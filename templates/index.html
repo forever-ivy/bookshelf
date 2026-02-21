@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🏠 家庭智慧书柜</title>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<div class="app-container">
+  <aside class="sidebar">
+    <div class="brand-header">
+      <h1><i class="fa-solid fa-book-open-reader"></i> 家庭智慧书柜</h1>
+    </div>
+
+    <div class="panel-card action-panel">
+      <button id="btn-store" class="btn-primary btn-block btn-lg">
+        <i class="fa-solid fa-camera"></i> 扫码存书
+      </button>
+
+      <div class="search-sectionbox">
+        <label for="search_input"><i class="fa-solid fa-magnifying-glass"></i> 想找哪本书？</label>
+        <div class="input-group">
+          <input id="search_input" type="text" placeholder="输入书名关键词..." class="input-field">
+          <button id="btn-search" class="btn-secondary">
+            帮我找
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-card log-panel">
+      <div class="panel-title">
+        <h3><i class="fa-solid fa-clock-rotate-left"></i> 操作记录</h3>
+      </div>
+      <div class="log-list-container">
+        <ul id="log_box" class="log-list">
+          </ul>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <header class="main-header">
+      <h2>我的藏书架</h2>
+      <div id="stats_bar" class="stats-pills">
+        <span class="pill pill-total"><i class="fa-solid fa-warehouse"></i> 总计: -</span>
+        <span class="pill pill-used"><i class="fa-solid fa-book"></i> 已存: -</span>
+        <span class="pill pill-free"><i class="fa-regular fa-square"></i> 空闲: -</span>
+      </div>
+    </header>
+
+    <div class="shelf-container scrollbar-styled">
+      <div id="shelf_grid" class="shelf-grid">
+        </div>
+    </div>
+  </main>
+
+  <aside class="assistant-panel">
+    <div class="panel-card insight-card">
+      <div class="panel-title">
+        <h3><i class="fa-solid fa-wand-magic-sparkles"></i> AI 馆长寄语</h3>
+      </div>
+      <div id="ai_insight_box" class="insight-content">
+        <i class="fa-solid fa-spinner fa-spin"></i> 正在观察书柜动态...
+      </div>
+    </div>
+
+    <div class="panel-card chat-card">
+      <div class="panel-title">
+        <h3><i class="fa-regular fa-comments"></i> 聊聊书</h3>
+      </div>
+      
+      <div class="chat-box-container scrollbar-styled">
+        <div id="chat_box" class="chat-messages">
+          </div>
+      </div>
+
+      <div class="chat-input-area">
+        <div class="input-group chat-text-group">
+          <input id="chat_input" type="text" placeholder="输入文字和小燕聊天..." class="input-field">
+          <button id="btn-send-text" class="btn-icon">
+            <i class="fa-regular fa-paper-plane"></i>
+          </button>
+        </div>
+        <button id="btn-voice" class="btn-primary btn-block btn-voice">
+          <i class="fa-solid fa-microphone"></i> 按下语音说话
+        </button>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script>
+// --- 工具函数 ---
+const getById = (id) => document.getElementById(id);
+const logBox = getById("log_box");
+const chatBox = getById("chat_box");
+
+function log(msg) {
+  const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const li = document.createElement("li");
+  li.className = "log-item animate-fade-in";
+  li.innerHTML = `<span class="log-time">${t}</span><span class="log-text">${msg}</span>`;
+  logBox.prepend(li);
+}
+
+function chat(role, text, isAudio = false) {
+  const div = document.createElement("div");
+  div.className = `message-bubble ${role === '小燕' ? 'ai' : 'user'} animate-slide-in`;
+  const icon = role === '小燕' ? '<i class="fa-solid fa-robot ai-avatar"></i>' : '';
+  const audioIcon = isAudio ? '<i class="fa-solid fa-microphone-lines voice-indicator"></i> ' : '';
+  
+  div.innerHTML = `
+    ${role === '小燕' ? icon : ''}
+    <div class="message-content">
+      <div class="message-sender">${role}</div>
+      <div class="message-text">${audioIcon}${text.replace(/\n/g, '<br>')}</div>
+    </div>
+  `;
+  chatBox.appendChild(div);
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+// --- 核心业务逻辑 ---
+
+/* 加载书架与统计 */
+async function loadShelf() {
+  const grid = getById("shelf_grid");
+  // grid.innerHTML = '<div class="loading-placeholder"><i class="fa-solid fa-spinner fa-spin"></i> 加载书架数据...</div>';
+  
+  try {
+    const r = await fetch("/api/compartments");
+    const data = await r.json();
+    grid.innerHTML = "";
+    let used = 0;
+
+    data.forEach(it => {
+      const cell = document.createElement("div");
+      cell.className = `shelf-cell animate-scale-in ${it.book ? 'occupied' : 'free'}`;
+      
+      if (it.book) {
+        used++;
+        cell.innerHTML = `
+          <div class="cell-icon"><i class="fa-solid fa-book"></i></div>
+          <div class="cell-title">${it.book}</div>
+          <div class="cell-cid">${it.cid} 号格</div>
+        `;
+        cell.onclick = () => takeBook(it.cid, it.book);
+        cell.title = `点击取出《${it.book}》`;
+      } else {
+        cell.innerHTML = `
+          <div class="cell-icon free"><i class="fa-regular fa-square-plus"></i></div>
+          <div class="cell-title">空闲</div>
+          <div class="cell-cid">${it.cid} 号格</div>
+        `;
+      }
+      grid.appendChild(cell);
+    });
+
+    // 更新统计栏
+    getById("stats_bar").innerHTML = `
+      <span class="pill pill-total" title="总格子数"><i class="fa-solid fa-warehouse"></i> ${data.length} 格</span>
+      <span class="pill pill-used" title="已存书籍"><i class="fa-solid fa-book"></i> ${used} 本</span>
+      <span class="pill pill-free" title="剩余空位"><i class="fa-regular fa-square"></i> ${data.length - used} 空</span>
+    `;
+  } catch (e) {
+    grid.innerHTML = `<div class="error-placeholder">加载失败: ${e.message}</div>`;
+  }
+}
+
+/* 加载 AI 寄语 */
+async function loadAiInsight() {
+    const box = getById("ai_insight_box");
+    try {
+        const r = await fetch("/api/ai_insight");
+        const j = await r.json();
+        box.innerHTML = j.insight;
+    } catch (e) {
+        box.innerText = "馆长暂时无法连接到大脑...";
+    }
+}
+
+/* 存书 */
+getById("btn-store").onclick = async function() {
+  const btn = this;
+  const originalHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 正在识别书籍...';
+  log("开启摄像头识别中...");
+
+  try {
+    const r = await fetch("/api/store", {method:"POST"});
+    const j = await r.json();
+    if (j.ok) {
+      log(j.msg);
+      Swal.fire({
+        icon: 'success',
+        title: '存入成功',
+        text: j.msg,
+        timer: 2000,
+        showConfirmButton: false,
+        background: '#fefae0',
+        color: '#8e735b'
+      });
+      if (j.ai_reply) chat("小燕", j.ai_reply);
+      loadShelf();
+      loadAiInsight();
+    } else {
+      throw new Error(j.msg);
+    }
+  } catch (err) {
+    log(`存书失败: ${err.message}`);
+    Swal.fire({
+      icon: 'error',
+      title: '哎呀，出错了',
+      text: err.message,
+      background: '#fefae0',
+      color: '#8e735b'
+    });
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalHtml;
+  }
+};
+
+/* 取书核心逻辑 */
+async function takeBook(cid, title) {
+  const result = await Swal.fire({
+    title: '确认取书？',
+    html: `您确定要取出位于 <b>${cid}号格</b> 的<br>《<span class="text-accent">${title}</span>》吗？`,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonColor: '#8e735b',
+    cancelButtonColor: '#a3b18a',
+    confirmButtonText: '是的，取出',
+    cancelButtonText: '取消',
+    background: '#fefae0',
+    color: '#555'
+  });
+
+  if (!result.isConfirmed) return;
+
+  try {
+    const r = await fetch("/api/take", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({cid, title})
+    });
+    const j = await r.json();
+    if (j.ok) {
+      log(j.msg);
+      Swal.fire({
+        icon: 'success',
+        title: '已取出',
+        text: `《${title}》已准备好，请拿取。`,
+        timer: 2000,
+        showConfirmButton: false,
+        background: '#fefae0',
+        color: '#8e735b'
+      });
+      if (j.ai_reply) chat("小燕", j.ai_reply);
+      loadShelf();
+    } else {
+      throw new Error(j.msg);
+    }
+  } catch (err) {
+    log(`取书失败: ${err.message}`);
+    Swal.fire({ icon: 'error', title: '取书失败', text: err.message, background: '#fefae0', color: '#8e735b' });
+  }
+}
+
+/* 输入文字找书 */
+getById("btn-search").onclick = async function() {
+  const input = getById("search_input");
+  const kw = input.value.trim();
+  if (!kw) {
+    input.focus();
+    return;
+  }
+  
+  const btn = this;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+
+  try {
+    const r = await fetch("/api/compartments");
+    const data = await r.json();
+    const hits = data.filter(i => i.book && i.book.includes(kw));
+    
+    if (hits.length === 0) {
+      Swal.fire({
+        icon: 'info',
+        title: '没找到呢',
+        text: `书柜里好像没有包含“${kw}”的书籍。`,
+        background: '#fefae0',
+        color: '#8e735b'
+      });
+    } else if (hits.length === 1) {
+      takeBook(hits[0].cid, hits[0].book);
+    } else {
+      // 多选列表
+      const options = {};
+      hits.forEach((h, i) => options[i] = `《${h.book}》 (位于 ${h.cid}号格)`);
+      const { value: idx } = await Swal.fire({
+        title: '找到了多本相似书籍',
+        text: '请选择您想取的那一本：',
+        input: 'select',
+        inputOptions: options,
+        inputPlaceholder: '点击选择...',
+        showCancelButton: true,
+        confirmButtonColor: '#8e735b',
+        background: '#fefae0',
+        color: '#555'
+      });
+      if (idx !== undefined && hits[idx]) {
+        takeBook(hits[idx].cid, hits[idx].book);
+      }
+    }
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '帮我找';
+    input.value = '';
+  }
+};
+
+/* 文本聊天 */
+async function sendTextMessage() {
+  const input = getById("chat_input");
+  const t = input.value.trim();
+  if (!t) return;
+  
+  chat("你", t);
+  input.value = "";
+  
+  try {
+    const r = await fetch("/api/chat", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({text:t})
+    });
+    const j = await r.json();
+    if (j.ok) chat("小燕", j.reply);
+  } catch (e) {
+    chat("系统", "连接 AI 服务失败，请稍后再试。");
+  }
+}
+getById("chat_input").onkeydown = e => { if (e.key === "Enter") sendTextMessage(); };
+getById("btn-send-text").onclick = sendTextMessage;
+
+/* 语音聊天 */
+getById("btn-voice").onclick = async function() {
+  const btn = this;
+  const originalHtml = btn.innerHTML;
+  btn.classList.add('listening');
+  btn.innerHTML = '<i class="fa-solid fa-microphone-lines fa-fade"></i> 小燕正在听你说话...';
+  log("语音监听中...");
+
+  try {
+    const r = await fetch("/api/voice_chat", {method:"POST"});
+    const j = await r.json();
+    if (j.ok) {
+      chat("你（语音）", j.text, true);
+      chat("小燕", j.reply);
+    } else {
+      log(j.msg || "语音识别失败");
+      Swal.fire({
+        toast: true, position: 'top-end', icon: 'warning',
+        title: j.msg || "没听清，再说一次吧", showConfirmButton: false, timer: 2000, background: '#fefae0'
+      });
+    }
+  } catch (err) {
+    log("语音服务异常");
+    Swal.fire({ toast: true, position: 'top-end', icon: 'error', title: "语音服务暂时不可用", timer: 2000, background: '#fefae0' });
+  } finally {
+    btn.classList.remove('listening');
+    btn.innerHTML = originalHtml;
+  }
+};
+
+// 初始化
+loadShelf();
+loadAiInsight();
+// 初始欢迎语
+setTimeout(() => chat("小燕", "欢迎回家！今天想读点什么书呢？"), 500);
+</script>
+</body>
+</html>

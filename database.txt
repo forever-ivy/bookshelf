@@ -1,0 +1,29 @@
+CREATE TABLE IF NOT EXISTS books (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    author TEXT,
+    category TEXT,          
+    keywords TEXT,       
+    description TEXT     
+);
+CREATE TABLE IF NOT EXISTS compartments (
+    compartment_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    x INTEGER NOT NULL,
+    y INTEGER NOT NULL,
+    status TEXT CHECK(status IN ('free','occupied')) DEFAULT 'free'
+);
+CREATE TABLE IF NOT EXISTS stored_books (
+    compartment_id INTEGER PRIMARY KEY,
+    book_id INTEGER NOT NULL,
+    stored_time TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (book_id) REFERENCES books(id),
+    FOREIGN KEY (compartment_id) REFERENCES compartments(compartment_id)
+);
+CREATE TABLE IF NOT EXISTS borrow_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    book_id INTEGER NOT NULL,
+    action TEXT CHECK(action IN ('store','take')) NOT NULL,
+    compartment_id INTEGER,
+    action_time TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (book_id) REFERENCES books(id)
+);
