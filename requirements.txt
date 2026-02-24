@@ -1,4 +1,15 @@
+numpy==1.26.4
 opencv-python
 easyocr
-sqlite3
 thefuzz
+paddleocr==2.7.3
+fastapi
+uvicorn
+edge-tts
+vosk
+soundfile
+python-multipart
+requests
+websockets
+sounddevice
+playsound==1.2.2
