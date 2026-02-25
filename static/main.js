@@ -127,6 +127,21 @@ async function storeByOcr(fromText, isAudio = false) {
 
 async function takeBook(cid, title) {
   try {
+    const result = await Swal.fire({
+      title: "\u786e\u8ba4\u53d6\u4e66",
+      html: `\u786e\u5b9a\u53d6\u51fa <b>${cid}\u53f7\u683c</b> \u7684\u300a${title}\u300b\u5417\uff1f`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonColor: "#8e735b",
+      cancelButtonColor: "#a3b18a",
+      confirmButtonText: "\u786e\u8ba4",
+      cancelButtonText: "\u53d6\u6d88",
+      background: "#fefae0",
+      color: "#555"
+    });
+
+    if (!result.isConfirmed) return;
+
     const r = await fetch("/api/take", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -225,26 +240,30 @@ getById("chat_input").onkeydown = (e) => {
 };
 getById("btn-send-text").onclick = sendTextMessage;
 
-getById("btn-voice").onclick = async function () {
-  const input = getById("chat_input");
-  const text = input.value.trim();
-  if (!text) return;
-  input.value = "";
-
-  if (isStoreIntent(text)) {
-    await storeByOcr(text, true);
-    return;
-  }
-
-  if (isTakeIntent(text)) {
-    await takeByTextIntent(text, true);
-    return;
-  }
-
-  chat(TXT.userVoice, text, true);
-  chat(TXT.bot, "\u8bed\u97f3\u901a\u9053\u6682\u65f6\u4e0d\u53ef\u7528\uff0c\u8bf7\u5148\u4f7f\u7528\u6587\u672c\u804a\u5929\u3002");
-};
+// Voice wake is handled on backend; no click-to-talk button here.
 
 loadShelf();
 loadAiInsight();
 setTimeout(() => chat(TXT.bot, TXT.welcome), 500);
+
+// Poll wake-voice events from backend and reflect in chat
+setInterval(async () => {
+  try {
+    const r = await fetch("/api/voice_events");
+    const j = await r.json();
+    if (!j.events || j.events.length === 0) return;
+    const seenKey = "__voice_event_ts";
+    const last = Number(sessionStorage.getItem(seenKey) || "0");
+    let maxTs = last;
+    j.events.forEach((e) => {
+      if (!e.ts || e.ts <= last) return;
+      const role = e.role === "assistant" ? TXT.bot : TXT.user;
+      chat(role, e.text, e.role === "user");
+      if (e.role === "assistant" && (e.text.includes("存入") || e.text.includes("取出"))) {
+        loadShelf();
+      }
+      if (e.ts > maxTs) maxTs = e.ts;
+    });
+    if (maxTs > last) sessionStorage.setItem(seenKey, String(maxTs));
+  } catch (_) {}
+}, 1000);

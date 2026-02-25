@@ -2,7 +2,6 @@ import json
 import os
 import re
 import uuid
-import wave
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -15,12 +14,7 @@ from pydantic import BaseModel
 from vosk import KaldiRecognizer, Model
 
 from db.book_match import find_book_by_title
-from db.shelf_ops import (
-    find_books_by_keyword,
-    find_free_compartment,
-    store_book,
-    take_book_by_cid,
-)
+from db.shelf_ops import find_books_by_keyword, find_free_compartment, store_book, take_book_by_cid
 
 
 MODEL_PATH = Path(os.getenv("VOSK_MODEL_PATH", "models/vosk-cn"))
@@ -28,8 +22,22 @@ VOICE_NAME = os.getenv("EDGE_TTS_VOICE", "zh-CN-XiaoxiaoNeural")
 DEFAULT_DEVICE_ID = os.getenv("DEFAULT_DEVICE_ID", "device-001")
 VOSK_SAMPLE_RATE = 16000
 
-TAKE_KEYWORDS = ("取书", "拿书", "借书", "取一下", "帮我取", "我要看")
-STORE_KEYWORDS = ("存书", "放回", "还书", "归还", "放进去", "帮我存")
+TAKE_KEYWORDS = (
+    "\u53d6\u4e66",
+    "\u62ff\u4e66",
+    "\u501f\u4e66",
+    "\u53d6\u4e00\u4e0b",
+    "\u5e2e\u6211\u53d6",
+    "\u6211\u8981\u770b",
+)
+STORE_KEYWORDS = (
+    "\u5b58\u4e66",
+    "\u653e\u56de",
+    "\u8fd8\u4e66",
+    "\u5f52\u8fd8",
+    "\u653e\u8fdb\u53bb",
+    "\u5e2e\u6211\u5b58",
+)
 
 router = APIRouter(prefix="/voice", tags=["voice"])
 
@@ -64,19 +72,12 @@ def _load_vosk_model() -> Model:
     if _vosk_model is not None:
         return _vosk_model
     if not MODEL_PATH.exists():
-        raise HTTPException(
-            status_code=500,
-            detail=f"VOSK model not found: {MODEL_PATH}",
-        )
+        raise HTTPException(status_code=500, detail=f"VOSK model not found: {MODEL_PATH}")
     _vosk_model = Model(str(MODEL_PATH))
     return _vosk_model
 
 
 def _convert_to_pcm16_16k(upload_path: Path) -> bytes:
-    """
-    Accept common audio formats readable by soundfile and convert to:
-    mono + 16kHz + PCM16 bytes.
-    """
     try:
         audio, sample_rate = sf.read(str(upload_path), dtype="float32", always_2d=True)
     except Exception as exc:
@@ -109,11 +110,14 @@ def _transcribe_pcm(pcm_bytes: bytes) -> str:
 
 
 def _extract_book_name(text: str) -> Optional[str]:
-    m = re.search(r"《([^》]{1,80})》", text)
+    m = re.search(r"\u300a([^\u300b]{1,80})\u300b", text)
     if m:
         return m.group(1).strip()
 
-    m = re.search(r"(?:取书|拿书|借书|存书|放回|还书|归还)\s*([^\s，。！？,.!?]{1,80})", text)
+    m = re.search(
+        r"(?:\u53d6\u4e66|\u62ff\u4e66|\u501f\u4e66|\u5b58\u4e66|\u653e\u56de|\u8fd8\u4e66|\u5f52\u8fd8)\s*([^\s\uFF0C\u3002\uFF01\uFF1F,.!?]{1,80})",
+        text,
+    )
     if m:
         return m.group(1).strip()
     return None
@@ -145,13 +149,7 @@ def _build_take_command(book_name: Optional[str]) -> dict[str, Any]:
             raise HTTPException(status_code=404, detail=f"Book is not in shelf now: {book_info['title']}")
 
     title, cid, x, y = rows[0]
-    return {
-        "action": "take",
-        "book": title,
-        "cid": cid,
-        "x": x,
-        "y": y,
-    }
+    return {"action": "take", "book": title, "cid": cid, "x": x, "y": y}
 
 
 def _build_store_command(book_name: Optional[str]) -> dict[str, Any]:
@@ -179,10 +177,10 @@ def _build_store_command(book_name: Optional[str]) -> dict[str, Any]:
 
 def _build_reply(intent: str, book: Optional[str]) -> str:
     if intent == "take_book":
-        return f"好的，正在为你取《{book or '目标书籍'}》。"
+        return f"\u597d\u7684\uff0c\u6b63\u5728\u4e3a\u4f60\u53d6\u300a{book or '目标书籍'}\u300b\u3002"
     if intent == "store_book":
-        return f"好的，正在为你存放《{book or '目标书籍'}》。"
-    return "我收到了你的指令。"
+        return f"\u597d\u7684\uff0c\u6b63\u5728\u4e3a\u4f60\u5b58\u653e\u300a{book or '目标书籍'}\u300b\u3002"
+    return "\u6211\u6536\u5230\u4e86\u4f60\u7684\u6307\u4ee4\u3002"
 
 
 def _apply_done_to_db(state: dict[str, Any]) -> None:
@@ -229,7 +227,6 @@ async def asr_upload(audio: UploadFile = File(...)):
     temp_path.parent.mkdir(parents=True, exist_ok=True)
     content = await audio.read()
     temp_path.write_bytes(content)
-
     try:
         if suffix == ".pcm":
             pcm = content
@@ -239,7 +236,6 @@ async def asr_upload(audio: UploadFile = File(...)):
     finally:
         if temp_path.exists():
             temp_path.unlink()
-
     return {"ok": True, "text": text}
 
 
@@ -292,11 +288,7 @@ async def create_command(req: CommandReq):
         raise HTTPException(status_code=400, detail=f"Unsupported intent for device command: {nlu.intent}")
 
     command_id = uuid.uuid4().hex
-    command = {
-        "type": "command",
-        "command_id": command_id,
-        "payload": action_payload,
-    }
+    command = {"type": "command", "command_id": command_id, "payload": action_payload}
     _command_states[command_id] = {
         "status": "accepted",
         "intent": nlu.intent,
@@ -324,7 +316,6 @@ async def update_command_status(req: CommandStatusReq):
         except Exception as exc:
             state["status"] = "failed"
             state["detail"] = f"DB apply failed: {exc}"
-
     return {"ok": True, "state": state}
 
 
@@ -357,11 +348,7 @@ async def assistant(req: CommandReq):
         action_payload = _build_store_command(nlu.book)
 
     command_id = uuid.uuid4().hex
-    command = {
-        "type": "command",
-        "command_id": command_id,
-        "payload": action_payload,
-    }
+    command = {"type": "command", "command_id": command_id, "payload": action_payload}
     _command_states[command_id] = {
         "status": "accepted",
         "intent": nlu.intent,
@@ -370,12 +357,7 @@ async def assistant(req: CommandReq):
         "created_at": datetime.now().isoformat(),
         "last_command": command,
     }
-
     await _push_command(device_id, command)
     reply = _build_reply(nlu.intent, action_payload.get("book"))
     audio_bytes = await _synthesize_mp3(reply)
-    return Response(
-        content=audio_bytes,
-        media_type="audio/mpeg",
-        headers={"X-Command-Id": command_id},
-    )
+    return Response(content=audio_bytes, media_type="audio/mpeg", headers={"X-Command-Id": command_id})
