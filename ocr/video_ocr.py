@@ -1,7 +1,6 @@
 import cv2
 from collections import Counter
 from ocr.paddle_ocr import ocr_image
-from db.book_match import match_book
 
 
 def recognize_book_from_camera(max_frames=30):

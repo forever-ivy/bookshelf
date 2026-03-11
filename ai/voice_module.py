@@ -1,4 +1,5 @@
 import asyncio
+import io
 import json
 import os
 import queue
@@ -6,6 +7,7 @@ import re
 import tempfile
 import threading
 import time
+import wave
 from pathlib import Path
 from typing import Iterable, Optional
 
@@ -34,6 +36,10 @@ try:
 except Exception:
     KaldiRecognizer = None
     Model = None
+
+# ── Whisper ASR（优先使用，准确率更高）──
+_whisper_transcribe = None
+_WHISPER_AVAILABLE = False
 
 
 _tts_queue = queue.Queue()
@@ -84,6 +90,23 @@ def _build_recognizer(model, sample_rate: int, hints: Optional[Iterable[str]] = 
     return KaldiRecognizer(model, sample_rate)
 
 
+# ── 专用 event loop，避免多线程 asyncio.run() 冲突 ──────
+import concurrent.futures as _cf
+_tts_event_loop = asyncio.new_event_loop()
+_tts_executor   = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="edge_tts_loop")
+
+def _run_async(coro):
+    """在专用线程的 event loop 里跑协程，任何线程都能安全调用"""
+    future = asyncio.run_coroutine_threadsafe(coro, _tts_event_loop)
+    return future.result(timeout=30)
+
+def _start_tts_loop():
+    asyncio.set_event_loop(_tts_event_loop)
+    _tts_event_loop.run_forever()
+
+threading.Thread(target=_start_tts_loop, daemon=True, name="edge_tts_event_loop").start()
+
+
 async def _edge_tts_to_file(text: str, out_file: str):
     communicate = edge_tts.Communicate(text=text, voice=_EDGE_TTS_VOICE)
     await communicate.save(out_file)
@@ -92,11 +115,10 @@ async def _edge_tts_to_file(text: str, out_file: str):
 def _speak_with_edge_tts(text: str) -> bool:
     if edge_tts is None or playsound is None:
         return False
-
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
             mp3_path = f.name
-        asyncio.run(_edge_tts_to_file(text, mp3_path))
+        _run_async(_edge_tts_to_file(text, mp3_path))
         playsound(mp3_path)
         try:
             os.remove(mp3_path)
@@ -106,6 +128,56 @@ def _speak_with_edge_tts(text: str) -> bool:
     except Exception as e:
         print("[TTS edge error]", e)
         return False
+
+
+def tts_to_mp3_bytes(text: str):
+    if edge_tts is None:
+        return None
+    clean = re.sub(r"[#*`]", "", str(text)).strip()
+    if not clean:
+        return None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
+            mp3_path = f.name
+        _run_async(_edge_tts_to_file(clean, mp3_path))
+        with open(mp3_path, "rb") as fp:
+            data = fp.read()
+        try:
+            os.remove(mp3_path)
+        except Exception:
+            pass
+        return data
+    except Exception as e:
+        print("[TTS bytes error]", e)
+        return None
+
+
+def tts_to_wav_bytes(text: str):
+    if pyttsx3 is None:
+        return None
+    clean = re.sub(r"[#*`]", "", str(text)).strip()
+    if not clean:
+        return None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as f:
+            wav_path = f.name
+        engine = pyttsx3.init()
+        engine.setProperty("rate", 180)
+        engine.setProperty("volume", 1.0)
+        engine.save_to_file(clean, wav_path)
+        engine.runAndWait()
+        engine.stop()
+        del engine
+        with open(wav_path, "rb") as fp:
+            data = fp.read()
+        try:
+            os.remove(wav_path)
+        except Exception:
+            pass
+        return data
+    except Exception as e:
+        print("[TTS wav error]", e)
+        return None
 
 
 def _speak_with_pyttsx3(text: str) -> bool:
@@ -217,6 +289,59 @@ def listen(timeout=8, phrase_time_limit=1.2, hints=None):
     if not result:
         return None
     return re.sub(r"\s+", "", result)
+
+
+def transcribe_pcm_bytes(pcm_bytes: bytes, sample_rate: int = 16000, hints=None):
+    model = _load_vosk_model()
+    if model is None or KaldiRecognizer is None:
+        return None
+    if not pcm_bytes:
+        return None
+
+    recognizer = _build_recognizer(model, sample_rate, hints=hints)
+    if recognizer is None:
+        return None
+    recognizer.SetWords(False)
+
+    chunk = 4000
+    for i in range(0, len(pcm_bytes), chunk):
+        recognizer.AcceptWaveform(pcm_bytes[i : i + chunk])
+
+    final_text = json.loads(recognizer.FinalResult()).get("text", "").strip()
+    return re.sub(r"\s+", "", final_text) or None
+
+
+def transcribe_wav_bytes(wav_bytes: bytes, hints=None):
+    if not wav_bytes:
+        return None
+    # 优先用 faster-whisper（更准、GPU下更快）
+    if _WHISPER_AVAILABLE:
+        try:
+            return _whisper_transcribe(wav_bytes, hints=hints) or None
+        except Exception as _we:
+            print(f"[whisper] 识别失败，降级到 Vosk: {_we}")
+    try:
+        with wave.open(io.BytesIO(wav_bytes), "rb") as wf:
+            rate = wf.getframerate()
+            channels = wf.getnchannels()
+            sampwidth = wf.getsampwidth()
+            frames = wf.readframes(wf.getnframes())
+    except Exception as e:
+        raise ValueError(f"invalid wav: {e}") from e
+    import audioop
+
+    pcm = frames
+    if sampwidth != 2:
+        pcm = audioop.lin2lin(pcm, sampwidth, 2)
+        sampwidth = 2
+    if channels != 1:
+        pcm = audioop.tomono(pcm, sampwidth, 0.5, 0.5)
+        channels = 1
+    if rate != 16000:
+        pcm, _ = audioop.ratecv(pcm, sampwidth, channels, rate, 16000, None)
+        rate = 16000
+
+    return transcribe_pcm_bytes(pcm, sample_rate=rate, hints=hints)
 
 
 def _normalize_wake(text: str) -> str:

@@ -18,16 +18,31 @@ def get_all_compartments():
     conn.close()
     return rows
 
-def store_book(book_id, compartment_id):
+def store_book(book_id, compartment_id, user_id=None):
+    """存书。user_id 为当前操作用户，None 时自动取当前活跃用户。"""
+    from db.user_ops import get_current_user
+    if user_id is None:
+        cur_user = get_current_user()
+        user_id = cur_user["id"] if cur_user else None
+
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute("INSERT INTO stored_books (compartment_id, book_id) VALUES (?, ?)", (compartment_id, book_id))
     cur.execute("UPDATE compartments SET status = 'occupied' WHERE compartment_id = ?", (compartment_id,))
-    cur.execute("INSERT INTO borrow_logs (book_id, action, compartment_id) VALUES (?, 'store', ?)", (book_id, compartment_id))
+    cur.execute(
+        "INSERT INTO borrow_logs (book_id, action, compartment_id, user_id) VALUES (?, 'store', ?, ?)",
+        (book_id, compartment_id, user_id)
+    )
     conn.commit()
     conn.close()
 
-def take_book_by_cid(compartment_id):
+def take_book_by_cid(compartment_id, user_id=None):
+    """取书。user_id 为当前操作用户，None 时自动取当前活跃用户。"""
+    from db.user_ops import get_current_user
+    if user_id is None:
+        cur_user = get_current_user()
+        user_id = cur_user["id"] if cur_user else None
+
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute("SELECT book_id FROM stored_books WHERE compartment_id = ?", (compartment_id,))
@@ -36,7 +51,10 @@ def take_book_by_cid(compartment_id):
         book_id = row[0]
         cur.execute("DELETE FROM stored_books WHERE compartment_id = ?", (compartment_id,))
         cur.execute("UPDATE compartments SET status = 'free' WHERE compartment_id = ?", (compartment_id,))
-        cur.execute("INSERT INTO borrow_logs (book_id, action, compartment_id) VALUES (?, 'take', ?)", (book_id, compartment_id))
+        cur.execute(
+            "INSERT INTO borrow_logs (book_id, action, compartment_id, user_id) VALUES (?, 'take', ?, ?)",
+            (book_id, compartment_id, user_id)
+        )
         conn.commit()
     conn.close()
     return True
