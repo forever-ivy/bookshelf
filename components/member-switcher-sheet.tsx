@@ -18,6 +18,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 
+import { AvatarGlyph } from '@/components/avatar-glyph';
 import { GlassSurface } from '@/components/glass-surface';
 import { PrimaryActionButton } from '@/components/primary-action-button';
 import { bookleafTheme } from '@/constants/bookleaf-theme';
@@ -299,7 +300,7 @@ function MemberSwitcherRow({
             },
             avatarStyle,
           ]}>
-          <Text style={{ fontSize: 24 }}>{getMemberAvatarLabel(member)}</Text>
+          <AvatarGlyph size={24} value={getMemberAvatarLabel(member)} />
         </Animated.View>
         <View style={{ flex: 1, gap: 4 }}>
           <Text

@@ -25,8 +25,13 @@ export type BorrowLog = {
 };
 
 export type MemberStats = {
+  avatar?: string | null;
+  color?: string | null;
   goal_reached: boolean;
+  id?: number;
+  name?: string;
   recent: BorrowLog[];
+  role?: 'parent' | 'child' | 'reader' | string;
   today_ops: number;
   total_store: number;
   total_take: number;

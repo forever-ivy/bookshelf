@@ -1,6 +1,7 @@
 import { Pressable, Text, View } from 'react-native';
 
 import { AppIcon } from '@/components/app-icon';
+import { AvatarGlyph } from '@/components/avatar-glyph';
 import { bookleafTheme } from '@/constants/bookleaf-theme';
 import type { MemberSummary } from '@/lib/api/types';
 import {
@@ -48,13 +49,7 @@ export function AvatarSwitcher({
               width: 48,
               zIndex: previewMembers.length - index,
             }}>
-            <Text
-              selectable
-              style={{
-                fontSize: 20,
-              }}>
-              {getMemberAvatarLabel(member)}
-            </Text>
+            <AvatarGlyph size={20} value={getMemberAvatarLabel(member)} />
           </View>
         ))}
       </View>

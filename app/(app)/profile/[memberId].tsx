@@ -3,6 +3,7 @@ import { Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import { AnimatedCountText } from '@/components/animated-count-text';
+import { AvatarGlyph } from '@/components/avatar-glyph';
 import { BookCarouselCard } from '@/components/book-carousel-card';
 import { GlassPillButton } from '@/components/glass-pill-button';
 import { GoalProgressCard } from '@/components/goal-progress-card';
@@ -16,10 +17,13 @@ import {
 } from '@/lib/api/hooks';
 import {
   getMemberAccentColor,
-  getMemberAvatarLabel,
   getMemberRoleLabel,
 } from '@/lib/member-presentation';
 import { createSlowFadeIn, createStaggeredFadeIn, motionTransitions } from '@/lib/motion';
+import {
+  getProfileAvatarValue,
+  resolveProfileMember,
+} from '@/lib/profile-helpers';
 import { useSessionStore } from '@/stores/session-store';
 
 export default function ProfileRoute() {
@@ -36,8 +40,8 @@ export default function ProfileRoute() {
     return <Redirect href="/connect" />;
   }
 
-  const member = (usersQuery.data ?? []).find((item) => item.id === numericMemberId);
   const stats = statsQuery.data;
+  const member = resolveProfileMember(usersQuery.data ?? [], numericMemberId, stats);
   const badges = badgesQuery.data?.badges ?? [];
   const progressTarget = Math.max(stats?.weekly_goal ?? 10, 1);
   const progressCurrent = stats?.weekly_takes ?? 0;
@@ -75,7 +79,7 @@ export default function ProfileRoute() {
             justifyContent: 'center',
             width: 88,
           }}>
-          <Text style={{ fontSize: 38 }}>{getMemberAvatarLabel(member)}</Text>
+          <AvatarGlyph size={38} value={getProfileAvatarValue(member)} />
         </Animated.View>
         <View style={{ gap: 6 }}>
           <Text
