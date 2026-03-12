@@ -1,6 +1,7 @@
 import React from 'react';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
   interpolate,
   useAnimatedScrollHandler,
@@ -10,6 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useCover } from '@/hooks/use-cover';
 import type { BooklistItem } from '@/lib/api/types';
 import { createStaggeredFadeIn, motionTransitions } from '@/lib/motion';
 
@@ -17,16 +19,45 @@ type BookCarouselCardProps = {
   items: BooklistItem[];
 };
 
-const coverGradients = [
-  ['#C8D8FF', '#E8EEFF'],
-  ['#EBCFBA', '#FAE8DB'],
-  ['#D0E7D1', '#E7F8E7'],
-  ['#D8D2FF', '#F2F0FF'],
-] as const;
-
 const BOOK_CARD_WIDTH = 148;
 const BOOK_CARD_GAP = 14;
 const BOOK_CARD_SPAN = BOOK_CARD_WIDTH + BOOK_CARD_GAP;
+
+type BooklistItemWithCoverFields = BooklistItem & {
+  cover?: string | null;
+  coverUrl?: string | null;
+  cover_url?: string | null;
+  image?: string | null;
+  image_url?: string | null;
+  thumbnail?: string | null;
+  thumbnailUrl?: string | null;
+  thumbnail_url?: string | null;
+};
+
+const bookCoverContainerStyle = {
+  borderCurve: 'continuous' as const,
+  borderRadius: 28,
+  height: 176,
+  justifyContent: 'flex-end' as const,
+  overflow: 'hidden' as const,
+  padding: 16,
+};
+
+function resolveBookCoverUrl(item: BooklistItem) {
+  const candidate = item as BooklistItemWithCoverFields;
+
+  return (
+    candidate.coverUrl ??
+    candidate.cover_url ??
+    candidate.cover ??
+    candidate.image ??
+    candidate.image_url ??
+    candidate.thumbnailUrl ??
+    candidate.thumbnail_url ??
+    candidate.thumbnail ??
+    null
+  );
+}
 
 export function BookCarouselCard({ items }: BookCarouselCardProps) {
   const visibleItems = items.slice(0, 6);
@@ -65,37 +96,31 @@ export function BookCarouselCard({ items }: BookCarouselCardProps) {
         onScroll={scrollHandler}
         scrollEventThrottle={16}
         showsHorizontalScrollIndicator={false}>
-        {visibleItems.map((item, index) => {
-          const gradient = coverGradients[index % coverGradients.length];
-
-          return (
-            <BookCarouselItem
-              gradient={gradient}
-              index={index}
-              key={item.id}
-              item={item}
-              scrollX={scrollX}
-            />
-          );
-        })}
+        {visibleItems.map((item, index) => (
+          <BookCarouselItem
+            index={index}
+            key={item.id}
+            item={item}
+            scrollX={scrollX}
+          />
+        ))}
       </Animated.ScrollView>
     </View>
   );
 }
 
 type BookCarouselItemProps = {
-  gradient: readonly [string, string];
   index: number;
   item: BooklistItem;
   scrollX: SharedValue<number>;
 };
 
-function BookCarouselItem({
-  gradient,
-  index,
-  item,
-  scrollX,
-}: BookCarouselItemProps) {
+function BookCarouselItem({ index, item, scrollX }: BookCarouselItemProps) {
+  const { cover, handleImageError } = useCover({
+    coverUrl: resolveBookCoverUrl(item),
+    seed: item.id,
+    title: item.title,
+  });
   const cardStyle = useAnimatedStyle(() => ({
     transform: [
       {
@@ -136,26 +161,33 @@ function BookCarouselItem({
         },
         cardStyle,
       ]}>
-      <LinearGradient
-        colors={[gradient[0], gradient[1]]}
-        style={{
-          borderCurve: 'continuous',
-          borderRadius: 28,
-          height: 176,
-          justifyContent: 'flex-end',
-          overflow: 'hidden',
-          padding: 16,
-        }}>
-        <Text
-          selectable
-          style={{
-            color: bookleafTheme.colors.text,
-            fontFamily: bookleafTheme.fonts.heading,
-            fontSize: 20,
-          }}>
-          {item.title}
-        </Text>
-      </LinearGradient>
+      {cover.kind === 'image' ? (
+        <View style={bookCoverContainerStyle}>
+          <Image
+            contentFit="cover"
+            onError={handleImageError}
+            source={{ uri: cover.uri }}
+            style={StyleSheet.absoluteFillObject}
+            transition={120}
+          />
+        </View>
+      ) : (
+        <LinearGradient
+          colors={[cover.colors[0], cover.colors[1]]}
+          style={bookCoverContainerStyle}>
+          <Text
+            numberOfLines={4}
+            selectable
+            style={{
+              color: bookleafTheme.colors.text,
+              fontFamily: bookleafTheme.fonts.heading,
+              fontSize: 20,
+              lineHeight: 24,
+            }}>
+            {cover.title}
+          </Text>
+        </LinearGradient>
+      )}
       <View style={{ gap: 2 }}>
         <Text
           numberOfLines={1}
