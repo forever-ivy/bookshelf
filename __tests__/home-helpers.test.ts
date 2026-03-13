@@ -1,4 +1,7 @@
-import { buildCabinetStatusSummary, getTimeBasedGreeting } from '@/lib/home-helpers';
+import {
+  buildCabinetStatusSummary,
+  getTimeBasedGreeting,
+} from '@/app/(app)/home.helpers';
 
 describe('buildCabinetStatusSummary', () => {
   it('counts occupied and free compartments', () => {

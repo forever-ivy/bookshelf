@@ -1,12 +1,12 @@
 import { Stack, usePathname } from 'expo-router';
 import { View } from 'react-native';
 
-import { AppBottomNav } from '@/components/app-bottom-nav';
+import { AppBottomNav } from '@/components/navigation/app-bottom-nav';
 import {
   appStackScreenOptions,
   profileScreenOptions,
-} from '@/lib/navigation-transitions';
-import type { BottomNavKey } from '@/lib/types';
+} from '@/lib/app/navigation-transitions';
+import type { BottomNavKey } from '@/lib/app/types';
 
 function resolveActiveNavKey(pathname: string): BottomNavKey {
   if (pathname.includes('/library')) {

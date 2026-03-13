@@ -8,14 +8,14 @@ import {
 } from 'react-native';
 import Animated from 'react-native-reanimated';
 
-import { AppIcon } from '@/components/app-icon';
-import { GlassPillButton } from '@/components/glass-pill-button';
-import { PrimaryActionButton } from '@/components/primary-action-button';
-import { ScreenShell } from '@/components/screen-shell';
+import { AppIcon } from '@/components/base/app-icon';
+import { GlassPillButton } from '@/components/actions/glass-pill-button';
+import { PrimaryActionButton } from '@/components/actions/primary-action-button';
+import { ScreenShell } from '@/components/navigation/screen-shell';
 import { bookleafTheme } from '@/constants/bookleaf-theme';
 import { createBookshelfApiClient } from '@/lib/api/client';
-import { createConnectionProfile } from '@/lib/connection';
-import { createStaggeredFadeIn } from '@/lib/motion';
+import { createConnectionProfile } from '@/lib/app/connection';
+import { createStaggeredFadeIn } from '@/lib/presentation/motion';
 import { useSessionStore } from '@/stores/session-store';
 
 function getErrorMessage(error: unknown) {

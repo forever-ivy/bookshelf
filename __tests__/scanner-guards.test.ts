@@ -1,4 +1,4 @@
-import { shouldSkipScannedCode } from '@/lib/scanner-guards';
+import { shouldSkipScannedCode } from '@/app/scanner.helpers';
 
 describe('shouldSkipScannedCode', () => {
   it('blocks repeated scans while verification is already running', () => {

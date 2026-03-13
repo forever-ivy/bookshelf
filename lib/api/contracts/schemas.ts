@@ -1,0 +1,149 @@
+import { z } from 'zod';
+
+export const memberSummarySchema = z.object({
+  avatar: z.string().nullable().optional(),
+  color: z.string().nullable().optional(),
+  current_goal_minutes: z.number().nullable().optional(),
+  current_streak_days: z.number().nullable().optional(),
+  id: z.number(),
+  name: z.string(),
+  role: z.string().optional(),
+});
+
+export const borrowLogSchema = z.object({
+  action: z.string(),
+  action_time: z.string().optional(),
+  id: z.number().optional(),
+  time: z.string().optional(),
+  title: z.string().optional(),
+});
+
+export const cabinetCompartmentSchema = z.object({
+  book: z.string().nullable(),
+  cid: z.number(),
+  status: z.string(),
+  x: z.number(),
+  y: z.number(),
+});
+
+export const memberStatsSchema = z.object({
+  avatar: z.string().nullable().optional(),
+  color: z.string().nullable().optional(),
+  goal_reached: z.boolean(),
+  id: z.number().optional(),
+  name: z.string().optional(),
+  recent: z.array(borrowLogSchema),
+  role: z.string().optional(),
+  today_ops: z.number(),
+  total_store: z.number(),
+  total_take: z.number(),
+  weekly_goal: z.number(),
+  weekly_takes: z.number(),
+});
+
+export const booklistItemSchema = z.object({
+  assigned_by_user_id: z.number().nullable().optional(),
+  author: z.string().nullable().optional(),
+  book_id: z.number().nullable().optional(),
+  category: z.string().nullable().optional(),
+  cover_url: z.string().nullable().optional(),
+  created_at: z.string().optional(),
+  description: z.string().nullable().optional(),
+  done: z.boolean(),
+  done_at: z.string().nullable().optional(),
+  id: z.number(),
+  note: z.string().nullable().optional(),
+  title: z.string(),
+});
+
+export const badgeSummarySchema = z.object({
+  badge_key: z.string(),
+  unlocked_at: z.string(),
+});
+
+export const weeklyReportSchema = z.object({
+  books: z.array(z.string()),
+  summary: z.string(),
+});
+
+export const monthlyReportSchema = z.object({
+  most_active: z.string().optional(),
+  summary: z.string().optional(),
+  top_category: z.string().optional(),
+  total_books: z.number().optional(),
+});
+
+export const familyMemberSchema = z.object({
+  avatar: z.string().nullable().optional(),
+  color: z.string().nullable().optional(),
+  id: z.number(),
+  name: z.string(),
+  role: z.string().optional(),
+});
+
+export const familySummarySchema = z.object({
+  created_at: z.string().optional(),
+  family_name: z.string(),
+  id: z.number(),
+  member_count: z.number().optional(),
+  owner_account_id: z.number().nullable().optional(),
+  owner_username: z.string().nullable().optional(),
+});
+
+export const familyDetailSchema = familySummarySchema.extend({
+  members: z.array(familyMemberSchema),
+});
+
+export const accountSummarySchema = z.object({
+  created_at: z.string().optional(),
+  id: z.number(),
+  last_login_at: z.string().nullable().optional(),
+  linked_user_count: z.number().optional(),
+  owned_family_count: z.number().optional(),
+  password_hash: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  status: z.string().optional(),
+  updated_at: z.string().optional(),
+  username: z.string().nullable().optional(),
+});
+
+export const accountUserRelationSchema = z.object({
+  account_id: z.number(),
+  avatar: z.string().nullable().optional(),
+  color: z.string().nullable().optional(),
+  created_at: z.string().optional(),
+  name: z.string().optional(),
+  relation_type: z.string(),
+  role: z.string().optional(),
+  user_id: z.number(),
+});
+
+export const userAccountRelationSchema = z.object({
+  account_id: z.number(),
+  created_at: z.string().optional(),
+  phone: z.string().nullable().optional(),
+  relation_type: z.string(),
+  status: z.string().optional(),
+  user_id: z.number(),
+  username: z.string().nullable().optional(),
+});
+
+export const readingEventSchema = z.object({
+  book_id: z.number().nullable().optional(),
+  book_title: z.string().nullable().optional(),
+  event_time: z.string(),
+  event_type: z.string(),
+  id: z.number(),
+  metadata_json: z.string().nullable().optional(),
+  source: z.string().nullable().optional(),
+  user_id: z.number().nullable().optional(),
+  user_name: z.string().nullable().optional(),
+});
+
+export const aiInsightSchema = z.object({
+  insight: z.string(),
+});
+
+export const messageSchema = z.object({
+  message: z.string().optional(),
+});

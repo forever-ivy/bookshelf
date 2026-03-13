@@ -1,4 +1,4 @@
-import { createBookCover } from '@/lib/createBookCover';
+import { createBookCover } from '@/lib/presentation/createBookCover';
 
 describe('createBookCover', () => {
   it('returns a generated cover when no remote cover url is provided', () => {

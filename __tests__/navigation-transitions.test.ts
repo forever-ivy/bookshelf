@@ -3,7 +3,7 @@ import {
   profileScreenOptions,
   rootStackScreenOptions,
   scannerScreenOptions,
-} from '@/lib/navigation-transitions';
+} from '@/lib/app/navigation-transitions';
 
 describe('navigation transitions', () => {
   it('uses direct transitions for root and primary app stacks', () => {

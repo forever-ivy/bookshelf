@@ -2,28 +2,32 @@ import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
-import { AnimatedCountText } from '@/components/animated-count-text';
-import { AvatarGlyph } from '@/components/avatar-glyph';
-import { BookCarouselCard } from '@/components/book-carousel-card';
-import { GlassPillButton } from '@/components/glass-pill-button';
-import { GoalProgressCard } from '@/components/goal-progress-card';
-import { ScreenShell } from '@/components/screen-shell';
+import { AnimatedCountText } from '@/components/base/animated-count-text';
+import { AvatarGlyph } from '@/components/member/avatar-glyph';
+import { BookCarouselCard } from '@/components/cards/book-carousel-card';
+import { GlassPillButton } from '@/components/actions/glass-pill-button';
+import { GoalProgressCard } from '@/components/cards/goal-progress-card';
+import { ScreenShell } from '@/components/navigation/screen-shell';
 import { bookleafTheme } from '@/constants/bookleaf-theme';
 import {
   useMemberBadgesQuery,
   useMemberBooklistQuery,
   useMemberStatsQuery,
   useUsersQuery,
-} from '@/lib/api/hooks';
+} from '@/lib/api/react-query/hooks';
 import {
   getMemberAccentColor,
   getMemberRoleLabel,
-} from '@/lib/member-presentation';
-import { createSlowFadeIn, createStaggeredFadeIn, motionTransitions } from '@/lib/motion';
+} from '@/lib/presentation/member-presentation';
+import {
+  createSlowFadeIn,
+  createStaggeredFadeIn,
+  motionTransitions,
+} from '@/lib/presentation/motion';
 import {
   getProfileAvatarValue,
   resolveProfileMember,
-} from '@/lib/profile-helpers';
+} from '@/app/(app)/profile.helpers';
 import { useSessionStore } from '@/stores/session-store';
 
 export default function ProfileRoute() {

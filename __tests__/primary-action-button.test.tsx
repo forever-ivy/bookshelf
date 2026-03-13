@@ -1,6 +1,6 @@
 import { fireEvent, render } from '@testing-library/react-native';
 
-import { PrimaryActionButton } from '@/components/primary-action-button';
+import { PrimaryActionButton } from '@/components/actions/primary-action-button';
 
 describe('PrimaryActionButton', () => {
   it('renders its label and fires onPress', () => {

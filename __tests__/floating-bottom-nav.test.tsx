@@ -1,9 +1,9 @@
 import { fireEvent, render } from '@testing-library/react-native';
 
-import { FloatingBottomNav } from '@/components/floating-bottom-nav';
+import { FloatingBottomNav } from '@/components/navigation/floating-bottom-nav';
 import { bookleafTheme } from '@/constants/bookleaf-theme';
 
-jest.mock('@/components/app-icon', () => {
+jest.mock('@/components/base/app-icon', () => {
   const React = require('react');
   const { Text: MockText } = require('react-native');
 

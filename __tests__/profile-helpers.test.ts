@@ -1,7 +1,7 @@
 import {
   getProfileAvatarValue,
   resolveProfileMember,
-} from '@/lib/profile-helpers';
+} from '@/app/(app)/profile.helpers';
 
 describe('resolveProfileMember', () => {
   it('falls back to stats payload when the member is missing from the users query', () => {

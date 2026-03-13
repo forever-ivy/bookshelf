@@ -9,13 +9,13 @@ import {
 } from 'react-native';
 import Animated from 'react-native-reanimated';
 
-import { GlassPillButton } from '@/components/glass-pill-button';
-import { PrimaryActionButton } from '@/components/primary-action-button';
+import { GlassPillButton } from '@/components/actions/glass-pill-button';
+import { PrimaryActionButton } from '@/components/actions/primary-action-button';
 import { bookleafTheme } from '@/constants/bookleaf-theme';
 import { createBookshelfApiClient } from '@/lib/api/client';
-import { createConnectionProfile } from '@/lib/connection';
-import { createStaggeredFadeIn } from '@/lib/motion';
-import { shouldSkipScannedCode } from '@/lib/scanner-guards';
+import { createConnectionProfile } from '@/lib/app/connection';
+import { createStaggeredFadeIn } from '@/lib/presentation/motion';
+import { shouldSkipScannedCode } from '@/app/scanner.helpers';
 import { useSessionStore } from '@/stores/session-store';
 
 function getScannerError(error: unknown) {

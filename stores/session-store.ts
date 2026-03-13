@@ -3,8 +3,8 @@ import { useStore } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 import { createStore } from 'zustand/vanilla';
 
-import type { ConnectionProfile } from '@/lib/connection';
-import { createPreviewConnectionProfile } from '@/lib/preview-data';
+import type { ConnectionProfile } from '@/lib/app/connection';
+import { createPreviewConnectionProfile } from '@/lib/app/preview-data';
 
 type SessionStoreState = {
   connection: ConnectionProfile | null;

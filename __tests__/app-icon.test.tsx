@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react-native';
 
-import { AppIcon } from '@/components/app-icon';
+import { AppIcon } from '@/components/base/app-icon';
 
 jest.mock('lucide-react-native', () => {
   const React = require('react');

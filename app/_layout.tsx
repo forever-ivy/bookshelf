@@ -19,7 +19,7 @@ import 'react-native-reanimated';
 import {
   rootStackScreenOptions,
   scannerScreenOptions,
-} from '@/lib/navigation-transitions';
+} from '@/lib/app/navigation-transitions';
 import { AppProviders } from '@/providers/app-providers';
 
 SplashScreen.preventAutoHideAsync().catch(() => null);

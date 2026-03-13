@@ -7,13 +7,13 @@ import Animated, {
   useSharedValue,
 } from 'react-native-reanimated';
 
-import { AvatarSwitcher } from '@/components/avatar-switcher';
-import { BookCarouselCard } from '@/components/book-carousel-card';
-import { CabinetStatusCard } from '@/components/cabinet-status-card';
-import { GlassPillButton } from '@/components/glass-pill-button';
-import { GoalProgressCard } from '@/components/goal-progress-card';
-import { MemberSwitcherSheet } from '@/components/member-switcher-sheet';
-import { ScreenShell } from '@/components/screen-shell';
+import { AvatarSwitcher } from '@/components/member/avatar-switcher';
+import { BookCarouselCard } from '@/components/cards/book-carousel-card';
+import { CabinetStatusCard } from '@/components/cards/cabinet-status-card';
+import { GlassPillButton } from '@/components/actions/glass-pill-button';
+import { GoalProgressCard } from '@/components/cards/goal-progress-card';
+import { MemberSwitcherSheet } from '@/components/member/member-switcher-sheet';
+import { ScreenShell } from '@/components/navigation/screen-shell';
 import { bookleafTheme } from '@/constants/bookleaf-theme';
 import {
   useCompartmentsQuery,
@@ -22,10 +22,13 @@ import {
   useMemberStatsQuery,
   useSwitchUserMutation,
   useUsersQuery,
-} from '@/lib/api/hooks';
-import type { BooklistItem } from '@/lib/api/types';
-import { buildCabinetStatusSummary, getTimeBasedGreeting } from '@/lib/home-helpers';
-import { createStaggeredFadeIn, motionTransitions } from '@/lib/motion';
+} from '@/lib/api/react-query/hooks';
+import type { BooklistItem } from '@/lib/api/contracts/types';
+import {
+  buildCabinetStatusSummary,
+  getTimeBasedGreeting,
+} from '@/app/(app)/home.helpers';
+import { createStaggeredFadeIn, motionTransitions } from '@/lib/presentation/motion';
 import { useSessionStore } from '@/stores/session-store';
 
 const emptyBookPreview: BooklistItem[] = [

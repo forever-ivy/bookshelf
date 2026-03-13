@@ -4,7 +4,7 @@ import {
   createBookCover,
   type BookCover,
   type CreateBookCoverInput,
-} from '@/lib/createBookCover';
+} from '@/lib/presentation/createBookCover';
 
 type UseCoverResult = {
   cover: BookCover;

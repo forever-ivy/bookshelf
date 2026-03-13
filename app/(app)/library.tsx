@@ -2,11 +2,11 @@ import { Redirect } from 'expo-router';
 import { Text } from 'react-native';
 import Animated from 'react-native-reanimated';
 
-import { BookCarouselCard } from '@/components/book-carousel-card';
-import { ScreenShell } from '@/components/screen-shell';
+import { BookCarouselCard } from '@/components/cards/book-carousel-card';
+import { ScreenShell } from '@/components/navigation/screen-shell';
 import { bookleafTheme } from '@/constants/bookleaf-theme';
-import { useBorrowLogsQuery, useMemberBooklistQuery } from '@/lib/api/hooks';
-import { createStaggeredFadeIn, motionTransitions } from '@/lib/motion';
+import { useBorrowLogsQuery, useMemberBooklistQuery } from '@/lib/api/react-query/hooks';
+import { createStaggeredFadeIn, motionTransitions } from '@/lib/presentation/motion';
 import { useSessionStore } from '@/stores/session-store';
 
 export default function LibraryRoute() {

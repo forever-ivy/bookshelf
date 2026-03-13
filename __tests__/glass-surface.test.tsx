@@ -1,7 +1,7 @@
 import {
   resolveGlassSurfaceMode,
   resolveGlassSurfacePalette,
-} from '@/components/glass-surface';
+} from '@/components/surfaces/glass-surface';
 
 describe('resolveGlassSurfaceMode', () => {
   it('uses liquid glass when both glass APIs are available on iOS', () => {

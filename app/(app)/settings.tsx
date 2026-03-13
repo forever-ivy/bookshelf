@@ -2,10 +2,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Redirect, useRouter } from 'expo-router';
 import { Text, View } from 'react-native';
 
-import { PrimaryActionButton } from '@/components/primary-action-button';
-import { ScreenShell } from '@/components/screen-shell';
+import { PrimaryActionButton } from '@/components/actions/primary-action-button';
+import { ScreenShell } from '@/components/navigation/screen-shell';
 import { bookleafTheme } from '@/constants/bookleaf-theme';
-import { performCabinetDisconnect } from '@/lib/session-actions';
+import { performCabinetDisconnect } from '@/lib/app/session-actions';
 import { useSessionStore } from '@/stores/session-store';
 
 export default function SettingsRoute() {

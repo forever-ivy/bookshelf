@@ -2,11 +2,15 @@ import { Redirect } from 'expo-router';
 import { Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
-import { AnimatedCountText } from '@/components/animated-count-text';
-import { ScreenShell } from '@/components/screen-shell';
+import { AnimatedCountText } from '@/components/base/animated-count-text';
+import { ScreenShell } from '@/components/navigation/screen-shell';
 import { bookleafTheme } from '@/constants/bookleaf-theme';
-import { useMonthlyReportQuery, useWeeklyReportQuery } from '@/lib/api/hooks';
-import { createSlowFadeIn, createStaggeredFadeIn, motionTransitions } from '@/lib/motion';
+import { useMonthlyReportQuery, useWeeklyReportQuery } from '@/lib/api/react-query/hooks';
+import {
+  createSlowFadeIn,
+  createStaggeredFadeIn,
+  motionTransitions,
+} from '@/lib/presentation/motion';
 import { useSessionStore } from '@/stores/session-store';
 
 export default function ReportsRoute() {

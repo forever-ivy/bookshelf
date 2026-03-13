@@ -1,4 +1,4 @@
-import { getPreviewCabinetData } from '@/lib/preview-data';
+import { getPreviewCabinetData } from '@/lib/app/preview-data';
 
 describe('getPreviewCabinetData', () => {
   it('returns a complete preview payload for UI-only navigation', () => {

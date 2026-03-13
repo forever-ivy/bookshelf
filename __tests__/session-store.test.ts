@@ -1,4 +1,4 @@
-import { createConnectionProfile } from '@/lib/connection';
+import { createConnectionProfile } from '@/lib/app/connection';
 import { createSessionStore } from '@/stores/session-store';
 
 describe('createSessionStore', () => {

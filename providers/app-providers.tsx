@@ -4,7 +4,7 @@ import * as SystemUI from 'expo-system-ui';
 import React from 'react';
 
 import { bookleafTheme } from '@/constants/bookleaf-theme';
-import { createAppQueryClient } from '@/lib/query-client';
+import { createAppQueryClient } from '@/lib/app/query-client';
 
 type AppProvidersProps = {
   children: React.ReactNode;

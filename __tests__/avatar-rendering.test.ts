@@ -1,4 +1,4 @@
-import { resolveAvatarVisual } from '@/lib/avatar-rendering';
+import { resolveAvatarVisual } from '@/lib/presentation/avatar-rendering';
 
 describe('resolveAvatarVisual', () => {
   it('turns emoji avatars into a stable remote image source', () => {

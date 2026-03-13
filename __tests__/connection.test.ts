@@ -1,4 +1,4 @@
-import { createConnectionProfile, normalizeBaseUrl } from '@/lib/connection';
+import { createConnectionProfile, normalizeBaseUrl } from '@/lib/app/connection';
 
 describe('normalizeBaseUrl', () => {
   it('trims whitespace and trailing slashes', () => {

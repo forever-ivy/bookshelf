@@ -1,4 +1,4 @@
-import { performCabinetDisconnect } from '@/lib/session-actions';
+import { performCabinetDisconnect } from '@/lib/app/session-actions';
 
 describe('performCabinetDisconnect', () => {
   it('clears query cache before resetting the local cabinet session', () => {

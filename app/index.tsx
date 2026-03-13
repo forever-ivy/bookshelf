@@ -2,7 +2,7 @@ import { Redirect } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
 
 import { bookleafTheme } from '@/constants/bookleaf-theme';
-import { getInitialHref } from '@/lib/navigation';
+import { getInitialHref } from '@/lib/app/navigation';
 import { useSessionStore } from '@/stores/session-store';
 
 export default function IndexRoute() {
