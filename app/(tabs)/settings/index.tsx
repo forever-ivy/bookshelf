@@ -7,11 +7,12 @@ import { PrimaryActionButton } from '@/components/actions/primary-action-button'
 import { SectionCard } from '@/components/surfaces/section-card';
 import { ShortcutCard } from '@/components/actions/shortcut-card';
 import { ScreenShell } from '@/components/navigation/screen-shell';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { performCabinetDisconnect } from '@/lib/app/session-actions';
 import { useSessionStore } from '@/stores/session-store';
 
 export default function SettingsRoute() {
+  const { theme } = useBookleafTheme();
   const router = useRouter();
   const queryClient = useQueryClient();
   const connection = useSessionStore((state) => state.connection);
@@ -24,13 +25,14 @@ export default function SettingsRoute() {
   return (
     <ScreenShell
       activeNavKey="settings"
-      backgroundDecoration={<HeroBubbleBackground variant="settings" />}>
+      backgroundDecoration={<HeroBubbleBackground variant="settings" />}
+      showTopOverlay={false}>
       <View style={{ gap: 8 }}>
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.text,
-            ...bookleafTheme.typography.heading,
+            color: theme.colors.text,
+            ...theme.typography.heading,
             fontSize: 40,
           }}>
           书柜设置
@@ -38,8 +40,8 @@ export default function SettingsRoute() {
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.textMuted,
-            ...bookleafTheme.typography.body,
+            color: theme.colors.textMuted,
+            ...theme.typography.body,
             fontSize: 15,
             lineHeight: 22,
           }}>
@@ -48,10 +50,10 @@ export default function SettingsRoute() {
       </View>
       <View
         style={{
-          backgroundColor: 'rgba(255,255,255,0.76)',
-          borderColor: bookleafTheme.colors.cardBorder,
+          backgroundColor: theme.colors.overlaySurface,
+          borderColor: theme.colors.cardBorder,
           borderCurve: 'continuous',
-          borderRadius: bookleafTheme.radii.xl,
+          borderRadius: theme.radii.xl,
           borderWidth: 1,
           gap: 10,
           padding: 22,
@@ -59,8 +61,8 @@ export default function SettingsRoute() {
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.textMuted,
-            ...bookleafTheme.typography.bold,
+            color: theme.colors.textMuted,
+            ...theme.typography.bold,
             fontSize: 12,
             letterSpacing: 1.2,
             textTransform: 'uppercase',
@@ -70,8 +72,8 @@ export default function SettingsRoute() {
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.text,
-            ...bookleafTheme.typography.heading,
+            color: theme.colors.text,
+            ...theme.typography.heading,
             fontSize: 30,
           }}>
           {connection.displayName}
@@ -79,8 +81,8 @@ export default function SettingsRoute() {
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.textMuted,
-            ...bookleafTheme.typography.medium,
+            color: theme.colors.textMuted,
+            ...theme.typography.medium,
             fontSize: 14,
             lineHeight: 22,
           }}>

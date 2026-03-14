@@ -6,12 +6,13 @@ import { BookCarouselCard } from '@/components/cards/book-carousel-card';
 import { SectionCard } from '@/components/surfaces/section-card';
 import { ShortcutCard } from '@/components/actions/shortcut-card';
 import { ScreenShell } from '@/components/navigation/screen-shell';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { useBorrowLogsQuery, useMemberBooklistQuery } from '@/lib/api/react-query/hooks';
 import { createStaggeredFadeIn, motionTransitions } from '@/lib/presentation/motion';
 import { useSessionStore } from '@/stores/session-store';
 
 export default function LibraryRoute() {
+  const { theme } = useBookleafTheme();
   const router = useRouter();
   const connection = useSessionStore((state) => state.connection);
   const memberId = useSessionStore((state) => state.currentMemberId);
@@ -23,13 +24,13 @@ export default function LibraryRoute() {
   }
 
   return (
-    <ScreenShell activeNavKey="library">
+    <ScreenShell activeNavKey="library" showTopOverlay={false}>
       <Animated.View entering={createStaggeredFadeIn(0)} style={{ gap: 8 }}>
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.text,
-            ...bookleafTheme.typography.heading,
+            color: theme.colors.text,
+            ...theme.typography.heading,
             fontSize: 40,
           }}>
           家庭书库
@@ -37,8 +38,8 @@ export default function LibraryRoute() {
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.textMuted,
-            ...bookleafTheme.typography.body,
+            color: theme.colors.textMuted,
+            ...theme.typography.body,
             fontSize: 15,
             lineHeight: 22,
           }}>
@@ -57,8 +58,8 @@ export default function LibraryRoute() {
           <Text
             selectable
             style={{
-              color: bookleafTheme.colors.textMuted,
-              ...bookleafTheme.typography.body,
+              color: theme.colors.textMuted,
+              ...theme.typography.body,
               fontSize: 14,
               lineHeight: 20,
             }}>
@@ -87,10 +88,10 @@ export default function LibraryRoute() {
         entering={createStaggeredFadeIn(4)}
         layout={motionTransitions.gentle}
         style={{
-          backgroundColor: 'rgba(255,255,255,0.76)',
-          borderColor: bookleafTheme.colors.cardBorder,
+          backgroundColor: theme.colors.overlaySurface,
+          borderColor: theme.colors.cardBorder,
           borderCurve: 'continuous',
-          borderRadius: bookleafTheme.radii.xl,
+          borderRadius: theme.radii.xl,
           borderWidth: 1,
           gap: 14,
           padding: 20,
@@ -98,8 +99,8 @@ export default function LibraryRoute() {
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.text,
-            ...bookleafTheme.typography.heading,
+            color: theme.colors.text,
+            ...theme.typography.heading,
             fontSize: 28,
           }}>
           最近借阅
@@ -110,17 +111,17 @@ export default function LibraryRoute() {
             key={`${log.title ?? 'log'}-${index}`}
             layout={motionTransitions.gentle}
             style={{
-              backgroundColor: bookleafTheme.colors.surfaceMuted,
+              backgroundColor: theme.colors.surfaceMuted,
               borderCurve: 'continuous',
-              borderRadius: bookleafTheme.radii.lg,
+              borderRadius: theme.radii.lg,
               gap: 4,
               padding: 14,
             }}>
             <Text
               selectable
               style={{
-                color: bookleafTheme.colors.text,
-                ...bookleafTheme.typography.semiBold,
+                color: theme.colors.text,
+                ...theme.typography.semiBold,
                 fontSize: 15,
               }}>
               {log.title ?? '书架动态'}
@@ -128,8 +129,8 @@ export default function LibraryRoute() {
             <Text
               selectable
               style={{
-                color: bookleafTheme.colors.textMuted,
-                ...bookleafTheme.typography.body,
+                color: theme.colors.textMuted,
+                ...theme.typography.body,
                 fontSize: 12,
               }}>
               {log.action} · {log.action_time ?? log.time ?? '刚刚'}

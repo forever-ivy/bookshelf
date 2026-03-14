@@ -12,7 +12,7 @@ import { AppIcon } from '@/components/base/app-icon';
 import { GlassPillButton } from '@/components/actions/glass-pill-button';
 import { PrimaryActionButton } from '@/components/actions/primary-action-button';
 import { ScreenShell } from '@/components/navigation/screen-shell';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { createBookshelfApiClient } from '@/lib/api/client';
 import { createConnectionProfile } from '@/lib/app/connection';
 import { createStaggeredFadeIn } from '@/lib/presentation/motion';
@@ -27,6 +27,7 @@ function getErrorMessage(error: unknown) {
 }
 
 export default function ConnectScreen() {
+  const { theme } = useBookleafTheme();
   const router = useRouter();
   const connection = useSessionStore((state) => state.connection);
   const enterPreviewMode = useSessionStore((state) => state.enterPreviewMode);
@@ -65,10 +66,10 @@ export default function ConnectScreen() {
         />
         <View
           style={{
-            backgroundColor: 'rgba(255,255,255,0.72)',
-            borderColor: bookleafTheme.colors.cardBorder,
+            backgroundColor: theme.colors.surfaceElevated,
+            borderColor: theme.colors.cardBorder,
             borderCurve: 'continuous',
-            borderRadius: bookleafTheme.radii.pill,
+            borderRadius: theme.radii.pill,
             borderWidth: 1,
             paddingHorizontal: 14,
             paddingVertical: 10,
@@ -76,8 +77,8 @@ export default function ConnectScreen() {
           <Text
             selectable
             style={{
-              color: bookleafTheme.colors.textMuted,
-              ...bookleafTheme.typography.semiBold,
+              color: theme.colors.textMuted,
+              ...theme.typography.semiBold,
               fontSize: 13,
             }}>
             第 1 步 / 共 3 步
@@ -91,10 +92,10 @@ export default function ConnectScreen() {
             style={{
               backgroundColor:
                 index === 0
-                  ? bookleafTheme.colors.primaryStrong
-                  : 'rgba(23,32,51,0.08)',
+                  ? theme.colors.primaryStrong
+                  : theme.colors.border,
               borderCurve: 'continuous',
-              borderRadius: bookleafTheme.radii.pill,
+              borderRadius: theme.radii.pill,
               flex: 1,
               height: 6,
             }}
@@ -105,8 +106,8 @@ export default function ConnectScreen() {
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.text,
-            ...bookleafTheme.typography.heading,
+            color: theme.colors.text,
+            ...theme.typography.heading,
             fontSize: 38,
             lineHeight: 44,
           }}>
@@ -115,8 +116,8 @@ export default function ConnectScreen() {
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.textMuted,
-            ...bookleafTheme.typography.body,
+            color: theme.colors.textMuted,
+            ...theme.typography.body,
             fontSize: 16,
             lineHeight: 24,
           }}>
@@ -127,8 +128,8 @@ export default function ConnectScreen() {
         entering={createStaggeredFadeIn(3)}
         style={{
           alignItems: 'center',
-          backgroundColor: 'rgba(255,255,255,0.76)',
-          borderColor: bookleafTheme.colors.cardBorder,
+          backgroundColor: theme.colors.overlaySurface,
+          borderColor: theme.colors.cardBorder,
           borderCurve: 'continuous',
           borderRadius: 38,
           borderStyle: 'dashed',
@@ -140,21 +141,21 @@ export default function ConnectScreen() {
         <View
           style={{
             alignItems: 'center',
-            backgroundColor: bookleafTheme.colors.surfaceMuted,
+            backgroundColor: theme.colors.surfaceMuted,
             borderCurve: 'continuous',
             borderRadius: 32,
             height: 120,
             justifyContent: 'center',
             width: 120,
           }}>
-          <AppIcon color={bookleafTheme.colors.primaryStrong} name="qr" size={52} />
+          <AppIcon color={theme.colors.primaryStrong} name="qr" size={52} />
         </View>
         <View style={{ gap: 6 }}>
           <Text
             selectable
             style={{
-              color: bookleafTheme.colors.text,
-              ...bookleafTheme.typography.semiBold,
+              color: theme.colors.text,
+              ...theme.typography.semiBold,
               fontSize: 18,
               textAlign: 'center',
             }}>
@@ -163,8 +164,8 @@ export default function ConnectScreen() {
           <Text
             selectable
             style={{
-              color: bookleafTheme.colors.textMuted,
-              ...bookleafTheme.typography.body,
+              color: theme.colors.textMuted,
+              ...theme.typography.body,
               fontSize: 14,
               lineHeight: 20,
               textAlign: 'center',
@@ -176,20 +177,20 @@ export default function ConnectScreen() {
       <Animated.View
         entering={createStaggeredFadeIn(4)}
         style={{
-          backgroundColor: 'rgba(240,244,239,0.92)',
+          backgroundColor: theme.states.neutral.background,
           borderCurve: 'continuous',
-          borderRadius: bookleafTheme.radii.lg,
+          borderRadius: theme.radii.lg,
           flexDirection: 'row',
           gap: 12,
           padding: 16,
         }}>
-        <AppIcon color={bookleafTheme.colors.textMuted} name="info" size={18} />
+        <AppIcon color={theme.states.neutral.icon} name="info" size={18} />
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.textMuted,
+            color: theme.states.neutral.description,
             flex: 1,
-            ...bookleafTheme.typography.body,
+            ...theme.typography.body,
             fontSize: 13,
             lineHeight: 18,
           }}>
@@ -200,10 +201,10 @@ export default function ConnectScreen() {
         <Animated.View
           entering={createStaggeredFadeIn(5)}
           style={{
-            backgroundColor: 'rgba(255,255,255,0.76)',
-            borderColor: bookleafTheme.colors.cardBorder,
+            backgroundColor: theme.colors.overlaySurface,
+            borderColor: theme.colors.cardBorder,
             borderCurve: 'continuous',
-            borderRadius: bookleafTheme.radii.xl,
+            borderRadius: theme.radii.xl,
             borderWidth: 1,
             gap: 14,
             padding: 20,
@@ -211,8 +212,8 @@ export default function ConnectScreen() {
           <Text
             selectable
             style={{
-              color: bookleafTheme.colors.text,
-              ...bookleafTheme.typography.semiBold,
+              color: theme.colors.text,
+              ...theme.typography.semiBold,
               fontSize: 16,
             }}>
             书柜地址
@@ -222,15 +223,15 @@ export default function ConnectScreen() {
             autoCorrect={false}
             onChangeText={setManualUrl}
             placeholder="https://cabinet.example.com"
-            placeholderTextColor={bookleafTheme.colors.textSoft}
+            placeholderTextColor={theme.colors.textSoft}
             style={{
-              backgroundColor: 'rgba(255,255,255,0.82)',
-              borderColor: 'rgba(158,195,255,0.22)',
+              backgroundColor: theme.colors.inputSurface,
+              borderColor: theme.colors.inputBorder,
               borderCurve: 'continuous',
-              borderRadius: bookleafTheme.radii.md,
+              borderRadius: theme.radii.md,
               borderWidth: 1,
-              color: bookleafTheme.colors.text,
-              ...bookleafTheme.typography.medium,
+              color: theme.colors.text,
+              ...theme.typography.medium,
               fontSize: 15,
               minHeight: 56,
               paddingHorizontal: 16,
@@ -248,16 +249,16 @@ export default function ConnectScreen() {
       {errorMessage ? (
         <View
           style={{
-            backgroundColor: '#FEE2E2',
+            backgroundColor: theme.colors.errorSurface,
             borderCurve: 'continuous',
-            borderRadius: bookleafTheme.radii.lg,
+            borderRadius: theme.radii.lg,
             padding: 16,
           }}>
           <Text
             selectable
             style={{
-              color: '#991B1B',
-              ...bookleafTheme.typography.medium,
+              color: theme.colors.errorIcon,
+              ...theme.typography.medium,
               fontSize: 13,
               lineHeight: 18,
             }}>
@@ -271,10 +272,10 @@ export default function ConnectScreen() {
           accessibilityRole="button"
           onPress={() => router.replace('/home')}
           style={{
-            backgroundColor: 'rgba(255,255,255,0.76)',
-            borderColor: bookleafTheme.colors.cardBorder,
+            backgroundColor: theme.colors.overlaySurface,
+            borderColor: theme.colors.cardBorder,
             borderCurve: 'continuous',
-            borderRadius: bookleafTheme.radii.xl,
+            borderRadius: theme.radii.xl,
             borderWidth: 1,
             gap: 8,
             padding: 18,
@@ -282,8 +283,8 @@ export default function ConnectScreen() {
           <Text
             selectable
             style={{
-              color: bookleafTheme.colors.text,
-              ...bookleafTheme.typography.semiBold,
+              color: theme.colors.text,
+              ...theme.typography.semiBold,
               fontSize: 16,
             }}>
             继续使用 {connection.displayName}
@@ -291,8 +292,8 @@ export default function ConnectScreen() {
           <Text
             selectable
             style={{
-              color: bookleafTheme.colors.textMuted,
-              ...bookleafTheme.typography.body,
+              color: theme.colors.textMuted,
+              ...theme.typography.body,
               fontSize: 13,
             }}>
             {connection.baseUrl}

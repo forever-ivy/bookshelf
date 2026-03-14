@@ -4,7 +4,7 @@ import Animated from 'react-native-reanimated';
 
 import { AnimatedCountText } from '@/components/base/animated-count-text';
 import { ScreenShell } from '@/components/navigation/screen-shell';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { useMonthlyReportQuery, useWeeklyReportQuery } from '@/lib/api/react-query/hooks';
 import {
   createSlowFadeIn,
@@ -14,6 +14,7 @@ import {
 import { useSessionStore } from '@/stores/session-store';
 
 export default function ReportsRoute() {
+  const { theme } = useBookleafTheme();
   const connection = useSessionStore((state) => state.connection);
   const memberId = useSessionStore((state) => state.currentMemberId);
   const weeklyReportQuery = useWeeklyReportQuery(memberId);
@@ -24,13 +25,13 @@ export default function ReportsRoute() {
   }
 
   return (
-    <ScreenShell activeNavKey="reports">
+    <ScreenShell activeNavKey="reports" showTopOverlay={false}>
       <Animated.View entering={createStaggeredFadeIn(0)} style={{ gap: 8 }}>
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.text,
-            ...bookleafTheme.typography.heading,
+            color: theme.colors.text,
+            ...theme.typography.heading,
             fontSize: 40,
           }}>
           阅读报告
@@ -38,8 +39,8 @@ export default function ReportsRoute() {
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.textMuted,
-            ...bookleafTheme.typography.body,
+            color: theme.colors.textMuted,
+            ...theme.typography.body,
             fontSize: 15,
             lineHeight: 22,
           }}>
@@ -50,12 +51,14 @@ export default function ReportsRoute() {
         body={weeklyReportQuery.data?.summary ?? '暂时还没有本周阅读总结。'}
         eyebrow="本周"
         index={1}
+        isDark={theme.isDark}
         title="孩子阅读总结"
       />
       <ReportCard
         body={monthlyReportQuery.data?.summary ?? '暂时还没有家庭月度报告。'}
         eyebrow="本月"
         index={2}
+        isDark={theme.isDark}
         title="家庭阅读快照"
       />
       <View
@@ -80,22 +83,26 @@ function ReportCard({
   body,
   eyebrow,
   index,
+  isDark,
   title,
 }: {
   body: string;
   eyebrow: string;
   index: number;
+  isDark: boolean;
   title: string;
 }) {
+  const { theme } = useBookleafTheme();
+
   return (
     <Animated.View
       entering={createSlowFadeIn(index)}
       layout={motionTransitions.gentle}
       style={{
-        backgroundColor: 'rgba(255,255,255,0.76)',
-        borderColor: bookleafTheme.colors.cardBorder,
+        backgroundColor: theme.colors.overlaySurface,
+        borderColor: theme.colors.cardBorder,
         borderCurve: 'continuous',
-        borderRadius: bookleafTheme.radii.xl,
+        borderRadius: theme.radii.xl,
         borderWidth: 1,
         gap: 12,
         padding: 22,
@@ -103,8 +110,8 @@ function ReportCard({
       <Text
         selectable
         style={{
-          color: bookleafTheme.colors.textMuted,
-          ...bookleafTheme.typography.bold,
+          color: theme.colors.textMuted,
+          ...theme.typography.bold,
           fontSize: 12,
           letterSpacing: 1.2,
           textTransform: 'uppercase',
@@ -114,8 +121,8 @@ function ReportCard({
       <Text
         selectable
         style={{
-          color: bookleafTheme.colors.text,
-          ...bookleafTheme.typography.heading,
+          color: theme.colors.text,
+          ...theme.typography.heading,
           fontSize: 30,
         }}>
         {title}
@@ -123,8 +130,8 @@ function ReportCard({
       <Text
         selectable
         style={{
-          color: bookleafTheme.colors.textMuted,
-          ...bookleafTheme.typography.body,
+          color: theme.colors.textMuted,
+          ...theme.typography.body,
           fontSize: 15,
           lineHeight: 24,
         }}>
@@ -143,14 +150,16 @@ function MetricBlock({
   numericValue?: number;
   value?: string;
 }) {
+  const { theme } = useBookleafTheme();
+
   return (
     <Animated.View
       entering={createStaggeredFadeIn(3, 60)}
       layout={motionTransitions.gentle}
       style={{
-        backgroundColor: bookleafTheme.colors.surfaceMuted,
+        backgroundColor: theme.colors.surfaceMuted,
         borderCurve: 'continuous',
-        borderRadius: bookleafTheme.radii.lg,
+        borderRadius: theme.radii.lg,
         flex: 1,
         gap: 6,
         padding: 16,
@@ -158,8 +167,8 @@ function MetricBlock({
       <Text
         selectable
         style={{
-          color: bookleafTheme.colors.textMuted,
-          ...bookleafTheme.typography.body,
+          color: theme.colors.textMuted,
+          ...theme.typography.body,
           fontSize: 12,
         }}>
         {label}
@@ -167,8 +176,8 @@ function MetricBlock({
       {typeof numericValue === 'number' ? (
         <AnimatedCountText
           style={{
-            color: bookleafTheme.colors.text,
-            ...bookleafTheme.typography.semiBold,
+            color: theme.colors.text,
+            ...theme.typography.semiBold,
             fontSize: 18,
             fontVariant: ['tabular-nums'],
           }}
@@ -179,8 +188,8 @@ function MetricBlock({
           numberOfLines={2}
           selectable
           style={{
-            color: bookleafTheme.colors.text,
-            ...bookleafTheme.typography.semiBold,
+            color: theme.colors.text,
+            ...theme.typography.semiBold,
             fontSize: 18,
           }}>
           {value}

@@ -1,10 +1,5 @@
-import { bookleafTheme } from '@/constants/bookleaf-theme';
-
 export const rootStackScreenOptions = {
   animation: 'none',
-  contentStyle: {
-    backgroundColor: bookleafTheme.colors.background,
-  },
   headerShown: false,
 } as const;
 

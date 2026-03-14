@@ -8,7 +8,7 @@ import { FlowScreenHeader } from '@/components/navigation/flow-screen-header';
 import { ScreenShell } from '@/components/navigation/screen-shell';
 import { SectionCard } from '@/components/surfaces/section-card';
 import { StateCard } from '@/components/surfaces/state-card';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { useActiveMember } from '@/hooks/use-active-member';
 import { useGoalQuery, useMemberStatsQuery, useSetGoalMutation } from '@/lib/api/react-query/hooks';
 import { createStaggeredFadeIn, motionTransitions } from '@/lib/presentation/motion';
@@ -17,6 +17,7 @@ import { useSessionStore } from '@/stores/session-store';
 const goalSuggestions = [3, 5, 7];
 
 export default function GoalSettingsScreen() {
+  const { theme } = useBookleafTheme();
   const connection = useSessionStore((state) => state.connection);
   const isPreviewMode = useSessionStore((state) => state.isPreviewMode);
   const { activeMember, members } = useActiveMember();
@@ -74,8 +75,8 @@ export default function GoalSettingsScreen() {
           <View
             style={{
               alignItems: 'center',
-              backgroundColor: 'rgba(255,255,255,0.82)',
-              borderColor: bookleafTheme.colors.cardBorder,
+              backgroundColor: theme.colors.surfaceElevated,
+              borderColor: theme.colors.cardBorder,
               borderCurve: 'continuous',
               borderRadius: 30,
               borderWidth: 1,
@@ -85,8 +86,8 @@ export default function GoalSettingsScreen() {
             <Text
               selectable
               style={{
-                color: bookleafTheme.colors.textMuted,
-                ...bookleafTheme.typography.medium,
+                color: theme.colors.textMuted,
+                ...theme.typography.medium,
                 fontSize: 13,
               }}>
               目标借阅本数 / 每周
@@ -99,8 +100,8 @@ export default function GoalSettingsScreen() {
               <Text
                 selectable
                 style={{
-                  color: bookleafTheme.colors.text,
-                  ...bookleafTheme.typography.heading,
+                  color: theme.colors.text,
+                  ...theme.typography.heading,
                   fontSize: 48,
                 }}>
                 {weeklyTarget}
@@ -120,18 +121,18 @@ export default function GoalSettingsScreen() {
                 style={{
                   backgroundColor:
                     weeklyTarget === value
-                      ? bookleafTheme.colors.primary
-                      : bookleafTheme.colors.surfaceMuted,
+                      ? theme.colors.primary
+                      : theme.colors.surfaceMuted,
                   borderCurve: 'continuous',
-                  borderRadius: bookleafTheme.radii.pill,
+                  borderRadius: theme.radii.pill,
                   paddingHorizontal: 14,
                   paddingVertical: 10,
                 }}>
                 <Text
                   selectable
                   style={{
-                    color: bookleafTheme.colors.text,
-                    ...bookleafTheme.typography.semiBold,
+                    color: theme.colors.text,
+                    ...theme.typography.semiBold,
                     fontSize: 13,
                   }}>
                   {value} 本 / 周
@@ -185,15 +186,17 @@ function StepperButton({
   label: string;
   onPress: () => void;
 }) {
+  const { theme } = useBookleafTheme();
+
   return (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
       style={{
         alignItems: 'center',
-        backgroundColor: bookleafTheme.colors.surfaceMuted,
+        backgroundColor: theme.colors.surfaceMuted,
         borderCurve: 'continuous',
-        borderRadius: bookleafTheme.radii.pill,
+        borderRadius: theme.radii.pill,
         height: 46,
         justifyContent: 'center',
         width: 46,
@@ -201,8 +204,8 @@ function StepperButton({
       <Text
         selectable
         style={{
-          color: bookleafTheme.colors.text,
-          ...bookleafTheme.typography.bold,
+          color: theme.colors.text,
+          ...theme.typography.bold,
           fontSize: 22,
         }}>
         {label}
@@ -212,12 +215,14 @@ function StepperButton({
 }
 
 function MetricCard({ label, value }: { label: string; value: number }) {
+  const { theme } = useBookleafTheme();
+
   return (
     <View
       style={{
-        backgroundColor: bookleafTheme.colors.surfaceSoft,
+        backgroundColor: theme.colors.surfaceSoft,
         borderCurve: 'continuous',
-        borderRadius: bookleafTheme.radii.lg,
+        borderRadius: theme.radii.lg,
         flex: 1,
         gap: 6,
         padding: 16,
@@ -225,8 +230,8 @@ function MetricCard({ label, value }: { label: string; value: number }) {
       <Text
         selectable
         style={{
-          color: bookleafTheme.colors.textMuted,
-          ...bookleafTheme.typography.body,
+          color: theme.colors.textMuted,
+          ...theme.typography.body,
           fontSize: 12,
         }}>
         {label}
@@ -234,8 +239,8 @@ function MetricCard({ label, value }: { label: string; value: number }) {
       <Text
         selectable
         style={{
-          color: bookleafTheme.colors.text,
-          ...bookleafTheme.typography.heading,
+          color: theme.colors.text,
+          ...theme.typography.heading,
           fontSize: 28,
         }}>
         {value}

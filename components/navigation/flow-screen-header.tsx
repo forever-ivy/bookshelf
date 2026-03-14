@@ -3,7 +3,7 @@ import React from 'react';
 import { Text, View } from 'react-native';
 
 import { GlassPillButton } from '@/components/actions/glass-pill-button';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 
 type FlowScreenHeaderProps = {
   description: string;
@@ -16,6 +16,7 @@ export function FlowScreenHeader({
   title,
   trailing,
 }: FlowScreenHeaderProps) {
+  const { theme } = useBookleafTheme();
   const router = useRouter();
 
   return (
@@ -28,8 +29,8 @@ export function FlowScreenHeader({
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.text,
-            ...bookleafTheme.typography.heading,
+            color: theme.colors.text,
+            ...theme.typography.heading,
             fontSize: 38,
             lineHeight: 44,
           }}>
@@ -38,8 +39,8 @@ export function FlowScreenHeader({
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.textMuted,
-            ...bookleafTheme.typography.body,
+            color: theme.colors.textMuted,
+            ...theme.typography.body,
             fontSize: 15,
             lineHeight: 22,
           }}>

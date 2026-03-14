@@ -46,4 +46,11 @@ describe('glass buttons', () => {
     expect(screen.getByText(/search:18:/)).toBeTruthy();
     expect(onPress).toHaveBeenCalledTimes(1);
   });
+
+  it('renders the iOS pill button inside a glass view shell', () => {
+    const screen = render(<GlassPillButton icon="back" onPress={jest.fn()} />);
+
+    expect(screen.getByTestId('glass-pill-button-shell')).toBeTruthy();
+    expect(screen.getByTestId('glass-pill-button-glass')).toBeTruthy();
+  });
 });

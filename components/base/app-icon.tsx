@@ -22,6 +22,8 @@ import {
   type LucideIcon,
 } from 'lucide-react-native';
 
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
+
 export type AppIconName =
   | 'home'
   | 'book'
@@ -73,17 +75,18 @@ const iconByName: Record<AppIconName, LucideIcon> = {
 };
 
 export function AppIcon({
-  color = '#0F172A',
+  color,
   name,
   size = 20,
   strokeWidth = 1.8,
 }: AppIconProps) {
+  const { theme } = useBookleafTheme();
   const IconComponent = iconByName[name] as React.ComponentType<Record<string, unknown>>;
 
   return (
     <IconComponent
       absoluteStrokeWidth
-      color={color}
+      color={color ?? theme.colors.text}
       size={size}
       strokeWidth={strokeWidth}
     />

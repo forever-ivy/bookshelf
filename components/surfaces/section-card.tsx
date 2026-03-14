@@ -1,6 +1,7 @@
 import React from 'react';
 import { Text, View } from 'react-native';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 
 type SectionCardProps = {
   children: React.ReactNode;
@@ -9,13 +10,15 @@ type SectionCardProps = {
 };
 
 export function SectionCard({ children, description, title }: SectionCardProps) {
+  const { theme } = useBookleafTheme();
+
   return (
     <View
       style={{
-        backgroundColor: bookleafTheme.colors.surface,
-        borderColor: bookleafTheme.colors.border,
+        backgroundColor: theme.colors.surface,
+        borderColor: theme.colors.border,
         borderCurve: 'continuous',
-        borderRadius: bookleafTheme.radii.lg,
+        borderRadius: theme.radii.lg,
         borderWidth: 1,
         gap: 16,
         padding: 20,
@@ -26,8 +29,8 @@ export function SectionCard({ children, description, title }: SectionCardProps) 
             <Text
               selectable
               style={{
-                color: bookleafTheme.colors.text,
-                ...bookleafTheme.typography.heading,
+                color: theme.colors.text,
+                ...theme.typography.heading,
                 fontSize: 28,
               }}>
               {title}
@@ -36,8 +39,8 @@ export function SectionCard({ children, description, title }: SectionCardProps) 
               <Text
                 selectable
                 style={{
-                  color: bookleafTheme.colors.textMuted,
-                  ...bookleafTheme.typography.body,
+                  color: theme.colors.textMuted,
+                  ...theme.typography.body,
                   fontSize: 14,
                   lineHeight: 20,
                 }}>

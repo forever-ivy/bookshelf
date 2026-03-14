@@ -10,7 +10,7 @@ import { FlowScreenHeader } from '@/components/navigation/flow-screen-header';
 import { ScreenShell } from '@/components/navigation/screen-shell';
 import { SectionCard } from '@/components/surfaces/section-card';
 import { StateCard } from '@/components/surfaces/state-card';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { useOcrIngestMutation } from '@/lib/api/react-query/hooks';
 import {
   resolveImagePickerModule,
@@ -37,6 +37,7 @@ function createImageFormData(asset: ImagePickerAsset) {
 }
 
 export default function StoreBookScreen() {
+  const { theme } = useBookleafTheme();
   const connection = useSessionStore((state) => state.connection);
   const isPreviewMode = useSessionStore((state) => state.isPreviewMode);
   const ocrIngestMutation = useOcrIngestMutation();
@@ -157,7 +158,7 @@ export default function StoreBookScreen() {
                 contentFit="cover"
                 source={{ uri: selectedAsset.uri }}
                 style={{
-                  borderRadius: bookleafTheme.radii.lg,
+                  borderRadius: theme.radii.lg,
                   height: 240,
                   width: '100%',
                 }}
@@ -165,8 +166,8 @@ export default function StoreBookScreen() {
               <Text
                 selectable
                 style={{
-                  color: bookleafTheme.colors.textMuted,
-                  ...bookleafTheme.typography.body,
+                  color: theme.colors.textMuted,
+                  ...theme.typography.body,
                   fontSize: 13,
                   lineHeight: 18,
                 }}>

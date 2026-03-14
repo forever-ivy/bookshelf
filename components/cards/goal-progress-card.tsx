@@ -9,7 +9,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { AnimatedCountText } from '@/components/base/animated-count-text';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { motionTransitions, motionTokens } from '@/lib/presentation/motion';
 
 type GoalProgressCardProps = {
@@ -36,6 +36,7 @@ export function GoalProgressCard({
   targetValue,
   title,
 }: GoalProgressCardProps) {
+  const { theme } = useBookleafTheme();
   const clampedProgress = Math.max(0, Math.min(progress, 1));
   const strokeDashoffset = CIRCUMFERENCE * (1 - clampedProgress);
   const animatedProgress = useSharedValue(clampedProgress);
@@ -54,9 +55,9 @@ export function GoalProgressCard({
   return (
     <View
       style={{
-        backgroundColor: 'rgba(238,244,255,0.92)',
+        backgroundColor: theme.goalProgress.cardBackground,
         borderCurve: 'continuous',
-        borderRadius: bookleafTheme.radii.xl,
+        borderRadius: theme.radii.xl,
         padding: 24,
       }}>
       <Animated.View
@@ -69,7 +70,7 @@ export function GoalProgressCard({
               cy="52"
               fill="transparent"
               r={RADIUS}
-              stroke="rgba(255,255,255,0.82)"
+              stroke={theme.goalProgress.track}
               strokeWidth={STROKE_WIDTH}
             />
             <AnimatedCircle
@@ -78,7 +79,7 @@ export function GoalProgressCard({
               cy="52"
               fill="transparent"
               r={RADIUS}
-              stroke={bookleafTheme.colors.primaryStrong}
+              stroke={theme.colors.primaryStrong}
               strokeDasharray={`${CIRCUMFERENCE} ${CIRCUMFERENCE}`}
               strokeDashoffset={strokeDashoffset}
               strokeLinecap="round"
@@ -93,8 +94,8 @@ export function GoalProgressCard({
             }}>
             <AnimatedCountText
               style={{
-                color: bookleafTheme.colors.text,
-                ...bookleafTheme.typography.bold,
+                color: theme.colors.text,
+                ...theme.typography.bold,
                 fontSize: 24,
                 fontVariant: ['tabular-nums'],
               }}
@@ -103,8 +104,8 @@ export function GoalProgressCard({
             <Text
               selectable
               style={{
-                color: bookleafTheme.colors.textMuted,
-                ...bookleafTheme.typography.body,
+                color: theme.colors.textMuted,
+                ...theme.typography.body,
                 fontSize: 12,
               }}>
               / {targetValue}
@@ -118,8 +119,8 @@ export function GoalProgressCard({
             <Text
               selectable
               style={{
-                color: bookleafTheme.colors.text,
-                ...bookleafTheme.typography.heading,
+                color: theme.colors.text,
+                ...theme.typography.heading,
                 fontSize: 26,
                 lineHeight: 30,
               }}>
@@ -128,8 +129,8 @@ export function GoalProgressCard({
             <Text
               selectable
               style={{
-                color: bookleafTheme.colors.textMuted,
-                ...bookleafTheme.typography.body,
+                color: theme.colors.textMuted,
+                ...theme.typography.body,
                 fontSize: 14,
                 lineHeight: 20,
               }}>
@@ -142,10 +143,10 @@ export function GoalProgressCard({
               onPress={onPress}
               style={{
                 alignSelf: 'flex-start',
-                backgroundColor: 'rgba(255,255,255,0.7)',
-                borderColor: 'rgba(255,255,255,0.55)',
+                backgroundColor: theme.goalProgress.ctaBackground,
+                borderColor: theme.goalProgress.ctaBorder,
                 borderCurve: 'continuous',
-                borderRadius: bookleafTheme.radii.pill,
+                borderRadius: theme.radii.pill,
                 borderWidth: 1,
                 paddingHorizontal: 14,
                 paddingVertical: 10,
@@ -153,8 +154,8 @@ export function GoalProgressCard({
               <Text
                 selectable
                 style={{
-                  color: bookleafTheme.colors.textMuted,
-                  ...bookleafTheme.typography.semiBold,
+                  color: theme.colors.textMuted,
+                  ...theme.typography.semiBold,
                   fontSize: 13,
                 }}>
                 {buttonLabel}

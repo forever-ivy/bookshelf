@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { PrimaryActionButton } from '@/components/actions/primary-action-button';
 import { AvatarGlyph } from '@/components/member/avatar-glyph';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import type { MemberSummary } from '@/lib/api/contracts/types';
 import {
   getMemberAccentColor,
@@ -26,14 +26,15 @@ export function MemberSwitcherSheetContent({
   onSelectMember,
   pendingMemberId,
 }: MemberSwitcherSheetContentProps) {
+  const { isDark, theme } = useBookleafTheme();
   const parentMembers = members.filter((member) => member.role === 'parent');
   const readerMembers = members.filter((member) => member.role !== 'parent');
 
   return (
     <View
       style={{
-        backgroundColor: bookleafTheme.colors.surface,
-        borderColor: bookleafTheme.colors.border,
+        backgroundColor: theme.colors.surface,
+        borderColor: theme.colors.border,
         borderCurve: 'continuous',
         borderRadius: 28,
         borderWidth: 1,
@@ -44,8 +45,8 @@ export function MemberSwitcherSheetContent({
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.text,
-            ...bookleafTheme.typography.heading,
+            color: theme.colors.text,
+            ...theme.typography.heading,
             fontSize: 30,
           }}>
           切换成员
@@ -53,8 +54,8 @@ export function MemberSwitcherSheetContent({
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.textMuted,
-            ...bookleafTheme.typography.body,
+            color: theme.colors.textMuted,
+            ...theme.typography.body,
             fontSize: 14,
           }}>
           不离开当前页面，直接切换这台书柜正在服务的家庭成员。
@@ -63,6 +64,7 @@ export function MemberSwitcherSheetContent({
       {parentMembers.length ? (
         <MemberSection
           activeMemberId={activeMemberId}
+          isDark={isDark}
           label="家长"
           members={parentMembers}
           onSelectMember={onSelectMember}
@@ -72,6 +74,7 @@ export function MemberSwitcherSheetContent({
       {readerMembers.length ? (
         <MemberSection
           activeMemberId={activeMemberId}
+          isDark={isDark}
           label="读者"
           members={readerMembers}
           onSelectMember={onSelectMember}
@@ -85,6 +88,7 @@ export function MemberSwitcherSheetContent({
 
 type MemberSectionProps = {
   activeMemberId?: number | null;
+  isDark: boolean;
   label: string;
   members: MemberSummary[];
   onSelectMember: (memberId: number) => void;
@@ -93,18 +97,21 @@ type MemberSectionProps = {
 
 function MemberSection({
   activeMemberId,
+  isDark,
   label,
   members,
   onSelectMember,
   pendingMemberId,
 }: MemberSectionProps) {
+  const { theme } = useBookleafTheme();
+
   return (
     <View style={{ gap: 12 }}>
       <Text
         selectable
         style={{
-          color: bookleafTheme.colors.textMuted,
-          ...bookleafTheme.typography.bold,
+          color: theme.colors.textMuted,
+          ...theme.typography.bold,
           fontSize: 12,
           letterSpacing: 1.2,
           textTransform: 'uppercase',
@@ -116,6 +123,7 @@ function MemberSection({
           active={member.id === activeMemberId}
           busy={pendingMemberId === member.id}
           disabled={pendingMemberId != null}
+          isDark={isDark}
           key={member.id}
           member={member}
           onPress={() => onSelectMember(member.id)}
@@ -129,6 +137,7 @@ type MemberSwitcherRowProps = {
   active: boolean;
   busy?: boolean;
   disabled?: boolean;
+  isDark: boolean;
   member: MemberSummary;
   onPress: () => void;
 };
@@ -137,9 +146,12 @@ function MemberSwitcherRow({
   active,
   busy = false,
   disabled = false,
+  isDark,
   member,
   onPress,
 }: MemberSwitcherRowProps) {
+  const { theme } = useBookleafTheme();
+
   return (
     <Pressable
       accessibilityRole="button"
@@ -147,10 +159,10 @@ function MemberSwitcherRow({
       onPress={onPress}
       style={{
         alignItems: 'center',
-        backgroundColor: active ? 'rgba(127, 168, 255, 0.12)' : bookleafTheme.colors.surface,
-        borderColor: active ? bookleafTheme.colors.primaryStrong : bookleafTheme.colors.border,
+        backgroundColor: active ? theme.colors.glassAccentSoft : theme.colors.surface,
+        borderColor: active ? theme.colors.primaryStrong : theme.colors.border,
         borderCurve: 'continuous',
-        borderRadius: bookleafTheme.radii.lg,
+        borderRadius: theme.radii.lg,
         borderWidth: 1,
         flexDirection: 'row',
         gap: 14,
@@ -160,9 +172,9 @@ function MemberSwitcherRow({
       <View
         style={{
           alignItems: 'center',
-          backgroundColor: getMemberAccentColor(member),
+          backgroundColor: getMemberAccentColor(member, isDark),
           borderCurve: 'continuous',
-          borderRadius: bookleafTheme.radii.pill,
+          borderRadius: theme.radii.pill,
           height: 54,
           justifyContent: 'center',
           width: 54,
@@ -173,8 +185,8 @@ function MemberSwitcherRow({
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.text,
-            ...bookleafTheme.typography.semiBold,
+            color: theme.colors.text,
+            ...theme.typography.semiBold,
             fontSize: 16,
           }}>
           {member.name}
@@ -182,21 +194,21 @@ function MemberSwitcherRow({
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.textMuted,
-            ...bookleafTheme.typography.body,
+            color: theme.colors.textMuted,
+            ...theme.typography.body,
             fontSize: 13,
           }}>
           {getMemberRoleLabel(member)}
         </Text>
       </View>
       {busy ? (
-        <ActivityIndicator color={bookleafTheme.colors.primaryStrong} />
+        <ActivityIndicator color={theme.colors.primaryStrong} />
       ) : active ? (
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.primaryStrong,
-            ...bookleafTheme.typography.bold,
+            color: theme.colors.primaryStrong,
+            ...theme.typography.bold,
             fontSize: 13,
           }}>
           当前

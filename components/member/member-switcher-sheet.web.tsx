@@ -2,6 +2,7 @@ import React from 'react';
 import { Modal, Pressable, View } from 'react-native';
 
 import { MemberSwitcherSheetContent } from '@/components/member/member-switcher-sheet-content';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import type { MemberSummary } from '@/lib/api/contracts/types';
 
 type MemberSwitcherSheetProps = {
@@ -19,6 +20,7 @@ export function MemberSwitcherSheet({
   onClose,
   onSelectMember,
 }: MemberSwitcherSheetProps) {
+  const { theme } = useBookleafTheme();
   const [pendingMemberId, setPendingMemberId] = React.useState<number | null>(null);
 
   async function handleSelectMember(memberId: number) {
@@ -41,7 +43,7 @@ export function MemberSwitcherSheet({
       <Pressable
         onPress={onClose}
         style={{
-          backgroundColor: 'rgba(15, 23, 42, 0.2)',
+          backgroundColor: theme.colors.modalScrim,
           bottom: 0,
           justifyContent: 'flex-end',
           left: 0,

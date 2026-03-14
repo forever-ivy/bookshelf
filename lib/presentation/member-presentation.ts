@@ -1,18 +1,20 @@
-import { bookleafTheme } from '@/constants/bookleaf-theme';
 import type { MemberSummary } from '@/lib/api/contracts/types';
 
-export function getMemberAccentColor(member?: Pick<MemberSummary, 'color'> | null) {
+export function getMemberAccentColor(
+  member?: Pick<MemberSummary, 'color'> | null,
+  isDark = false
+) {
   switch (member?.color) {
     case 'cool':
-      return '#C9D7FF';
+      return isDark ? '#5C74C7' : '#C9D7FF';
     case 'forest':
-      return '#CDECCF';
+      return isDark ? '#4F8B6B' : '#CDECCF';
     case 'sun':
-      return '#F7D8A8';
+      return isDark ? '#B28A4E' : '#F7D8A8';
     case 'rose':
-      return '#F8D0DA';
+      return isDark ? '#B36B87' : '#F8D0DA';
     default:
-      return bookleafTheme.colors.primary;
+      return isDark ? '#6E9BFF' : '#9EC3FF';
   }
 }
 

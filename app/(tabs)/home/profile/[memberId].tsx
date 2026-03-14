@@ -7,11 +7,11 @@ import { AvatarGlyph } from '@/components/member/avatar-glyph';
 import { BookCarouselCard } from '@/components/cards/book-carousel-card';
 import { GlassPillButton } from '@/components/actions/glass-pill-button';
 import { GoalProgressCard } from '@/components/cards/goal-progress-card';
-import { MilestoneBadge } from '@/components/cards/milestone';
+import { MilestoneRail } from '@/components/cards/milestone';
 import { SectionCard } from '@/components/surfaces/section-card';
 import { ShortcutCard } from '@/components/actions/shortcut-card';
 import { ScreenShell } from '@/components/navigation/screen-shell';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import {
   useMemberBadgesQuery,
   useMemberBooklistQuery,
@@ -34,6 +34,7 @@ import {
 import { useSessionStore } from '@/stores/session-store';
 
 export default function ProfileRoute() {
+  const { isDark, theme } = useBookleafTheme();
   const router = useRouter();
   const connection = useSessionStore((state) => state.connection);
   const { memberId } = useLocalSearchParams<{ memberId: string }>();
@@ -67,8 +68,8 @@ export default function ProfileRoute() {
         layout={motionTransitions.gentle}
         style={{
           alignItems: 'center',
-          backgroundColor: 'rgba(255,255,255,0.76)',
-          borderColor: bookleafTheme.colors.cardBorder,
+          backgroundColor: theme.colors.overlaySurface,
+          borderColor: theme.colors.cardBorder,
           borderCurve: 'continuous',
           borderRadius: 40,
           borderWidth: 1,
@@ -79,7 +80,7 @@ export default function ProfileRoute() {
           layout={motionTransitions.snappy}
           style={{
             alignItems: 'center',
-            backgroundColor: getMemberAccentColor(member),
+            backgroundColor: getMemberAccentColor(member, isDark),
             borderCurve: 'continuous',
             borderRadius: 38,
             height: 88,
@@ -92,8 +93,8 @@ export default function ProfileRoute() {
           <Text
             selectable
             style={{
-              color: bookleafTheme.colors.text,
-              ...bookleafTheme.typography.heading,
+              color: theme.colors.text,
+              ...theme.typography.heading,
               fontSize: 36,
               textAlign: 'center',
             }}>
@@ -102,8 +103,8 @@ export default function ProfileRoute() {
           <Text
             selectable
             style={{
-              color: bookleafTheme.colors.textMuted,
-              ...bookleafTheme.typography.medium,
+              color: theme.colors.textMuted,
+              ...theme.typography.medium,
               fontSize: 14,
               textAlign: 'center',
             }}>
@@ -129,10 +130,10 @@ export default function ProfileRoute() {
         entering={createStaggeredFadeIn(2)}
         layout={motionTransitions.gentle}
         style={{
-          backgroundColor: 'rgba(255,255,255,0.76)',
-          borderColor: bookleafTheme.colors.cardBorder,
+          backgroundColor: theme.colors.overlaySurface,
+          borderColor: theme.colors.cardBorder,
           borderCurve: 'continuous',
-          borderRadius: bookleafTheme.radii.xl,
+          borderRadius: theme.radii.xl,
           borderWidth: 1,
           gap: 12,
           padding: 22,
@@ -140,28 +141,21 @@ export default function ProfileRoute() {
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.text,
-            ...bookleafTheme.typography.heading,
+            color: theme.colors.text,
+            ...theme.typography.heading,
             fontSize: 28,
           }}>
           里程碑
         </Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+        <View>
           {badges.length ? (
-            badges.map((badge, index) => (
-              <Animated.View
-                entering={createStaggeredFadeIn(index, 40)}
-                key={badge.badge_key}
-                layout={motionTransitions.snappy}>
-                <MilestoneBadge badgeKey={badge.badge_key} />
-              </Animated.View>
-            ))
+            <MilestoneRail badges={badges} />
           ) : (
             <Text
               selectable
               style={{
-                color: bookleafTheme.colors.textMuted,
-                ...bookleafTheme.typography.body,
+                color: theme.colors.textMuted,
+                ...theme.typography.body,
                 fontSize: 14,
               }}>
               孩子开始借书和还书后，这里会逐步解锁阅读徽章。
@@ -202,14 +196,16 @@ export default function ProfileRoute() {
 }
 
 function ProfileMetric({ label, value }: { label: string; value: number }) {
+  const { theme } = useBookleafTheme();
+
   return (
     <Animated.View
       entering={createStaggeredFadeIn(1, 50)}
       layout={motionTransitions.gentle}
       style={{
-        backgroundColor: bookleafTheme.colors.surfaceSoft,
+        backgroundColor: theme.colors.surfaceSoft,
         borderCurve: 'continuous',
-        borderRadius: bookleafTheme.radii.lg,
+        borderRadius: theme.radii.lg,
         flex: 1,
         gap: 4,
         padding: 16,
@@ -217,16 +213,16 @@ function ProfileMetric({ label, value }: { label: string; value: number }) {
       <Text
         selectable
         style={{
-          color: bookleafTheme.colors.textMuted,
-          ...bookleafTheme.typography.body,
+          color: theme.colors.textMuted,
+          ...theme.typography.body,
           fontSize: 12,
         }}>
         {label}
       </Text>
       <AnimatedCountText
         style={{
-          color: bookleafTheme.colors.text,
-          ...bookleafTheme.typography.bold,
+          color: theme.colors.text,
+          ...theme.typography.bold,
           fontSize: 22,
           fontVariant: ['tabular-nums'],
         }}

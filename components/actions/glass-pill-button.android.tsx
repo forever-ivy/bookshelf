@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable, Text } from 'react-native';
 
 import { AppIcon } from '@/components/base/app-icon';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 
 type GlassPillButtonProps = {
   icon: 'back' | 'info' | 'search' | 'share';
@@ -11,16 +11,18 @@ type GlassPillButtonProps = {
 };
 
 export function GlassPillButton({ icon, label, onPress }: GlassPillButtonProps) {
+  const { theme } = useBookleafTheme();
+
   return (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
       style={{
         alignItems: 'center',
-        backgroundColor: bookleafTheme.colors.surface,
-        borderColor: bookleafTheme.colors.border,
+        backgroundColor: theme.colors.surface,
+        borderColor: theme.colors.border,
         borderCurve: 'continuous',
-        borderRadius: bookleafTheme.radii.pill,
+        borderRadius: theme.radii.pill,
         borderWidth: 1,
         flexDirection: 'row',
         gap: 8,
@@ -28,13 +30,13 @@ export function GlassPillButton({ icon, label, onPress }: GlassPillButtonProps) 
         minWidth: 44,
         paddingHorizontal: label ? 14 : 12,
       }}>
-      <AppIcon color={bookleafTheme.colors.text} name={icon} size={18} />
+      <AppIcon color={theme.colors.text} name={icon} size={18} />
       {label ? (
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.text,
-            ...bookleafTheme.typography.semiBold,
+            color: theme.colors.text,
+            ...theme.typography.semiBold,
             fontSize: 14,
           }}>
           {label}

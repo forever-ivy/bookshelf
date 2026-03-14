@@ -56,17 +56,17 @@ describe('ScreenShell', () => {
     return ScreenShell!;
   }
 
-  it('renders a top visual overlay while keeping page content visible', () => {
+  it('renders a top visual overlay when explicitly enabled while keeping page content visible', () => {
     const ScreenShell = loadScreenShell();
     const screen = render(
-      <ScreenShell>
+      <ScreenShell showTopOverlay>
         <Text selectable>页面正文</Text>
       </ScreenShell>
     );
 
     expect(screen.getByTestId('screen-shell-top-overlay')).toBeTruthy();
-    expect(screen.getByTestId('screen-shell-top-blur').props.intensity).toBe(4);
-    expect(screen.getByTestId('screen-shell-top-gradient').props.xml).toContain('stop-opacity="0.08"');
+    expect(screen.getByTestId('screen-shell-top-blur').props.intensity).toBe(18);
+    expect(screen.getByTestId('screen-shell-top-gradient').props.xml).toContain('stop-opacity="0.12"');
     expect(screen.getByTestId('screen-shell-scroll-view')).toBeTruthy();
     expect(screen.getByText('页面正文')).toBeTruthy();
   });
@@ -83,7 +83,7 @@ describe('ScreenShell', () => {
 
     expect(() =>
       render(
-        <ScreenShell>
+        <ScreenShell showTopOverlay>
           <Text selectable>页面正文</Text>
         </ScreenShell>
       )
@@ -101,6 +101,19 @@ describe('ScreenShell', () => {
 
     expect(screen.getByTestId('screen-shell-background-decoration')).toBeTruthy();
     expect(screen.getByTestId('custom-bubble-background')).toBeTruthy();
+    expect(screen.getByTestId('screen-shell-scroll-view')).toBeTruthy();
+    expect(screen.getByText('页面正文')).toBeTruthy();
+  });
+
+  it('does not render the custom top overlay by default', () => {
+    const ScreenShell = loadScreenShell();
+    const screen = render(
+      <ScreenShell>
+        <Text selectable>页面正文</Text>
+      </ScreenShell>
+    );
+
+    expect(screen.queryByTestId('screen-shell-top-overlay')).toBeNull();
     expect(screen.getByTestId('screen-shell-scroll-view')).toBeTruthy();
     expect(screen.getByText('页面正文')).toBeTruthy();
   });

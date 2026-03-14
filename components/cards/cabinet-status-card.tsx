@@ -1,7 +1,7 @@
 import { Text, View } from 'react-native';
 
 import { AppIcon } from '@/components/base/app-icon';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import type { CabinetStatusSummary } from '@/lib/api/contracts/types';
 
 type CabinetStatusCardProps = {
@@ -9,35 +9,37 @@ type CabinetStatusCardProps = {
 };
 
 export function CabinetStatusCard({ summary }: CabinetStatusCardProps) {
+  const { theme } = useBookleafTheme();
+
   return (
     <View
       style={{
-        backgroundColor: 'rgba(255,255,255,0.78)',
-        borderColor: bookleafTheme.colors.cardBorder,
+        backgroundColor: theme.colors.overlaySurface,
+        borderColor: theme.colors.cardBorder,
         borderCurve: 'continuous',
-        borderRadius: bookleafTheme.radii.xl,
+        borderRadius: theme.radii.xl,
         borderWidth: 1,
-        boxShadow: bookleafTheme.shadows.card,
+        boxShadow: theme.shadows.card,
         gap: 18,
         padding: 24,
       }}>
       <View
         style={{
           alignSelf: 'flex-start',
-          backgroundColor: '#D7F5E1',
+          backgroundColor: theme.connectionBadge.background,
           borderCurve: 'continuous',
-          borderRadius: bookleafTheme.radii.pill,
+          borderRadius: theme.radii.pill,
           flexDirection: 'row',
           gap: 8,
           paddingHorizontal: 12,
           paddingVertical: 8,
         }}>
-        <AppIcon color={bookleafTheme.colors.accentGreen} name="cabinet" size={16} />
+        <AppIcon color={theme.connectionBadge.icon} name="cabinet" size={16} />
         <Text
           selectable
           style={{
-            color: '#0F5132',
-            ...bookleafTheme.typography.semiBold,
+            color: theme.connectionBadge.text,
+            ...theme.typography.semiBold,
             fontSize: 12,
           }}>
           已连接
@@ -47,8 +49,8 @@ export function CabinetStatusCard({ summary }: CabinetStatusCardProps) {
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.text,
-            ...bookleafTheme.typography.heading,
+            color: theme.colors.text,
+            ...theme.typography.heading,
             fontSize: 28,
           }}>
           {summary.connectedLabel}
@@ -56,8 +58,8 @@ export function CabinetStatusCard({ summary }: CabinetStatusCardProps) {
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.textMuted,
-            ...bookleafTheme.typography.medium,
+            color: theme.colors.textMuted,
+            ...theme.typography.medium,
             fontSize: 15,
           }}>
           {summary.locationLabel} · {summary.totalBooks} 本书
@@ -72,9 +74,9 @@ export function CabinetStatusCard({ summary }: CabinetStatusCardProps) {
           <View
             key={item.label}
             style={{
-              backgroundColor: bookleafTheme.colors.surfaceMuted,
+              backgroundColor: theme.colors.surfaceMuted,
               borderCurve: 'continuous',
-              borderRadius: bookleafTheme.radii.lg,
+              borderRadius: theme.radii.lg,
               flex: 1,
               gap: 4,
               padding: 14,
@@ -82,8 +84,8 @@ export function CabinetStatusCard({ summary }: CabinetStatusCardProps) {
             <Text
               selectable
               style={{
-                color: bookleafTheme.colors.text,
-                ...bookleafTheme.typography.bold,
+                color: theme.colors.text,
+                ...theme.typography.bold,
                 fontSize: 18,
                 fontVariant: ['tabular-nums'],
               }}>
@@ -92,8 +94,8 @@ export function CabinetStatusCard({ summary }: CabinetStatusCardProps) {
             <Text
               selectable
               style={{
-                color: bookleafTheme.colors.textMuted,
-                ...bookleafTheme.typography.body,
+                color: theme.colors.textMuted,
+                ...theme.typography.body,
                 fontSize: 12,
               }}>
               {item.label}

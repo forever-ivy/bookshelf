@@ -3,7 +3,7 @@ import { controlSize, frame, textFieldStyle } from '@expo/ui/swift-ui/modifiers'
 import React from 'react';
 import { Text, type TextInputProps, View } from 'react-native';
 
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 
 type FieldInputProps = TextInputProps & {
   hint?: string;
@@ -20,6 +20,7 @@ export function FieldInput({
   value,
   ...props
 }: FieldInputProps) {
+  const { theme } = useBookleafTheme();
   const textFieldRef = React.useRef<TextFieldRef>(null);
 
   React.useEffect(() => {
@@ -34,8 +35,8 @@ export function FieldInput({
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.text,
-            ...bookleafTheme.typography.semiBold,
+            color: theme.colors.text,
+            ...theme.typography.semiBold,
             fontSize: 15,
           }}>
           {label}
@@ -44,8 +45,8 @@ export function FieldInput({
           <Text
             selectable
             style={{
-              color: bookleafTheme.colors.textMuted,
-              ...bookleafTheme.typography.body,
+              color: theme.colors.textMuted,
+              ...theme.typography.body,
               fontSize: 12,
               lineHeight: 18,
             }}>

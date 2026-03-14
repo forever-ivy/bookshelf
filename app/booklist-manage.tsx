@@ -9,7 +9,7 @@ import { FlowScreenHeader } from '@/components/navigation/flow-screen-header';
 import { ScreenShell } from '@/components/navigation/screen-shell';
 import { SectionCard } from '@/components/surfaces/section-card';
 import { StateCard } from '@/components/surfaces/state-card';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { useActiveMember } from '@/hooks/use-active-member';
 import {
   useAddBooklistItemMutation,
@@ -21,6 +21,7 @@ import { createStaggeredFadeIn, motionTransitions } from '@/lib/presentation/mot
 import { useSessionStore } from '@/stores/session-store';
 
 export default function BooklistManageScreen() {
+  const { theme } = useBookleafTheme();
   const connection = useSessionStore((state) => state.connection);
   const isPreviewMode = useSessionStore((state) => state.isPreviewMode);
   const { activeMember } = useActiveMember();
@@ -121,10 +122,10 @@ export default function BooklistManageScreen() {
               key={item.id}
               layout={motionTransitions.gentle}
               style={{
-                backgroundColor: item.done ? bookleafTheme.colors.surfaceSoft : 'rgba(255,255,255,0.82)',
-                borderColor: bookleafTheme.colors.cardBorder,
+                backgroundColor: item.done ? theme.colors.surfaceSoft : theme.colors.surfaceElevated,
+                borderColor: theme.colors.cardBorder,
                 borderCurve: 'continuous',
-                borderRadius: bookleafTheme.radii.lg,
+                borderRadius: theme.radii.lg,
                 borderWidth: 1,
                 gap: 14,
                 padding: 16,
@@ -133,8 +134,8 @@ export default function BooklistManageScreen() {
                 <Text
                   selectable
                   style={{
-                    color: bookleafTheme.colors.text,
-                    ...bookleafTheme.typography.semiBold,
+                    color: theme.colors.text,
+                    ...theme.typography.semiBold,
                     fontSize: 16,
                   }}>
                   {item.title}
@@ -142,8 +143,8 @@ export default function BooklistManageScreen() {
                 <Text
                   selectable
                   style={{
-                    color: bookleafTheme.colors.textMuted,
-                    ...bookleafTheme.typography.body,
+                    color: theme.colors.textMuted,
+                    ...theme.typography.body,
                     fontSize: 13,
                     lineHeight: 18,
                   }}>

@@ -11,10 +11,12 @@ import {
   rootStackScreenOptions,
   scannerScreenOptions,
 } from '@/lib/app/navigation-transitions';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { AppProviders } from '@/providers/app-providers';
 
 export default function RootLayout() {
   const pathname = usePathname();
+  const { theme } = useBookleafTheme();
 
   React.useEffect(() => {
     console.log('[startup] RootLayout mounted');
@@ -29,7 +31,13 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AppProviders>
-          <Stack screenOptions={rootStackScreenOptions}>
+          <Stack
+            screenOptions={{
+              ...rootStackScreenOptions,
+              contentStyle: {
+                backgroundColor: theme.colors.background,
+              },
+            }}>
             <Stack.Screen name="index" />
             <Stack.Screen name="connect" />
             <Stack.Screen name="scanner" options={scannerScreenOptions} />
@@ -42,7 +50,7 @@ export default function RootLayout() {
             <Stack.Screen name="member-form" options={flowScreenOptions} />
             <Stack.Screen name="(tabs)" />
           </Stack>
-          <StatusBar style="dark" />
+          <StatusBar style={theme.statusBarStyle} />
         </AppProviders>
       </SafeAreaProvider>
     </GestureHandlerRootView>

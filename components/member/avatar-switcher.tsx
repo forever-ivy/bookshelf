@@ -2,7 +2,7 @@ import { Pressable, Text, View } from 'react-native';
 
 import { AppIcon } from '@/components/base/app-icon';
 import { AvatarGlyph } from '@/components/member/avatar-glyph';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import type { MemberSummary } from '@/lib/api/contracts/types';
 import {
   getMemberAccentColor,
@@ -21,6 +21,7 @@ export function AvatarSwitcher({
   members,
   onPress,
 }: AvatarSwitcherProps) {
+  const { isDark, theme } = useBookleafTheme();
   const previewMembers = members.slice(0, 3);
 
   return (
@@ -38,10 +39,10 @@ export function AvatarSwitcher({
             key={member.id}
             style={{
               alignItems: 'center',
-              backgroundColor: getMemberAccentColor(member),
-              borderColor: bookleafTheme.colors.surface,
+              backgroundColor: getMemberAccentColor(member, isDark),
+              borderColor: theme.colors.surface,
               borderCurve: 'continuous',
-              borderRadius: bookleafTheme.radii.pill,
+              borderRadius: theme.radii.pill,
               borderWidth: 2,
               height: 48,
               justifyContent: 'center',
@@ -57,8 +58,8 @@ export function AvatarSwitcher({
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.text,
-            ...bookleafTheme.typography.semiBold,
+            color: theme.colors.text,
+            ...theme.typography.semiBold,
             fontSize: 15,
           }}>
           {activeMember?.name ?? '选择成员'}
@@ -66,8 +67,8 @@ export function AvatarSwitcher({
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.textMuted,
-            ...bookleafTheme.typography.body,
+            color: theme.colors.textMuted,
+            ...theme.typography.body,
             fontSize: 12,
           }}>
           切换{getMemberRoleLabel(activeMember)}
@@ -76,16 +77,16 @@ export function AvatarSwitcher({
       <View
         style={{
           alignItems: 'center',
-          backgroundColor: 'rgba(255,255,255,0.82)',
-          borderColor: bookleafTheme.colors.cardBorder,
+          backgroundColor: theme.colors.surfaceElevated,
+          borderColor: theme.colors.cardBorder,
           borderCurve: 'continuous',
-          borderRadius: bookleafTheme.radii.pill,
+          borderRadius: theme.radii.pill,
           borderWidth: 1,
           height: 38,
           justifyContent: 'center',
           width: 38,
         }}>
-        <AppIcon color={bookleafTheme.colors.textMuted} name="spark" size={16} />
+        <AppIcon color={theme.colors.textMuted} name="spark" size={16} />
       </View>
     </Pressable>
   );

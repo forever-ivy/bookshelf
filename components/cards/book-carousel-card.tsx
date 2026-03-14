@@ -9,7 +9,7 @@ import Animated, {
   useSharedValue,
 } from 'react-native-reanimated';
 
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { useCover } from '@/hooks/use-cover';
 import type { BooklistItem } from '@/lib/api/contracts/types';
 import { createStaggeredFadeIn, motionTransitions } from '@/lib/presentation/motion';
@@ -59,6 +59,7 @@ function resolveBookCoverUrl(item: BooklistItem) {
 }
 
 export function BookCarouselCard({ items }: BookCarouselCardProps) {
+  const { theme } = useBookleafTheme();
   const visibleItems = items.slice(0, 6);
   const scrollX = useSharedValue(0);
   const scrollHandler = useAnimatedScrollHandler({
@@ -73,8 +74,8 @@ export function BookCarouselCard({ items }: BookCarouselCardProps) {
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.text,
-            ...bookleafTheme.typography.heading,
+            color: theme.colors.text,
+            ...theme.typography.heading,
             fontSize: 26,
           }}>
           家庭书库
@@ -82,8 +83,8 @@ export function BookCarouselCard({ items }: BookCarouselCardProps) {
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.textMuted,
-            ...bookleafTheme.typography.body,
+            color: theme.colors.textMuted,
+            ...theme.typography.body,
             fontSize: 14,
           }}>
           把这周要读的书放在随手可见的位置。
@@ -115,6 +116,7 @@ type BookCarouselItemProps = {
 };
 
 function BookCarouselItem({ index, item, scrollX }: BookCarouselItemProps) {
+  const { theme } = useBookleafTheme();
   const { cover, handleImageError } = useCover({
     coverUrl: resolveBookCoverUrl(item),
     seed: item.id,
@@ -198,8 +200,8 @@ function BookCarouselItem({ index, item, scrollX }: BookCarouselItemProps) {
               numberOfLines={4}
               selectable
               style={{
-                color: bookleafTheme.colors.text,
-                ...bookleafTheme.typography.heading,
+                color: theme.colors.text,
+                ...theme.typography.heading,
                 fontSize: 20,
                 lineHeight: 24,
               }}>
@@ -212,8 +214,8 @@ function BookCarouselItem({ index, item, scrollX }: BookCarouselItemProps) {
             numberOfLines={1}
             selectable
             style={{
-              color: bookleafTheme.colors.text,
-              ...bookleafTheme.typography.semiBold,
+              color: theme.colors.text,
+              ...theme.typography.semiBold,
               fontSize: 14,
             }}>
             {item.title}
@@ -223,9 +225,9 @@ function BookCarouselItem({ index, item, scrollX }: BookCarouselItemProps) {
             selectable
             style={{
               color: item.done
-                ? bookleafTheme.colors.accentGreen
-                : bookleafTheme.colors.textMuted,
-              ...bookleafTheme.typography.body,
+                ? theme.colors.accentGreen
+                : theme.colors.textMuted,
+              ...theme.typography.body,
               fontSize: 12,
               lineHeight: 17,
             }}>

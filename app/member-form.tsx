@@ -9,7 +9,7 @@ import { FlowScreenHeader } from '@/components/navigation/flow-screen-header';
 import { ScreenShell } from '@/components/navigation/screen-shell';
 import { SectionCard } from '@/components/surfaces/section-card';
 import { StateCard } from '@/components/surfaces/state-card';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { useCreateUserMutation, useUpdateUserMutation, useUserQuery } from '@/lib/api/react-query/hooks';
 import { createStaggeredFadeIn, motionTransitions } from '@/lib/presentation/motion';
 import { useSessionStore } from '@/stores/session-store';
@@ -23,6 +23,7 @@ const memberRoles = [
 const memberColors = ['warm', 'cool', 'forest', 'sun'];
 
 export default function MemberFormScreen() {
+  const { theme } = useBookleafTheme();
   const router = useRouter();
   const connection = useSessionStore((state) => state.connection);
   const isPreviewMode = useSessionStore((state) => state.isPreviewMode);
@@ -150,8 +151,8 @@ export default function MemberFormScreen() {
             <Text
               selectable
               style={{
-                color: bookleafTheme.colors.text,
-                ...bookleafTheme.typography.semiBold,
+                color: theme.colors.text,
+                ...theme.typography.semiBold,
                 fontSize: 15,
               }}>
               成员角色
@@ -171,8 +172,8 @@ export default function MemberFormScreen() {
             <Text
               selectable
               style={{
-                color: bookleafTheme.colors.text,
-                ...bookleafTheme.typography.semiBold,
+                color: theme.colors.text,
+                ...theme.typography.semiBold,
                 fontSize: 15,
               }}>
               主题色
@@ -236,22 +237,24 @@ function ChoiceChip({
   label: string;
   onPress: () => void;
 }) {
+  const { theme } = useBookleafTheme();
+
   return (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
       style={{
-        backgroundColor: isActive ? bookleafTheme.colors.primary : bookleafTheme.colors.surfaceMuted,
+        backgroundColor: isActive ? theme.colors.primary : theme.colors.surfaceMuted,
         borderCurve: 'continuous',
-        borderRadius: bookleafTheme.radii.pill,
+        borderRadius: theme.radii.pill,
         paddingHorizontal: 14,
         paddingVertical: 10,
       }}>
       <Text
         selectable
         style={{
-          color: bookleafTheme.colors.text,
-          ...bookleafTheme.typography.semiBold,
+          color: theme.colors.text,
+          ...theme.typography.semiBold,
           fontSize: 13,
         }}>
         {label}

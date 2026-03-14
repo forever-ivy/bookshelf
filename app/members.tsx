@@ -8,13 +8,14 @@ import { FlowScreenHeader } from '@/components/navigation/flow-screen-header';
 import { ScreenShell } from '@/components/navigation/screen-shell';
 import { SectionCard } from '@/components/surfaces/section-card';
 import { StateCard } from '@/components/surfaces/state-card';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { useActiveMember } from '@/hooks/use-active-member';
 import { useDeleteUserMutation, useSwitchUserMutation } from '@/lib/api/react-query/hooks';
 import { createStaggeredFadeIn, motionTransitions } from '@/lib/presentation/motion';
 import { useSessionStore } from '@/stores/session-store';
 
 export default function MembersScreen() {
+  const { theme } = useBookleafTheme();
   const router = useRouter();
   const connection = useSessionStore((state) => state.connection);
   const isPreviewMode = useSessionStore((state) => state.isPreviewMode);
@@ -79,11 +80,11 @@ export default function MembersScreen() {
                 layout={motionTransitions.gentle}
                 style={{
                   backgroundColor: isActive
-                    ? 'rgba(158,195,255,0.22)'
-                    : 'rgba(255,255,255,0.82)',
-                  borderColor: bookleafTheme.colors.cardBorder,
+                    ? theme.colors.glassAccentSoft
+                    : theme.colors.surfaceElevated,
+                  borderColor: theme.colors.cardBorder,
                   borderCurve: 'continuous',
-                  borderRadius: bookleafTheme.radii.lg,
+                  borderRadius: theme.radii.lg,
                   borderWidth: 1,
                   gap: 14,
                   padding: 16,
@@ -92,8 +93,8 @@ export default function MembersScreen() {
                   <Text
                     selectable
                     style={{
-                      color: bookleafTheme.colors.text,
-                      ...bookleafTheme.typography.semiBold,
+                      color: theme.colors.text,
+                      ...theme.typography.semiBold,
                       fontSize: 17,
                     }}>
                     {member.name}
@@ -101,8 +102,8 @@ export default function MembersScreen() {
                   <Text
                     selectable
                     style={{
-                      color: bookleafTheme.colors.textMuted,
-                      ...bookleafTheme.typography.body,
+                      color: theme.colors.textMuted,
+                      ...theme.typography.body,
                       fontSize: 13,
                       lineHeight: 18,
                     }}>

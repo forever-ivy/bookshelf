@@ -43,6 +43,25 @@ jest.mock('expo-blur', () => {
   };
 });
 
+jest.mock('expo-glass-effect', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+
+  return {
+    GlassContainer: ({
+      children,
+      ...props
+    }: Record<string, unknown> & { children?: React.ReactNode }) =>
+      React.createElement(View, props, children),
+    GlassView: ({
+      children,
+      ...props
+    }: Record<string, unknown> & { children?: React.ReactNode }) =>
+      React.createElement(View, props, children),
+    isLiquidGlassAvailable: jest.fn(() => true),
+  };
+});
+
 jest.mock('@expo/ui/swift-ui', () => {
   const React = require('react');
   const { TextInput, View } = require('react-native');

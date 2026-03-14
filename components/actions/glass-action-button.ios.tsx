@@ -1,7 +1,7 @@
 import React from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 
 export type GlassActionButtonProps = {
   disabled?: boolean;
@@ -18,13 +18,14 @@ export function GlassActionButton({
   onPress,
   variant = 'primary',
 }: GlassActionButtonProps) {
+  const { theme } = useBookleafTheme();
   const isPrimary = variant === 'primary';
   const effectiveDisabled = disabledProp || loading;
   const foregroundColor = effectiveDisabled
-    ? bookleafTheme.colors.textSoft
+    ? theme.colors.textSoft
     : isPrimary
-      ? '#FFFFFF'
-      : bookleafTheme.colors.text;
+      ? theme.colors.primaryText
+      : theme.colors.text;
 
   return (
     <Pressable
@@ -38,10 +39,10 @@ export function GlassActionButton({
       style={{
         alignItems: 'center',
         alignSelf: 'stretch',
-        backgroundColor: isPrimary ? bookleafTheme.colors.primaryStrong : bookleafTheme.colors.surface,
-        borderColor: bookleafTheme.colors.border,
+        backgroundColor: isPrimary ? theme.colors.primaryStrong : theme.colors.surface,
+        borderColor: theme.colors.border,
         borderCurve: 'continuous',
-        borderRadius: bookleafTheme.radii.pill,
+        borderRadius: theme.radii.pill,
         borderWidth: 1,
         justifyContent: 'center',
         minHeight: isPrimary ? 56 : 46,
@@ -53,7 +54,7 @@ export function GlassActionButton({
         <Text
           style={{
             color: foregroundColor,
-            ...bookleafTheme.typography.bold,
+            ...theme.typography.bold,
             fontSize: isPrimary ? 16 : 14,
           }}>
           {label}

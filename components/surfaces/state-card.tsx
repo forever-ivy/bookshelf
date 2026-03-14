@@ -2,7 +2,7 @@ import React from 'react';
 import { Text, View } from 'react-native';
 
 import { AppIcon, type AppIconName } from '@/components/base/app-icon';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 
 type StateCardVariant = 'neutral' | 'error' | 'success' | 'warning';
 
@@ -14,29 +14,6 @@ type StateCardProps = {
   variant?: StateCardVariant;
 };
 
-const paletteByVariant: Record<StateCardVariant, { background: string; icon: string; title: string }> = {
-  error: {
-    background: '#FEE2E2',
-    icon: '#991B1B',
-    title: '#7F1D1D',
-  },
-  neutral: {
-    background: 'rgba(240,244,239,0.92)',
-    icon: bookleafTheme.colors.textMuted,
-    title: bookleafTheme.colors.text,
-  },
-  success: {
-    background: '#DCFCE7',
-    icon: '#166534',
-    title: '#14532D',
-  },
-  warning: {
-    background: '#FEF3C7',
-    icon: '#92400E',
-    title: '#78350F',
-  },
-};
-
 export function StateCard({
   action,
   description,
@@ -44,14 +21,15 @@ export function StateCard({
   title,
   variant = 'neutral',
 }: StateCardProps) {
-  const palette = paletteByVariant[variant];
+  const { theme } = useBookleafTheme();
+  const palette = theme.states[variant];
 
   return (
     <View
       style={{
         backgroundColor: palette.background,
         borderCurve: 'continuous',
-        borderRadius: bookleafTheme.radii.lg,
+        borderRadius: theme.radii.lg,
         gap: 12,
         padding: 16,
       }}>
@@ -69,7 +47,7 @@ export function StateCard({
             selectable
             style={{
               color: palette.title,
-              ...bookleafTheme.typography.semiBold,
+              ...theme.typography.semiBold,
               fontSize: 15,
             }}>
             {title}
@@ -77,8 +55,8 @@ export function StateCard({
           <Text
             selectable
             style={{
-              color: variant === 'neutral' ? bookleafTheme.colors.textMuted : palette.title,
-              ...bookleafTheme.typography.body,
+              color: palette.description,
+              ...theme.typography.body,
               fontSize: 13,
               lineHeight: 18,
             }}>

@@ -3,7 +3,7 @@ import { fillMaxWidth } from '@expo/ui/jetpack-compose/modifiers';
 import React from 'react';
 import { Text, type TextInputProps, View } from 'react-native';
 
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 
 type FieldInputProps = TextInputProps & {
   hint?: string;
@@ -19,6 +19,7 @@ export function FieldInput({
   value,
   ...props
 }: FieldInputProps) {
+  const { theme } = useBookleafTheme();
   const textInputRef = React.useRef<TextInputRef>(null);
 
   React.useEffect(() => {
@@ -33,8 +34,8 @@ export function FieldInput({
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.text,
-            ...bookleafTheme.typography.semiBold,
+            color: theme.colors.text,
+            ...theme.typography.semiBold,
             fontSize: 15,
           }}>
           {label}
@@ -43,8 +44,8 @@ export function FieldInput({
           <Text
             selectable
             style={{
-              color: bookleafTheme.colors.textMuted,
-              ...bookleafTheme.typography.body,
+              color: theme.colors.textMuted,
+              ...theme.typography.body,
               fontSize: 12,
               lineHeight: 18,
             }}>
@@ -69,8 +70,8 @@ export function FieldInput({
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.textSoft,
-            ...bookleafTheme.typography.body,
+            color: theme.colors.textSoft,
+            ...theme.typography.body,
             fontSize: 12,
           }}>
           {props.placeholder}

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Text, TextInput, type TextInputProps, View } from 'react-native';
 
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 
 type FieldInputProps = TextInputProps & {
   hint?: string;
@@ -15,14 +15,16 @@ export function FieldInput({
   style,
   ...props
 }: FieldInputProps) {
+  const { theme } = useBookleafTheme();
+
   return (
     <View style={{ gap: 8 }}>
       <View style={{ gap: 4 }}>
         <Text
           selectable
           style={{
-            color: bookleafTheme.colors.text,
-            ...bookleafTheme.typography.semiBold,
+            color: theme.colors.text,
+            ...theme.typography.semiBold,
             fontSize: 15,
           }}>
           {label}
@@ -31,8 +33,8 @@ export function FieldInput({
           <Text
             selectable
             style={{
-              color: bookleafTheme.colors.textMuted,
-              ...bookleafTheme.typography.body,
+              color: theme.colors.textMuted,
+              ...theme.typography.body,
               fontSize: 12,
               lineHeight: 18,
             }}>
@@ -42,16 +44,16 @@ export function FieldInput({
       </View>
       <TextInput
         multiline={multiline}
-        placeholderTextColor={bookleafTheme.colors.textSoft}
+        placeholderTextColor={theme.colors.textSoft}
         style={[
           {
-            backgroundColor: bookleafTheme.colors.surface,
-            borderColor: bookleafTheme.colors.border,
+            backgroundColor: theme.colors.surface,
+            borderColor: theme.colors.border,
             borderCurve: 'continuous',
-            borderRadius: bookleafTheme.radii.md,
+            borderRadius: theme.radii.md,
             borderWidth: 1,
-            color: bookleafTheme.colors.text,
-            ...bookleafTheme.typography.medium,
+            color: theme.colors.text,
+            ...theme.typography.medium,
             fontSize: 15,
             minHeight: multiline ? 112 : 56,
             paddingHorizontal: 16,

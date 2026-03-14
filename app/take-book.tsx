@@ -9,13 +9,14 @@ import { FlowScreenHeader } from '@/components/navigation/flow-screen-header';
 import { ScreenShell } from '@/components/navigation/screen-shell';
 import { SectionCard } from '@/components/surfaces/section-card';
 import { StateCard } from '@/components/surfaces/state-card';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { useActiveMember } from '@/hooks/use-active-member';
 import { useMemberBooklistQuery, useTakeBookByTextMutation } from '@/lib/api/react-query/hooks';
 import { createStaggeredFadeIn, motionTransitions } from '@/lib/presentation/motion';
 import { useSessionStore } from '@/stores/session-store';
 
 export default function TakeBookScreen() {
+  const { theme } = useBookleafTheme();
   const connection = useSessionStore((state) => state.connection);
   const isPreviewMode = useSessionStore((state) => state.isPreviewMode);
   const { activeMember } = useActiveMember();
@@ -128,17 +129,17 @@ export default function TakeBookScreen() {
                     accessibilityRole="button"
                     onPress={() => setQuery(item.title)}
                     style={{
-                      backgroundColor: bookleafTheme.colors.surfaceMuted,
+                      backgroundColor: theme.colors.surfaceMuted,
                       borderCurve: 'continuous',
-                      borderRadius: bookleafTheme.radii.pill,
+                      borderRadius: theme.radii.pill,
                       paddingHorizontal: 14,
                       paddingVertical: 10,
                     }}>
                     <Text
                       selectable
                       style={{
-                        color: bookleafTheme.colors.text,
-                        ...bookleafTheme.typography.semiBold,
+                        color: theme.colors.text,
+                        ...theme.typography.semiBold,
                         fontSize: 13,
                       }}>
                       {item.title}

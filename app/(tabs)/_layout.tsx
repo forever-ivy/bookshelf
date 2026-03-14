@@ -1,10 +1,11 @@
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 
 import { getNativeTabIconProps } from '@/components/base/app-icon';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { appTabs } from '@/lib/app/navigation';
 
 export default function AppTabsLayout() {
+  const { theme } = useBookleafTheme();
   const titlePositionAdjustment = {
     vertical: 3,
   } as const;
@@ -47,28 +48,28 @@ export default function AppTabsLayout() {
 
   return (
     <NativeTabs
-      backgroundColor={bookleafTheme.colors.surface}
+      backgroundColor={theme.nav.background}
       blurEffect="systemMaterial"
       iconColor={{
-        default: bookleafTheme.colors.textSoft,
-        selected: bookleafTheme.colors.primaryStrong,
+        default: theme.nav.iconDefault,
+        selected: theme.nav.iconSelected,
       }}
       labelStyle={{
         default: {
-          color: bookleafTheme.colors.textSoft,
-          fontFamily: bookleafTheme.typography.medium.fontFamily,
+          color: theme.nav.labelDefault,
+          fontFamily: theme.typography.medium.fontFamily,
           fontSize: 12,
           fontWeight: '500',
         },
         selected: {
-          color: bookleafTheme.colors.primaryStrong,
-          fontFamily: bookleafTheme.typography.bold.fontFamily,
+          color: theme.nav.labelSelected,
+          fontFamily: theme.typography.bold.fontFamily,
           fontSize: 12,
           fontWeight: '700',
         },
       }}
       minimizeBehavior="onScrollDown"
-      tintColor={bookleafTheme.colors.primaryStrong}>
+      tintColor={theme.nav.iconSelected}>
       {appTabs.map((tab) => (
         <NativeTabs.Trigger
           key={tab.key}

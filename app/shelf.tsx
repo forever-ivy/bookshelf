@@ -8,7 +8,7 @@ import { ScreenShell } from '@/components/navigation/screen-shell';
 import { SectionCard } from '@/components/surfaces/section-card';
 import { StateCard } from '@/components/surfaces/state-card';
 import { PrimaryActionButton } from '@/components/actions/primary-action-button';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { useActiveMember } from '@/hooks/use-active-member';
 import { useCompartmentsQuery, useTakeBookMutation } from '@/lib/api/react-query/hooks';
 import { createStaggeredFadeIn, motionTransitions } from '@/lib/presentation/motion';
@@ -16,6 +16,7 @@ import { useSessionStore } from '@/stores/session-store';
 import { Redirect, useRouter } from 'expo-router';
 
 export default function ShelfScreen() {
+  const { theme } = useBookleafTheme();
   const router = useRouter();
   const connection = useSessionStore((state) => state.connection);
   const isPreviewMode = useSessionStore((state) => state.isPreviewMode);
@@ -99,13 +100,13 @@ export default function ShelfScreen() {
                     layout={motionTransitions.gentle}
                     style={{
                       backgroundColor: isOccupied
-                        ? 'rgba(255,255,255,0.82)'
-                        : bookleafTheme.colors.surfaceSoft,
+                        ? theme.colors.surfaceElevated
+                        : theme.colors.surfaceSoft,
                       borderColor: isOccupied
-                        ? bookleafTheme.colors.cardBorder
-                        : 'rgba(23,32,51,0.05)',
+                        ? theme.colors.cardBorder
+                        : theme.colors.border,
                       borderCurve: 'continuous',
-                      borderRadius: bookleafTheme.radii.lg,
+                      borderRadius: theme.radii.lg,
                       borderWidth: 1,
                       gap: 12,
                       minWidth: '47%',
@@ -115,8 +116,8 @@ export default function ShelfScreen() {
                       <Text
                         selectable
                         style={{
-                          color: bookleafTheme.colors.textMuted,
-                          ...bookleafTheme.typography.medium,
+                          color: theme.colors.textMuted,
+                          ...theme.typography.medium,
                           fontSize: 12,
                         }}>
                         第 {compartment.cid} 格
@@ -124,8 +125,8 @@ export default function ShelfScreen() {
                       <Text
                         selectable
                         style={{
-                          color: bookleafTheme.colors.text,
-                          ...bookleafTheme.typography.semiBold,
+                          color: theme.colors.text,
+                          ...theme.typography.semiBold,
                           fontSize: 16,
                           lineHeight: 22,
                         }}>
@@ -134,8 +135,8 @@ export default function ShelfScreen() {
                       <Text
                         selectable
                         style={{
-                          color: bookleafTheme.colors.textMuted,
-                          ...bookleafTheme.typography.body,
+                          color: theme.colors.textMuted,
+                          ...theme.typography.body,
                           fontSize: 12,
                         }}>
                         {isOccupied

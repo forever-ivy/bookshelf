@@ -17,7 +17,7 @@ import { MemberSwitcherSheet } from '@/components/member/member-switcher-sheet';
 import { ScreenShell } from '@/components/navigation/screen-shell';
 import { SectionCard } from '@/components/surfaces/section-card';
 import { ShortcutCard } from '@/components/actions/shortcut-card';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import {
   useCompartmentsQuery,
   useCurrentUserQuery,
@@ -40,6 +40,7 @@ const emptyBookPreview: BooklistItem[] = [
 ];
 
 export default function HomeRoute() {
+  const { theme } = useBookleafTheme();
   const router = useRouter();
   const connection = useSessionStore((state) => state.connection);
   const currentMemberId = useSessionStore((state) => state.currentMemberId);
@@ -95,6 +96,7 @@ export default function HomeRoute() {
       <ScreenShell
         activeNavKey="home"
         backgroundDecoration={<HeroBubbleBackground variant="home" />}
+        showTopOverlay={false}
         scrollOffset={scrollOffset}>
         <Animated.View
           style={[
@@ -123,8 +125,8 @@ export default function HomeRoute() {
             <Text
               selectable
               style={{
-                color: bookleafTheme.colors.textMuted,
-                ...bookleafTheme.typography.medium,
+                color: theme.colors.textMuted,
+                ...theme.typography.medium,
                 fontSize: 14,
               }}>
               {connection.displayName}
@@ -132,8 +134,8 @@ export default function HomeRoute() {
             <Text
               selectable
               style={{
-                color: bookleafTheme.colors.text,
-                ...bookleafTheme.typography.heading,
+                color: theme.colors.text,
+                ...theme.typography.heading,
                 fontSize: 42,
                 lineHeight: 48,
               }}>
@@ -202,17 +204,17 @@ export default function HomeRoute() {
             entering={createStaggeredFadeIn(6)}
             layout={motionTransitions.gentle}
             style={{
-              backgroundColor: 'rgba(255,255,255,0.72)',
+              backgroundColor: theme.colors.surfaceElevated,
               borderCurve: 'continuous',
-              borderRadius: bookleafTheme.radii.lg,
+              borderRadius: theme.radii.lg,
               gap: 6,
               padding: 16,
             }}>
             <Text
               selectable
               style={{
-                color: bookleafTheme.colors.text,
-                ...bookleafTheme.typography.semiBold,
+                color: theme.colors.text,
+                ...theme.typography.semiBold,
                 fontSize: 15,
               }}>
               书柜数据还在同步中
@@ -220,8 +222,8 @@ export default function HomeRoute() {
             <Text
               selectable
               style={{
-                color: bookleafTheme.colors.textMuted,
-                ...bookleafTheme.typography.body,
+                color: theme.colors.textMuted,
+                ...theme.typography.body,
                 fontSize: 13,
                 lineHeight: 18,
               }}>

@@ -11,7 +11,7 @@ import Animated from 'react-native-reanimated';
 
 import { GlassPillButton } from '@/components/actions/glass-pill-button';
 import { PrimaryActionButton } from '@/components/actions/primary-action-button';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { createBookshelfApiClient } from '@/lib/api/client';
 import { createConnectionProfile } from '@/lib/app/connection';
 import { createStaggeredFadeIn } from '@/lib/presentation/motion';
@@ -27,6 +27,7 @@ function getScannerError(error: unknown) {
 }
 
 export default function ScannerScreen() {
+  const { theme } = useBookleafTheme();
   const router = useRouter();
   const [permission, requestPermission] = useCameraPermissions();
   const [feedback, setFeedback] = React.useState<string | null>(null);
@@ -77,11 +78,11 @@ export default function ScannerScreen() {
       <View
         style={{
           alignItems: 'center',
-          backgroundColor: '#10192A',
+          backgroundColor: theme.colors.scannerBase,
           flex: 1,
           justifyContent: 'center',
         }}>
-        <ActivityIndicator color="#FFFFFF" />
+        <ActivityIndicator color={theme.colors.scannerText} />
       </View>
     );
   }
@@ -90,7 +91,7 @@ export default function ScannerScreen() {
     return (
       <View
         style={{
-          backgroundColor: '#10192A',
+          backgroundColor: theme.colors.scannerBase,
           flex: 1,
           justifyContent: 'space-between',
           paddingBottom: 44,
@@ -102,8 +103,8 @@ export default function ScannerScreen() {
           <Text
             selectable
             style={{
-              color: '#FFFFFF',
-              ...bookleafTheme.typography.heading,
+              color: theme.colors.scannerText,
+              ...theme.typography.heading,
               fontSize: 36,
             }}>
             需要相机权限
@@ -111,8 +112,8 @@ export default function ScannerScreen() {
           <Text
             selectable
             style={{
-              color: 'rgba(255,255,255,0.78)',
-              ...bookleafTheme.typography.body,
+              color: theme.colors.scannerTextSoft,
+              ...theme.typography.body,
               fontSize: 16,
               lineHeight: 24,
           }}>
@@ -127,7 +128,7 @@ export default function ScannerScreen() {
   }
 
   return (
-    <View style={{ backgroundColor: '#10192A', flex: 1 }}>
+    <View style={{ backgroundColor: theme.colors.scannerBase, flex: 1 }}>
       <CameraView
         barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
         onBarcodeScanned={({ data }) => handleScan(data)}
@@ -149,10 +150,10 @@ export default function ScannerScreen() {
           <GlassPillButton icon="back" onPress={() => router.back()} />
           <View
             style={{
-              backgroundColor: 'rgba(16,25,42,0.62)',
-              borderColor: 'rgba(255,255,255,0.16)',
+              backgroundColor: theme.colors.scannerPanelSubtle,
+              borderColor: theme.colors.scannerPanelBorderStrong,
               borderCurve: 'continuous',
-              borderRadius: bookleafTheme.radii.pill,
+              borderRadius: theme.radii.pill,
               borderWidth: 1,
               paddingHorizontal: 14,
               paddingVertical: 10,
@@ -160,8 +161,8 @@ export default function ScannerScreen() {
             <Text
               selectable
               style={{
-                color: '#FFFFFF',
-                ...bookleafTheme.typography.semiBold,
+                color: theme.colors.scannerText,
+                ...theme.typography.semiBold,
                 fontSize: 13,
               }}>
               扫描书柜二维码
@@ -176,7 +177,7 @@ export default function ScannerScreen() {
           }}>
           <View
             style={{
-              borderColor: '#FFFFFF',
+              borderColor: theme.colors.scannerFrame,
               borderCurve: 'continuous',
               borderRadius: 36,
               borderWidth: 3,
@@ -188,8 +189,8 @@ export default function ScannerScreen() {
         <Animated.View
           entering={createStaggeredFadeIn(1)}
           style={{
-            backgroundColor: 'rgba(16,25,42,0.72)',
-            borderColor: 'rgba(255,255,255,0.12)',
+            backgroundColor: theme.colors.scannerPanel,
+            borderColor: theme.colors.scannerPanelBorder,
             borderCurve: 'continuous',
             borderRadius: 30,
             borderWidth: 1,
@@ -199,8 +200,8 @@ export default function ScannerScreen() {
           <Text
             selectable
             style={{
-              color: '#FFFFFF',
-              ...bookleafTheme.typography.semiBold,
+              color: theme.colors.scannerText,
+              ...theme.typography.semiBold,
               fontSize: 16,
             }}>
             将二维码放入框内
@@ -208,8 +209,8 @@ export default function ScannerScreen() {
           <Text
             selectable
             style={{
-              color: 'rgba(255,255,255,0.72)',
-              ...bookleafTheme.typography.body,
+              color: theme.colors.scannerTextMuted,
+              ...theme.typography.body,
               fontSize: 14,
               lineHeight: 20,
             }}>
@@ -227,16 +228,16 @@ export default function ScannerScreen() {
                 setIsConnecting(false);
               }}
               style={{
-                backgroundColor: 'rgba(255,255,255,0.08)',
+                backgroundColor: theme.colors.scannerRetry,
                 borderCurve: 'continuous',
-                borderRadius: bookleafTheme.radii.lg,
+                borderRadius: theme.radii.lg,
                 padding: 12,
               }}>
               <Text
                 selectable
                 style={{
-                  color: '#FFFFFF',
-                  ...bookleafTheme.typography.medium,
+                  color: theme.colors.scannerText,
+                  ...theme.typography.medium,
                   fontSize: 13,
                 }}>
                 {feedback}

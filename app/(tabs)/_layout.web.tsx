@@ -3,10 +3,11 @@ import { Tabs, TabList, TabSlot, TabTrigger } from 'expo-router/ui';
 import { Text, View } from 'react-native';
 
 import { AppIcon } from '@/components/base/app-icon';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { appTabs } from '@/lib/app/navigation';
 
 export default function AppTabsWebLayout() {
+  const { theme } = useBookleafTheme();
   const pathname = usePathname();
 
   return (
@@ -14,8 +15,8 @@ export default function AppTabsWebLayout() {
       <TabSlot />
       <TabList
         style={{
-          backgroundColor: bookleafTheme.colors.surface,
-          borderTopColor: bookleafTheme.colors.border,
+          backgroundColor: theme.nav.background,
+          borderTopColor: theme.colors.border,
           borderTopWidth: 1,
           flexDirection: 'row',
           gap: 12,
@@ -60,10 +61,12 @@ function WebTabTriggerContent({
   icon,
   label,
 }: WebTabTriggerContentProps) {
+  const { theme } = useBookleafTheme();
+
   return (
     <View style={{ alignItems: 'center', gap: 10 }}>
       <AppIcon
-        color={focused ? bookleafTheme.colors.primaryStrong : bookleafTheme.colors.textSoft}
+        color={focused ? theme.nav.iconSelected : theme.nav.iconDefault}
         name={icon}
         size={20}
         strokeWidth={focused ? 2.3 : 1.9}
@@ -71,8 +74,8 @@ function WebTabTriggerContent({
       <Text
         selectable
         style={{
-          color: focused ? bookleafTheme.colors.primaryStrong : bookleafTheme.colors.textSoft,
-          fontFamily: bookleafTheme.typography.body.fontFamily,
+          color: focused ? theme.nav.labelSelected : theme.nav.labelDefault,
+          fontFamily: theme.typography.body.fontFamily,
           fontSize: 12,
           fontWeight: focused ? '700' : '500',
         }}>

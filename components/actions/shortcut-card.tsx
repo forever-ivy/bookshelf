@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { AppIcon, type AppIconName } from '@/components/base/app-icon';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 
 type ShortcutCardProps = {
   description: string;
@@ -17,15 +17,17 @@ export function ShortcutCard({
   onPress,
   title,
 }: ShortcutCardProps) {
+  const { theme } = useBookleafTheme();
+
   return (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
       style={{
-        backgroundColor: bookleafTheme.colors.surface,
-        borderColor: bookleafTheme.colors.border,
+        backgroundColor: theme.colors.surface,
+        borderColor: theme.colors.border,
         borderCurve: 'continuous',
-        borderRadius: bookleafTheme.radii.lg,
+        borderRadius: theme.radii.lg,
         borderWidth: 1,
         flex: 1,
         minHeight: 148,
@@ -36,21 +38,21 @@ export function ShortcutCard({
         <View
           style={{
             alignItems: 'center',
-            backgroundColor: bookleafTheme.colors.surfaceMuted,
+            backgroundColor: theme.colors.surfaceMuted,
             borderCurve: 'continuous',
             borderRadius: 22,
             height: 48,
             justifyContent: 'center',
             width: 48,
           }}>
-          <AppIcon color={bookleafTheme.colors.primaryStrong} name={icon} size={22} />
+          <AppIcon color={theme.colors.primaryStrong} name={icon} size={22} />
         </View>
         <View style={{ gap: 6 }}>
           <Text
             selectable
             style={{
-              color: bookleafTheme.colors.text,
-              ...bookleafTheme.typography.semiBold,
+              color: theme.colors.text,
+              ...theme.typography.semiBold,
               fontSize: 16,
             }}>
             {title}
@@ -58,8 +60,8 @@ export function ShortcutCard({
           <Text
             selectable
             style={{
-              color: bookleafTheme.colors.textMuted,
-              ...bookleafTheme.typography.body,
+              color: theme.colors.textMuted,
+              ...theme.typography.body,
               fontSize: 13,
               lineHeight: 18,
             }}>

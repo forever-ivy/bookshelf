@@ -1,11 +1,12 @@
 import { Redirect } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
 
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { getInitialHref } from '@/lib/app/navigation';
 import { useSessionStore } from '@/stores/session-store';
 
 export default function IndexRoute() {
+  const { theme } = useBookleafTheme();
   const hasConnection = useSessionStore((state) => state.hasConnection);
   const hydrated = useSessionStore((state) => state.hydrated);
   const initialHref = getInitialHref(hasConnection);
@@ -20,11 +21,11 @@ export default function IndexRoute() {
       <View
         style={{
           alignItems: 'center',
-          backgroundColor: bookleafTheme.colors.background,
+          backgroundColor: theme.colors.background,
           flex: 1,
           justifyContent: 'center',
         }}>
-        <ActivityIndicator color={bookleafTheme.colors.primaryStrong} />
+        <ActivityIndicator color={theme.colors.primaryStrong} />
       </View>
     );
   }

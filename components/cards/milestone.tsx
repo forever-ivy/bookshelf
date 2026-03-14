@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 
 import { AppIcon } from '@/components/base/app-icon';
-import { bookleafTheme } from '@/constants/bookleaf-theme';
+import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import type { BadgeSummary } from '@/lib/api/contracts/types';
 
 type MilestoneBadgeProps = {
@@ -97,6 +97,7 @@ function MilestoneDetailModal({
   onClose,
   badgeKey,
 }: MilestoneDetailModalProps) {
+  const { theme } = useBookleafTheme();
   const presentation = badgeKey ? milestoneByKey[badgeKey] : null;
 
   return (
@@ -109,7 +110,7 @@ function MilestoneDetailModal({
         onPress={onClose}
         style={{
           alignItems: 'center',
-          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          backgroundColor: theme.milestone.modalScrim,
           flex: 1,
           justifyContent: 'center',
           padding: 24,
@@ -119,8 +120,8 @@ function MilestoneDetailModal({
           onPress={(e) => e.stopPropagation()}
           style={{
             alignItems: 'center',
-            backgroundColor: 'rgba(238,244,255,0.98)',
-            borderColor: 'rgba(255,255,255,0.9)',
+            backgroundColor: theme.milestone.modalBackground,
+            borderColor: theme.milestone.modalBorder,
             borderCurve: 'continuous',
             borderRadius: 32,
             borderWidth: 1,
@@ -131,12 +132,12 @@ function MilestoneDetailModal({
           <View
             style={{
               alignItems: 'center',
-              backgroundColor: 'rgba(255, 230, 170, 0.92)',
-              borderColor: 'rgba(255,255,255,0.9)',
+              backgroundColor: theme.milestone.haloOuter,
+              borderColor: theme.milestone.haloOuterBorder,
               borderCurve: 'continuous',
-              borderRadius: bookleafTheme.radii.pill,
+              borderRadius: theme.radii.pill,
               borderWidth: 1,
-              boxShadow: '0 12px 32px rgba(255, 228, 160, 0.5)',
+              boxShadow: theme.milestone.haloOuterShadow,
               height: 140,
               justifyContent: 'center',
               width: 140,
@@ -144,9 +145,9 @@ function MilestoneDetailModal({
             <View
               style={{
                 alignItems: 'center',
-                backgroundColor: 'rgba(255,255,255,0.94)',
+                backgroundColor: theme.milestone.haloInner,
                 borderCurve: 'continuous',
-                borderRadius: bookleafTheme.radii.pill,
+                borderRadius: theme.radii.pill,
                 height: 110,
                 justifyContent: 'center',
                 width: 110,
@@ -160,7 +161,7 @@ function MilestoneDetailModal({
                 />
               ) : (
                 <AppIcon
-                  color={bookleafTheme.colors.primaryStrong}
+                  color={theme.colors.primaryStrong}
                   name="spark"
                   size={48}
                 />
@@ -168,18 +169,18 @@ function MilestoneDetailModal({
             </View>
           </View>
           <Text
-            style={{
-              color: bookleafTheme.colors.text,
-              ...bookleafTheme.typography.semiBold,
+          style={{
+              color: theme.colors.text,
+              ...theme.typography.semiBold,
               fontSize: 20,
               textAlign: 'center',
             }}>
             {presentation?.label ?? badgeKey}
           </Text>
           <Text
-            style={{
-              color: bookleafTheme.colors.textMuted,
-              ...bookleafTheme.typography.body,
+          style={{
+              color: theme.colors.textMuted,
+              ...theme.typography.body,
               fontSize: 14,
               textAlign: 'center',
             }}>
@@ -188,7 +189,7 @@ function MilestoneDetailModal({
           <TouchableOpacity
             onPress={onClose}
             style={{
-              backgroundColor: bookleafTheme.colors.primary,
+              backgroundColor: theme.milestone.buttonBackground,
               borderCurve: 'continuous',
               borderRadius: 12,
               marginTop: 8,
@@ -197,8 +198,8 @@ function MilestoneDetailModal({
             }}>
             <Text
               style={{
-                color: 'white',
-                ...bookleafTheme.typography.semiBold,
+                color: theme.milestone.buttonText,
+                ...theme.typography.semiBold,
                 fontSize: 15,
               }}>
               关闭
@@ -211,6 +212,7 @@ function MilestoneDetailModal({
 }
 
 export function MilestoneBadge({ badgeKey, onPress }: MilestoneBadgeProps) {
+  const { theme } = useBookleafTheme();
   const presentation = milestoneByKey[badgeKey];
 
   return (
@@ -220,8 +222,8 @@ export function MilestoneBadge({ badgeKey, onPress }: MilestoneBadgeProps) {
       style={{
         alignItems: 'center',
         justifyContent:"center",
-        backgroundColor: 'rgba(238,244,255,0.84)',
-        borderColor: 'rgba(255,255,255,0.72)',
+        backgroundColor: theme.milestone.cardBackground,
+        borderColor: theme.milestone.cardBorder,
         borderCurve: 'continuous',
         borderRadius: 28,
         borderWidth: 1,
@@ -236,12 +238,12 @@ export function MilestoneBadge({ badgeKey, onPress }: MilestoneBadgeProps) {
         <View
           style={{
             alignItems: 'center',
-            backgroundColor: 'rgba(255, 230, 170, 0.92)',
-            borderColor: 'rgba(255,255,255,0.9)',
+            backgroundColor: theme.milestone.haloOuter,
+            borderColor: theme.milestone.haloOuterBorder,
             borderCurve: 'continuous',
-            borderRadius: bookleafTheme.radii.pill,
+            borderRadius: theme.radii.pill,
             borderWidth: 1,
-            boxShadow: '0 10px 24px rgba(255, 228, 160, 0.42)',
+            boxShadow: theme.milestone.haloOuterShadow,
             height: 78,
             justifyContent: 'center',
             width: 78,
@@ -250,9 +252,9 @@ export function MilestoneBadge({ badgeKey, onPress }: MilestoneBadgeProps) {
           <View
             style={{
               alignItems: 'center',
-              backgroundColor: 'rgba(255,255,255,0.94)',
+              backgroundColor: theme.milestone.haloInner,
               borderCurve: 'continuous',
-              borderRadius: bookleafTheme.radii.pill,
+              borderRadius: theme.radii.pill,
               height: 60,
               justifyContent: 'center',
               width: 60,
@@ -267,7 +269,7 @@ export function MilestoneBadge({ badgeKey, onPress }: MilestoneBadgeProps) {
               />
             ) : (
               <AppIcon
-                color={bookleafTheme.colors.primaryStrong}
+                color={theme.colors.primaryStrong}
                 name="spark"
                 size={24}
               />
@@ -278,8 +280,8 @@ export function MilestoneBadge({ badgeKey, onPress }: MilestoneBadgeProps) {
           numberOfLines={2}
           selectable
           style={{
-            color: bookleafTheme.colors.text,
-            ...bookleafTheme.typography.semiBold,
+            color: theme.colors.text,
+            ...theme.typography.semiBold,
             fontSize: 13,
             lineHeight: 18,
             minHeight: 36,
