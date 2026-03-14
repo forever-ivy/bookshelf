@@ -3,6 +3,7 @@ import type {
   BooklistItem,
   BorrowLog,
   CabinetCompartment,
+  MemberGoal,
   MemberStats,
   MemberSummary,
   MonthlyReport,
@@ -12,27 +13,39 @@ import { createConnectionProfile } from '@/lib/app/connection';
 
 const previewUsers: MemberSummary[] = [
   {
+    age: 38,
     avatar: '妈',
+    family_name: '暮光阅读家',
     color: 'cool',
+    interests: '亲子共读、自然故事',
     id: 1,
     name: '妈妈',
+    pin: '0000',
     role: 'parent',
   },
   {
+    age: 8,
     avatar: '米',
+    family_name: '暮光阅读家',
     color: 'forest',
     current_goal_minutes: 20,
     current_streak_days: 6,
+    grade_level: '小学二年级',
     id: 2,
+    interests: '冒险故事、自然观察',
     name: '米洛',
     role: 'child',
   },
   {
+    age: 6,
     avatar: '艾',
+    family_name: '暮光阅读家',
     color: 'sun',
     current_goal_minutes: 15,
     current_streak_days: 3,
+    grade_level: '学前班',
     id: 3,
+    interests: '建筑、图画书',
     name: '艾玛',
     role: 'child',
   },
@@ -169,6 +182,21 @@ const previewMonthlyReport: MonthlyReport = {
   total_books: 18,
 };
 
+const previewGoalsByMember: Record<number, MemberGoal> = {
+  1: {
+    user_id: 1,
+    weekly_target: 4,
+  },
+  2: {
+    user_id: 2,
+    weekly_target: 5,
+  },
+  3: {
+    user_id: 3,
+    weekly_target: 4,
+  },
+};
+
 export function createPreviewConnectionProfile() {
   return createConnectionProfile('preview://cabinet', '预览书柜');
 }
@@ -188,5 +216,6 @@ export function getPreviewCabinetData() {
     weeklyReportsByMember: previewWeeklyReports,
     borrowLogsByMember: previewBorrowLogsByMember,
     booklist: previewBooklistByMember[2],
+    goalsByMember: previewGoalsByMember,
   };
 }

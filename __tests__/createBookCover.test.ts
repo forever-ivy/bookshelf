@@ -12,6 +12,10 @@ describe('createBookCover', () => {
       title: '月光图书馆',
     });
 
+    if (cover.kind !== 'generated') {
+      throw new Error('Expected a generated cover');
+    }
+
     expect(cover.colors).toHaveLength(2);
   });
 

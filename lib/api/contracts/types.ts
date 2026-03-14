@@ -1,11 +1,37 @@
 export type MemberSummary = {
+  age?: number | null;
   id: number;
   name: string;
   avatar?: string | null;
+  birth_date?: string | null;
   color?: string | null;
+  created_at?: string | null;
+  family_id?: number | null;
+  family_name?: string | null;
+  gender?: string | null;
+  grade_level?: string | null;
+  interests?: string | null;
+  pin?: string | null;
+  reading_level?: string | null;
   role?: 'parent' | 'child' | 'reader' | string;
   current_goal_minutes?: number | null;
   current_streak_days?: number | null;
+  updated_at?: string | null;
+};
+
+export type MemberDraft = {
+  age?: number | null;
+  avatar?: string | null;
+  birth_date?: string | null;
+  color?: string | null;
+  family_id?: number | null;
+  gender?: string | null;
+  grade_level?: string | null;
+  interests?: string | null;
+  name?: string;
+  pin?: string | null;
+  reading_level?: string | null;
+  role?: string;
 };
 
 export type CabinetCompartment = {
@@ -69,6 +95,21 @@ export type BooklistItem = {
 export type BadgeSummary = {
   badge_key: string;
   unlocked_at: string;
+};
+
+export type MemberGoal = {
+  user_id: number;
+  weekly_target: number;
+};
+
+export type ShelfActionResult = {
+  ai_reply?: string | null;
+  reply?: string | null;
+};
+
+export type OcrIngestResult = ShelfActionResult & {
+  audio_b64?: string | null;
+  audio_format?: string | null;
 };
 
 export type CabinetStatusSummary = {

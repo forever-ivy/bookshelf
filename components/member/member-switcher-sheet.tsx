@@ -20,6 +20,7 @@ import Animated, {
 
 import { AvatarGlyph } from '@/components/member/avatar-glyph';
 import { GlassSurface } from '@/components/surfaces/glass-surface';
+import { getGlassMotionProfile } from '@/components/surfaces/glass/glass-motion';
 import { PrimaryActionButton } from '@/components/actions/primary-action-button';
 import { bookleafTheme } from '@/constants/bookleaf-theme';
 import type { MemberSummary } from '@/lib/api/contracts/types';
@@ -66,6 +67,7 @@ export function MemberSwitcherSheet({
   const parentMembers = members.filter((member) => member.role === 'parent');
   const readerMembers = members.filter((member) => member.role !== 'parent');
   const snapPoints = React.useMemo(() => ['58%', '80%'], []);
+  const sheetMotion = React.useMemo(() => getGlassMotionProfile('sheet'), []);
   const contentProgress = useSharedValue(0);
 
   React.useEffect(() => {
@@ -74,14 +76,14 @@ export function MemberSwitcherSheet({
         Haptics.selectionAsync().catch(() => null);
       }
 
-      contentProgress.value = withSpring(1, motionTokens.spring.gentle);
+      contentProgress.value = withSpring(1, sheetMotion.mount.spring);
       bottomSheetRef.current?.present();
       return;
     }
 
     contentProgress.value = 0;
     bottomSheetRef.current?.dismiss();
-  }, [contentProgress, isOpen]);
+  }, [contentProgress, isOpen, sheetMotion.mount.spring]);
 
   const handleDismiss = React.useCallback(() => {
     if (process.env.EXPO_OS === 'ios') {
@@ -105,15 +107,20 @@ export function MemberSwitcherSheet({
   );
 
   const contentMotionStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(contentProgress.value, [0, 1], [0.9, 1]),
     transform: [
       {
-        translateY: interpolate(contentProgress.value, [0, 1], [20, 0]),
+        translateY: interpolate(
+          contentProgress.value,
+          [0, 1],
+          [sheetMotion.mount.fromTranslateY, 0]
+        ),
       },
       {
-        scale: interpolate(contentProgress.value, [0, 1], [0.98, 1]),
+        scale: interpolate(contentProgress.value, [0, 1], [sheetMotion.mount.fromScale, 1]),
       },
     ],
-  }));
+  }), [sheetMotion.mount.fromScale, sheetMotion.mount.fromTranslateY]);
 
   async function handleSelectMember(memberId: number) {
     if (pendingMemberId != null) {

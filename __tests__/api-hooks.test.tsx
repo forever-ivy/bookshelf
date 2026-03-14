@@ -3,9 +3,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import {
+  useAddBooklistItemMutation,
   useBorrowLogsQuery,
   useCurrentUserQuery,
+  useGoalQuery,
   useMonthlyReportQuery,
+  useSetGoalMutation,
   useSwitchUserMutation,
 } from '@/lib/api/react-query/hooks';
 import { createConnectionProfile } from '@/lib/app/connection';
@@ -133,5 +136,85 @@ describe('api hooks', () => {
     });
 
     expect(sessionStore.getState().currentMemberId).toBe(8);
+  });
+
+  it('loads the member goal for the goal settings flow', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        data: { user_id: 3, weekly_target: 5 },
+      }),
+    }) as typeof fetch;
+
+    const { result } = renderHook(() => useGoalQuery(3), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toEqual({ user_id: 3, weekly_target: 5 });
+  });
+
+  it('invalidates goal and stats queries after saving a new weekly target', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        data: { user_id: 3, weekly_target: 6 },
+      }),
+    }) as typeof fetch;
+
+    const wrapper = createWrapper();
+    const invalidateSpy = jest.spyOn(activeQueryClient!, 'invalidateQueries');
+
+    const { result } = renderHook(() => useSetGoalMutation(3), {
+      wrapper,
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync(6);
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ['cabinet', 'https://cabinet.example.com', 'goal', 3],
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ['cabinet', 'https://cabinet.example.com', 'stats', 3],
+    });
+  });
+
+  it('invalidates member-facing reading surfaces after adding a booklist item', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        data: { id: 42 },
+      }),
+    }) as typeof fetch;
+
+    const wrapper = createWrapper();
+    const invalidateSpy = jest.spyOn(activeQueryClient!, 'invalidateQueries');
+
+    const { result } = renderHook(() => useAddBooklistItemMutation(3), {
+      wrapper,
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        note: '周末一起读',
+        title: '月光图书馆',
+      });
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ['cabinet', 'https://cabinet.example.com', 'booklist', 3],
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ['cabinet', 'https://cabinet.example.com', 'stats', 3],
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ['cabinet', 'https://cabinet.example.com', 'badges', 3],
+    });
   });
 });

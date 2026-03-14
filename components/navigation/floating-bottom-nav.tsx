@@ -7,12 +7,13 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
 
 import { AppIcon } from '@/components/base/app-icon';
 import { GlassSurface } from '@/components/surfaces/glass-surface';
+import { useGlassMountMotion } from '@/components/surfaces/glass/glass-mount-motion';
+import { resolveGlassPressTransform } from '@/components/surfaces/glass/glass-motion';
+import { useGlassPressMotion } from '@/components/surfaces/glass/glass-press-motion';
 import { bookleafTheme } from '@/constants/bookleaf-theme';
-import { motionTokens } from '@/lib/presentation/motion';
 import type { BottomNavItem, BottomNavKey } from '@/lib/app/types';
 
 type FloatingBottomNavProps = {
@@ -30,34 +31,19 @@ export function FloatingBottomNav({
     items.findIndex((item) => item.key === activeKey),
     0
   );
+  const { animatedStyle: mountStyle, profile } = useGlassMountMotion('nav');
   const activePatchX = useSharedValue(activeIndex * 74);
-  const mountProgress = useSharedValue(0);
 
   React.useEffect(() => {
     activePatchX.value = withSpring(activeIndex * 74, {
-      damping: 20,
-      mass: 0.95,
-      stiffness: 210,
+      damping: profile.selectionSpring.damping,
+      mass: profile.selectionSpring.mass,
+      stiffness: profile.selectionSpring.stiffness,
     });
-  }, [activeIndex, activePatchX]);
-
-  React.useEffect(() => {
-    mountProgress.value = withSpring(1, motionTokens.spring.gentle);
-  }, [mountProgress]);
+  }, [activeIndex, activePatchX, profile.selectionSpring.damping, profile.selectionSpring.mass, profile.selectionSpring.stiffness]);
 
   const activePatchStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: activePatchX.value }],
-  }));
-
-  const containerStyle = useAnimatedStyle(() => ({
-    transform: [
-      {
-        translateY: interpolate(mountProgress.value, [0, 1], [18, 0]),
-      },
-      {
-        scale: interpolate(mountProgress.value, [0, 1], [0.98, 1]),
-      },
-    ],
   }));
 
   return (
@@ -68,7 +54,7 @@ export function FloatingBottomNav({
           bottom: 18,
           position: 'absolute',
         },
-        containerStyle,
+        mountStyle,
       ]}>
       <GlassSurface
         fallbackMode="material"
@@ -78,7 +64,6 @@ export function FloatingBottomNav({
         style={{
           alignSelf: 'center',
           borderCurve: 'continuous',
-          borderRadius: bookleafTheme.radii.pill,
           boxShadow: bookleafTheme.shadows.floating,
           flexDirection: 'row',
           gap: 10,
@@ -90,27 +75,21 @@ export function FloatingBottomNav({
           pointerEvents="none"
           style={[
             {
-              bottom: 9,
-              left: 14,
+              backgroundColor: 'rgba(255,255,255,0.18)',
+              borderColor: 'rgba(255,255,255,0.24)',
+              borderCurve: 'continuous',
+              borderRadius: bookleafTheme.radii.pill,
+              borderWidth: 1,
+              bottom: 10,
+              left: 16,
               position: 'absolute',
-              top: 9,
-              width: 64,
+              top: 10,
+              width: 60,
             },
             activePatchStyle,
           ]}
           testID="active-nav-frosted-patch">
-          <GlassSurface
-            fallbackMode="material"
-            motionPreset="button"
-            style={{
-              borderCurve: 'continuous',
-              borderRadius: bookleafTheme.radii.pill,
-              flex: 1,
-            }}
-            tone="subtle"
-            variant="clear">
-            <View style={{ flex: 1 }} />
-          </GlassSurface>
+          <View style={{ flex: 1 }} />
         </Animated.View>
         {items.map((item) => (
           <FloatingBottomNavItem
@@ -136,30 +115,36 @@ function FloatingBottomNavItem({
   item,
   onPress,
 }: FloatingBottomNavItemProps) {
+  const { delayLongPress, emphasisProgress, onLongPress, onPressIn, onPressOut, pressProgress, profile } =
+    useGlassPressMotion({
+      preset: 'nav',
+    });
   const activeProgress = useSharedValue(active ? 1 : 0);
-  const pressProgress = useSharedValue(0);
-  const longPressProgress = useSharedValue(0);
 
   React.useEffect(() => {
-    activeProgress.value = withSpring(active ? 1 : 0, motionTokens.spring.snappy);
-  }, [active, activeProgress]);
+    activeProgress.value = withSpring(active ? 1 : 0, profile.selectionSpring);
+  }, [active, activeProgress, profile.selectionSpring]);
 
-  const contentStyle = useAnimatedStyle(() => ({
-    transform: [
-      {
-        scale:
-          interpolate(activeProgress.value, [0, 1], [0.95, 1.02]) +
-          interpolate(pressProgress.value, [0, 1], [0, 0.028]) +
-          interpolate(longPressProgress.value, [0, 1], [0, 0.1]),
-      },
-      {
-        translateY:
-          interpolate(activeProgress.value, [0, 1], [1.5, 0]) -
-          interpolate(pressProgress.value, [0, 1], [0, 1.5]) -
-          interpolate(longPressProgress.value, [0, 1], [0, 4]),
-      },
-    ],
-  }));
+  const contentStyle = useAnimatedStyle(() => {
+    const pressTransform = resolveGlassPressTransform(
+      'nav',
+      pressProgress.value,
+      emphasisProgress.value
+    );
+
+    return {
+      transform: [
+        {
+          scale: interpolate(activeProgress.value, [0, 1], [0.95, 1.02]) + (pressTransform.scale - 1),
+        },
+        {
+          translateY:
+            interpolate(activeProgress.value, [0, 1], [1.5, 0]) +
+            pressTransform.translateY,
+        },
+      ],
+    };
+  });
 
   const activeIconStyle = useAnimatedStyle(() => ({
     opacity: activeProgress.value,
@@ -171,8 +156,8 @@ function FloatingBottomNavItem({
 
   const activeLabelStyle = useAnimatedStyle(() => ({
     color: interpolateColor(activeProgress.value, [0, 1], [
-      bookleafTheme.colors.text,
-      bookleafTheme.colors.primaryStrong,
+      bookleafTheme.colors.glassForeground,
+      bookleafTheme.colors.glassForegroundActive,
     ]),
   }));
 
@@ -181,23 +166,12 @@ function FloatingBottomNavItem({
       accessibilityLabel={item.label}
       accessibilityRole="tab"
       accessibilityState={{ selected: active }}
+      delayLongPress={delayLongPress}
       key={item.key}
       onPress={onPress}
-      onLongPress={() => {
-        longPressProgress.value = withSpring(1, motionTokens.spring.snappy);
-
-        if (process.env.EXPO_OS === 'ios') {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => null);
-        }
-      }}
-      onPressIn={() => {
-        pressProgress.value = withSpring(1, motionTokens.spring.snappy);
-      }}
-      onPressOut={() => {
-        pressProgress.value = withSpring(0, motionTokens.spring.snappy);
-        longPressProgress.value = withSpring(0, motionTokens.spring.gentle);
-      }}
-      delayLongPress={130}
+      onLongPress={onLongPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
       style={{
         alignItems: 'center',
         borderCurve: 'continuous',
@@ -231,7 +205,7 @@ function FloatingBottomNavItem({
               },
               inactiveIconStyle,
             ]}>
-            <AppIcon color={bookleafTheme.colors.text} name={item.icon} size={20} />
+            <AppIcon color={bookleafTheme.colors.glassForeground} name={item.icon} size={20} />
           </Animated.View>
           <Animated.View
             style={[
@@ -242,7 +216,11 @@ function FloatingBottomNavItem({
               },
               activeIconStyle,
             ]}>
-            <AppIcon color={bookleafTheme.colors.primaryStrong} name={item.icon} size={20} />
+            <AppIcon
+              color={bookleafTheme.colors.glassForegroundActive}
+              name={item.icon}
+              size={20}
+            />
           </Animated.View>
         </View>
         <Animated.Text

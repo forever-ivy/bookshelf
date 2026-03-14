@@ -210,4 +210,79 @@ describe('createBookshelfApiClient', () => {
       total_books: 9,
     });
   });
+
+  it('returns the dedicated goal payload for member goal screens', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        data: {
+          user_id: 3,
+          weekly_target: 6,
+        },
+      }),
+    }) as typeof fetch;
+
+    const client = createBookshelfApiClient('https://cabinet.example.com');
+
+    await expect(client.getGoal(3)).resolves.toEqual({
+      user_id: 3,
+      weekly_target: 6,
+    });
+  });
+
+  it('returns richer member detail fields for the member form', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        data: {
+          age: 8,
+          avatar: '米',
+          family_name: '暮光阅读家',
+          grade_level: '小学二年级',
+          id: 2,
+          interests: '冒险故事',
+          name: '米洛',
+          pin: '1234',
+          reading_level: '桥梁书',
+          role: 'child',
+        },
+      }),
+    }) as typeof fetch;
+
+    const client = createBookshelfApiClient('https://cabinet.example.com');
+
+    await expect(client.getUser(2)).resolves.toEqual({
+      age: 8,
+      avatar: '米',
+      family_name: '暮光阅读家',
+      grade_level: '小学二年级',
+      id: 2,
+      interests: '冒险故事',
+      name: '米洛',
+      pin: '1234',
+      reading_level: '桥梁书',
+      role: 'child',
+    });
+  });
+
+  it('unwraps the take-by-text action result for the family operation flows', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        data: {
+          ai_reply: '已经找到《月光图书馆》，请看第 2 格。',
+        },
+        message: '取书成功',
+      }),
+    }) as typeof fetch;
+
+    const client = createBookshelfApiClient('https://cabinet.example.com');
+
+    await expect(client.takeBookByText('月光图书馆')).resolves.toEqual({
+      ai_reply: '已经找到《月光图书馆》，请看第 2 格。',
+    });
+  });
 });

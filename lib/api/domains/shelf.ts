@@ -1,14 +1,18 @@
-import { aiInsightSchema, cabinetCompartmentSchema, messageSchema } from '@/lib/api/contracts/schemas';
+import {
+  aiInsightSchema,
+  cabinetCompartmentSchema,
+  ocrIngestResultSchema,
+  shelfActionResultSchema,
+} from '@/lib/api/contracts/schemas';
 import { createHttpClient } from '@/lib/api/core/http';
-import type { CabinetCompartment } from '@/lib/api/contracts/types';
+import type {
+  CabinetCompartment,
+  OcrIngestResult,
+  ShelfActionResult,
+} from '@/lib/api/contracts/types';
 import { z } from 'zod';
 
 const compartmentsSchema = z.array(cabinetCompartmentSchema);
-const shelfActionSchema = z.object({
-  ai_reply: z.string().optional(),
-  message: z.string().optional(),
-  reply: z.string().optional(),
-});
 
 export function createShelfApi(baseUrl: string) {
   const http = createHttpClient(baseUrl);
@@ -21,26 +25,28 @@ export function createShelfApi(baseUrl: string) {
       return http.get<CabinetCompartment[]>('/api/compartments', { schema: compartmentsSchema });
     },
     ocrIngest(formData: FormData, options?: { audio?: boolean; source?: string }) {
-      return http.post('/api/ocr/ingest', {
+      return http.post<OcrIngestResult>('/api/ocr/ingest', {
         data: formData,
         params: {
           audio: options?.audio ? 1 : undefined,
           source: options?.source ?? 'app',
         },
+        schema: ocrIngestResultSchema,
       });
     },
     storeBook() {
-      return http.post('/api/store', { schema: shelfActionSchema });
+      return http.post<ShelfActionResult>('/api/store', { schema: shelfActionResultSchema });
     },
     takeBook(payload: { cid: number; title?: string }) {
-      return http.post('/api/take', {
+      return http.post<ShelfActionResult>('/api/take', {
         data: payload,
-        schema: shelfActionSchema,
+        schema: shelfActionResultSchema,
       });
     },
     takeBookByText(text: string) {
-      return http.post('/api/take_by_text', {
+      return http.post<ShelfActionResult>('/api/take_by_text', {
         data: { text },
+        schema: shelfActionResultSchema,
       });
     },
   };

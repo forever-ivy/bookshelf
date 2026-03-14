@@ -2,6 +2,12 @@ import { act, renderHook } from '@testing-library/react-native';
 
 import { useCover } from '@/hooks/use-cover';
 
+type CoverHookProps = {
+  coverUrl?: string;
+  seed: number;
+  title: string;
+};
+
 describe('useCover', () => {
   it('returns a generated cover immediately when no cover url exists', () => {
     const { result } = renderHook(() =>
@@ -47,7 +53,7 @@ describe('useCover', () => {
 
   it('resets the failure state when a different remote cover arrives', () => {
     const { result, rerender } = renderHook(
-      ({ coverUrl, seed, title }) =>
+      ({ coverUrl, seed, title }: CoverHookProps) =>
         useCover({
           coverUrl,
           seed,

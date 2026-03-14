@@ -1,15 +1,10 @@
-import * as Haptics from 'expo-haptics';
 import React from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 
 import { GlassSurface } from '@/components/surfaces/glass-surface';
+import { useGlassPressMotion } from '@/components/surfaces/glass/glass-press-motion';
 import { bookleafTheme } from '@/constants/bookleaf-theme';
-import { motionTokens } from '@/lib/presentation/motion';
 
 export type GlassActionButtonProps = {
   disabled?: boolean;
@@ -28,15 +23,11 @@ export function GlassActionButton({
 }: GlassActionButtonProps) {
   const isPrimary = variant === 'primary';
   const effectiveDisabled = disabled || loading;
-  const pressed = useSharedValue(0);
-  const held = useSharedValue(0);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: effectiveDisabled ? 1 : 1 - pressed.value * 0.025 + held.value * 0.04 },
-      { translateY: effectiveDisabled ? 0 : pressed.value * 1.5 - held.value * 2.5 },
-    ],
-  }));
+  const { animatedStyle, delayLongPress, onLongPress, onPressIn, onPressOut } =
+    useGlassPressMotion({
+      disabled: effectiveDisabled,
+      preset: isPrimary ? 'cta' : 'button',
+    });
 
   const foregroundColor = effectiveDisabled
     ? bookleafTheme.colors.glassForeground
@@ -52,27 +43,11 @@ export function GlassActionButton({
         disabled: effectiveDisabled,
       }}
       disabled={effectiveDisabled}
-      onLongPress={() => {
-        if (effectiveDisabled) {
-          return;
-        }
-
-        held.value = withSpring(1, motionTokens.spring.snappy);
-
-        if (process.env.EXPO_OS === 'ios') {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => null);
-        }
-      }}
+      delayLongPress={delayLongPress}
+      onLongPress={onLongPress}
       onPress={onPress}
-      onPressIn={() => {
-        if (!effectiveDisabled) {
-          pressed.value = withSpring(1, motionTokens.spring.snappy);
-        }
-      }}
-      onPressOut={() => {
-        pressed.value = withSpring(0, motionTokens.spring.snappy);
-        held.value = withSpring(0, motionTokens.spring.gentle);
-      }}>
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}>
       <Animated.View style={animatedStyle}>
         <GlassSurface
           fallbackMode="material"
@@ -82,7 +57,6 @@ export function GlassActionButton({
           style={{
             alignItems: 'center',
             borderCurve: 'continuous',
-            borderRadius: isPrimary ? bookleafTheme.radii.lg : bookleafTheme.radii.md,
             justifyContent: 'center',
             minHeight: isPrimary ? 56 : 46,
             paddingHorizontal: isPrimary ? 20 : 18,

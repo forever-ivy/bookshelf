@@ -7,6 +7,8 @@ import { AvatarGlyph } from '@/components/member/avatar-glyph';
 import { BookCarouselCard } from '@/components/cards/book-carousel-card';
 import { GlassPillButton } from '@/components/actions/glass-pill-button';
 import { GoalProgressCard } from '@/components/cards/goal-progress-card';
+import { SectionCard } from '@/components/surfaces/section-card';
+import { ShortcutCard } from '@/components/actions/shortcut-card';
 import { ScreenShell } from '@/components/navigation/screen-shell';
 import { bookleafTheme } from '@/constants/bookleaf-theme';
 import {
@@ -182,6 +184,31 @@ export default function ProfileRoute() {
         </View>
       </Animated.View>
       <Animated.View entering={createStaggeredFadeIn(3)} layout={motionTransitions.gentle}>
+        <SectionCard
+          description="档案页现在也可以直接进入目标编辑和成员管理，不需要再绕回设置页。"
+          title="继续调整">
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+            <ShortcutCard
+              description="修改这位成员的每周阅读目标。"
+              icon="target"
+              onPress={() =>
+                router.push({
+                  params: { memberId: String(numericMemberId) },
+                  pathname: '/goal-settings',
+                })
+              }
+              title="编辑目标"
+            />
+            <ShortcutCard
+              description="查看或维护全家的成员资料。"
+              icon="users"
+              onPress={() => router.push('/members')}
+              title="管理成员"
+            />
+          </View>
+        </SectionCard>
+      </Animated.View>
+      <Animated.View entering={createStaggeredFadeIn(4)} layout={motionTransitions.gentle}>
         <BookCarouselCard items={booklistQuery.data ?? []} />
       </Animated.View>
     </ScreenShell>

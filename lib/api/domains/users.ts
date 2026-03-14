@@ -3,6 +3,7 @@ import {
   booklistItemSchema,
   borrowLogSchema,
   memberStatsSchema,
+  memberGoalSchema,
   memberSummarySchema,
   userAccountRelationSchema,
   weeklyReportSchema,
@@ -12,6 +13,8 @@ import type {
   BadgeSummary,
   BooklistItem,
   BorrowLog,
+  MemberDraft,
+  MemberGoal,
   MemberStats,
   MemberSummary,
   WeeklyReport,
@@ -26,10 +29,6 @@ const badgesEnvelopeSchema = z.object({
   badges: z.array(badgeSummarySchema),
 });
 const userAccountRelationListSchema = z.array(userAccountRelationSchema);
-const goalSchema = z.object({
-  user_id: z.number(),
-  weekly_target: z.number(),
-});
 const booklistCreateSchema = z.object({
   id: z.number(),
 });
@@ -42,21 +41,6 @@ const updateUserSchema = z.object({
   user: memberSummarySchema,
 });
 
-type UserDraft = {
-  age?: number | null;
-  avatar?: string;
-  birth_date?: string | null;
-  color?: string;
-  family_id?: number | null;
-  gender?: string | null;
-  grade_level?: string | null;
-  interests?: string | null;
-  name?: string;
-  pin?: string;
-  reading_level?: string | null;
-  role?: string;
-};
-
 export function createUsersApi(baseUrl: string) {
   const http = createHttpClient(baseUrl);
 
@@ -67,7 +51,7 @@ export function createUsersApi(baseUrl: string) {
         schema: booklistCreateSchema,
       });
     },
-    createUser(payload: UserDraft) {
+    createUser(payload: MemberDraft) {
       return http.post<{ id: number; user: MemberSummary }>('/api/users', {
         data: payload,
         schema: createUserSchema,
@@ -91,8 +75,8 @@ export function createUsersApi(baseUrl: string) {
       });
     },
     getGoal(userId: number) {
-      return http.get<{ user_id: number; weekly_target: number }>(`/api/users/${userId}/goal`, {
-        schema: goalSchema,
+      return http.get<MemberGoal>(`/api/users/${userId}/goal`, {
+        schema: memberGoalSchema,
       });
     },
     getMemberBadges(memberId: number) {
@@ -133,9 +117,9 @@ export function createUsersApi(baseUrl: string) {
       });
     },
     setGoal(userId: number, weeklyTarget: number) {
-      return http.post<{ user_id: number; weekly_target: number }>(`/api/users/${userId}/goal`, {
+      return http.post<MemberGoal>(`/api/users/${userId}/goal`, {
         data: { weekly_target: weeklyTarget },
-        schema: goalSchema,
+        schema: memberGoalSchema,
       });
     },
     switchUser(userId: number) {
@@ -144,7 +128,7 @@ export function createUsersApi(baseUrl: string) {
         schema: nullableMemberSummarySchema,
       });
     },
-    updateUser(userId: number, payload: UserDraft) {
+    updateUser(userId: number, payload: MemberDraft) {
       return http.put<{ user: MemberSummary }>(`/api/users/${userId}`, {
         data: payload,
         schema: updateUserSchema,

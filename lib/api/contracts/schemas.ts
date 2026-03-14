@@ -1,13 +1,24 @@
 import { z } from 'zod';
 
 export const memberSummarySchema = z.object({
+  age: z.number().nullable().optional(),
   avatar: z.string().nullable().optional(),
+  birth_date: z.string().nullable().optional(),
   color: z.string().nullable().optional(),
+  created_at: z.string().nullable().optional(),
   current_goal_minutes: z.number().nullable().optional(),
   current_streak_days: z.number().nullable().optional(),
+  family_id: z.number().nullable().optional(),
+  family_name: z.string().nullable().optional(),
+  gender: z.string().nullable().optional(),
+  grade_level: z.string().nullable().optional(),
   id: z.number(),
+  interests: z.string().nullable().optional(),
   name: z.string(),
+  pin: z.string().nullable().optional(),
+  reading_level: z.string().nullable().optional(),
   role: z.string().optional(),
+  updated_at: z.string().nullable().optional(),
 });
 
 export const borrowLogSchema = z.object({
@@ -146,4 +157,19 @@ export const aiInsightSchema = z.object({
 
 export const messageSchema = z.object({
   message: z.string().optional(),
+});
+
+export const memberGoalSchema = z.object({
+  user_id: z.number(),
+  weekly_target: z.number(),
+});
+
+export const shelfActionResultSchema = z.object({
+  ai_reply: z.string().nullable().optional(),
+  reply: z.string().nullable().optional(),
+});
+
+export const ocrIngestResultSchema = shelfActionResultSchema.extend({
+  audio_b64: z.string().nullable().optional(),
+  audio_format: z.string().nullable().optional(),
 });

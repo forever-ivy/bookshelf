@@ -14,6 +14,8 @@ import { GlassPillButton } from '@/components/actions/glass-pill-button';
 import { GoalProgressCard } from '@/components/cards/goal-progress-card';
 import { MemberSwitcherSheet } from '@/components/member/member-switcher-sheet';
 import { ScreenShell } from '@/components/navigation/screen-shell';
+import { SectionCard } from '@/components/surfaces/section-card';
+import { ShortcutCard } from '@/components/actions/shortcut-card';
 import { bookleafTheme } from '@/constants/bookleaf-theme';
 import {
   useCompartmentsQuery,
@@ -157,11 +159,43 @@ export default function HomeRoute() {
           />
         </Animated.View>
         <Animated.View entering={createStaggeredFadeIn(4)} layout={motionTransitions.gentle}>
+          <SectionCard
+            description="围绕家庭阅读最常用的操作，我已经替你铺成了四条快入口。"
+            title="现在就开始">
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+              <ShortcutCard
+                description="查看每一个格口的占用状态。"
+                icon="cabinet"
+                onPress={() => router.push('/shelf')}
+                title="看书架"
+              />
+              <ShortcutCard
+                description="拍书或选图，把书放回家庭书架。"
+                icon="camera"
+                onPress={() => router.push('/store-book')}
+                title="去存书"
+              />
+              <ShortcutCard
+                description="按书名搜索，直接替孩子取书。"
+                icon="search"
+                onPress={() => router.push('/take-book')}
+                title="帮孩子取书"
+              />
+              <ShortcutCard
+                description="调整每周借阅目标。"
+                icon="target"
+                onPress={() => router.push('/goal-settings')}
+                title="修改目标"
+              />
+            </View>
+          </SectionCard>
+        </Animated.View>
+        <Animated.View entering={createStaggeredFadeIn(5)} layout={motionTransitions.gentle}>
           <BookCarouselCard items={booklist} />
         </Animated.View>
         {usersQuery.error || compartmentsQuery.error || statsQuery.error ? (
           <Animated.View
-            entering={createStaggeredFadeIn(5)}
+            entering={createStaggeredFadeIn(6)}
             layout={motionTransitions.gentle}
             style={{
               backgroundColor: 'rgba(255,255,255,0.72)',

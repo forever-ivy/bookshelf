@@ -1,4 +1,5 @@
 import { fireEvent, render } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 
 import { FloatingBottomNav } from '@/components/navigation/floating-bottom-nav';
 import { bookleafTheme } from '@/constants/bookleaf-theme';
@@ -71,13 +72,13 @@ describe('FloatingBottomNav', () => {
     expect(tabs[0]?.props.onLongPress).toEqual(expect.any(Function));
   });
 
-  it('uses blue for the active icon and black for inactive icons', () => {
+  it('uses restrained glass foreground colors for active and inactive icons', () => {
     const screen = render(
       <FloatingBottomNav activeKey="home" items={items} onSelect={jest.fn()} />
     );
 
-    expect(screen.getByText(`home:${bookleafTheme.colors.primaryStrong}`)).toBeTruthy();
-    expect(screen.getByText(`book:${bookleafTheme.colors.text}`)).toBeTruthy();
+    expect(screen.getByText(`home:${bookleafTheme.colors.glassForegroundActive}`)).toBeTruthy();
+    expect(screen.getByText(`book:${bookleafTheme.colors.glassForeground}`)).toBeTruthy();
   });
 
   it('renders a local frosted patch under the active item', () => {
@@ -85,6 +86,11 @@ describe('FloatingBottomNav', () => {
       <FloatingBottomNav activeKey="home" items={items} onSelect={jest.fn()} />
     );
 
-    expect(screen.getByTestId('active-nav-frosted-patch')).toBeTruthy();
+    const patch = screen.getByTestId('active-nav-frosted-patch');
+    const flattenedStyle = StyleSheet.flatten(patch.props.style);
+
+    expect(patch).toBeTruthy();
+    expect(flattenedStyle?.backgroundColor).toBe('rgba(255,255,255,0.18)');
+    expect(flattenedStyle?.borderColor).toBe('rgba(255,255,255,0.24)');
   });
 });

@@ -1,16 +1,24 @@
 import React from 'react';
 import {
   BarChart3,
+  Bookmark,
+  Camera,
   ChevronLeft,
+  Check,
   House,
   Info,
   LibraryBig,
   PanelsTopLeft,
+  Pencil,
+  Plus,
   QrCode,
   Search,
   Settings2,
   Share2,
   Sparkles,
+  Target,
+  Trash2,
+  Users,
   type LucideIcon,
 } from 'lucide-react-native';
 
@@ -25,7 +33,15 @@ export type AppIconName =
   | 'info'
   | 'cabinet'
   | 'share'
-  | 'spark';
+  | 'spark'
+  | 'camera'
+  | 'users'
+  | 'plus'
+  | 'target'
+  | 'trash'
+  | 'check'
+  | 'edit'
+  | 'bookmark';
 
 type AppIconProps = {
   color?: string;
@@ -36,16 +52,24 @@ type AppIconProps = {
 
 const iconByName: Record<AppIconName, LucideIcon> = {
   back: ChevronLeft,
+  bookmark: Bookmark,
   book: LibraryBig,
   cabinet: PanelsTopLeft,
+  camera: Camera,
   chart: BarChart3,
+  check: Check,
+  edit: Pencil,
   home: House,
   info: Info,
+  plus: Plus,
   qr: QrCode,
   search: Search,
   settings: Settings2,
   share: Share2,
   spark: Sparkles,
+  target: Target,
+  trash: Trash2,
+  users: Users,
 };
 
 export function AppIcon({

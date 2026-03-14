@@ -1,16 +1,11 @@
 import React from 'react';
 import { Pressable, Text } from 'react-native';
-import * as Haptics from 'expo-haptics';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 
 import { AppIcon } from '@/components/base/app-icon';
 import { GlassSurface } from '@/components/surfaces/glass-surface';
+import { useGlassPressMotion } from '@/components/surfaces/glass/glass-press-motion';
 import { bookleafTheme } from '@/constants/bookleaf-theme';
-import { motionTokens } from '@/lib/presentation/motion';
 
 type GlassPillButtonProps = {
   icon: 'back' | 'info' | 'search' | 'share';
@@ -19,34 +14,19 @@ type GlassPillButtonProps = {
 };
 
 export function GlassPillButton({ icon, label, onPress }: GlassPillButtonProps) {
-  const pressed = useSharedValue(0);
-  const held = useSharedValue(0);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: 1 - pressed.value * 0.03 + held.value * 0.05 },
-      { translateY: pressed.value * 1.5 - held.value * 2.5 },
-    ],
-  }));
+  const { animatedStyle, delayLongPress, onLongPress, onPressIn, onPressOut } =
+    useGlassPressMotion({
+      preset: 'button',
+    });
 
   return (
     <Pressable
       accessibilityRole="button"
-      onLongPress={() => {
-        held.value = withSpring(1, motionTokens.spring.snappy);
-
-        if (process.env.EXPO_OS === 'ios') {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => null);
-        }
-      }}
+      delayLongPress={delayLongPress}
+      onLongPress={onLongPress}
       onPress={onPress}
-      onPressIn={() => {
-        pressed.value = withSpring(1, motionTokens.spring.snappy);
-      }}
-      onPressOut={() => {
-        pressed.value = withSpring(0, motionTokens.spring.snappy);
-        held.value = withSpring(0, motionTokens.spring.gentle);
-      }}>
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}>
       <Animated.View style={animatedStyle}>
         <GlassSurface
           fallbackMode="material"
@@ -56,7 +36,6 @@ export function GlassPillButton({ icon, label, onPress }: GlassPillButtonProps) 
           style={{
             alignItems: 'center',
             borderCurve: 'continuous',
-            borderRadius: bookleafTheme.radii.pill,
             flexDirection: 'row',
             gap: 8,
             minHeight: 46,
