@@ -7,6 +7,7 @@ import { AvatarGlyph } from '@/components/member/avatar-glyph';
 import { BookCarouselCard } from '@/components/cards/book-carousel-card';
 import { GlassPillButton } from '@/components/actions/glass-pill-button';
 import { GoalProgressCard } from '@/components/cards/goal-progress-card';
+import { MilestoneBadge } from '@/components/cards/milestone';
 import { SectionCard } from '@/components/surfaces/section-card';
 import { ShortcutCard } from '@/components/actions/shortcut-card';
 import { ScreenShell } from '@/components/navigation/screen-shell';
@@ -145,29 +146,14 @@ export default function ProfileRoute() {
           }}>
           里程碑
         </Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
           {badges.length ? (
             badges.map((badge, index) => (
               <Animated.View
                 entering={createStaggeredFadeIn(index, 40)}
                 key={badge.badge_key}
-                layout={motionTransitions.snappy}
-                style={{
-                  backgroundColor: bookleafTheme.colors.surfaceMuted,
-                  borderCurve: 'continuous',
-                  borderRadius: bookleafTheme.radii.pill,
-                  paddingHorizontal: 14,
-                  paddingVertical: 10,
-                }}>
-                <Text
-                  selectable
-                  style={{
-                    color: bookleafTheme.colors.text,
-                    ...bookleafTheme.typography.semiBold,
-                    fontSize: 13,
-                  }}>
-                  {badge.badge_key}
-                </Text>
+                layout={motionTransitions.snappy}>
+                <MilestoneBadge badgeKey={badge.badge_key} />
               </Animated.View>
             ))
           ) : (

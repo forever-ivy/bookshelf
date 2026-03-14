@@ -30,6 +30,19 @@ jest.mock('expo-image-picker', () => {
   };
 });
 
+jest.mock('expo-blur', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+
+  return {
+    BlurView: ({
+      children,
+      ...props
+    }: Record<string, unknown> & { children?: React.ReactNode }) =>
+      React.createElement(View, props, children),
+  };
+});
+
 jest.mock('@expo/ui/swift-ui', () => {
   const React = require('react');
   const { TextInput, View } = require('react-native');

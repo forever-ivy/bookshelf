@@ -9,6 +9,7 @@ import Animated, {
 
 import { AvatarSwitcher } from '@/components/member/avatar-switcher';
 import { BookCarouselCard } from '@/components/cards/book-carousel-card';
+import { HeroBubbleBackground } from '@/components/background/hero-bubble-background';
 import { CabinetStatusCard } from '@/components/cards/cabinet-status-card';
 import { GlassPillButton } from '@/components/actions/glass-pill-button';
 import { GoalProgressCard } from '@/components/cards/goal-progress-card';
@@ -91,7 +92,10 @@ export default function HomeRoute() {
 
   return (
     <>
-      <ScreenShell activeNavKey="home" scrollOffset={scrollOffset}>
+      <ScreenShell
+        activeNavKey="home"
+        backgroundDecoration={<HeroBubbleBackground variant="home" />}
+        scrollOffset={scrollOffset}>
         <Animated.View
           style={[
             {

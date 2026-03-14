@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Redirect, useRouter } from 'expo-router';
 import { Text, View } from 'react-native';
 
+import { HeroBubbleBackground } from '@/components/background/hero-bubble-background';
 import { PrimaryActionButton } from '@/components/actions/primary-action-button';
 import { SectionCard } from '@/components/surfaces/section-card';
 import { ShortcutCard } from '@/components/actions/shortcut-card';
@@ -21,7 +22,9 @@ export default function SettingsRoute() {
   }
 
   return (
-    <ScreenShell activeNavKey="settings">
+    <ScreenShell
+      activeNavKey="settings"
+      backgroundDecoration={<HeroBubbleBackground variant="settings" />}>
       <View style={{ gap: 8 }}>
         <Text
           selectable

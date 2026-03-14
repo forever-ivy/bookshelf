@@ -37,6 +37,7 @@ export function GoalProgressCard({
   title,
 }: GoalProgressCardProps) {
   const clampedProgress = Math.max(0, Math.min(progress, 1));
+  const strokeDashoffset = CIRCUMFERENCE * (1 - clampedProgress);
   const animatedProgress = useSharedValue(clampedProgress);
 
   React.useEffect(() => {
@@ -56,12 +57,11 @@ export function GoalProgressCard({
         backgroundColor: 'rgba(238,244,255,0.92)',
         borderCurve: 'continuous',
         borderRadius: bookleafTheme.radii.xl,
-        gap: 18,
         padding: 24,
       }}>
       <Animated.View
         layout={motionTransitions.gentle}
-        style={{ alignItems: 'center', flexDirection: 'row', gap: 18 }}>
+        style={{ alignItems: 'flex-start', flexDirection: 'row', gap: 18 }}>
         <View style={{ alignItems: 'center', justifyContent: 'center' }}>
           <Svg height="104" width="104" viewBox="0 0 104 104">
             <Circle
@@ -78,9 +78,9 @@ export function GoalProgressCard({
               cy="52"
               fill="transparent"
               r={RADIUS}
-              rotation="-90"
               stroke={bookleafTheme.colors.primaryStrong}
-              strokeDasharray={CIRCUMFERENCE}
+              strokeDasharray={`${CIRCUMFERENCE} ${CIRCUMFERENCE}`}
+              strokeDashoffset={strokeDashoffset}
               strokeLinecap="round"
               strokeWidth={STROKE_WIDTH}
               transform="rotate(-90 52 52)"
@@ -111,53 +111,58 @@ export function GoalProgressCard({
             </Text>
           </View>
         </View>
-        <View style={{ flex: 1, gap: 6 }}>
-          <Text
-            selectable
-            style={{
-              color: bookleafTheme.colors.text,
-              ...bookleafTheme.typography.heading,
-              fontSize: 26,
-            }}>
-            {title}
-          </Text>
-          <Text
-            selectable
-            style={{
-              color: bookleafTheme.colors.textMuted,
-              ...bookleafTheme.typography.body,
-              fontSize: 14,
-              lineHeight: 20,
-            }}>
-            {subtitle}
-          </Text>
+        <View
+          style={{ flex: 1, gap: 16, minWidth: 0, paddingTop: 4 }}
+          testID="goal-progress-card-copy">
+          <View style={{ gap: 6 }}>
+            <Text
+              selectable
+              style={{
+                color: bookleafTheme.colors.text,
+                ...bookleafTheme.typography.heading,
+                fontSize: 26,
+                lineHeight: 30,
+              }}>
+              {title}
+            </Text>
+            <Text
+              selectable
+              style={{
+                color: bookleafTheme.colors.textMuted,
+                ...bookleafTheme.typography.body,
+                fontSize: 14,
+                lineHeight: 20,
+              }}>
+              {subtitle}
+            </Text>
+          </View>
+          {onPress ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={onPress}
+              style={{
+                alignSelf: 'flex-start',
+                backgroundColor: 'rgba(255,255,255,0.7)',
+                borderColor: 'rgba(255,255,255,0.55)',
+                borderCurve: 'continuous',
+                borderRadius: bookleafTheme.radii.pill,
+                borderWidth: 1,
+                paddingHorizontal: 14,
+                paddingVertical: 10,
+              }}>
+              <Text
+                selectable
+                style={{
+                  color: bookleafTheme.colors.textMuted,
+                  ...bookleafTheme.typography.semiBold,
+                  fontSize: 13,
+                }}>
+                {buttonLabel}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       </Animated.View>
-      {onPress ? (
-        <Pressable
-          accessibilityRole="button"
-          onPress={onPress}
-          style={{
-            alignSelf: 'flex-start',
-            backgroundColor: 'rgba(255,255,255,0.7)',
-            borderColor: 'rgba(255,255,255,0.55)',
-            borderCurve: 'continuous',
-            borderRadius: bookleafTheme.radii.pill,
-            borderWidth: 1,
-            paddingHorizontal: 14,
-            paddingVertical: 10,
-          }}>
-          <Text
-            selectable
-            style={{
-              color: bookleafTheme.colors.textMuted,
-              ...bookleafTheme.typography.semiBold,
-              fontSize: 13,
-            }}>
-            {buttonLabel}
-          </Text>
-        </Pressable>
-      ) : null}
     </View>
   );
 }
