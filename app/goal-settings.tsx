@@ -86,7 +86,7 @@ export default function GoalSettingsScreen() {
               selectable
               style={{
                 color: bookleafTheme.colors.textMuted,
-                fontFamily: bookleafTheme.fonts.medium,
+                ...bookleafTheme.typography.medium,
                 fontSize: 13,
               }}>
               目标借阅本数 / 每周
@@ -100,7 +100,7 @@ export default function GoalSettingsScreen() {
                 selectable
                 style={{
                   color: bookleafTheme.colors.text,
-                  fontFamily: bookleafTheme.fonts.heading,
+                  ...bookleafTheme.typography.heading,
                   fontSize: 48,
                 }}>
                 {weeklyTarget}
@@ -131,7 +131,7 @@ export default function GoalSettingsScreen() {
                   selectable
                   style={{
                     color: bookleafTheme.colors.text,
-                    fontFamily: bookleafTheme.fonts.semiBold,
+                    ...bookleafTheme.typography.semiBold,
                     fontSize: 13,
                   }}>
                   {value} 本 / 周
@@ -202,7 +202,7 @@ function StepperButton({
         selectable
         style={{
           color: bookleafTheme.colors.text,
-          fontFamily: bookleafTheme.fonts.bold,
+          ...bookleafTheme.typography.bold,
           fontSize: 22,
         }}>
         {label}
@@ -226,7 +226,7 @@ function MetricCard({ label, value }: { label: string; value: number }) {
         selectable
         style={{
           color: bookleafTheme.colors.textMuted,
-          fontFamily: bookleafTheme.fonts.body,
+          ...bookleafTheme.typography.body,
           fontSize: 12,
         }}>
         {label}
@@ -235,7 +235,7 @@ function MetricCard({ label, value }: { label: string; value: number }) {
         selectable
         style={{
           color: bookleafTheme.colors.text,
-          fontFamily: bookleafTheme.fonts.heading,
+          ...bookleafTheme.typography.heading,
           fontSize: 28,
         }}>
         {value}

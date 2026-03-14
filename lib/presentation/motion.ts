@@ -1,7 +1,6 @@
 import {
   Easing,
-  FadeInDown,
-  FadeInUp,
+  FadeIn,
   LinearTransition,
   SlideInDown,
   SlideInUp,
@@ -45,13 +44,13 @@ export const motionTransitions = {
 } as const;
 
 export function createStaggeredFadeIn(index: number, delayStep = 70) {
-  return FadeInDown.duration(motionTokens.duration.calm)
+  return FadeIn.duration(motionTokens.duration.calm)
     .delay(index * delayStep)
     .easing(Easing.bezier(0.22, 1, 0.36, 1));
 }
 
 export function createSlowFadeIn(index = 0, delayStep = 90) {
-  return FadeInUp.duration(motionTokens.duration.slow)
+  return FadeIn.duration(motionTokens.duration.slow)
     .delay(index * delayStep)
     .easing(Easing.bezier(0.22, 1, 0.36, 1));
 }

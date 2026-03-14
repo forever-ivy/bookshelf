@@ -151,7 +151,7 @@ export default function MemberFormScreen() {
               selectable
               style={{
                 color: bookleafTheme.colors.text,
-                fontFamily: bookleafTheme.fonts.semiBold,
+                ...bookleafTheme.typography.semiBold,
                 fontSize: 15,
               }}>
               成员角色
@@ -172,7 +172,7 @@ export default function MemberFormScreen() {
               selectable
               style={{
                 color: bookleafTheme.colors.text,
-                fontFamily: bookleafTheme.fonts.semiBold,
+                ...bookleafTheme.typography.semiBold,
                 fontSize: 15,
               }}>
               主题色
@@ -251,7 +251,7 @@ function ChoiceChip({
         selectable
         style={{
           color: bookleafTheme.colors.text,
-          fontFamily: bookleafTheme.fonts.semiBold,
+          ...bookleafTheme.typography.semiBold,
           fontSize: 13,
         }}>
         {label}

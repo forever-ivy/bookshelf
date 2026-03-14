@@ -1,28 +1,18 @@
 import { Platform } from 'react-native';
 
-const chineseFontFamilies = Platform.select({
-  ios: {
-    heading: 'PingFangSC-Semibold',
-    body: 'PingFangSC-Regular',
-    medium: 'PingFangSC-Medium',
-    semiBold: 'PingFangSC-Semibold',
-    bold: 'PingFangSC-Semibold',
-  },
-  android: {
-    heading: 'sans-serif-medium',
-    body: 'sans-serif',
-    medium: 'sans-serif-medium',
-    semiBold: 'sans-serif-medium',
-    bold: 'sans-serif-bold',
-  },
-  default: {
-    heading: 'System',
-    body: 'System',
-    medium: 'System',
-    semiBold: 'System',
-    bold: 'System',
-  },
+const systemFontFamily = Platform.select({
+  ios: 'System',
+  android: 'sans-serif',
+  default: 'System',
 });
+
+const fontWeights = {
+  body: '400',
+  medium: '500',
+  semiBold: '600',
+  heading: '600',
+  bold: '700',
+} as const;
 
 export const bookleafTheme = {
   colors: {
@@ -30,6 +20,7 @@ export const bookleafTheme = {
     surface: '#FFFDFC',
     surfaceMuted: '#EEF4FF',
     surfaceSoft: '#F0F4EF',
+    border: 'rgba(148, 163, 184, 0.22)',
     cardBorder: 'rgba(255,255,255,0.55)',
     text: '#172033',
     textMuted: '#64748B',
@@ -70,11 +61,33 @@ export const bookleafTheme = {
     primary: '0 14px 24px rgba(126, 168, 255, 0.36)',
   },
   fonts: {
-    heading: chineseFontFamilies.heading,
-    body: chineseFontFamilies.body,
-    medium: chineseFontFamilies.medium,
-    semiBold: chineseFontFamilies.semiBold,
-    bold: chineseFontFamilies.bold,
+    heading: systemFontFamily,
+    body: systemFontFamily,
+    medium: systemFontFamily,
+    semiBold: systemFontFamily,
+    bold: systemFontFamily,
+  },
+  typography: {
+    heading: {
+      fontFamily: systemFontFamily,
+      fontWeight: fontWeights.heading,
+    },
+    body: {
+      fontFamily: systemFontFamily,
+      fontWeight: fontWeights.body,
+    },
+    medium: {
+      fontFamily: systemFontFamily,
+      fontWeight: fontWeights.medium,
+    },
+    semiBold: {
+      fontFamily: systemFontFamily,
+      fontWeight: fontWeights.semiBold,
+    },
+    bold: {
+      fontFamily: systemFontFamily,
+      fontWeight: fontWeights.bold,
+    },
   },
 } as const;
 

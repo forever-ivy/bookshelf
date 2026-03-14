@@ -8,6 +8,12 @@ import { useSessionStore } from '@/stores/session-store';
 export default function IndexRoute() {
   const hasConnection = useSessionStore((state) => state.hasConnection);
   const hydrated = useSessionStore((state) => state.hydrated);
+  const initialHref = getInitialHref(hasConnection);
+
+  console.log('[startup] IndexRoute render', {
+    hasConnection,
+    hydrated,
+  });
 
   if (!hydrated) {
     return (
@@ -23,5 +29,7 @@ export default function IndexRoute() {
     );
   }
 
-  return <Redirect href={getInitialHref(hasConnection)} />;
+  console.log('[startup] IndexRoute redirect', { initialHref });
+
+  return <Redirect href={initialHref} />;
 }

@@ -94,7 +94,7 @@ export function GoalProgressCard({
             <AnimatedCountText
               style={{
                 color: bookleafTheme.colors.text,
-                fontFamily: bookleafTheme.fonts.bold,
+                ...bookleafTheme.typography.bold,
                 fontSize: 24,
                 fontVariant: ['tabular-nums'],
               }}
@@ -104,7 +104,7 @@ export function GoalProgressCard({
               selectable
               style={{
                 color: bookleafTheme.colors.textMuted,
-                fontFamily: bookleafTheme.fonts.body,
+                ...bookleafTheme.typography.body,
                 fontSize: 12,
               }}>
               / {targetValue}
@@ -116,7 +116,7 @@ export function GoalProgressCard({
             selectable
             style={{
               color: bookleafTheme.colors.text,
-              fontFamily: bookleafTheme.fonts.heading,
+              ...bookleafTheme.typography.heading,
               fontSize: 26,
             }}>
             {title}
@@ -125,7 +125,7 @@ export function GoalProgressCard({
             selectable
             style={{
               color: bookleafTheme.colors.textMuted,
-              fontFamily: bookleafTheme.fonts.body,
+              ...bookleafTheme.typography.body,
               fontSize: 14,
               lineHeight: 20,
             }}>
@@ -151,7 +151,7 @@ export function GoalProgressCard({
             selectable
             style={{
               color: bookleafTheme.colors.textMuted,
-              fontFamily: bookleafTheme.fonts.semiBold,
+              ...bookleafTheme.typography.semiBold,
               fontSize: 13,
             }}>
             {buttonLabel}

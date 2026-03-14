@@ -1,11 +1,6 @@
 import React from 'react';
 import { Text, View } from 'react-native';
-import Animated from 'react-native-reanimated';
-
-import { GlassSurface } from '@/components/surfaces/glass-surface';
-import { useGlassMountMotion } from '@/components/surfaces/glass/glass-mount-motion';
 import { bookleafTheme } from '@/constants/bookleaf-theme';
-import { motionTransitions } from '@/lib/presentation/motion';
 
 type SectionCardProps = {
   children: React.ReactNode;
@@ -14,49 +9,45 @@ type SectionCardProps = {
 };
 
 export function SectionCard({ children, description, title }: SectionCardProps) {
-  const { animatedStyle } = useGlassMountMotion('card');
-
   return (
-    <Animated.View layout={motionTransitions.gentle} style={animatedStyle}>
-      <GlassSurface
-        fallbackMode="material"
-        motionPreset="card"
-        style={{
-          borderCurve: 'continuous',
-          gap: 16,
-          padding: 20,
-        }}
-        tone="neutral"
-        variant="regular">
-        <View style={{ gap: 16 }}>
-          {title ? (
-            <View style={{ gap: 6 }}>
+    <View
+      style={{
+        backgroundColor: bookleafTheme.colors.surface,
+        borderColor: bookleafTheme.colors.border,
+        borderCurve: 'continuous',
+        borderRadius: bookleafTheme.radii.lg,
+        borderWidth: 1,
+        gap: 16,
+        padding: 20,
+      }}>
+      <View style={{ gap: 16 }}>
+        {title ? (
+          <View style={{ gap: 6 }}>
+            <Text
+              selectable
+              style={{
+                color: bookleafTheme.colors.text,
+                ...bookleafTheme.typography.heading,
+                fontSize: 28,
+              }}>
+              {title}
+            </Text>
+            {description ? (
               <Text
                 selectable
                 style={{
-                  color: bookleafTheme.colors.text,
-                  fontFamily: bookleafTheme.fonts.heading,
-                  fontSize: 28,
+                  color: bookleafTheme.colors.textMuted,
+                  ...bookleafTheme.typography.body,
+                  fontSize: 14,
+                  lineHeight: 20,
                 }}>
-                {title}
+                {description}
               </Text>
-              {description ? (
-                <Text
-                  selectable
-                  style={{
-                    color: bookleafTheme.colors.textMuted,
-                    fontFamily: bookleafTheme.fonts.body,
-                    fontSize: 14,
-                    lineHeight: 20,
-                  }}>
-                  {description}
-                </Text>
-              ) : null}
-            </View>
-          ) : null}
-          {children}
-        </View>
-      </GlassSurface>
-    </Animated.View>
+            ) : null}
+          </View>
+        ) : null}
+        {children}
+      </View>
+    </View>
   );
 }

@@ -15,7 +15,7 @@ import { bookleafTheme } from '@/constants/bookleaf-theme';
 import { createBookshelfApiClient } from '@/lib/api/client';
 import { createConnectionProfile } from '@/lib/app/connection';
 import { createStaggeredFadeIn } from '@/lib/presentation/motion';
-import { shouldSkipScannedCode } from '@/app/scanner.helpers';
+import { shouldSkipScannedCode } from '@/lib/presentation/scanner-helpers';
 import { useSessionStore } from '@/stores/session-store';
 
 function getScannerError(error: unknown) {
@@ -61,7 +61,7 @@ export default function ScannerScreen() {
       const profile = createConnectionProfile(data);
       await createBookshelfApiClient(profile.baseUrl).getCompartments();
       setConnection(profile);
-      router.replace('/(app)/home');
+      router.replace('/home');
     } catch (error) {
       scanBlockRef.current = {
         blockedUntil: Date.now() + 2500,
@@ -103,7 +103,7 @@ export default function ScannerScreen() {
             selectable
             style={{
               color: '#FFFFFF',
-              fontFamily: bookleafTheme.fonts.heading,
+              ...bookleafTheme.typography.heading,
               fontSize: 36,
             }}>
             需要相机权限
@@ -112,7 +112,7 @@ export default function ScannerScreen() {
             selectable
             style={{
               color: 'rgba(255,255,255,0.78)',
-              fontFamily: bookleafTheme.fonts.body,
+              ...bookleafTheme.typography.body,
               fontSize: 16,
               lineHeight: 24,
           }}>
@@ -161,7 +161,7 @@ export default function ScannerScreen() {
               selectable
               style={{
                 color: '#FFFFFF',
-                fontFamily: bookleafTheme.fonts.semiBold,
+                ...bookleafTheme.typography.semiBold,
                 fontSize: 13,
               }}>
               扫描书柜二维码
@@ -200,7 +200,7 @@ export default function ScannerScreen() {
             selectable
             style={{
               color: '#FFFFFF',
-              fontFamily: bookleafTheme.fonts.semiBold,
+              ...bookleafTheme.typography.semiBold,
               fontSize: 16,
             }}>
             将二维码放入框内
@@ -209,7 +209,7 @@ export default function ScannerScreen() {
             selectable
             style={{
               color: 'rgba(255,255,255,0.72)',
-              fontFamily: bookleafTheme.fonts.body,
+              ...bookleafTheme.typography.body,
               fontSize: 14,
               lineHeight: 20,
             }}>
@@ -236,7 +236,7 @@ export default function ScannerScreen() {
                 selectable
                 style={{
                   color: '#FFFFFF',
-                  fontFamily: bookleafTheme.fonts.medium,
+                  ...bookleafTheme.typography.medium,
                   fontSize: 13,
                 }}>
                 {feedback}

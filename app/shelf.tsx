@@ -116,7 +116,7 @@ export default function ShelfScreen() {
                         selectable
                         style={{
                           color: bookleafTheme.colors.textMuted,
-                          fontFamily: bookleafTheme.fonts.medium,
+                          ...bookleafTheme.typography.medium,
                           fontSize: 12,
                         }}>
                         第 {compartment.cid} 格
@@ -125,7 +125,7 @@ export default function ShelfScreen() {
                         selectable
                         style={{
                           color: bookleafTheme.colors.text,
-                          fontFamily: bookleafTheme.fonts.semiBold,
+                          ...bookleafTheme.typography.semiBold,
                           fontSize: 16,
                           lineHeight: 22,
                         }}>
@@ -135,7 +135,7 @@ export default function ShelfScreen() {
                         selectable
                         style={{
                           color: bookleafTheme.colors.textMuted,
-                          fontFamily: bookleafTheme.fonts.body,
+                          ...bookleafTheme.typography.body,
                           fontSize: 12,
                         }}>
                         {isOccupied

@@ -37,7 +37,7 @@ export function CabinetStatusCard({ summary }: CabinetStatusCardProps) {
           selectable
           style={{
             color: '#0F5132',
-            fontFamily: bookleafTheme.fonts.semiBold,
+            ...bookleafTheme.typography.semiBold,
             fontSize: 12,
           }}>
           已连接
@@ -48,7 +48,7 @@ export function CabinetStatusCard({ summary }: CabinetStatusCardProps) {
           selectable
           style={{
             color: bookleafTheme.colors.text,
-            fontFamily: bookleafTheme.fonts.heading,
+            ...bookleafTheme.typography.heading,
             fontSize: 28,
           }}>
           {summary.connectedLabel}
@@ -57,7 +57,7 @@ export function CabinetStatusCard({ summary }: CabinetStatusCardProps) {
           selectable
           style={{
             color: bookleafTheme.colors.textMuted,
-            fontFamily: bookleafTheme.fonts.medium,
+            ...bookleafTheme.typography.medium,
             fontSize: 15,
           }}>
           {summary.locationLabel} · {summary.totalBooks} 本书
@@ -83,7 +83,7 @@ export function CabinetStatusCard({ summary }: CabinetStatusCardProps) {
               selectable
               style={{
                 color: bookleafTheme.colors.text,
-                fontFamily: bookleafTheme.fonts.bold,
+                ...bookleafTheme.typography.bold,
                 fontSize: 18,
                 fontVariant: ['tabular-nums'],
               }}>
@@ -93,7 +93,7 @@ export function CabinetStatusCard({ summary }: CabinetStatusCardProps) {
               selectable
               style={{
                 color: bookleafTheme.colors.textMuted,
-                fontFamily: bookleafTheme.fonts.body,
+                ...bookleafTheme.typography.body,
                 fontSize: 12,
               }}>
               {item.label}

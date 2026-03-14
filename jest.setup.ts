@@ -30,24 +30,70 @@ jest.mock('expo-image-picker', () => {
   };
 });
 
-jest.mock('expo-glass-effect', () => {
+jest.mock('@expo/ui/swift-ui', () => {
   const React = require('react');
-  const { View } = require('react-native');
+  const { TextInput, View } = require('react-native');
+  const MockTextField = React.forwardRef(
+    (props: Record<string, unknown>, ref: ForwardedRef<unknown>) => {
+      React.useImperativeHandle(ref, () => ({
+        blur: async () => undefined,
+        focus: async () => undefined,
+        setSelection: async () => undefined,
+        setText: async () => undefined,
+      }));
+
+      return React.createElement(TextInput, props);
+    }
+  );
 
   return {
-    GlassContainer: ({
-      children,
-      ...props
-    }: {
-      children?: React.ReactNode;
-    }) => React.createElement(View, props, children),
-    GlassView: ({
-      children,
-      ...props
-    }: {
-      children?: React.ReactNode;
-    }) => React.createElement(View, props, children),
-    isGlassEffectAPIAvailable: jest.fn(() => false),
-    isLiquidGlassAvailable: jest.fn(() => false),
+    BottomSheet: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(View, { testID: 'swift-bottom-sheet' }, children),
+    Button: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(View, { testID: 'swift-button' }, children),
+    Host: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(View, { testID: 'swift-host' }, children),
+    RNHostView: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(View, { testID: 'swift-rn-host' }, children),
+    TextField: MockTextField,
   };
 });
+
+jest.mock('@expo/ui/swift-ui/modifiers', () => ({
+  buttonStyle: jest.fn(() => ({ type: 'buttonStyle' })),
+  controlSize: jest.fn(() => ({ type: 'controlSize' })),
+  disabled: jest.fn(() => ({ type: 'disabled' })),
+  frame: jest.fn(() => ({ type: 'frame' })),
+  textFieldStyle: jest.fn(() => ({ type: 'textFieldStyle' })),
+  tint: jest.fn(() => ({ type: 'tint' })),
+}));
+
+jest.mock('@expo/ui/jetpack-compose', () => {
+  const React = require('react');
+  const { TextInput, View } = require('react-native');
+  const MockTextInput = React.forwardRef(
+    (props: Record<string, unknown>, ref: ForwardedRef<unknown>) => {
+      React.useImperativeHandle(ref, () => ({
+        setText: async () => undefined,
+      }));
+
+      return React.createElement(TextInput, props);
+    }
+  );
+
+  return {
+    Button: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(View, { testID: 'compose-button' }, children),
+    Host: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(View, { testID: 'compose-host' }, children),
+    ModalBottomSheet: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(View, { testID: 'compose-bottom-sheet' }, children),
+    RNHostView: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(View, { testID: 'compose-rn-host' }, children),
+    TextInput: MockTextInput,
+  };
+});
+
+jest.mock('@expo/ui/jetpack-compose/modifiers', () => ({
+  fillMaxWidth: jest.fn(() => ({ type: 'fillMaxWidth' })),
+}));

@@ -44,7 +44,7 @@ export default function ConnectScreen() {
       const profile = createConnectionProfile(url);
       await createBookshelfApiClient(profile.baseUrl).getCompartments();
       setConnection(profile);
-      router.replace('/(app)/home');
+      router.replace('/home');
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
     } finally {
@@ -59,7 +59,7 @@ export default function ConnectScreen() {
           icon="back"
           onPress={() => {
             if (connection?.baseUrl) {
-              router.replace('/(app)/home');
+              router.replace('/home');
             }
           }}
         />
@@ -77,7 +77,7 @@ export default function ConnectScreen() {
             selectable
             style={{
               color: bookleafTheme.colors.textMuted,
-              fontFamily: bookleafTheme.fonts.semiBold,
+              ...bookleafTheme.typography.semiBold,
               fontSize: 13,
             }}>
             第 1 步 / 共 3 步
@@ -106,7 +106,7 @@ export default function ConnectScreen() {
           selectable
           style={{
             color: bookleafTheme.colors.text,
-            fontFamily: bookleafTheme.fonts.heading,
+            ...bookleafTheme.typography.heading,
             fontSize: 38,
             lineHeight: 44,
           }}>
@@ -116,7 +116,7 @@ export default function ConnectScreen() {
           selectable
           style={{
             color: bookleafTheme.colors.textMuted,
-            fontFamily: bookleafTheme.fonts.body,
+            ...bookleafTheme.typography.body,
             fontSize: 16,
             lineHeight: 24,
           }}>
@@ -154,7 +154,7 @@ export default function ConnectScreen() {
             selectable
             style={{
               color: bookleafTheme.colors.text,
-              fontFamily: bookleafTheme.fonts.semiBold,
+              ...bookleafTheme.typography.semiBold,
               fontSize: 18,
               textAlign: 'center',
             }}>
@@ -164,7 +164,7 @@ export default function ConnectScreen() {
             selectable
             style={{
               color: bookleafTheme.colors.textMuted,
-              fontFamily: bookleafTheme.fonts.body,
+              ...bookleafTheme.typography.body,
               fontSize: 14,
               lineHeight: 20,
               textAlign: 'center',
@@ -189,7 +189,7 @@ export default function ConnectScreen() {
           style={{
             color: bookleafTheme.colors.textMuted,
             flex: 1,
-            fontFamily: bookleafTheme.fonts.body,
+            ...bookleafTheme.typography.body,
             fontSize: 13,
             lineHeight: 18,
           }}>
@@ -212,7 +212,7 @@ export default function ConnectScreen() {
             selectable
             style={{
               color: bookleafTheme.colors.text,
-              fontFamily: bookleafTheme.fonts.semiBold,
+              ...bookleafTheme.typography.semiBold,
               fontSize: 16,
             }}>
             书柜地址
@@ -230,7 +230,7 @@ export default function ConnectScreen() {
               borderRadius: bookleafTheme.radii.md,
               borderWidth: 1,
               color: bookleafTheme.colors.text,
-              fontFamily: bookleafTheme.fonts.medium,
+              ...bookleafTheme.typography.medium,
               fontSize: 15,
               minHeight: 56,
               paddingHorizontal: 16,
@@ -257,7 +257,7 @@ export default function ConnectScreen() {
             selectable
             style={{
               color: '#991B1B',
-              fontFamily: bookleafTheme.fonts.medium,
+              ...bookleafTheme.typography.medium,
               fontSize: 13,
               lineHeight: 18,
             }}>
@@ -269,7 +269,7 @@ export default function ConnectScreen() {
         <Animated.View entering={createStaggeredFadeIn(6)}>
         <Pressable
           accessibilityRole="button"
-          onPress={() => router.replace('/(app)/home')}
+          onPress={() => router.replace('/home')}
           style={{
             backgroundColor: 'rgba(255,255,255,0.76)',
             borderColor: bookleafTheme.colors.cardBorder,
@@ -283,7 +283,7 @@ export default function ConnectScreen() {
             selectable
             style={{
               color: bookleafTheme.colors.text,
-              fontFamily: bookleafTheme.fonts.semiBold,
+              ...bookleafTheme.typography.semiBold,
               fontSize: 16,
             }}>
             继续使用 {connection.displayName}
@@ -292,7 +292,7 @@ export default function ConnectScreen() {
             selectable
             style={{
               color: bookleafTheme.colors.textMuted,
-              fontFamily: bookleafTheme.fonts.body,
+              ...bookleafTheme.typography.body,
               fontSize: 13,
             }}>
             {connection.baseUrl}
@@ -312,7 +312,7 @@ export default function ConnectScreen() {
             label="无书柜预览"
             onPress={() => {
               enterPreviewMode();
-              router.replace('/(app)/home');
+              router.replace('/home');
             }}
             variant="ghost"
           />

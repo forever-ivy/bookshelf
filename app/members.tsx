@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Pressable, Text, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { Redirect, useRouter } from 'expo-router';
 
@@ -93,7 +93,7 @@ export default function MembersScreen() {
                     selectable
                     style={{
                       color: bookleafTheme.colors.text,
-                      fontFamily: bookleafTheme.fonts.semiBold,
+                      ...bookleafTheme.typography.semiBold,
                       fontSize: 17,
                     }}>
                     {member.name}
@@ -102,7 +102,7 @@ export default function MembersScreen() {
                     selectable
                     style={{
                       color: bookleafTheme.colors.textMuted,
-                      fontFamily: bookleafTheme.fonts.body,
+                      ...bookleafTheme.typography.body,
                       fontSize: 13,
                       lineHeight: 18,
                     }}>

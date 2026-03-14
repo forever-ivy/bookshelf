@@ -29,7 +29,7 @@ export function FlowScreenHeader({
           selectable
           style={{
             color: bookleafTheme.colors.text,
-            fontFamily: bookleafTheme.fonts.heading,
+            ...bookleafTheme.typography.heading,
             fontSize: 38,
             lineHeight: 44,
           }}>
@@ -39,7 +39,7 @@ export function FlowScreenHeader({
           selectable
           style={{
             color: bookleafTheme.colors.textMuted,
-            fontFamily: bookleafTheme.fonts.body,
+            ...bookleafTheme.typography.body,
             fontSize: 15,
             lineHeight: 22,
           }}>

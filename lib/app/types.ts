@@ -1,9 +1,10 @@
 import type { AppIconName } from '@/components/base/app-icon';
 
-export type BottomNavKey = 'home' | 'library' | 'reports' | 'settings';
+export type AppTabKey = 'home' | 'library' | 'reports' | 'settings';
 
-export type BottomNavItem = {
-  key: BottomNavKey;
+export type AppTabItem = {
+  href: '/home' | '/library' | '/reports' | '/settings';
+  key: AppTabKey;
   label: string;
   icon: AppIconName;
 };

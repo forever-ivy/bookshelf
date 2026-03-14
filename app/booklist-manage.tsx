@@ -134,7 +134,7 @@ export default function BooklistManageScreen() {
                   selectable
                   style={{
                     color: bookleafTheme.colors.text,
-                    fontFamily: bookleafTheme.fonts.semiBold,
+                    ...bookleafTheme.typography.semiBold,
                     fontSize: 16,
                   }}>
                   {item.title}
@@ -143,7 +143,7 @@ export default function BooklistManageScreen() {
                   selectable
                   style={{
                     color: bookleafTheme.colors.textMuted,
-                    fontFamily: bookleafTheme.fonts.body,
+                    ...bookleafTheme.typography.body,
                     fontSize: 13,
                     lineHeight: 18,
                   }}>

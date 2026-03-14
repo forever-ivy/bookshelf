@@ -1,15 +1,5 @@
-import {
-  PlayfairDisplay_700Bold,
-} from '@expo-google-fonts/playfair-display';
-import {
-  PublicSans_400Regular,
-  PublicSans_500Medium,
-  PublicSans_600SemiBold,
-  PublicSans_700Bold,
-} from '@expo-google-fonts/public-sans';
-import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
+import { hideAsync as hideSplashAsync } from 'expo-splash-screen';
+import { Stack, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -23,26 +13,17 @@ import {
 } from '@/lib/app/navigation-transitions';
 import { AppProviders } from '@/providers/app-providers';
 
-SplashScreen.preventAutoHideAsync().catch(() => null);
-
 export default function RootLayout() {
-  const [fontsLoaded, fontError] = useFonts({
-    PlayfairDisplay_700Bold,
-    PublicSans_400Regular,
-    PublicSans_500Medium,
-    PublicSans_600SemiBold,
-    PublicSans_700Bold,
-  });
+  const pathname = usePathname();
 
   React.useEffect(() => {
-    if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync().catch(() => null);
-    }
-  }, [fontError, fontsLoaded]);
+    console.log('[startup] RootLayout mounted');
+    hideSplashAsync().catch(() => null);
+  }, []);
 
-  if (!fontsLoaded && !fontError) {
-    return null;
-  }
+  React.useEffect(() => {
+    console.log('[nav] pathname', pathname);
+  }, [pathname]);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -59,7 +40,7 @@ export default function RootLayout() {
             <Stack.Screen name="goal-settings" options={flowScreenOptions} />
             <Stack.Screen name="members" options={flowScreenOptions} />
             <Stack.Screen name="member-form" options={flowScreenOptions} />
-            <Stack.Screen name="(app)" />
+            <Stack.Screen name="(tabs)" />
           </Stack>
           <StatusBar style="dark" />
         </AppProviders>

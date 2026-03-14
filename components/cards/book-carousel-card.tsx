@@ -1,6 +1,5 @@
 import React from 'react';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
   interpolate,
@@ -75,7 +74,7 @@ export function BookCarouselCard({ items }: BookCarouselCardProps) {
           selectable
           style={{
             color: bookleafTheme.colors.text,
-            fontFamily: bookleafTheme.fonts.heading,
+            ...bookleafTheme.typography.heading,
             fontSize: 26,
           }}>
           家庭书库
@@ -84,7 +83,7 @@ export function BookCarouselCard({ items }: BookCarouselCardProps) {
           selectable
           style={{
             color: bookleafTheme.colors.textMuted,
-            fontFamily: bookleafTheme.fonts.body,
+            ...bookleafTheme.typography.body,
             fontSize: 14,
           }}>
           把这周要读的书放在随手可见的位置。
@@ -154,65 +153,86 @@ function BookCarouselItem({ index, item, scrollX }: BookCarouselItemProps) {
     <Animated.View
       entering={createStaggeredFadeIn(index, 45)}
       layout={motionTransitions.gentle}
-      style={[
-        {
-          gap: 10,
-          width: BOOK_CARD_WIDTH,
-        },
-        cardStyle,
-      ]}>
-      {cover.kind === 'image' ? (
-        <View style={bookCoverContainerStyle}>
-          <Image
-            contentFit="cover"
-            onError={handleImageError}
-            source={{ uri: cover.uri }}
-            style={StyleSheet.absoluteFillObject}
-            transition={120}
-          />
-        </View>
-      ) : (
-        <LinearGradient
-          colors={[cover.colors[0], cover.colors[1]]}
-          style={bookCoverContainerStyle}>
+      style={{ width: BOOK_CARD_WIDTH }}
+      testID={`book-carousel-item-layout-${index}`}>
+      <Animated.View
+        style={[
+          {
+            gap: 10,
+          },
+          cardStyle,
+        ]}
+        testID={`book-carousel-item-motion-${index}`}>
+        {cover.kind === 'image' ? (
+          <View style={bookCoverContainerStyle}>
+            <Image
+              contentFit="cover"
+              onError={handleImageError}
+              source={{ uri: cover.uri }}
+              style={StyleSheet.absoluteFillObject}
+              transition={120}
+            />
+          </View>
+        ) : (
+          <View
+            style={bookCoverContainerStyle}>
+            <View
+              style={[
+                StyleSheet.absoluteFillObject,
+                {
+                  backgroundColor: cover.colors[0],
+                  opacity: 0.9,
+                },
+              ]}
+            />
+            <View
+              style={[
+                StyleSheet.absoluteFillObject,
+                {
+                  backgroundColor: cover.colors[1],
+                  opacity: 0.35,
+                },
+              ]}
+            />
+            <Text
+              numberOfLines={4}
+              selectable
+              style={{
+                color: bookleafTheme.colors.text,
+                ...bookleafTheme.typography.heading,
+                fontSize: 20,
+                lineHeight: 24,
+              }}>
+              {cover.title}
+            </Text>
+          </View>
+        )}
+        <View style={{ gap: 2 }}>
           <Text
-            numberOfLines={4}
+            numberOfLines={1}
             selectable
             style={{
               color: bookleafTheme.colors.text,
-              fontFamily: bookleafTheme.fonts.heading,
-              fontSize: 20,
-              lineHeight: 24,
+              ...bookleafTheme.typography.semiBold,
+              fontSize: 14,
             }}>
-            {cover.title}
+            {item.title}
           </Text>
-        </LinearGradient>
-      )}
-      <View style={{ gap: 2 }}>
-        <Text
-          numberOfLines={1}
-          selectable
-          style={{
-            color: bookleafTheme.colors.text,
-            fontFamily: bookleafTheme.fonts.semiBold,
-            fontSize: 14,
-          }}>
-          {item.title}
-        </Text>
-        <Text
-          numberOfLines={2}
-          selectable
-          style={{
-            color: item.done
-              ? bookleafTheme.colors.accentGreen
-              : bookleafTheme.colors.textMuted,
-            fontFamily: bookleafTheme.fonts.body,
-            fontSize: 12,
-            lineHeight: 17,
-          }}>
-          {item.done ? '已完成' : item.note || '已为下一次阅读准备好'}
-        </Text>
-      </View>
+          <Text
+            numberOfLines={2}
+            selectable
+            style={{
+              color: item.done
+                ? bookleafTheme.colors.accentGreen
+                : bookleafTheme.colors.textMuted,
+              ...bookleafTheme.typography.body,
+              fontSize: 12,
+              lineHeight: 17,
+            }}>
+            {item.done ? '已完成' : item.note || '已为下一次阅读准备好'}
+          </Text>
+        </View>
+      </Animated.View>
     </Animated.View>
   );
 }

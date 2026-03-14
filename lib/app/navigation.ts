@@ -1,20 +1,20 @@
-import type { BottomNavItem, BottomNavKey } from '@/lib/app/types';
+import type { AppTabItem, AppTabKey } from '@/lib/app/types';
 
-export const appNavItems = [
-  { key: 'home', label: '首页', icon: 'home' },
-  { key: 'library', label: '书库', icon: 'book' },
-  { key: 'reports', label: '报告', icon: 'chart' },
-  { key: 'settings', label: '设置', icon: 'settings' },
-] as const satisfies readonly BottomNavItem[];
+export const appTabs = [
+  { href: '/home', key: 'home', label: '首页', icon: 'home' },
+  { href: '/library', key: 'library', label: '书库', icon: 'book' },
+  { href: '/reports', key: 'reports', label: '报告', icon: 'chart' },
+  { href: '/settings', key: 'settings', label: '设置', icon: 'settings' },
+] as const satisfies readonly AppTabItem[];
 
-export const navHrefByKey: Record<BottomNavKey, '/(app)/home' | '/(app)/library' | '/(app)/reports' | '/(app)/settings'> =
+export const appTabHrefByKey: Record<AppTabKey, AppTabItem['href']> =
   {
-    home: '/(app)/home',
-    library: '/(app)/library',
-    reports: '/(app)/reports',
-    settings: '/(app)/settings',
+    home: '/home',
+    library: '/library',
+    reports: '/reports',
+    settings: '/settings',
   };
 
 export function getInitialHref(hasConnection: boolean) {
-  return hasConnection ? '/(app)/home' : '/connect';
+  return hasConnection ? '/home' : '/connect';
 }

@@ -166,7 +166,7 @@ export default function StoreBookScreen() {
                 selectable
                 style={{
                   color: bookleafTheme.colors.textMuted,
-                  fontFamily: bookleafTheme.fonts.body,
+                  ...bookleafTheme.typography.body,
                   fontSize: 13,
                   lineHeight: 18,
                 }}>

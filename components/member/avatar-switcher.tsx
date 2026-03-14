@@ -58,7 +58,7 @@ export function AvatarSwitcher({
           selectable
           style={{
             color: bookleafTheme.colors.text,
-            fontFamily: bookleafTheme.fonts.semiBold,
+            ...bookleafTheme.typography.semiBold,
             fontSize: 15,
           }}>
           {activeMember?.name ?? '选择成员'}
@@ -67,7 +67,7 @@ export function AvatarSwitcher({
           selectable
           style={{
             color: bookleafTheme.colors.textMuted,
-            fontFamily: bookleafTheme.fonts.body,
+            ...bookleafTheme.typography.body,
             fontSize: 12,
           }}>
           切换{getMemberRoleLabel(activeMember)}

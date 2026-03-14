@@ -69,7 +69,7 @@ export function StateCard({
             selectable
             style={{
               color: palette.title,
-              fontFamily: bookleafTheme.fonts.semiBold,
+              ...bookleafTheme.typography.semiBold,
               fontSize: 15,
             }}>
             {title}
@@ -78,7 +78,7 @@ export function StateCard({
             selectable
             style={{
               color: variant === 'neutral' ? bookleafTheme.colors.textMuted : palette.title,
-              fontFamily: bookleafTheme.fonts.body,
+              ...bookleafTheme.typography.body,
               fontSize: 13,
               lineHeight: 18,
             }}>

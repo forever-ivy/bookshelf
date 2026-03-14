@@ -1,6 +1,7 @@
+import React from 'react';
 import { render } from '@testing-library/react-native';
 
-import { AppIcon } from '@/components/base/app-icon';
+import { AppIcon, getNativeTabIconProps } from '@/components/base/app-icon';
 
 jest.mock('lucide-react-native', () => {
   const React = require('react');
@@ -21,16 +22,24 @@ jest.mock('lucide-react-native', () => {
 
   return {
     BarChart3: createIcon('BarChart3'),
+    Bookmark: createIcon('Bookmark'),
+    Camera: createIcon('Camera'),
+    Check: createIcon('Check'),
     ChevronLeft: createIcon('ChevronLeft'),
     House: createIcon('House'),
     Info: createIcon('Info'),
     LibraryBig: createIcon('LibraryBig'),
     PanelsTopLeft: createIcon('PanelsTopLeft'),
+    Pencil: createIcon('Pencil'),
+    Plus: createIcon('Plus'),
     QrCode: createIcon('QrCode'),
     Search: createIcon('Search'),
     Settings2: createIcon('Settings2'),
     Share2: createIcon('Share2'),
     Sparkles: createIcon('Sparkles'),
+    Target: createIcon('Target'),
+    Trash2: createIcon('Trash2'),
+    Users: createIcon('Users'),
   };
 });
 
@@ -45,5 +54,24 @@ describe('AppIcon', () => {
     const screen = render(<AppIcon name="qr" />);
 
     expect(screen.getByTestId('lucide-qrcode')).toBeTruthy();
+  });
+
+  it('returns native tabs icon props that avoid unsupported lucide React elements', () => {
+    expect(getNativeTabIconProps('home')).toEqual({
+      md: 'home',
+      sf: { default: 'house', selected: 'house.fill' },
+    });
+    expect(getNativeTabIconProps('book')).toEqual({
+      md: 'local_library',
+      sf: { default: 'books.vertical', selected: 'books.vertical.fill' },
+    });
+    expect(getNativeTabIconProps('chart')).toEqual({
+      md: 'bar_chart',
+      sf: { default: 'chart.bar', selected: 'chart.bar.fill' },
+    });
+    expect(getNativeTabIconProps('settings')).toEqual({
+      md: 'settings',
+      sf: { default: 'gearshape', selected: 'gearshape.fill' },
+    });
   });
 });

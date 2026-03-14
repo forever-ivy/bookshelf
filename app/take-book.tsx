@@ -138,7 +138,7 @@ export default function TakeBookScreen() {
                       selectable
                       style={{
                         color: bookleafTheme.colors.text,
-                        fontFamily: bookleafTheme.fonts.semiBold,
+                        ...bookleafTheme.typography.semiBold,
                         fontSize: 13,
                       }}>
                       {item.title}

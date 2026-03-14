@@ -78,7 +78,7 @@ export function AppIcon({
   size = 20,
   strokeWidth = 1.8,
 }: AppIconProps) {
-  const IconComponent = iconByName[name];
+  const IconComponent = iconByName[name] as React.ComponentType<Record<string, unknown>>;
 
   return (
     <IconComponent
@@ -88,4 +88,50 @@ export function AppIcon({
       strokeWidth={strokeWidth}
     />
   );
+}
+
+export type NativeTabIconName = Extract<AppIconName, 'home' | 'book' | 'chart' | 'settings'>;
+
+const nativeTabIconPropsByName = {
+  book: {
+    md: 'local_library',
+    sf: {
+      default: 'books.vertical.fill',
+      selected: 'books.vertical.fill',
+    },
+  },
+  chart: {
+    md: 'bar_chart',
+    sf: {
+      default: 'chart.bar.fill',
+      selected: 'chart.bar.fill',
+    },
+  },
+  home: {
+    md: 'home',
+    sf: {
+      default: 'house.fill',
+      selected: 'house.fill',
+    },
+  },
+  settings: {
+    md: 'settings',
+    sf: {
+      default: 'gearshape.fill',
+      selected: 'gearshape.fill',
+    },
+  },
+} as const satisfies Record<
+  NativeTabIconName,
+  {
+    md: string;
+    sf: {
+      default: string;
+      selected: string;
+    };
+  }
+>;
+
+export function getNativeTabIconProps(name: NativeTabIconName) {
+  return nativeTabIconPropsByName[name];
 }
