@@ -59,19 +59,19 @@ describe('AppIcon', () => {
   it('returns native tabs icon props that avoid unsupported lucide React elements', () => {
     expect(getNativeTabIconProps('home')).toEqual({
       md: 'home',
-      sf: { default: 'house', selected: 'house.fill' },
+      sf: { default: 'house.fill', selected: 'house.fill' },
     });
     expect(getNativeTabIconProps('book')).toEqual({
       md: 'local_library',
-      sf: { default: 'books.vertical', selected: 'books.vertical.fill' },
+      sf: { default: 'books.vertical.fill', selected: 'books.vertical.fill' },
     });
     expect(getNativeTabIconProps('chart')).toEqual({
       md: 'bar_chart',
-      sf: { default: 'chart.bar', selected: 'chart.bar.fill' },
+      sf: { default: 'chart.bar.fill', selected: 'chart.bar.fill' },
     });
     expect(getNativeTabIconProps('settings')).toEqual({
       md: 'settings',
-      sf: { default: 'gearshape', selected: 'gearshape.fill' },
+      sf: { default: 'gearshape.fill', selected: 'gearshape.fill' },
     });
   });
 });

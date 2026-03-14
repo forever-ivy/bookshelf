@@ -21,6 +21,7 @@ jest.mock('expo-router', () => {
 
   return {
     Stack,
+    usePathname: () => '/home',
   };
 });
 
