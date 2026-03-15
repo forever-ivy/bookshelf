@@ -1,6 +1,14 @@
 import React from 'react';
-import { Text } from 'react-native';
+import { Text, View } from 'react-native';
 import { render } from '@testing-library/react-native';
+const renderer = require('react-test-renderer') as {
+  act: (callback: () => void) => void;
+  create: (element: React.ReactElement) => {
+    root: {
+      findAllByType: (type: unknown) => Array<{ props: { style?: unknown } }>;
+    };
+  };
+};
 
 jest.mock('react-native-reanimated', () => {
   const React = require('react');
@@ -44,6 +52,15 @@ jest.mock('react-native-svg', () => {
       React.createElement(View, props, children),
   };
 });
+
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({
+    bottom: 18,
+    left: 0,
+    right: 0,
+    top: 32,
+  }),
+}));
 
 describe('ScreenShell', () => {
   function loadScreenShell() {
@@ -116,5 +133,49 @@ describe('ScreenShell', () => {
     expect(screen.queryByTestId('screen-shell-top-overlay')).toBeNull();
     expect(screen.getByTestId('screen-shell-scroll-view')).toBeTruthy();
     expect(screen.getByText('页面正文')).toBeTruthy();
+  });
+
+  it('uses safe-area insets when calculating scroll padding', () => {
+    const ScreenShell = loadScreenShell();
+    const screen = render(
+      <ScreenShell activeNavKey="home">
+        <Text selectable>页面正文</Text>
+      </ScreenShell>
+    );
+
+    expect(screen.getByTestId('screen-shell-scroll-view').props.contentContainerStyle[0])
+      .toMatchObject({
+        paddingBottom: 74,
+        paddingTop: 36,
+      });
+  });
+
+  it('does not apply a negative top offset to the page shell root', () => {
+    const ScreenShell = loadScreenShell();
+    let tree:
+      | {
+          root: {
+            findAllByType: (type: unknown) => Array<{ props: { style?: unknown } }>;
+          };
+        }
+      | undefined;
+
+    renderer.act(() => {
+      tree = renderer.create(
+        <ScreenShell>
+          <Text selectable>页面正文</Text>
+        </ScreenShell>
+      );
+    });
+
+    const rootView = tree!.root.findAllByType(View)[0];
+
+    expect(rootView.props.style).toMatchObject({
+      backgroundColor: expect.any(String),
+      flex: 1,
+    });
+    expect(rootView.props.style).not.toMatchObject({
+      marginTop: expect.any(Number),
+    });
   });
 });

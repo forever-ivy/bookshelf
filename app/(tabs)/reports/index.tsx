@@ -6,6 +6,7 @@ import { AnimatedCountText } from '@/components/base/animated-count-text';
 import { ScreenShell } from '@/components/navigation/screen-shell';
 import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { useMonthlyReportQuery, useWeeklyReportQuery } from '@/lib/api/react-query/hooks';
+import { appRoutes } from '@/lib/app/routes';
 import {
   createSlowFadeIn,
   createStaggeredFadeIn,
@@ -21,7 +22,7 @@ export default function ReportsRoute() {
   const monthlyReportQuery = useMonthlyReportQuery();
 
   if (!connection) {
-    return <Redirect href="/connect" />;
+    return <Redirect href={appRoutes.connect} />;
   }
 
   return (

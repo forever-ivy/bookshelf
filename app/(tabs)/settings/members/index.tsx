@@ -11,6 +11,7 @@ import { StateCard } from '@/components/surfaces/state-card';
 import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { useActiveMember } from '@/hooks/use-active-member';
 import { useDeleteUserMutation, useSwitchUserMutation } from '@/lib/api/react-query/hooks';
+import { appRoutes } from '@/lib/app/routes';
 import { createStaggeredFadeIn, motionTransitions } from '@/lib/presentation/motion';
 import { useSessionStore } from '@/stores/session-store';
 
@@ -24,7 +25,7 @@ export default function MembersScreen() {
   const switchUserMutation = useSwitchUserMutation();
 
   if (!connection) {
-    return <Redirect href="/connect" />;
+    return <Redirect href={appRoutes.connect} />;
   }
 
   return (
@@ -49,7 +50,7 @@ export default function MembersScreen() {
           <PrimaryActionButton
             disabled={isPreviewMode}
             label="新增成员"
-            onPress={() => router.push('/member-form')}
+            onPress={() => router.push(appRoutes.settingsMembersForm)}
           />
           {usersQuery.isLoading ? (
             <StateCard
@@ -125,7 +126,7 @@ export default function MembersScreen() {
                       onPress={() =>
                         router.push({
                           params: { memberId: String(member.id) },
-                          pathname: '/member-form',
+                          pathname: appRoutes.settingsMembersForm,
                         })
                       }
                       variant="ghost"

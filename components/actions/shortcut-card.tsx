@@ -29,12 +29,11 @@ export function ShortcutCard({
         borderCurve: 'continuous',
         borderRadius: theme.radii.lg,
         borderWidth: 1,
-        flex: 1,
-        minHeight: 148,
-        minWidth: '47%',
+        height: 196,
         padding: 18,
+        width: '100%',
       }}>
-      <View style={{ flex: 1, justifyContent: 'space-between' }}>
+      <View style={{ flex: 1, gap: 18, justifyContent: 'flex-start' }}>
         <View
           style={{
             alignItems: 'center',
@@ -49,6 +48,7 @@ export function ShortcutCard({
         </View>
         <View style={{ gap: 6 }}>
           <Text
+            numberOfLines={2}
             selectable
             style={{
               color: theme.colors.text,
@@ -58,6 +58,7 @@ export function ShortcutCard({
             {title}
           </Text>
           <Text
+            numberOfLines={3}
             selectable
             style={{
               color: theme.colors.textMuted,

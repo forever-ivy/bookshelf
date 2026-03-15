@@ -16,8 +16,13 @@ jest.mock('expo-router', () => {
 
   const Stack = ({ children }: { children?: React.ReactNode }) =>
     React.createElement(View, { testID: 'root-stack' }, children);
-  Stack.Screen = ({ children }: { children?: React.ReactNode }) =>
-    React.createElement(View, null, children);
+  Stack.Screen = ({
+    children,
+    name,
+  }: {
+    children?: React.ReactNode;
+    name?: string;
+  }) => React.createElement(View, { testID: `screen-${name}` }, children);
 
   return {
     Stack,
@@ -80,5 +85,22 @@ describe('RootLayout', () => {
     render(<RootLayout />);
 
     expect(mockHideAsync).toHaveBeenCalled();
+  });
+
+  it('registers grouped connect, tabs, and modal routes instead of the old root-level task pages', () => {
+    const screen = render(<RootLayout />);
+
+    expect(screen.getByTestId('screen-index')).toBeTruthy();
+    expect(screen.getByTestId('screen-(connect)')).toBeTruthy();
+    expect(screen.getByTestId('screen-(tabs)')).toBeTruthy();
+    expect(screen.getByTestId('screen-(modals)')).toBeTruthy();
+    expect(screen.queryByTestId('screen-shelf')).toBeNull();
+    expect(screen.queryByTestId('screen-store-book')).toBeNull();
+    expect(screen.queryByTestId('screen-take-book')).toBeNull();
+    expect(screen.queryByTestId('screen-booklist-manage')).toBeNull();
+    expect(screen.queryByTestId('screen-goal-settings')).toBeNull();
+    expect(screen.queryByTestId('screen-members')).toBeNull();
+    expect(screen.queryByTestId('screen-member-form')).toBeNull();
+    expect(screen.queryByTestId('screen-scanner')).toBeNull();
   });
 });

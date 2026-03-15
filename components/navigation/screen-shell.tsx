@@ -1,6 +1,7 @@
 import React from "react";
 import { BlurView } from "expo-blur";
 import { View, type StyleProp, type ViewStyle } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, {
   useAnimatedScrollHandler,
   type SharedValue,
@@ -47,6 +48,7 @@ export function ScreenShell({
   scrollOffset,
 }: ScreenShellProps) {
   const { theme } = useBookleafTheme();
+  const insets = useSafeAreaInsets();
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       if (scrollOffset) {
@@ -80,9 +82,9 @@ export function ScreenShell({
         contentContainerStyle={[
           {
             gap: 24,
-            paddingBottom: activeNavKey ? 56 : 40,
+            paddingBottom: insets.bottom + (activeNavKey ? 56 : 40),
             paddingHorizontal: 24,
-            paddingTop: 28,
+            paddingTop: insets.top -24 ,
           },
           contentContainerStyle,
         ]}

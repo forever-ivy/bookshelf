@@ -11,6 +11,7 @@ import { StateCard } from '@/components/surfaces/state-card';
 import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { useActiveMember } from '@/hooks/use-active-member';
 import { useGoalQuery, useMemberStatsQuery, useSetGoalMutation } from '@/lib/api/react-query/hooks';
+import { appRoutes } from '@/lib/app/routes';
 import { createStaggeredFadeIn, motionTransitions } from '@/lib/presentation/motion';
 import { useSessionStore } from '@/stores/session-store';
 
@@ -37,7 +38,7 @@ export default function GoalSettingsScreen() {
   }, [goalQuery.data?.weekly_target]);
 
   if (!connection) {
-    return <Redirect href="/connect" />;
+    return <Redirect href={appRoutes.connect} />;
   }
 
   return (

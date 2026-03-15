@@ -196,7 +196,7 @@ jest.mock('@/components/cards/milestone', () => ({
   },
 }));
 
-import ProfileRoute from '@/app/(tabs)/home/profile/[memberId]';
+import ProfileRoute from '@/app/(tabs)/home/profile/[memberId]/index';
 
 describe('ProfileRoute', () => {
   it('renders multiple milestones inside a horizontal rail instead of stacking badge cards', () => {

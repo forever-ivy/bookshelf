@@ -12,6 +12,7 @@ import { SectionCard } from '@/components/surfaces/section-card';
 import { StateCard } from '@/components/surfaces/state-card';
 import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { useOcrIngestMutation } from '@/lib/api/react-query/hooks';
+import { appRoutes } from '@/lib/app/routes';
 import {
   resolveImagePickerModule,
   type ImagePickerAsset,
@@ -48,7 +49,7 @@ export default function StoreBookScreen() {
   const [readingHint, setReadingHint] = React.useState('');
 
   if (!connection) {
-    return <Redirect href="/connect" />;
+    return <Redirect href={appRoutes.connect} />;
   }
 
   async function openCamera() {

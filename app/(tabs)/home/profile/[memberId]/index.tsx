@@ -13,6 +13,10 @@ import { ShortcutCard } from '@/components/actions/shortcut-card';
 import { ScreenShell } from '@/components/navigation/screen-shell';
 import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import {
+  appRoutes,
+  getMemberGoalsHref,
+} from '@/lib/app/routes';
+import {
   useMemberBadgesQuery,
   useMemberBooklistQuery,
   useMemberStatsQuery,
@@ -45,7 +49,7 @@ export default function ProfileRoute() {
   const badgesQuery = useMemberBadgesQuery(numericMemberId);
 
   if (!connection) {
-    return <Redirect href="/connect" />;
+    return <Redirect href={appRoutes.connect} />;
   }
 
   const stats = statsQuery.data;
@@ -171,18 +175,13 @@ export default function ProfileRoute() {
             <ShortcutCard
               description="修改这位成员的每周阅读目标。"
               icon="target"
-              onPress={() =>
-                router.push({
-                  params: { memberId: String(numericMemberId) },
-                  pathname: '/goal-settings',
-                })
-              }
+              onPress={() => router.push(getMemberGoalsHref(numericMemberId))}
               title="编辑目标"
             />
             <ShortcutCard
               description="查看或维护全家的成员资料。"
               icon="users"
-              onPress={() => router.push('/members')}
+              onPress={() => router.push(appRoutes.settingsMembers)}
               title="管理成员"
             />
           </View>

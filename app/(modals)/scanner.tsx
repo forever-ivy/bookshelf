@@ -14,6 +14,7 @@ import { PrimaryActionButton } from '@/components/actions/primary-action-button'
 import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { createBookshelfApiClient } from '@/lib/api/client';
 import { createConnectionProfile } from '@/lib/app/connection';
+import { appRoutes } from '@/lib/app/routes';
 import { createStaggeredFadeIn } from '@/lib/presentation/motion';
 import { shouldSkipScannedCode } from '@/lib/presentation/scanner-helpers';
 import { useSessionStore } from '@/stores/session-store';
@@ -62,7 +63,7 @@ export default function ScannerScreen() {
       const profile = createConnectionProfile(data);
       await createBookshelfApiClient(profile.baseUrl).getCompartments();
       setConnection(profile);
-      router.replace('/home');
+      router.replace(appRoutes.home);
     } catch (error) {
       scanBlockRef.current = {
         blockedUntil: Date.now() + 2500,

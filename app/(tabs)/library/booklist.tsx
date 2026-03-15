@@ -17,6 +17,7 @@ import {
   useMarkBooklistDoneMutation,
   useMemberBooklistQuery,
 } from '@/lib/api/react-query/hooks';
+import { appRoutes } from '@/lib/app/routes';
 import { createStaggeredFadeIn, motionTransitions } from '@/lib/presentation/motion';
 import { useSessionStore } from '@/stores/session-store';
 
@@ -33,7 +34,7 @@ export default function BooklistManageScreen() {
   const [note, setNote] = React.useState('');
 
   if (!connection) {
-    return <Redirect href="/connect" />;
+    return <Redirect href={appRoutes.connect} />;
   }
 
   const items = booklistQuery.data ?? [];

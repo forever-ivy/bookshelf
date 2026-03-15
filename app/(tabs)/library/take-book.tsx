@@ -12,6 +12,7 @@ import { StateCard } from '@/components/surfaces/state-card';
 import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { useActiveMember } from '@/hooks/use-active-member';
 import { useMemberBooklistQuery, useTakeBookByTextMutation } from '@/lib/api/react-query/hooks';
+import { appRoutes } from '@/lib/app/routes';
 import { createStaggeredFadeIn, motionTransitions } from '@/lib/presentation/motion';
 import { useSessionStore } from '@/stores/session-store';
 
@@ -26,7 +27,7 @@ export default function TakeBookScreen() {
   const [lastResult, setLastResult] = React.useState<string | null>(null);
 
   if (!connection) {
-    return <Redirect href="/connect" />;
+    return <Redirect href={appRoutes.connect} />;
   }
 
   const suggestions = (booklistQuery.data ?? []).filter((item) => !item.done).slice(0, 4);

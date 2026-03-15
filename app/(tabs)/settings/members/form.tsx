@@ -11,6 +11,7 @@ import { SectionCard } from '@/components/surfaces/section-card';
 import { StateCard } from '@/components/surfaces/state-card';
 import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { useCreateUserMutation, useUpdateUserMutation, useUserQuery } from '@/lib/api/react-query/hooks';
+import { appRoutes } from '@/lib/app/routes';
 import { createStaggeredFadeIn, motionTransitions } from '@/lib/presentation/motion';
 import { useSessionStore } from '@/stores/session-store';
 
@@ -64,7 +65,7 @@ export default function MemberFormScreen() {
   }, [userQuery.data]);
 
   if (!connection) {
-    return <Redirect href="/connect" />;
+    return <Redirect href={appRoutes.connect} />;
   }
 
   const activeMutation = isEditing ? updateUserMutation : createUserMutation;

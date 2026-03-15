@@ -1,73 +1,87 @@
-type MockChainableTransition = {
-  damping: jest.Mock<MockChainableTransition, []>;
-  delay: jest.Mock<MockChainableTransition, []>;
-  easing: jest.Mock<MockChainableTransition, []>;
-  mass: jest.Mock<MockChainableTransition, []>;
-  springify: jest.Mock<MockChainableTransition, []>;
-  stiffness: jest.Mock<MockChainableTransition, []>;
-  duration: jest.Mock<MockChainableTransition, []>;
-};
+jest.mock('react-native-reanimated', () => {
+  function createBuilder(kind: string) {
+    return {
+      config: {} as Record<string, unknown>,
+      kind,
+      damping(value: number) {
+        this.config.damping = value;
+        return this;
+      },
+      delay(value: number) {
+        this.config.delay = value;
+        return this;
+      },
+      duration(value: number) {
+        this.config.duration = value;
+        return this;
+      },
+      easing(value: unknown) {
+        this.config.easing = value;
+        return this;
+      },
+      mass(value: number) {
+        this.config.mass = value;
+        return this;
+      },
+      springify() {
+        this.config.springify = true;
+        return this;
+      },
+      stiffness(value: number) {
+        this.config.stiffness = value;
+        return this;
+      },
+      withInitialValues(value: unknown) {
+        this.config.initialValues = value;
+        return this;
+      },
+    };
+  }
 
-const createMockChainableTransition = (): MockChainableTransition => ({
-  damping: jest.fn(() => createMockChainableTransition()),
-  delay: jest.fn(() => createMockChainableTransition()),
-  easing: jest.fn(() => createMockChainableTransition()),
-  mass: jest.fn(() => createMockChainableTransition()),
-  springify: jest.fn(() => createMockChainableTransition()),
-  stiffness: jest.fn(() => createMockChainableTransition()),
-  duration: jest.fn(() => createMockChainableTransition()),
+  return {
+    Easing: {
+      bezier: (...values: number[]) => ({ type: 'bezier', values }),
+    },
+    FadeIn: createBuilder('FadeIn'),
+    FadeInUp: createBuilder('FadeInUp'),
+    LinearTransition: createBuilder('LinearTransition'),
+    SlideInDown: createBuilder('SlideInDown'),
+    SlideInUp: createBuilder('SlideInUp'),
+  };
 });
 
-jest.mock('react-native-reanimated', () => ({
-  Easing: {
-    bezier: jest.fn(() => 'bezier'),
-  },
-  FadeIn: {
-    duration: jest.fn(() => createMockChainableTransition()),
-  },
-  FadeInDown: {
-    duration: jest.fn(() => createMockChainableTransition()),
-  },
-  FadeInUp: {
-    duration: jest.fn(() => createMockChainableTransition()),
-  },
-  LinearTransition: {
-    springify: jest.fn(() => createMockChainableTransition()),
-  },
-  SlideInDown: {
-    springify: jest.fn(() => createMockChainableTransition()),
-  },
-  SlideInUp: {
-    duration: jest.fn(() => createMockChainableTransition()),
-  },
-}));
-
-import { createSlowFadeIn, createStaggeredFadeIn } from '@/lib/presentation/motion';
-
-const reanimatedMock = jest.requireMock('react-native-reanimated') as {
-  FadeIn: { duration: jest.Mock };
-  FadeInDown: { duration: jest.Mock };
-  FadeInUp: { duration: jest.Mock };
-};
-
 describe('motion helpers', () => {
-  beforeEach(() => {
-    reanimatedMock.FadeIn.duration.mockClear();
-    reanimatedMock.FadeInDown.duration.mockClear();
-    reanimatedMock.FadeInUp.duration.mockClear();
+  function loadMotion() {
+    let motion: typeof import('@/lib/presentation/motion');
+
+    jest.isolateModules(() => {
+      motion = require('@/lib/presentation/motion');
+    });
+
+    return motion!;
+  }
+
+  it('uses an upward entrance instead of a pure fade for staggered content', () => {
+    const { createStaggeredFadeIn } = loadMotion();
+
+    const animation = createStaggeredFadeIn(2, 50) as unknown as {
+      config: Record<string, unknown>;
+      kind: string;
+    };
+
+    expect(animation.kind).toBe('FadeInUp');
+    expect(animation.config.delay).toBe(100);
   });
 
-  it('uses opacity-only fade in for staggered entry so it can coexist with layout transitions', () => {
-    createStaggeredFadeIn(2);
+  it('keeps the slow entrance on the same upward motion family', () => {
+    const { createSlowFadeIn } = loadMotion();
 
-    expect(reanimatedMock.FadeIn.duration).toHaveBeenCalled();
-    expect(reanimatedMock.FadeInDown.duration).not.toHaveBeenCalled();
-  });
+    const animation = createSlowFadeIn(1, 90) as unknown as {
+      config: Record<string, unknown>;
+      kind: string;
+    };
 
-  it('uses opacity-only fade in for slow entry so it can coexist with layout transitions', () => {
-    createSlowFadeIn(1);
-
-    expect(reanimatedMock.FadeIn.duration).toHaveBeenCalled();
-    expect(reanimatedMock.FadeInUp.duration).not.toHaveBeenCalled();
+    expect(animation.kind).toBe('FadeInUp');
+    expect(animation.config.delay).toBe(90);
   });
 });

@@ -1,20 +1,21 @@
 import type { AppTabItem, AppTabKey } from '@/lib/app/types';
+import { appRoutes } from '@/lib/app/routes';
 
 export const appTabs = [
-  { href: '/home', key: 'home', label: '首页', icon: 'home' },
-  { href: '/library', key: 'library', label: '书库', icon: 'book' },
-  { href: '/reports', key: 'reports', label: '报告', icon: 'chart' },
-  { href: '/settings', key: 'settings', label: '设置', icon: 'settings' },
+  { href: appRoutes.home, key: 'home', label: '首页', icon: 'home' },
+  { href: appRoutes.library, key: 'library', label: '书库', icon: 'book' },
+  { href: appRoutes.reports, key: 'reports', label: '报告', icon: 'chart' },
+  { href: appRoutes.settings, key: 'settings', label: '设置', icon: 'settings' },
 ] as const satisfies readonly AppTabItem[];
 
 export const appTabHrefByKey: Record<AppTabKey, AppTabItem['href']> =
   {
-    home: '/home',
-    library: '/library',
-    reports: '/reports',
-    settings: '/settings',
+    home: appRoutes.home,
+    library: appRoutes.library,
+    reports: appRoutes.reports,
+    settings: appRoutes.settings,
   };
 
 export function getInitialHref(hasConnection: boolean) {
-  return hasConnection ? '/home' : '/connect';
+  return hasConnection ? appRoutes.home : appRoutes.connect;
 }

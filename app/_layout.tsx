@@ -7,7 +7,6 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
 import {
-  flowScreenOptions,
   rootStackScreenOptions,
   scannerScreenOptions,
 } from '@/lib/app/navigation-transitions';
@@ -39,16 +38,9 @@ export default function RootLayout() {
               },
             }}>
             <Stack.Screen name="index" />
-            <Stack.Screen name="connect" />
-            <Stack.Screen name="scanner" options={scannerScreenOptions} />
-            <Stack.Screen name="shelf" options={flowScreenOptions} />
-            <Stack.Screen name="store-book" options={flowScreenOptions} />
-            <Stack.Screen name="take-book" options={flowScreenOptions} />
-            <Stack.Screen name="booklist-manage" options={flowScreenOptions} />
-            <Stack.Screen name="goal-settings" options={flowScreenOptions} />
-            <Stack.Screen name="members" options={flowScreenOptions} />
-            <Stack.Screen name="member-form" options={flowScreenOptions} />
+            <Stack.Screen name="(connect)" />
             <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="(modals)" options={scannerScreenOptions} />
           </Stack>
           <StatusBar style={theme.statusBarStyle} />
         </AppProviders>

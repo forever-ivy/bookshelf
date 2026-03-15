@@ -15,6 +15,7 @@ import { ScreenShell } from '@/components/navigation/screen-shell';
 import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { createBookshelfApiClient } from '@/lib/api/client';
 import { createConnectionProfile } from '@/lib/app/connection';
+import { appRoutes } from '@/lib/app/routes';
 import { createStaggeredFadeIn } from '@/lib/presentation/motion';
 import { useSessionStore } from '@/stores/session-store';
 
@@ -45,7 +46,7 @@ export default function ConnectScreen() {
       const profile = createConnectionProfile(url);
       await createBookshelfApiClient(profile.baseUrl).getCompartments();
       setConnection(profile);
-      router.replace('/home');
+      router.replace(appRoutes.home);
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
     } finally {
@@ -60,7 +61,7 @@ export default function ConnectScreen() {
           icon="back"
           onPress={() => {
             if (connection?.baseUrl) {
-              router.replace('/home');
+              router.replace(appRoutes.home);
             }
           }}
         />
@@ -270,7 +271,7 @@ export default function ConnectScreen() {
         <Animated.View entering={createStaggeredFadeIn(6)}>
         <Pressable
           accessibilityRole="button"
-          onPress={() => router.replace('/home')}
+          onPress={() => router.replace(appRoutes.home)}
           style={{
             backgroundColor: theme.colors.overlaySurface,
             borderColor: theme.colors.cardBorder,
@@ -302,7 +303,10 @@ export default function ConnectScreen() {
         </Animated.View>
       ) : null}
       <Animated.View entering={createStaggeredFadeIn(7)} style={{ gap: 12 }}>
-        <PrimaryActionButton label="扫码连接" onPress={() => router.push('/scanner')} />
+        <PrimaryActionButton
+          label="扫码连接"
+          onPress={() => router.push(appRoutes.scanner)}
+        />
         <PrimaryActionButton
           label={showManualEntry ? '收起手动输入' : '手动输入地址'}
           onPress={() => setShowManualEntry((value) => !value)}
@@ -313,7 +317,7 @@ export default function ConnectScreen() {
             label="无书柜预览"
             onPress={() => {
               enterPreviewMode();
-              router.replace('/home');
+              router.replace(appRoutes.home);
             }}
             variant="ghost"
           />

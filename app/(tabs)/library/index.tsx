@@ -5,9 +5,11 @@ import Animated from 'react-native-reanimated';
 import { BookCarouselCard } from '@/components/cards/book-carousel-card';
 import { SectionCard } from '@/components/surfaces/section-card';
 import { ShortcutCard } from '@/components/actions/shortcut-card';
+import { TwoColumnGrid } from '@/components/layout/two-column-grid';
 import { ScreenShell } from '@/components/navigation/screen-shell';
 import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { useBorrowLogsQuery, useMemberBooklistQuery } from '@/lib/api/react-query/hooks';
+import { appRoutes } from '@/lib/app/routes';
 import { createStaggeredFadeIn, motionTransitions } from '@/lib/presentation/motion';
 import { useSessionStore } from '@/stores/session-store';
 
@@ -20,7 +22,7 @@ export default function LibraryRoute() {
   const borrowLogsQuery = useBorrowLogsQuery(memberId);
 
   if (!connection) {
-    return <Redirect href="/connect" />;
+    return <Redirect href={appRoutes.connect} />;
   }
 
   return (
@@ -53,7 +55,7 @@ export default function LibraryRoute() {
         entering={createStaggeredFadeIn(2)}
         layout={motionTransitions.gentle}>
         <SectionCard
-          description="在书库里不只是看书单，也可以直接进入管理和取书流程。"
+          description="在书库里不只是看书单，也可以直接进入书架、取书和存书流程。"
           title="继续操作">
           <Text
             selectable
@@ -67,20 +69,33 @@ export default function LibraryRoute() {
           </Text>
           <Animated.View
             entering={createStaggeredFadeIn(3)}
-            layout={motionTransitions.gentle}
-            style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+            layout={motionTransitions.gentle}>
+            <TwoColumnGrid>
             <ShortcutCard
               description="新增、删除、完成当前成员的阅读任务。"
               icon="bookmark"
-              onPress={() => router.push('/booklist-manage')}
+              onPress={() => router.push(appRoutes.libraryBooklist)}
               title="管理书单"
             />
             <ShortcutCard
               description="按书名搜索，立刻发起取书。"
               icon="search"
-              onPress={() => router.push('/take-book')}
+              onPress={() => router.push(appRoutes.libraryTakeBook)}
               title="去取书"
             />
+            <ShortcutCard
+              description="拍照识别后，把书存回家庭书架。"
+              icon="camera"
+              onPress={() => router.push(appRoutes.libraryStoreBook)}
+              title="去存书"
+            />
+            <ShortcutCard
+              description="查看当前书柜的每一个格口状态。"
+              icon="cabinet"
+              onPress={() => router.push(appRoutes.libraryShelf)}
+              title="家庭书架"
+            />
+            </TwoColumnGrid>
           </Animated.View>
         </SectionCard>
       </Animated.View>
