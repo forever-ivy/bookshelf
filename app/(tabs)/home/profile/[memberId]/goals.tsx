@@ -20,6 +20,9 @@ const goalSuggestions = [3, 5, 7];
 export default function GoalSettingsScreen() {
   const { theme } = useBookleafTheme();
   const connection = useSessionStore((state) => state.connection);
+  const isAuthenticated = useSessionStore((state) =>
+    typeof state.isAuthenticated === 'boolean' ? state.isAuthenticated : true
+  );
   const isPreviewMode = useSessionStore((state) => state.isPreviewMode);
   const { activeMember, members } = useActiveMember();
   const { memberId } = useLocalSearchParams<{ memberId?: string }>();
@@ -39,6 +42,10 @@ export default function GoalSettingsScreen() {
 
   if (!connection) {
     return <Redirect href={appRoutes.connect} />;
+  }
+
+  if (!isAuthenticated) {
+    return <Redirect href={appRoutes.authLogin} />;
   }
 
   return (

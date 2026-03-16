@@ -17,12 +17,19 @@ import { useSessionStore } from '@/stores/session-store';
 export default function ReportsRoute() {
   const { theme } = useBookleafTheme();
   const connection = useSessionStore((state) => state.connection);
+  const isAuthenticated = useSessionStore((state) =>
+    typeof state.isAuthenticated === 'boolean' ? state.isAuthenticated : true
+  );
   const memberId = useSessionStore((state) => state.currentMemberId);
   const weeklyReportQuery = useWeeklyReportQuery(memberId);
   const monthlyReportQuery = useMonthlyReportQuery();
 
   if (!connection) {
     return <Redirect href={appRoutes.connect} />;
+  }
+
+  if (!isAuthenticated) {
+    return <Redirect href={appRoutes.authLogin} />;
   }
 
   return (

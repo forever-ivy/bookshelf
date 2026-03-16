@@ -34,6 +34,48 @@ export type MemberDraft = {
   role?: string;
 };
 
+export type AuthAccountSummary = {
+  created_at?: string | null;
+  id: number;
+  last_login_at?: string | null;
+  phone?: string | null;
+  status?: string | null;
+  system_role?: 'admin' | 'user' | string;
+  updated_at?: string | null;
+  username?: string | null;
+};
+
+export type CabinetBindingSummary = {
+  cabinet_name?: string | null;
+  created_at?: string | null;
+  family_id?: number | null;
+  family_name?: string | null;
+  id?: number;
+  initialized: boolean;
+  updated_at?: string | null;
+};
+
+export type AuthSession = {
+  account: AuthAccountSummary;
+  cabinet: CabinetBindingSummary;
+  token: string;
+  user: MemberSummary;
+};
+
+export type PairExchangeResult = {
+  cabinet: CabinetBindingSummary;
+  pair_code: string;
+  pair_token: string;
+  requires_setup: boolean;
+};
+
+export type PairIssueResult = {
+  bind_url: string;
+  cabinet: CabinetBindingSummary;
+  expires_at: string;
+  pair_code: string;
+};
+
 export type CabinetCompartment = {
   cid: number;
   status: 'free' | 'occupied' | string;

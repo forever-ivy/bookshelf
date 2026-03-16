@@ -5,6 +5,7 @@ import {
   type RequestConfig,
   type RequestOptions,
 } from "@/lib/api/core/types";
+import { sessionStore } from "@/stores/session-store";
 import { z, type ZodType } from "zod";
 
 /**
@@ -125,9 +126,14 @@ function buildHeaders(
 ) {
   const headers = new Headers(headersInit);
   const hasJsonBody = body != null && !isFormData(body);
+  const authToken = sessionStore.getState().authToken;
 
   if (hasJsonBody && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
+  }
+
+  if (authToken && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${authToken}`);
   }
 
   return headers;

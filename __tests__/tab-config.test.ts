@@ -1,12 +1,16 @@
 import { appTabs, getInitialHref } from '@/lib/app/navigation';
 
 describe('tab config', () => {
-  it('returns the new home route when a connection exists', () => {
-    expect(getInitialHref(true)).toBe('/home');
+  it('returns the login route when a cabinet is bound but auth is missing', () => {
+    expect(getInitialHref({ hasConnection: true, isAuthenticated: false })).toBe('/login');
   });
 
-  it('keeps connect as the unauthenticated entry route', () => {
-    expect(getInitialHref(false)).toBe('/connect');
+  it('keeps connect as the entry route before the cabinet is bound', () => {
+    expect(getInitialHref({ hasConnection: false, isAuthenticated: false })).toBe('/connect');
+  });
+
+  it('returns the home route when both cabinet binding and auth are ready', () => {
+    expect(getInitialHref({ hasConnection: true, isAuthenticated: true })).toBe('/home');
   });
 
   it('defines four tabs with public hrefs and lucide icons', () => {

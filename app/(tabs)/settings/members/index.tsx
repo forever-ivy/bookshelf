@@ -1,7 +1,7 @@
 import React from 'react';
-import { Alert, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
-import { Redirect, useRouter } from 'expo-router';
+import { Redirect } from 'expo-router';
 
 import { PrimaryActionButton } from '@/components/actions/primary-action-button';
 import { FlowScreenHeader } from '@/components/navigation/flow-screen-header';
@@ -9,70 +9,84 @@ import { ScreenShell } from '@/components/navigation/screen-shell';
 import { SectionCard } from '@/components/surfaces/section-card';
 import { StateCard } from '@/components/surfaces/state-card';
 import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
-import { useActiveMember } from '@/hooks/use-active-member';
-import { useDeleteUserMutation, useSwitchUserMutation } from '@/lib/api/react-query/hooks';
+import { useUsersQuery, useUpdateUserMutation } from '@/lib/api/react-query/hooks';
 import { appRoutes } from '@/lib/app/routes';
 import { createStaggeredFadeIn, motionTransitions } from '@/lib/presentation/motion';
 import { useSessionStore } from '@/stores/session-store';
 
 export default function MembersScreen() {
   const { theme } = useBookleafTheme();
-  const router = useRouter();
   const connection = useSessionStore((state) => state.connection);
+  const currentAccount = useSessionStore((state) => state.currentAccount);
+  const currentMember = useSessionStore((state) => state.currentMember);
+  const isAuthenticated = useSessionStore((state) =>
+    typeof state.isAuthenticated === 'boolean' ? state.isAuthenticated : true
+  );
   const isPreviewMode = useSessionStore((state) => state.isPreviewMode);
-  const { activeMember, currentMemberId, members, usersQuery } = useActiveMember();
-  const deleteUserMutation = useDeleteUserMutation();
-  const switchUserMutation = useSwitchUserMutation();
+  const usersQuery = useUsersQuery();
+  const updateUserMutation = useUpdateUserMutation();
+  const canManage = currentAccount?.system_role === 'admin';
+  const members = usersQuery.data ?? [];
 
   if (!connection) {
     return <Redirect href={appRoutes.connect} />;
+  }
+
+  if (!isAuthenticated) {
+    return <Redirect href={appRoutes.authLogin} />;
   }
 
   return (
     <ScreenShell contentContainerStyle={{ gap: 20 }}>
       <Animated.View entering={createStaggeredFadeIn(0)}>
         <FlowScreenHeader
-          description={`当前连接到 ${connection.displayName}。你可以维护家庭成员，并切换正在使用的读者。`}
-          title="家庭成员"
+          description={
+            canManage
+              ? `当前连接到 ${connection.displayName}。你可以把家庭成员设置为家长或孩子。`
+              : `当前连接到 ${connection.displayName}。只有管理员可以调整家庭角色。`
+          }
+          title="家庭角色"
         />
       </Animated.View>
       <Animated.View entering={createStaggeredFadeIn(1)} layout={motionTransitions.gentle}>
         <SectionCard
-          description={`当前活跃成员是 ${activeMember?.name ?? '未选择'}。新增或编辑成员都会回流到现有首页、书库和报告数据里。`}
-          title="成员列表">
+          description="新账号需要先通过扫码完成注册。这里不再新增成员，只负责管理现有家庭角色。"
+          title="家庭成员">
           {isPreviewMode ? (
             <StateCard
-              description="预览模式下你仍然可以浏览成员结构，但创建、编辑和删除都会被禁用。"
+              description="预览模式会展示角色管理布局，但不会真的写入角色变更。"
               title="预览模式不可操作"
               variant="warning"
             />
           ) : null}
-          <PrimaryActionButton
-            disabled={isPreviewMode}
-            label="新增成员"
-            onPress={() => router.push(appRoutes.settingsMembersForm)}
-          />
+          {!canManage ? (
+            <StateCard
+              description="你当前是普通用户，只能查看自己的家庭身份。需要管理员账号才能调整角色。"
+              title="当前为只读模式"
+              variant="warning"
+            />
+          ) : null}
           {usersQuery.isLoading ? (
             <StateCard
-              description="正在同步家庭成员。"
+              description="正在同步当前家庭成员。"
               title="成员加载中"
             />
           ) : null}
           {usersQuery.error ? (
             <StateCard
-              description="家庭成员暂时没有同步出来，请稍后重试。"
+              description="家庭成员暂时没有同步出来，请稍后再试。"
               title="成员列表不可用"
               variant="error"
             />
           ) : null}
           {!usersQuery.isLoading && !members.length ? (
             <StateCard
-              description="目前还没有家庭成员。先创建一个孩子或家长档案，首页就会开始完整运转。"
+              description="当前家庭还没有成员。请先从扫码和注册流程创建账号。"
               title="还没有成员"
             />
           ) : null}
           {members.map((member, index) => {
-            const isActive = currentMemberId === member.id;
+            const isCurrent = currentMember?.id === member.id;
 
             return (
               <Animated.View
@@ -80,7 +94,7 @@ export default function MembersScreen() {
                 key={member.id}
                 layout={motionTransitions.gentle}
                 style={{
-                  backgroundColor: isActive
+                  backgroundColor: isCurrent
                     ? theme.colors.glassAccentSoft
                     : theme.colors.surfaceElevated,
                   borderColor: theme.colors.cardBorder,
@@ -108,49 +122,43 @@ export default function MembersScreen() {
                       fontSize: 13,
                       lineHeight: 18,
                     }}>
-                    {[member.role, member.grade_level, member.interests].filter(Boolean).join(' · ') || '家庭阅读成员'}
+                    {[member.role, isCurrent ? '当前登录' : null, member.grade_level]
+                      .filter(Boolean)
+                      .join(' · ') || '家庭阅读成员'}
                   </Text>
                 </View>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-                  <View style={{ minWidth: '47%' }}>
-                    <PrimaryActionButton
-                      label={isActive ? '当前使用中' : '切换为当前成员'}
-                      loading={switchUserMutation.isPending}
-                      onPress={() => switchUserMutation.mutate(member.id)}
-                      variant={isActive ? 'ghost' : 'primary'}
-                    />
+                {canManage ? (
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                    <View style={{ minWidth: '47%' }}>
+                      <PrimaryActionButton
+                        disabled={isPreviewMode || updateUserMutation.isPending}
+                        label={member.role === 'parent' ? '当前是家长' : '设为家长'}
+                        loading={updateUserMutation.isPending}
+                        onPress={() =>
+                          updateUserMutation.mutate({
+                            memberId: member.id,
+                            payload: { role: 'parent' },
+                          })
+                        }
+                        variant={member.role === 'parent' ? 'ghost' : 'primary'}
+                      />
+                    </View>
+                    <View style={{ minWidth: '47%' }}>
+                      <PrimaryActionButton
+                        disabled={isPreviewMode || updateUserMutation.isPending}
+                        label={member.role === 'child' ? '当前是孩子' : '设为孩子'}
+                        loading={updateUserMutation.isPending}
+                        onPress={() =>
+                          updateUserMutation.mutate({
+                            memberId: member.id,
+                            payload: { role: 'child' },
+                          })
+                        }
+                        variant={member.role === 'child' ? 'ghost' : 'primary'}
+                      />
+                    </View>
                   </View>
-                  <View style={{ minWidth: '47%' }}>
-                    <PrimaryActionButton
-                      label="编辑资料"
-                      onPress={() =>
-                        router.push({
-                          params: { memberId: String(member.id) },
-                          pathname: appRoutes.settingsMembersForm,
-                        })
-                      }
-                      variant="ghost"
-                    />
-                  </View>
-                  <View style={{ minWidth: '47%' }}>
-                    <PrimaryActionButton
-                      disabled={isPreviewMode}
-                      label="删除成员"
-                      loading={deleteUserMutation.isPending}
-                      onPress={() => {
-                        Alert.alert('确认删除', `要删除成员「${member.name}」吗？`, [
-                          { style: 'cancel', text: '保留' },
-                          {
-                            style: 'destructive',
-                            text: '删除',
-                            onPress: () => deleteUserMutation.mutate(member.id),
-                          },
-                        ]);
-                      }}
-                      variant="ghost"
-                    />
-                  </View>
-                </View>
+                ) : null}
               </Animated.View>
             );
           })}

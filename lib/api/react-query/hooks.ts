@@ -52,15 +52,17 @@ export const cabinetQueryKeys = {
 
 function useActiveCabinet() {
   const connection = useSessionStore((state) => state.connection);
+  const authToken = useSessionStore((state) => state.authToken);
   const isPreviewMode = useSessionStore((state) => state.isPreviewMode);
   const baseUrl = connection?.baseUrl ?? '';
   const preview = getPreviewCabinetData();
 
   return {
+    authToken,
     baseUrl,
     client: baseUrl ? createBookshelfApiClient(baseUrl) : null,
     connection,
-    enabled: Boolean(baseUrl) || isPreviewMode,
+    enabled: (Boolean(baseUrl) && Boolean(authToken)) || isPreviewMode,
     isPreviewMode,
     preview,
   };

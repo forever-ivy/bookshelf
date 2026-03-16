@@ -8,12 +8,14 @@ import { useSessionStore } from '@/stores/session-store';
 export default function IndexRoute() {
   const { theme } = useBookleafTheme();
   const hasConnection = useSessionStore((state) => state.hasConnection);
+  const isAuthenticated = useSessionStore((state) => state.isAuthenticated);
   const hydrated = useSessionStore((state) => state.hydrated);
-  const initialHref = getInitialHref(hasConnection);
+  const initialHref = getInitialHref({ hasConnection, isAuthenticated });
 
   console.log('[startup] IndexRoute render', {
     hasConnection,
     hydrated,
+    isAuthenticated,
   });
 
   if (!hydrated) {

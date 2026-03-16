@@ -1,3 +1,4 @@
+import { createAuthApi } from '@/lib/api/domains/auth';
 import { createAccountsApi } from '@/lib/api/domains/accounts';
 import { createBooksApi } from '@/lib/api/domains/books';
 import { createFamilyApi } from '@/lib/api/domains/family';
@@ -11,6 +12,7 @@ export { ApiError } from '@/lib/api/core/types';
 
 export function createBookshelfApiClient(baseUrl: string) {
   return {
+    ...createAuthApi(baseUrl),
     ...createUsersApi(baseUrl),
     ...createShelfApi(baseUrl),
     ...createBooksApi(baseUrl),

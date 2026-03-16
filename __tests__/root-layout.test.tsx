@@ -91,6 +91,7 @@ describe('RootLayout', () => {
     const screen = render(<RootLayout />);
 
     expect(screen.getByTestId('screen-index')).toBeTruthy();
+    expect(screen.getByTestId('screen-(auth)')).toBeTruthy();
     expect(screen.getByTestId('screen-(connect)')).toBeTruthy();
     expect(screen.getByTestId('screen-(tabs)')).toBeTruthy();
     expect(screen.getByTestId('screen-(modals)')).toBeTruthy();

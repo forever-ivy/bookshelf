@@ -4,19 +4,46 @@ import { createJSONStorage, persist, type StateStorage } from 'zustand/middlewar
 import { createStore } from 'zustand/vanilla';
 
 import type { ConnectionProfile } from '@/lib/app/connection';
+import type { MemberSummary } from '@/lib/api/contracts/types';
 import { createPreviewConnectionProfile } from '@/lib/app/preview-data';
 
+type AuthAccountSummary = {
+  id: number;
+  phone?: string | null;
+  system_role?: string | null;
+  username?: string | null;
+};
+
+type PendingPairingContext = {
+  pairCode: string;
+  pairToken: string;
+  requiresSetup: boolean;
+};
+
 type SessionStoreState = {
+  authToken: string | null;
   connection: ConnectionProfile | null;
+  currentAccount: AuthAccountSummary | null;
+  currentMember: MemberSummary | null;
   currentMemberId: number | null;
+  pendingPairing: PendingPairingContext | null;
   enterPreviewMode: () => void;
   hasConnection: boolean;
   hydrated: boolean;
+  isAuthenticated: boolean;
   isPreviewMode: boolean;
+  clearAuthSession: () => void;
   clearSession: () => void;
+  clearPendingPairing: () => void;
   finishHydration: () => void;
+  setAuthSession: (payload: {
+    account: AuthAccountSummary;
+    authToken: string;
+    currentMember: MemberSummary;
+  }) => void;
   setConnection: (connection: ConnectionProfile) => void;
   setCurrentMemberId: (memberId: number | null) => void;
+  setPendingPairing: (pairing: PendingPairingContext | null) => void;
 };
 
 const secureStoreStorage: StateStorage = {
@@ -69,11 +96,16 @@ export function resolveSessionStorage(options: ResolveSessionStorageOptions = {}
 
 function createSessionState() {
   return {
+    authToken: null,
     connection: null,
+    currentAccount: null,
+    currentMember: null,
     currentMemberId: null,
     hasConnection: false,
     hydrated: false,
+    isAuthenticated: false,
     isPreviewMode: false,
+    pendingPairing: null,
   };
 }
 
@@ -82,28 +114,74 @@ export function createSessionStore() {
     persist(
       (set) => ({
         ...createSessionState(),
+        clearAuthSession: () =>
+          set((state) => ({
+            authToken: null,
+            currentAccount: null,
+            currentMember: null,
+            currentMemberId: null,
+            hasConnection: state.hasConnection,
+            hydrated: true,
+            isAuthenticated: false,
+            isPreviewMode: state.isPreviewMode,
+            pendingPairing: null,
+            connection: state.connection,
+          })),
         clearSession: () =>
           set({
             ...createSessionState(),
             hydrated: true,
           }),
+        clearPendingPairing: () => set({ pendingPairing: null }),
         enterPreviewMode: () =>
           set({
+            authToken: 'preview-token',
             connection: createPreviewConnectionProfile(),
+            currentAccount: {
+              id: 0,
+              system_role: 'admin',
+              username: 'preview-admin',
+            },
+            currentMember: {
+              id: 2,
+              name: '晴晴',
+              role: 'child',
+            },
             currentMemberId: 2,
             hasConnection: true,
             hydrated: true,
+            isAuthenticated: true,
             isPreviewMode: true,
+            pendingPairing: null,
           }),
         finishHydration: () => set({ hydrated: true }),
+        setAuthSession: ({ account, authToken, currentMember }) =>
+          set((state) => ({
+            authToken,
+            connection: state.connection,
+            currentAccount: account,
+            currentMember,
+            currentMemberId: currentMember.id,
+            hasConnection: Boolean(state.connection),
+            hydrated: true,
+            isAuthenticated: true,
+            isPreviewMode: false,
+            pendingPairing: null,
+          })),
         setConnection: (connection) =>
           set({
+            authToken: null,
             connection,
+            currentAccount: null,
+            currentMember: null,
             currentMemberId: null,
             hasConnection: true,
+            isAuthenticated: false,
             isPreviewMode: false,
+            pendingPairing: null,
           }),
         setCurrentMemberId: (memberId) => set({ currentMemberId: memberId }),
+        setPendingPairing: (pairing) => set({ pendingPairing: pairing }),
       }),
       {
         name: 'bookleaf-session',
@@ -113,10 +191,15 @@ export function createSessionStore() {
           }, 0);
         },
         partialize: (state) => ({
+          authToken: state.authToken,
           connection: state.connection,
+          currentAccount: state.currentAccount,
+          currentMember: state.currentMember,
           currentMemberId: state.currentMemberId,
           hasConnection: state.hasConnection,
+          isAuthenticated: state.isAuthenticated,
           isPreviewMode: state.isPreviewMode,
+          pendingPairing: state.pendingPairing,
         }),
         storage: createJSONStorage(() => resolveSessionStorage()),
       }

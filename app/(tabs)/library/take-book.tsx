@@ -19,6 +19,9 @@ import { useSessionStore } from '@/stores/session-store';
 export default function TakeBookScreen() {
   const { theme } = useBookleafTheme();
   const connection = useSessionStore((state) => state.connection);
+  const isAuthenticated = useSessionStore((state) =>
+    typeof state.isAuthenticated === 'boolean' ? state.isAuthenticated : true
+  );
   const isPreviewMode = useSessionStore((state) => state.isPreviewMode);
   const { activeMember } = useActiveMember();
   const booklistQuery = useMemberBooklistQuery(activeMember?.id);
@@ -28,6 +31,10 @@ export default function TakeBookScreen() {
 
   if (!connection) {
     return <Redirect href={appRoutes.connect} />;
+  }
+
+  if (!isAuthenticated) {
+    return <Redirect href={appRoutes.authLogin} />;
   }
 
   const suggestions = (booklistQuery.data ?? []).filter((item) => !item.done).slice(0, 4);

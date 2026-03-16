@@ -21,6 +21,48 @@ export const memberSummarySchema = z.object({
   updated_at: z.string().nullable().optional(),
 });
 
+export const authAccountSummarySchema = z.object({
+  created_at: z.string().nullable().optional(),
+  id: z.number(),
+  last_login_at: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  status: z.string().nullable().optional(),
+  system_role: z.string().optional(),
+  updated_at: z.string().nullable().optional(),
+  username: z.string().nullable().optional(),
+});
+
+export const cabinetBindingSummarySchema = z.object({
+  cabinet_name: z.string().nullable().optional(),
+  created_at: z.string().nullable().optional(),
+  family_id: z.number().nullable().optional(),
+  family_name: z.string().nullable().optional(),
+  id: z.number().optional(),
+  initialized: z.boolean(),
+  updated_at: z.string().nullable().optional(),
+});
+
+export const authSessionSchema = z.object({
+  account: authAccountSummarySchema,
+  cabinet: cabinetBindingSummarySchema,
+  token: z.string(),
+  user: memberSummarySchema,
+});
+
+export const pairExchangeSchema = z.object({
+  cabinet: cabinetBindingSummarySchema,
+  pair_code: z.string(),
+  pair_token: z.string(),
+  requires_setup: z.boolean(),
+});
+
+export const pairIssueSchema = z.object({
+  bind_url: z.string(),
+  cabinet: cabinetBindingSummarySchema,
+  expires_at: z.string(),
+  pair_code: z.string(),
+});
+
 export const borrowLogSchema = z.object({
   action: z.string(),
   action_time: z.string().optional(),
@@ -111,9 +153,9 @@ export const accountSummarySchema = z.object({
   last_login_at: z.string().nullable().optional(),
   linked_user_count: z.number().optional(),
   owned_family_count: z.number().optional(),
-  password_hash: z.string().nullable().optional(),
   phone: z.string().nullable().optional(),
   status: z.string().optional(),
+  system_role: z.string().optional(),
   updated_at: z.string().optional(),
   username: z.string().nullable().optional(),
 });

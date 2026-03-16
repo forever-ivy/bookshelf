@@ -16,7 +16,10 @@ import { createBookshelfApiClient } from '@/lib/api/client';
 import { createConnectionProfile } from '@/lib/app/connection';
 import { appRoutes } from '@/lib/app/routes';
 import { createStaggeredFadeIn } from '@/lib/presentation/motion';
-import { shouldSkipScannedCode } from '@/lib/presentation/scanner-helpers';
+import {
+  parseCabinetScanPayload,
+  shouldSkipScannedCode,
+} from '@/lib/presentation/scanner-helpers';
 import { useSessionStore } from '@/stores/session-store';
 
 function getScannerError(error: unknown) {
@@ -33,7 +36,11 @@ export default function ScannerScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [feedback, setFeedback] = React.useState<string | null>(null);
   const [isConnecting, setIsConnecting] = React.useState(false);
+  const authToken = useSessionStore((state) => state.authToken);
+  const connection = useSessionStore((state) => state.connection);
+  const clearPendingPairing = useSessionStore((state) => state.clearPendingPairing);
   const setConnection = useSessionStore((state) => state.setConnection);
+  const setPendingPairing = useSessionStore((state) => state.setPendingPairing);
   const scanBlockRef = React.useRef<{
     blockedUntil: number;
     lastBlockedValue: string | null;
@@ -57,13 +64,49 @@ export default function ScannerScreen() {
     }
 
     setIsConnecting(true);
-    setFeedback('正在验证书柜...');
+    setFeedback('正在绑定书柜...');
 
     try {
-      const profile = createConnectionProfile(data);
-      await createBookshelfApiClient(profile.baseUrl).getCompartments();
+      const parsed = parseCabinetScanPayload(data);
+      if (!parsed) {
+        throw new Error('这个二维码没有指向可连接的书柜服务。');
+      }
+
+      const profile = createConnectionProfile(parsed.baseUrl);
+      const client = createBookshelfApiClient(profile.baseUrl);
+      const isSameAuthenticatedCabinet =
+        Boolean(authToken) && connection?.baseUrl === profile.baseUrl;
+
+      if (parsed.pairCode) {
+        const pairing = await client.exchangePairCode(parsed.pairCode);
+        if (isSameAuthenticatedCabinet) {
+          clearPendingPairing();
+          router.replace(appRoutes.home);
+          return;
+        }
+
+        setConnection(profile);
+        setPendingPairing({
+          pairCode: pairing.pair_code,
+          pairToken: pairing.pair_token,
+          requiresSetup: pairing.requires_setup,
+        });
+        router.replace(
+          pairing.requires_setup ? appRoutes.authRegister : appRoutes.authLogin
+        );
+        return;
+      }
+
+      await client.issuePairCode();
+      if (isSameAuthenticatedCabinet) {
+        clearPendingPairing();
+        router.replace(appRoutes.home);
+        return;
+      }
+
       setConnection(profile);
-      router.replace(appRoutes.home);
+      clearPendingPairing();
+      router.replace(appRoutes.authLogin);
     } catch (error) {
       scanBlockRef.current = {
         blockedUntil: Date.now() + 2500,
@@ -118,7 +161,7 @@ export default function ScannerScreen() {
               fontSize: 16,
               lineHeight: 24,
           }}>
-            Bookleaf 仅会使用相机扫描书柜二维码，并保存书柜地址。
+            Bookleaf 仅会使用相机扫描书柜二维码，并保存书柜绑定信息。
           </Text>
         </Animated.View>
         <Animated.View entering={createStaggeredFadeIn(1)}>
@@ -215,7 +258,7 @@ export default function ScannerScreen() {
               fontSize: 14,
               lineHeight: 20,
             }}>
-            验证通过后，系统会自动带你进入应用。
+            绑定成功后，系统会自动带你进入登录或注册流程。
           </Text>
           {feedback ? (
             <Pressable

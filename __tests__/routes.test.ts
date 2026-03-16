@@ -13,6 +13,8 @@ describe('app routes', () => {
   });
 
   it('defines grouped library and settings task routes', () => {
+    expect(appRoutes.authLogin).toBe('/login');
+    expect(appRoutes.authRegister).toBe('/register');
     expect(appRoutes.libraryShelf).toBe('/library/shelf');
     expect(appRoutes.libraryBooklist).toBe('/library/booklist');
     expect(appRoutes.libraryTakeBook).toBe('/library/take-book');

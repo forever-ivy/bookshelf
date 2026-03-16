@@ -1,4 +1,6 @@
 export const appRoutes = {
+  authLogin: '/login',
+  authRegister: '/register',
   connect: '/connect',
   home: '/home',
   library: '/library',

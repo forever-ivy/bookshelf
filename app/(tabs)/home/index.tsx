@@ -22,7 +22,6 @@ import {
   useCompartmentsQuery,
   useCurrentUserQuery,
   useMemberStatsQuery,
-  useSwitchUserMutation,
   useUsersQuery,
 } from '@/lib/api/react-query/hooks';
 import {
@@ -41,21 +40,23 @@ export default function HomeRoute() {
   const { theme } = useBookleafTheme();
   const router = useRouter();
   const connection = useSessionStore((state) => state.connection);
+  const isAuthenticated = useSessionStore((state) =>
+    typeof state.isAuthenticated === 'boolean' ? state.isAuthenticated : true
+  );
   const currentMemberId = useSessionStore((state) => state.currentMemberId);
   const setCurrentMemberId = useSessionStore((state) => state.setCurrentMemberId);
-  const [isMemberSheetOpen, setIsMemberSheetOpen] = React.useState(false);
   const scrollOffset = useSharedValue(0);
   const usersQuery = useUsersQuery();
   const currentUserQuery = useCurrentUserQuery();
   const compartmentsQuery = useCompartmentsQuery();
-  const switchUserMutation = useSwitchUserMutation();
 
-  const members = usersQuery.data ?? [];
+  const familyMembers = usersQuery.data ?? [];
   const activeMember =
-    members.find((member) => member.id === currentMemberId) ??
     currentUserQuery.data ??
-    members[0] ??
+    familyMembers.find((member) => member.id === currentMemberId) ??
+    familyMembers[0] ??
     null;
+  const members = activeMember ? [activeMember] : [];
 
   React.useEffect(() => {
     if (!currentMemberId && activeMember?.id) {
@@ -80,6 +81,10 @@ export default function HomeRoute() {
 
   if (!connection) {
     return <Redirect href={appRoutes.connect} />;
+  }
+
+  if (!isAuthenticated) {
+    return <Redirect href={appRoutes.authLogin} />;
   }
 
   const summary = buildCabinetStatusSummary(
@@ -110,7 +115,7 @@ export default function HomeRoute() {
               <AvatarSwitcher
                 activeMember={activeMember}
                 members={members}
-                onPress={() => setIsMemberSheetOpen(true)}
+                onPress={() => null}
               />
             </View>
             <GlassPillButton
@@ -236,13 +241,6 @@ export default function HomeRoute() {
           </Animated.View>
         ) : null}
       </ScreenShell>
-      <MemberSwitcherSheet
-        activeMemberId={activeMember?.id}
-        isOpen={isMemberSheetOpen}
-        members={members}
-        onClose={() => setIsMemberSheetOpen(false)}
-        onSelectMember={(memberId: number) => switchUserMutation.mutateAsync(memberId)}
-      />
     </>
   );
 }

@@ -31,6 +31,8 @@ export default function ConnectScreen() {
   const { theme } = useBookleafTheme();
   const router = useRouter();
   const connection = useSessionStore((state) => state.connection);
+  const authToken = useSessionStore((state) => state.authToken);
+  const clearPendingPairing = useSessionStore((state) => state.clearPendingPairing);
   const enterPreviewMode = useSessionStore((state) => state.enterPreviewMode);
   const setConnection = useSessionStore((state) => state.setConnection);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -44,9 +46,18 @@ export default function ConnectScreen() {
 
     try {
       const profile = createConnectionProfile(url);
-      await createBookshelfApiClient(profile.baseUrl).getCompartments();
+      await createBookshelfApiClient(profile.baseUrl).issuePairCode();
+      const isSameAuthenticatedCabinet =
+        Boolean(authToken) && connection?.baseUrl === profile.baseUrl;
+
+      if (isSameAuthenticatedCabinet) {
+        router.replace(appRoutes.home);
+        return;
+      }
+
       setConnection(profile);
-      router.replace(appRoutes.home);
+      clearPendingPairing();
+      router.replace(appRoutes.authLogin);
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
     } finally {
@@ -122,7 +133,7 @@ export default function ConnectScreen() {
             fontSize: 16,
             lineHeight: 24,
           }}>
-          扫描书柜服务端展示的二维码，或者手动输入书柜地址。
+          扫描 Web 端展示的绑定二维码，或者在开发环境里手动输入书柜地址。
         </Text>
       </Animated.View>
       <Animated.View
@@ -170,8 +181,8 @@ export default function ConnectScreen() {
               fontSize: 14,
               lineHeight: 20,
               textAlign: 'center',
-            }}>
-            二维码里应包含 Python 后端地址，例如 `http://192.168.1.20:5000`。
+          }}>
+            生产流程下二维码会包含书柜地址和一次性配对码；手动地址连接仅作为开发调试兜底。
           </Text>
         </View>
       </Animated.View>
@@ -195,7 +206,7 @@ export default function ConnectScreen() {
             fontSize: 13,
             lineHeight: 18,
           }}>
-          Bookleaf 会先验证书柜是否可达，只有服务端连通后才会进入首页。
+          Bookleaf 会先验证书柜服务是否可达，然后再把你带到登录或注册流程。
         </Text>
       </Animated.View>
       {showManualEntry ? (

@@ -40,11 +40,24 @@ function createWrapper() {
 describe('api hooks', () => {
   beforeEach(() => {
     sessionStore.setState({
+      authToken: 'jwt-token',
       connection: createConnectionProfile('https://cabinet.example.com', 'Living Room'),
+      currentAccount: {
+        id: 1,
+        system_role: 'admin',
+        username: 'ivy-admin',
+      },
+      currentMember: {
+        id: 3,
+        name: '陈一诺',
+        role: 'parent',
+      },
       currentMemberId: 3,
       hasConnection: true,
       hydrated: true,
+      isAuthenticated: true,
       isPreviewMode: false,
+      pendingPairing: null,
     });
   });
 

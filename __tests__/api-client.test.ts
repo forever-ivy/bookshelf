@@ -1,9 +1,14 @@
 import { createBookshelfApiClient } from '@/lib/api/client';
 import { ApiError } from '@/lib/api/core/types';
+import { sessionStore } from '@/stores/session-store';
 
 const originalFetch = global.fetch;
 
 describe('createBookshelfApiClient', () => {
+  beforeEach(() => {
+    sessionStore.getState().clearSession();
+  });
+
   afterEach(() => {
     global.fetch = originalFetch;
     jest.resetAllMocks();

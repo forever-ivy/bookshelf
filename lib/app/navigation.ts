@@ -16,6 +16,16 @@ export const appTabHrefByKey: Record<AppTabKey, AppTabItem['href']> =
     settings: appRoutes.settings,
   };
 
-export function getInitialHref(hasConnection: boolean) {
-  return hasConnection ? appRoutes.home : appRoutes.connect;
+export function getInitialHref({
+  hasConnection,
+  isAuthenticated,
+}: {
+  hasConnection: boolean;
+  isAuthenticated: boolean;
+}) {
+  if (!hasConnection) {
+    return appRoutes.connect;
+  }
+
+  return isAuthenticated ? appRoutes.home : appRoutes.authLogin;
 }

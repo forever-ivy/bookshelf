@@ -41,6 +41,9 @@ export default function ProfileRoute() {
   const { isDark, theme } = useBookleafTheme();
   const router = useRouter();
   const connection = useSessionStore((state) => state.connection);
+  const isAuthenticated = useSessionStore((state) =>
+    typeof state.isAuthenticated === 'boolean' ? state.isAuthenticated : true
+  );
   const { memberId } = useLocalSearchParams<{ memberId: string }>();
   const numericMemberId = Number(memberId);
   const usersQuery = useUsersQuery();
@@ -50,6 +53,10 @@ export default function ProfileRoute() {
 
   if (!connection) {
     return <Redirect href={appRoutes.connect} />;
+  }
+
+  if (!isAuthenticated) {
+    return <Redirect href={appRoutes.authLogin} />;
   }
 
   const stats = statsQuery.data;

@@ -1,4 +1,7 @@
-import { shouldSkipScannedCode } from '@/lib/presentation/scanner-helpers';
+import {
+  parseCabinetScanPayload,
+  shouldSkipScannedCode,
+} from '@/lib/presentation/scanner-helpers';
 
 describe('shouldSkipScannedCode', () => {
   it('blocks repeated scans while verification is already running', () => {
@@ -41,5 +44,27 @@ describe('shouldSkipScannedCode', () => {
         2500
       )
     ).toBe(false);
+  });
+
+  it('extracts the base cabinet url and pair code from the new bind qr payload', () => {
+    expect(
+      parseCabinetScanPayload('https://cabinet.example.com/bind?pair_code=pair-123')
+    ).toEqual({
+      baseUrl: 'https://cabinet.example.com',
+      bindUrl: 'https://cabinet.example.com/bind?pair_code=pair-123',
+      pairCode: 'pair-123',
+    });
+  });
+
+  it('falls back to the raw cabinet origin when a dev qr only contains the base url', () => {
+    expect(parseCabinetScanPayload('https://cabinet.example.com')).toEqual({
+      baseUrl: 'https://cabinet.example.com',
+      bindUrl: 'https://cabinet.example.com',
+      pairCode: null,
+    });
+  });
+
+  it('returns null for invalid scan payloads', () => {
+    expect(parseCabinetScanPayload('not-a-url')).toBeNull();
   });
 });

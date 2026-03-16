@@ -39,6 +39,9 @@ const emptyBookPreview: BooklistItem[] = [
 export default function ShelfScreen() {
   const router = useRouter();
   const connection = useSessionStore((state) => state.connection);
+  const isAuthenticated = useSessionStore((state) =>
+    typeof state.isAuthenticated === 'boolean' ? state.isAuthenticated : true
+  );
   const isPreviewMode = useSessionStore((state) => state.isPreviewMode);
   const { activeMember } = useActiveMember();
   const compartmentsQuery = useCompartmentsQuery();
@@ -47,6 +50,10 @@ export default function ShelfScreen() {
 
   if (!connection) {
     return <Redirect href={appRoutes.connect} />;
+  }
+
+  if (!isAuthenticated) {
+    return <Redirect href={appRoutes.authLogin} />;
   }
 
   const compartments = compartmentsQuery.data ?? [];

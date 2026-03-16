@@ -17,12 +17,19 @@ export default function LibraryRoute() {
   const { theme } = useBookleafTheme();
   const router = useRouter();
   const connection = useSessionStore((state) => state.connection);
+  const isAuthenticated = useSessionStore((state) =>
+    typeof state.isAuthenticated === 'boolean' ? state.isAuthenticated : true
+  );
   const memberId = useSessionStore((state) => state.currentMemberId);
   const booklistQuery = useMemberBooklistQuery(memberId);
   const borrowLogsQuery = useBorrowLogsQuery(memberId);
 
   if (!connection) {
     return <Redirect href={appRoutes.connect} />;
+  }
+
+  if (!isAuthenticated) {
+    return <Redirect href={appRoutes.authLogin} />;
   }
 
   return (

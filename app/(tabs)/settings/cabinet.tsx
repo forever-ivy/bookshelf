@@ -7,6 +7,7 @@ import { ScreenShell } from '@/components/navigation/screen-shell';
 import { SectionCard } from '@/components/surfaces/section-card';
 import { StateCard } from '@/components/surfaces/state-card';
 import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
+import { createBookshelfApiClient } from '@/lib/api/client';
 import { appRoutes } from '@/lib/app/routes';
 import { performCabinetDisconnect } from '@/lib/app/session-actions';
 import { useSessionStore } from '@/stores/session-store';
@@ -16,10 +17,18 @@ export default function CabinetSettingsRoute() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const connection = useSessionStore((state) => state.connection);
+  const isAuthenticated = useSessionStore((state) =>
+    typeof state.isAuthenticated === 'boolean' ? state.isAuthenticated : true
+  );
+  const clearAuthSession = useSessionStore((state) => state.clearAuthSession);
   const clearSession = useSessionStore((state) => state.clearSession);
 
   if (!connection) {
     return <Redirect href={appRoutes.connect} />;
+  }
+
+  if (!isAuthenticated) {
+    return <Redirect href={appRoutes.authLogin} />;
   }
 
   return (
@@ -89,6 +98,17 @@ export default function CabinetSettingsRoute() {
       <SectionCard
         description="Bookleaf 会先验证连接，再把你带回首页。修改地址和重新扫码都放在这里。"
         title="连接操作">
+        <PrimaryActionButton
+          label="退出当前账号"
+          onPress={async () => {
+            try {
+              await createBookshelfApiClient(connection.baseUrl).logout();
+            } catch {}
+            clearAuthSession();
+            router.replace(appRoutes.authLogin);
+          }}
+          variant="ghost"
+        />
         <PrimaryActionButton
           label="重新扫码连接"
           onPress={() => router.push(appRoutes.scanner)}

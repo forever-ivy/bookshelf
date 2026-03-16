@@ -40,6 +40,9 @@ function createImageFormData(asset: ImagePickerAsset) {
 export default function StoreBookScreen() {
   const { theme } = useBookleafTheme();
   const connection = useSessionStore((state) => state.connection);
+  const isAuthenticated = useSessionStore((state) =>
+    typeof state.isAuthenticated === 'boolean' ? state.isAuthenticated : true
+  );
   const isPreviewMode = useSessionStore((state) => state.isPreviewMode);
   const ocrIngestMutation = useOcrIngestMutation();
   const imagePicker = React.useMemo(() => resolveImagePickerModule(), []);
@@ -50,6 +53,10 @@ export default function StoreBookScreen() {
 
   if (!connection) {
     return <Redirect href={appRoutes.connect} />;
+  }
+
+  if (!isAuthenticated) {
+    return <Redirect href={appRoutes.authLogin} />;
   }
 
   async function openCamera() {

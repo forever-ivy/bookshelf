@@ -24,6 +24,9 @@ import { useSessionStore } from '@/stores/session-store';
 export default function BooklistManageScreen() {
   const { theme } = useBookleafTheme();
   const connection = useSessionStore((state) => state.connection);
+  const isAuthenticated = useSessionStore((state) =>
+    typeof state.isAuthenticated === 'boolean' ? state.isAuthenticated : true
+  );
   const isPreviewMode = useSessionStore((state) => state.isPreviewMode);
   const { activeMember } = useActiveMember();
   const booklistQuery = useMemberBooklistQuery(activeMember?.id);
@@ -35,6 +38,10 @@ export default function BooklistManageScreen() {
 
   if (!connection) {
     return <Redirect href={appRoutes.connect} />;
+  }
+
+  if (!isAuthenticated) {
+    return <Redirect href={appRoutes.authLogin} />;
   }
 
   const items = booklistQuery.data ?? [];
