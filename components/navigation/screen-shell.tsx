@@ -84,7 +84,7 @@ export function ScreenShell({
             gap: 24,
             paddingBottom: insets.bottom + (activeNavKey ? 56 : 40),
             paddingHorizontal: 24,
-            paddingTop: insets.top -24 ,
+            paddingTop: insets.top + 4,
           },
           contentContainerStyle,
         ]}

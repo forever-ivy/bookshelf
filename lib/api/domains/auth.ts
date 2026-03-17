@@ -1,4 +1,5 @@
 import {
+  authIdentitySchema,
   authSessionSchema,
   pairExchangeSchema,
   pairIssueSchema,
@@ -30,7 +31,7 @@ export function createAuthApi(baseUrl: string) {
       return http.post<null>('/api/auth/logout');
     },
     me() {
-      return http.get('/api/auth/me', { schema: authSessionSchema });
+      return http.get('/api/auth/me', { schema: authIdentitySchema });
     },
     register(payload: {
       family_name?: string;

@@ -3,13 +3,16 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import {
+  useAccountsQuery,
   useAddBooklistItemMutation,
   useBorrowLogsQuery,
+  useCreateBookMutation,
+  useCreateReadingEventMutation,
   useCurrentUserQuery,
+  useFamilyQuery,
   useGoalQuery,
   useMonthlyReportQuery,
   useSetGoalMutation,
-  useSwitchUserMutation,
 } from '@/lib/api/react-query/hooks';
 import { createConnectionProfile } from '@/lib/app/connection';
 import { sessionStore } from '@/stores/session-store';
@@ -134,21 +137,71 @@ describe('api hooks', () => {
     });
   });
 
-  it('updates the active member when the switch mutation succeeds', async () => {
+  it('loads account audit rows for the settings surface', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ ok: true, data: { id: 8, name: 'Milo' } }),
+      json: async () => ({
+        ok: true,
+        data: [{ id: 7, linked_user_count: 2, system_role: 'admin', username: 'ivy-admin' }],
+      }),
     }) as typeof fetch;
 
-    const { result } = renderHook(() => useSwitchUserMutation(), {
+    const { result } = renderHook(() => useAccountsQuery(), {
       wrapper: createWrapper(),
     });
 
-    await act(async () => {
-      await result.current.mutateAsync(8);
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toEqual([
+      { id: 7, linked_user_count: 2, system_role: 'admin', username: 'ivy-admin' },
+    ]);
+  });
+
+  it('hydrates current family detail by listing families before loading the active family record', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: [{ family_name: '暮光阅读家', id: 9, member_count: 3, owner_account_id: 1 }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: {
+            family_name: '暮光阅读家',
+            id: 9,
+            members: [{ id: 3, name: '陈一诺', role: 'parent' }],
+            owner_account_id: 1,
+          },
+        }),
+      }) as typeof fetch;
+
+    const { result } = renderHook(() => useFamilyQuery(), {
+      wrapper: createWrapper(),
     });
 
-    expect(sessionStore.getState().currentMemberId).toBe(8);
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      1,
+      'https://cabinet.example.com/api/families',
+      expect.objectContaining({ method: 'GET' })
+    );
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      2,
+      'https://cabinet.example.com/api/families/9',
+      expect.objectContaining({ method: 'GET' })
+    );
+    expect(result.current.data).toEqual({
+      family_name: '暮光阅读家',
+      id: 9,
+      members: [{ id: 3, name: '陈一诺', role: 'parent' }],
+      owner_account_id: 1,
+    });
   });
 
   it('loads the member goal for the goal settings flow', async () => {
@@ -228,6 +281,66 @@ describe('api hooks', () => {
     });
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ['cabinet', 'https://cabinet.example.com', 'badges', 3],
+    });
+  });
+
+  it('invalidates books queries after creating a new book', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        data: {
+          book: { id: 52, title: '月球上的图书馆' },
+          id: 52,
+        },
+      }),
+    }) as typeof fetch;
+
+    const wrapper = createWrapper();
+    const invalidateSpy = jest.spyOn(activeQueryClient!, 'invalidateQueries');
+
+    const { result } = renderHook(() => useCreateBookMutation(), {
+      wrapper,
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ title: '月球上的图书馆' });
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ['cabinet', 'https://cabinet.example.com', 'books'],
+    });
+  });
+
+  it('invalidates reading events after recording a new event', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        data: {
+          event: {
+            event_time: '2026-03-16T10:00:00',
+            event_type: 'finish',
+            id: 91,
+          },
+          id: 91,
+        },
+      }),
+    }) as typeof fetch;
+
+    const wrapper = createWrapper();
+    const invalidateSpy = jest.spyOn(activeQueryClient!, 'invalidateQueries');
+
+    const { result } = renderHook(() => useCreateReadingEventMutation(), {
+      wrapper,
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ event_type: 'finish' });
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ['cabinet', 'https://cabinet.example.com', 'reading-events'],
     });
   });
 });

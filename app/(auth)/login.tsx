@@ -79,13 +79,14 @@ export default function LoginScreen() {
     <ScreenShell contentContainerStyle={{ gap: 20, paddingTop: 18 }}>
       <Animated.View entering={createStaggeredFadeIn(0)}>
         <FlowScreenHeader
-          description={`你已经绑定到 ${activeConnection.displayName}。输入在 App 注册过的用户名和密码即可进入书柜。`}
+          description={`已连接至 ${activeConnection.displayName}。请登录。`}
+          showBackButton={false}
           title="登录书柜"
         />
       </Animated.View>
       <Animated.View entering={createStaggeredFadeIn(1)}>
         <SectionCard
-          description="登录成功后，Bookleaf 会把 JWT 保存在本机，下次回到应用会直接恢复到你的账号。"
+          description="下次免密自动登录。"
           title="账号登录">
           <View style={{ gap: 12 }}>
             <TextInput
@@ -102,9 +103,10 @@ export default function LoginScreen() {
                 borderWidth: 1,
                 color: theme.colors.text,
                 ...theme.typography.medium,
-                fontSize: 15,
-                minHeight: 56,
-                paddingHorizontal: 16,
+                fontSize: 16,
+                minHeight: 60,
+                paddingHorizontal: 18,
+                textAlign: "left",
               }}
               value={username}
             />
@@ -123,9 +125,10 @@ export default function LoginScreen() {
                 borderWidth: 1,
                 color: theme.colors.text,
                 ...theme.typography.medium,
-                fontSize: 15,
-                minHeight: 56,
-                paddingHorizontal: 16,
+                fontSize: 16,
+                minHeight: 60,
+                paddingHorizontal: 18,
+                textAlign: "left",
               }}
               value={password}
             />
@@ -149,11 +152,6 @@ export default function LoginScreen() {
       ) : null}
       <Animated.View entering={createStaggeredFadeIn(3)}>
         <SectionCard
-          description={
-            pendingPairing?.pairToken
-              ? '你刚刚通过二维码完成了书柜绑定。如果这是首次使用，也可以直接创建新账号。'
-              : '如果这是新书柜，请先扫描 Web 端二维码，拿到一次性配对凭证后才能注册。'
-          }
           title="还没有账号？">
           <View style={{ gap: 12 }}>
             <PrimaryActionButton
@@ -175,22 +173,9 @@ export default function LoginScreen() {
                   lineHeight: 18,
                 }}>
                 {pendingPairing.requiresSetup
-                  ? '这是这台书柜的首次注册，创建成功后你会自动成为管理员。'
-                  : '新注册账号会自动加入当前家庭，默认身份是普通用户和孩子。'}
+                  ? '首次注册即为管理员。'
+                  : '注册后自动加入当前家庭。'}
               </Text>
-            ) : null}
-            {!pendingPairing?.pairToken ? (
-              <Pressable onPress={() => router.push(appRoutes.scanner)}>
-                <Text
-                  selectable
-                  style={{
-                    color: theme.colors.primaryStrong,
-                    ...theme.typography.semiBold,
-                    fontSize: 14,
-                  }}>
-                  打开扫码页
-                </Text>
-              </Pressable>
             ) : null}
           </View>
         </SectionCard>

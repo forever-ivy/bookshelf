@@ -22,15 +22,14 @@ jest.mock('@/components/base/app-icon', () => {
 });
 
 describe('glass buttons', () => {
-  it('renders a loading action button without crashing in fallback mode', () => {
+  it('renders a loading action button with liquid glass background', () => {
     const screen = render(
       <GlassActionButton label="保存目标" loading onPress={jest.fn()} variant="primary" />
     );
 
-    expect(screen.getByRole('button').props.accessibilityState).toEqual({
-      busy: true,
-      disabled: true,
-    });
+    expect(screen.getByTestId('glass-action-button-native-host')).toBeTruthy();
+    expect(screen.getByTestId('glass-action-button-glass')).toBeTruthy();
+    expect(screen.getByTestId('glass-action-button-spinner')).toBeTruthy();
     expect(screen.getByText('保存目标')).toBeTruthy();
   });
 
@@ -42,15 +41,16 @@ describe('glass buttons', () => {
 
     fireEvent.press(screen.getByRole('button'));
 
+    expect(screen.getByText(/^search:18:/)).toBeTruthy();
     expect(screen.getByText('看看书架')).toBeTruthy();
-    expect(screen.getByText(/search:18:/)).toBeTruthy();
     expect(onPress).toHaveBeenCalledTimes(1);
   });
 
   it('renders the iOS pill button inside a glass view shell', () => {
     const screen = render(<GlassPillButton icon="back" onPress={jest.fn()} />);
 
-    expect(screen.getByTestId('glass-pill-button-shell')).toBeTruthy();
+    expect(screen.getByTestId('glass-pill-button-native-host')).toBeTruthy();
     expect(screen.getByTestId('glass-pill-button-glass')).toBeTruthy();
+    expect(screen.getByLabelText('返回')).toBeTruthy();
   });
 });

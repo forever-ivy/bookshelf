@@ -24,7 +24,7 @@ function getErrorMessage(error: unknown) {
     return error.message;
   }
 
-  return '无法连接到这台书柜，请检查地址后重试。';
+  return '无法连接到此书柜，请确认地址后重试。';
 }
 
 export default function ConnectScreen() {
@@ -131,9 +131,9 @@ export default function ConnectScreen() {
             color: theme.colors.textMuted,
             ...theme.typography.body,
             fontSize: 16,
-            lineHeight: 24,
+            lineHeight: 24
           }}>
-          扫描 Web 端展示的绑定二维码，或者在开发环境里手动输入书柜地址。
+          扫描书柜二维码或手动输入地址。
         </Text>
       </Animated.View>
       <Animated.View
@@ -181,8 +181,8 @@ export default function ConnectScreen() {
               fontSize: 14,
               lineHeight: 20,
               textAlign: 'center',
-          }}>
-            生产流程下二维码会包含书柜地址和一次性配对码；手动地址连接仅作为开发调试兜底。
+            }}>
+            扫描二维码或手动输入地址完成连接。
           </Text>
         </View>
       </Animated.View>
@@ -196,7 +196,6 @@ export default function ConnectScreen() {
           gap: 12,
           padding: 16,
         }}>
-        <AppIcon color={theme.states.neutral.icon} name="info" size={18} />
         <Text
           selectable
           style={{
@@ -206,7 +205,7 @@ export default function ConnectScreen() {
             fontSize: 13,
             lineHeight: 18,
           }}>
-          Bookleaf 会先验证书柜服务是否可达，然后再把你带到登录或注册流程。
+          连接成功后将自动引导注册或登录。
         </Text>
       </Animated.View>
       {showManualEntry ? (
@@ -244,9 +243,10 @@ export default function ConnectScreen() {
               borderWidth: 1,
               color: theme.colors.text,
               ...theme.typography.medium,
-              fontSize: 15,
-              minHeight: 56,
-              paddingHorizontal: 16,
+              fontSize: 16,
+              minHeight: 60,
+              paddingHorizontal: 18,
+              textAlign: 'left',
             }}
             value={manualUrl}
           />

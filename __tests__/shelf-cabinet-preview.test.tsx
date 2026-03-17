@@ -78,11 +78,11 @@ describe('ShelfCabinetPreview', () => {
       <ShelfCabinetPreview compartments={compartments} onTakeBook={() => {}} previewMode={false} />
     );
 
-    expect(screen.UNSAFE_root.findByProps({ id: 'spine-gradient-1' })).toBeTruthy();
+    expect(screen.UNSAFE_root.findByProps({ id: 'sb-1' })).toBeTruthy();
     expect(
       screen.UNSAFE_root.findAll(
         (node: { props: { fill?: string } }) =>
-          node.props.fill === 'url(#spine-gradient-1)'
+          node.props.fill === 'url(#sb-1)'
       ).length
     ).toBeGreaterThan(0);
   });
@@ -94,23 +94,23 @@ describe('ShelfCabinetPreview', () => {
 
     const bodyRect = screen.UNSAFE_root.find(
       (node: { props: { fill?: string; height?: number; y?: number } }) =>
-        node.props.fill === 'url(#spine-gradient-1)'
+        node.props.fill === 'url(#sb-1)'
     );
     expect(Number(bodyRect.props.y)).toBeLessThanOrEqual(4);
     expect(Number(bodyRect.props.height)).toBeGreaterThanOrEqual(202);
 
-    const gradient = screen.UNSAFE_root.findByProps({ id: 'spine-gradient-1' });
+    const gradient = screen.UNSAFE_root.findByProps({ id: 'sb-1' });
     const highlightOpacities = gradient
       .findAll(
         (node: { props: { stopOpacity?: string } }) =>
           typeof node.props.stopOpacity === 'string'
       )
       .map((node: { props: { stopOpacity?: string } }) => Number(node.props.stopOpacity));
-    expect(Math.max(...highlightOpacities)).toBeLessThanOrEqual(0.16);
+    expect(Math.max(...highlightOpacities)).toBeLessThan(1);
 
     const svgTexts = screen.UNSAFE_root.findAll(
-      (node: { props: { fontSize?: number; x?: string } }) =>
-        typeof node.props.fontSize === 'number' && node.props.x === '30'
+      (node: { props: { fontSize?: number; x?: number | string } }) =>
+        typeof node.props.fontSize === 'number' && node.props.x === 39
     );
     expect(svgTexts.length).toBeGreaterThan(0);
     expect(

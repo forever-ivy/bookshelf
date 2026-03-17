@@ -27,7 +27,7 @@ function getScannerError(error: unknown) {
     return error.message;
   }
 
-  return '这个二维码没有指向可连接的书柜服务。';
+  return '无法识别此二维码，请确认使用的是书柜页面生成的二维码。';
 }
 
 export default function ScannerScreen() {
@@ -64,7 +64,7 @@ export default function ScannerScreen() {
     }
 
     setIsConnecting(true);
-    setFeedback('正在绑定书柜...');
+    setFeedback('正在连接，请稍候…');
 
     try {
       const parsed = parseCabinetScanPayload(data);
@@ -161,7 +161,7 @@ export default function ScannerScreen() {
               fontSize: 16,
               lineHeight: 24,
           }}>
-            Bookleaf 仅会使用相机扫描书柜二维码，并保存书柜绑定信息。
+            相机仅用于扫描连接。
           </Text>
         </Animated.View>
         <Animated.View entering={createStaggeredFadeIn(1)}>
@@ -258,7 +258,6 @@ export default function ScannerScreen() {
               fontSize: 14,
               lineHeight: 20,
             }}>
-            绑定成功后，系统会自动带你进入登录或注册流程。
           </Text>
           {feedback ? (
             <Pressable

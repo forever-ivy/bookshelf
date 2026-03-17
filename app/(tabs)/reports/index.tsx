@@ -1,9 +1,12 @@
-import { Redirect } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import { AnimatedCountText } from '@/components/base/animated-count-text';
+import { ShortcutCard } from '@/components/actions/shortcut-card';
+import { TwoColumnGrid } from '@/components/layout/two-column-grid';
 import { ScreenShell } from '@/components/navigation/screen-shell';
+import { SectionCard } from '@/components/surfaces/section-card';
 import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import { useMonthlyReportQuery, useWeeklyReportQuery } from '@/lib/api/react-query/hooks';
 import { appRoutes } from '@/lib/app/routes';
@@ -16,6 +19,7 @@ import { useSessionStore } from '@/stores/session-store';
 
 export default function ReportsRoute() {
   const { theme } = useBookleafTheme();
+  const router = useRouter();
   const connection = useSessionStore((state) => state.connection);
   const isAuthenticated = useSessionStore((state) =>
     typeof state.isAuthenticated === 'boolean' ? state.isAuthenticated : true
@@ -83,6 +87,18 @@ export default function ReportsRoute() {
           value={monthlyReportQuery.data?.top_category ?? '-'}
         />
       </View>
+      <SectionCard
+
+        title="更多记录">
+        <TwoColumnGrid>
+          <ShortcutCard
+
+            icon="bookmark"
+            onPress={() => router.push(appRoutes.reportsReadingEvents)}
+            title="阅读事件"
+          />
+        </TwoColumnGrid>
+      </SectionCard>
     </ScreenShell>
   );
 }

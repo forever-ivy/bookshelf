@@ -10,6 +10,7 @@ import { GoalProgressCard } from '@/components/cards/goal-progress-card';
 import { MilestoneRail } from '@/components/cards/milestone';
 import { SectionCard } from '@/components/surfaces/section-card';
 import { ShortcutCard } from '@/components/actions/shortcut-card';
+import { TwoColumnGrid } from '@/components/layout/two-column-grid';
 import { ScreenShell } from '@/components/navigation/screen-shell';
 import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 import {
@@ -176,22 +177,24 @@ export default function ProfileRoute() {
       </Animated.View>
       <Animated.View entering={createStaggeredFadeIn(3)} layout={motionTransitions.gentle}>
         <SectionCard
-          description="档案页现在也可以直接进入目标编辑和成员管理，不需要再绕回设置页。"
+
           title="继续调整">
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+          <TwoColumnGrid>
             <ShortcutCard
-              description="修改这位成员的每周阅读目标。"
+
               icon="target"
               onPress={() => router.push(getMemberGoalsHref(numericMemberId))}
+              size="compact"
               title="编辑目标"
             />
             <ShortcutCard
-              description="查看或维护全家的成员资料。"
+
               icon="users"
               onPress={() => router.push(appRoutes.settingsMembers)}
+              size="compact"
               title="管理成员"
             />
-          </View>
+          </TwoColumnGrid>
         </SectionCard>
       </Animated.View>
       <Animated.View entering={createStaggeredFadeIn(4)} layout={motionTransitions.gentle}>

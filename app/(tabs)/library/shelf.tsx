@@ -78,13 +78,11 @@ export default function ShelfScreen() {
         <SectionCard>
           <TwoColumnGrid>
             <ShortcutCard
-              description="改用书名搜索要借的书。"
               icon="search"
               onPress={() => router.push(appRoutes.libraryTakeBook)}
               title="文本取书"
             />
             <ShortcutCard
-              description="拍照识别后把书放回家庭书架。"
               icon="camera"
               onPress={() => router.push(appRoutes.libraryStoreBook)}
               title="去存书"

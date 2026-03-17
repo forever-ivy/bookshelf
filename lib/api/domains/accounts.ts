@@ -1,5 +1,6 @@
 import { accountSummarySchema, accountUserRelationSchema } from '@/lib/api/contracts/schemas';
 import { createHttpClient } from '@/lib/api/core/http';
+import type { AccountSummary, AccountUserRelation } from '@/lib/api/contracts/types';
 import { z } from 'zod';
 
 /**
@@ -76,7 +77,7 @@ export function createAccountsApi(baseUrl: string) {
      * @returns 账户详情，包含 ID、用户名、手机号、状态等
      */
     getAccount(accountId: number) {
-      return http.get(`/api/accounts/${accountId}`, { schema: accountSummarySchema });
+      return http.get<AccountSummary>(`/api/accounts/${accountId}`, { schema: accountSummarySchema });
     },
 
     /**
@@ -85,7 +86,7 @@ export function createAccountsApi(baseUrl: string) {
      * @returns 用户关联关系数组
      */
     getAccountUsers(accountId: number) {
-      return http.get(`/api/accounts/${accountId}/users`, { schema: accountUsersSchema });
+      return http.get<AccountUserRelation[]>(`/api/accounts/${accountId}/users`, { schema: accountUsersSchema });
     },
 
     /**
@@ -93,7 +94,7 @@ export function createAccountsApi(baseUrl: string) {
      * @returns 账户数组
      */
     getAccounts() {
-      return http.get('/api/accounts', { schema: accountsSchema });
+      return http.get<AccountSummary[]>('/api/accounts', { schema: accountsSchema });
     },
 
     /**

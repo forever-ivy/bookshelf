@@ -32,23 +32,33 @@ describe('createBookshelfApiClient', () => {
     expect(users).toEqual([{ id: 1, name: 'Sarah' }]);
   });
 
-  it('unwraps the active member when switching readers', async () => {
+  it('returns auth identity payloads from /api/auth/me without requiring a token field', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ ok: true, data: { id: 8, name: 'Milo' } }),
+      json: async () => ({
+        ok: true,
+        data: {
+          account: { id: 1, system_role: 'admin', username: 'ivy-admin' },
+          cabinet: { id: 9, initialized: true, cabinet_name: '客厅书柜' },
+          user: { id: 8, name: 'Milo', role: 'child' },
+        },
+      }),
     }) as typeof fetch;
 
     const client = createBookshelfApiClient('https://cabinet.example.com');
-    const user = await client.switchUser(8);
+    const identity = await client.me();
 
     expect(global.fetch).toHaveBeenCalledWith(
-      'https://cabinet.example.com/api/users/switch',
+      'https://cabinet.example.com/api/auth/me',
       expect.objectContaining({
-        body: JSON.stringify({ user_id: 8 }),
-        method: 'POST',
+        method: 'GET',
       })
     );
-    expect(user).toEqual({ id: 8, name: 'Milo' });
+    expect(identity).toEqual({
+      account: { id: 1, system_role: 'admin', username: 'ivy-admin' },
+      cabinet: { id: 9, initialized: true, cabinet_name: '客厅书柜' },
+      user: { id: 8, name: 'Milo', role: 'child' },
+    });
   });
 
   it('raises an ApiError when the cabinet rejects a request', async () => {
@@ -69,22 +79,11 @@ describe('createBookshelfApiClient', () => {
     } satisfies Partial<ApiError>);
   });
 
-  it('uses fallback backend error fields when message is absent', async () => {
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: false,
-      status: 400,
-      headers: {
-        get: () => 'application/json',
-      },
-      json: async () => ({ ok: false, data: null, error: 'Missing user_id' }),
-    }) as typeof fetch;
-
+  it('does not expose legacy createUser or switchUser helpers on the shared api client', () => {
     const client = createBookshelfApiClient('https://cabinet.example.com');
 
-    await expect(client.switchUser(0)).rejects.toMatchObject({
-      message: 'Missing user_id',
-      status: 400,
-    } satisfies Partial<ApiError>);
+    expect(client).not.toHaveProperty('createUser');
+    expect(client).not.toHaveProperty('switchUser');
   });
 
   it('rejects invalid payloads that fail runtime schema validation', async () => {

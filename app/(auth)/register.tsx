@@ -57,14 +57,14 @@ export default function RegisterScreen() {
       <ScreenShell contentContainerStyle={{ gap: 20, paddingTop: 18 }}>
         <Animated.View entering={createStaggeredFadeIn(0)}>
           <FlowScreenHeader
-            description="注册前需要先扫描 Web 端二维码，拿到一次性配对凭证。"
-            title="先绑定书柜"
+            description="注册前需要先扫描书柜二维码完成配对。"
+            title="先完成配对"
           />
         </Animated.View>
         <Animated.View entering={createStaggeredFadeIn(1)}>
           <StateCard
-            description="当前没有可用的配对凭证。请回到扫码页重新扫描二维码，然后再继续注册。"
-            title="缺少配对信息"
+            description="未检测到配对信息，请重新扫描书柜二维码后再继续。"
+            title="配对信息已失效"
             variant="warning"
           />
         </Animated.View>
@@ -118,15 +118,14 @@ export default function RegisterScreen() {
         <FlowScreenHeader
           description={
             pairingContext.requiresSetup
-              ? `你正在初始化 ${activeConnection.displayName}。首个注册账号会自动成为管理员和家长。`
-              : `你已经绑定到 ${activeConnection.displayName}。注册成功后会自动加入当前家庭。`
+              ? `设置 ${activeConnection.displayName} 的管理员账号。`
+              : `注册加入 ${activeConnection.displayName}。`
           }
           title="创建账号"
         />
       </Animated.View>
       <Animated.View entering={createStaggeredFadeIn(1)}>
         <SectionCard
-          description="注册完成后，应用会自动保存当前登录态，并把你带回书柜首页。"
           title="填写资料">
           <View style={{ gap: 12 }}>
             <TextInput
@@ -142,9 +141,10 @@ export default function RegisterScreen() {
                 borderWidth: 1,
                 color: theme.colors.text,
                 ...theme.typography.medium,
-                fontSize: 15,
-                minHeight: 56,
-                paddingHorizontal: 16,
+                fontSize: 16,
+                minHeight: 60,
+                paddingHorizontal: 18,
+                textAlign: "left",
               }}
               value={name}
             />
@@ -162,9 +162,10 @@ export default function RegisterScreen() {
                   borderWidth: 1,
                   color: theme.colors.text,
                   ...theme.typography.medium,
-                  fontSize: 15,
-                  minHeight: 56,
-                  paddingHorizontal: 16,
+                  fontSize: 16,
+                  minHeight: 60,
+                  paddingHorizontal: 18,
+                textAlign: "left",
                 }}
                 value={familyName}
               />
@@ -183,9 +184,10 @@ export default function RegisterScreen() {
                 borderWidth: 1,
                 color: theme.colors.text,
                 ...theme.typography.medium,
-                fontSize: 15,
-                minHeight: 56,
-                paddingHorizontal: 16,
+                fontSize: 16,
+                minHeight: 60,
+                paddingHorizontal: 18,
+                textAlign: "left",
               }}
               value={username}
             />
@@ -204,9 +206,10 @@ export default function RegisterScreen() {
                 borderWidth: 1,
                 color: theme.colors.text,
                 ...theme.typography.medium,
-                fontSize: 15,
-                minHeight: 56,
-                paddingHorizontal: 16,
+                fontSize: 16,
+                minHeight: 60,
+                paddingHorizontal: 18,
+                textAlign: "left",
               }}
               value={password}
             />
@@ -225,9 +228,10 @@ export default function RegisterScreen() {
                 borderWidth: 1,
                 color: theme.colors.text,
                 ...theme.typography.medium,
-                fontSize: 15,
-                minHeight: 56,
-                paddingHorizontal: 16,
+                fontSize: 16,
+                minHeight: 60,
+                paddingHorizontal: 18,
+                textAlign: "left",
               }}
               value={confirmPassword}
             />
@@ -258,7 +262,7 @@ export default function RegisterScreen() {
       ) : null}
       <Animated.View entering={createStaggeredFadeIn(3)}>
         <SectionCard
-          description="如果你已经有账号，可以直接返回登录页。当前这份配对凭证会继续保留。"
+          description="已经有账号？直接返回登录页即可，配对信息不会丢失。"
           title="已有账号？">
           <PrimaryActionButton
             label="返回登录"
@@ -274,7 +278,7 @@ export default function RegisterScreen() {
               fontSize: 13,
               lineHeight: 18,
             }}>
-            当前配对码: {pairingContext.pairCode}
+            已完成书柜配对
           </Text>
         </SectionCard>
       </Animated.View>

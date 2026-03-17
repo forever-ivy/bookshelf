@@ -79,9 +79,6 @@ jest.mock('@/lib/api/react-query/hooks', () => ({
     },
     error: null,
   }),
-  useSwitchUserMutation: () => ({
-    mutateAsync: jest.fn(),
-  }),
   useUsersQuery: () => ({
     data: [{ id: 1, name: '米洛' }],
     error: null,

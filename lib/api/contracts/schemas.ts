@@ -49,6 +49,10 @@ export const authSessionSchema = z.object({
   user: memberSummarySchema,
 });
 
+export const authIdentitySchema = authSessionSchema.omit({
+  token: true,
+});
+
 export const pairExchangeSchema = z.object({
   cabinet: cabinetBindingSummarySchema,
   pair_code: z.string(),
@@ -181,6 +185,29 @@ export const userAccountRelationSchema = z.object({
   username: z.string().nullable().optional(),
 });
 
+const booleanLikeSchema = z.union([z.boolean(), z.number()]).transform((value) => Boolean(value));
+
+export const bookSummarySchema = z.object({
+  age_max: z.number().nullable().optional(),
+  age_min: z.number().nullable().optional(),
+  author: z.string().nullable().optional(),
+  category: z.string().nullable().optional(),
+  compartment_ids: z.string().nullable().optional(),
+  cover_url: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  difficulty_level: z.string().nullable().optional(),
+  id: z.number(),
+  isbn: z.string().nullable().optional(),
+  is_on_shelf: booleanLikeSchema.optional(),
+  keywords: z.string().nullable().optional(),
+  on_shelf_count: z.number().optional(),
+  publish_year: z.number().nullable().optional(),
+  publisher: z.string().nullable().optional(),
+  tags: z.string().nullable().optional(),
+  title: z.string(),
+  updated_at: z.string().nullable().optional(),
+});
+
 export const readingEventSchema = z.object({
   book_id: z.number().nullable().optional(),
   book_title: z.string().nullable().optional(),
@@ -204,6 +231,21 @@ export const messageSchema = z.object({
 export const memberGoalSchema = z.object({
   user_id: z.number(),
   weekly_target: z.number(),
+});
+
+export const familyWriteResultSchema = z.object({
+  family: familySummarySchema,
+  id: z.number().optional(),
+});
+
+export const bookWriteResultSchema = z.object({
+  book: bookSummarySchema,
+  id: z.number().optional(),
+});
+
+export const readingEventWriteResultSchema = z.object({
+  event: readingEventSchema,
+  id: z.number(),
 });
 
 export const shelfActionResultSchema = z.object({

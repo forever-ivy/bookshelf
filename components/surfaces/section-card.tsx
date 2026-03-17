@@ -20,8 +20,12 @@ export function SectionCard({ children, description, title }: SectionCardProps) 
         borderCurve: 'continuous',
         borderRadius: theme.radii.lg,
         borderWidth: 1,
+        shadowColor: '#0F172A',
+        shadowOffset: { height: 12, width: 0 },
+        shadowOpacity: theme.isDark ? 0.3 : 0.045,
+        shadowRadius: 36,
         gap: 16,
-        padding: 20,
+        padding: 24,
       }}>
       <View style={{ gap: 16 }}>
         {title ? (
@@ -41,8 +45,8 @@ export function SectionCard({ children, description, title }: SectionCardProps) 
                 style={{
                   color: theme.colors.textMuted,
                   ...theme.typography.body,
-                  fontSize: 14,
-                  lineHeight: 20,
+                  fontSize: 15,
+                  lineHeight: 22,
                 }}>
                 {description}
               </Text>

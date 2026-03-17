@@ -1,6 +1,8 @@
+import { bookSummarySchema, bookWriteResultSchema } from '@/lib/api/contracts/schemas';
 import { createHttpClient } from '@/lib/api/core/http';
+import type { BookDraft, BookSummary } from '@/lib/api/contracts/types';
+import { z } from 'zod';
 
-type BookMutation = Record<string, unknown>;
 type BooksQuery = {
   category?: string;
   limit?: number;
@@ -8,24 +10,33 @@ type BooksQuery = {
   stored_only?: boolean;
 };
 
+const booksSchema = z.array(bookSummarySchema);
+
 export function createBooksApi(baseUrl: string) {
   const http = createHttpClient(baseUrl);
 
   return {
-    createBook(payload: BookMutation) {
-      return http.post('/api/books', {
+    createBook(payload: BookDraft) {
+      return http.post<{ book: BookSummary; id?: number }>('/api/books', {
         data: payload,
+        schema: bookWriteResultSchema,
       });
     },
     getBook(bookId: number) {
-      return http.get(`/api/books/${bookId}`);
+      return http.get<BookSummary>(`/api/books/${bookId}`, {
+        schema: bookSummarySchema,
+      });
     },
     listBooks(query: BooksQuery = {}) {
-      return http.get('/api/books', { params: query });
+      return http.get<BookSummary[]>('/api/books', {
+        params: query,
+        schema: booksSchema,
+      });
     },
-    updateBook(bookId: number, payload: BookMutation) {
-      return http.put(`/api/books/${bookId}`, {
+    updateBook(bookId: number, payload: BookDraft) {
+      return http.put<{ book: BookSummary; id?: number }>(`/api/books/${bookId}`, {
         data: payload,
+        schema: bookWriteResultSchema,
       });
     },
   };

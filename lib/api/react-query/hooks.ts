@@ -1,7 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { createBookshelfApiClient } from '@/lib/api/client';
-import type { MemberDraft } from '@/lib/api/contracts/types';
+import type {
+  BookDraft,
+  FamilyDraft,
+  MemberDraft,
+  ReadingEventDraft,
+} from '@/lib/api/contracts/types';
 import { getPreviewCabinetData } from '@/lib/app/preview-data';
 import { useSessionStore } from '@/stores/session-store';
 
@@ -12,11 +17,28 @@ export const cabinetQueryKeys = {
   badges(baseUrl: string, memberId: number) {
     return [...this.all(baseUrl), 'badges', memberId] as const;
   },
+  account(baseUrl: string, accountId: number) {
+    return [...this.all(baseUrl), 'account', accountId] as const;
+  },
+  accountUsers(baseUrl: string, accountId: number) {
+    return [...this.account(baseUrl, accountId), 'users'] as const;
+  },
+  accounts(baseUrl: string) {
+    return [...this.all(baseUrl), 'accounts'] as const;
+  },
   booklist(baseUrl: string, memberId: number) {
     return [...this.all(baseUrl), 'booklist', memberId] as const;
   },
   booklistActions(baseUrl: string, memberId: number) {
     return [...this.booklist(baseUrl, memberId), 'actions'] as const;
+  },
+  book(baseUrl: string, bookId: number) {
+    return [...this.all(baseUrl), 'book', bookId] as const;
+  },
+  books(baseUrl: string, filters?: string) {
+    return filters
+      ? ([...this.all(baseUrl), 'books', filters] as const)
+      : ([...this.all(baseUrl), 'books'] as const);
   },
   borrowLogs(baseUrl: string, memberId: number, days: number) {
     return [...this.all(baseUrl), 'borrow-logs', memberId, days] as const;
@@ -30,6 +52,12 @@ export const cabinetQueryKeys = {
   currentUser(baseUrl: string) {
     return [...this.all(baseUrl), 'current-user'] as const;
   },
+  families(baseUrl: string) {
+    return [...this.all(baseUrl), 'families'] as const;
+  },
+  family(baseUrl: string, familyId: number | 'current') {
+    return [...this.all(baseUrl), 'family', familyId] as const;
+  },
   goal(baseUrl: string, memberId: number) {
     return [...this.all(baseUrl), 'goal', memberId] as const;
   },
@@ -38,6 +66,11 @@ export const cabinetQueryKeys = {
   },
   stats(baseUrl: string, memberId: number) {
     return [...this.all(baseUrl), 'stats', memberId] as const;
+  },
+  readingEvents(baseUrl: string, filters?: string) {
+    return filters
+      ? ([...this.all(baseUrl), 'reading-events', filters] as const)
+      : ([...this.all(baseUrl), 'reading-events'] as const);
   },
   users(baseUrl: string) {
     return [...this.all(baseUrl), 'users'] as const;
@@ -70,6 +103,14 @@ function useActiveCabinet() {
 
 function resolveMemberId(memberId: number | null | undefined, previewMemberId: number) {
   return memberId ?? previewMemberId;
+}
+
+function serializeFilters(filters?: Record<string, unknown>) {
+  if (!filters || Object.keys(filters).length === 0) {
+    return undefined;
+  }
+
+  return JSON.stringify(filters);
 }
 
 async function invalidateMemberQueries(
@@ -143,6 +184,67 @@ async function invalidateShelfMutationQueries(
   }
 
   await Promise.all(tasks);
+}
+
+async function invalidateBooksQueries(
+  queryClient: ReturnType<typeof useQueryClient>,
+  baseUrl: string,
+  bookId?: number,
+) {
+  const tasks = [
+    queryClient.invalidateQueries({
+      queryKey: cabinetQueryKeys.books(baseUrl),
+    }),
+  ];
+
+  if (bookId != null) {
+    tasks.push(
+      queryClient.invalidateQueries({
+        queryKey: cabinetQueryKeys.book(baseUrl, bookId),
+      })
+    );
+  }
+
+  await Promise.all(tasks);
+}
+
+async function invalidateFamilyQueries(
+  queryClient: ReturnType<typeof useQueryClient>,
+  baseUrl: string,
+  familyId?: number,
+) {
+  const tasks = [
+    queryClient.invalidateQueries({
+      queryKey: cabinetQueryKeys.families(baseUrl),
+    }),
+    queryClient.invalidateQueries({
+      queryKey: cabinetQueryKeys.family(baseUrl, 'current'),
+    }),
+  ];
+
+  if (familyId != null) {
+    tasks.push(
+      queryClient.invalidateQueries({
+        queryKey: cabinetQueryKeys.family(baseUrl, familyId),
+      })
+    );
+  }
+
+  await Promise.all(tasks);
+}
+
+async function invalidateReadingEventQueries(
+  queryClient: ReturnType<typeof useQueryClient>,
+  baseUrl: string,
+) {
+  await Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: cabinetQueryKeys.readingEvents(baseUrl),
+    }),
+    queryClient.invalidateQueries({
+      queryKey: cabinetQueryKeys.monthlyReport(baseUrl),
+    }),
+  ]);
 }
 
 export function useUsersQuery() {
@@ -299,34 +401,155 @@ export function useUserQuery(memberId?: number | null) {
   });
 }
 
-export function useSwitchUserMutation() {
+export function useAccountsQuery() {
   const cabinet = useActiveCabinet();
-  const queryClient = useQueryClient();
-  const setCurrentMemberId = useSessionStore((state) => state.setCurrentMemberId);
 
-  return useMutation({
-    mutationFn: async (memberId: number) =>
+  return useQuery({
+    enabled: cabinet.enabled,
+    queryFn: () =>
       cabinet.isPreviewMode
-        ? Promise.resolve(cabinet.preview.users.find((user) => user.id === memberId) ?? null)
-        : cabinet.client!.switchUser(memberId),
-    onSuccess: async (_, memberId) => {
-      if (!cabinet.baseUrl) {
-        return;
+        ? Promise.resolve(cabinet.preview.accounts)
+        : cabinet.client!.getAccounts(),
+    queryKey: cabinetQueryKeys.accounts(cabinet.baseUrl),
+  });
+}
+
+export function useAccountQuery(accountId?: number | null) {
+  const cabinet = useActiveCabinet();
+
+  return useQuery({
+    enabled: cabinet.enabled && Boolean(accountId),
+    queryFn: () =>
+      cabinet.isPreviewMode
+        ? Promise.resolve(
+            cabinet.preview.accounts.find((account) => account.id === accountId) ?? null
+          )
+        : cabinet.client!.getAccount(accountId!),
+    queryKey: cabinetQueryKeys.account(cabinet.baseUrl, accountId ?? -1),
+  });
+}
+
+export function useAccountUsersQuery(accountId?: number | null) {
+  const cabinet = useActiveCabinet();
+
+  return useQuery({
+    enabled: cabinet.enabled && Boolean(accountId),
+    queryFn: () =>
+      cabinet.isPreviewMode
+        ? Promise.resolve(
+            cabinet.preview.familyDetail.members.map((member) => ({
+              account_id: accountId!,
+              avatar: member.avatar,
+              color: member.color,
+              name: member.name,
+              relation_type: member.role === 'parent' ? 'owner' : 'member',
+              role: member.role,
+              user_id: member.id,
+            }))
+          )
+        : cabinet.client!.getAccountUsers(accountId!),
+    queryKey: cabinetQueryKeys.accountUsers(cabinet.baseUrl, accountId ?? -1),
+  });
+}
+
+export function useFamiliesQuery() {
+  const cabinet = useActiveCabinet();
+
+  return useQuery({
+    enabled: cabinet.enabled,
+    queryFn: () =>
+      cabinet.isPreviewMode
+        ? Promise.resolve(cabinet.preview.families)
+        : cabinet.client!.getFamilies(),
+    queryKey: cabinetQueryKeys.families(cabinet.baseUrl),
+  });
+}
+
+export function useFamilyQuery() {
+  const cabinet = useActiveCabinet();
+
+  return useQuery({
+    enabled: cabinet.enabled,
+    queryFn: async () => {
+      if (cabinet.isPreviewMode) {
+        return cabinet.preview.familyDetail;
       }
 
-      setCurrentMemberId(memberId);
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: cabinetQueryKeys.currentUser(cabinet.baseUrl),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: cabinetQueryKeys.stats(cabinet.baseUrl, memberId),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: cabinetQueryKeys.booklist(cabinet.baseUrl, memberId),
-        }),
-      ]);
+      const families = await cabinet.client!.getFamilies();
+      const activeFamily = families[0];
+      if (!activeFamily) {
+        return null;
+      }
+
+      return cabinet.client!.getFamily(activeFamily.id);
     },
+    queryKey: cabinetQueryKeys.family(cabinet.baseUrl, 'current'),
+  });
+}
+
+export function useBooksQuery(
+  query: { category?: string; limit?: number; q?: string; stored_only?: boolean } = {}
+) {
+  const cabinet = useActiveCabinet();
+  const filterKey = serializeFilters(query);
+
+  return useQuery({
+    enabled: cabinet.enabled,
+    queryFn: () => {
+      if (cabinet.isPreviewMode) {
+        return Promise.resolve(
+          cabinet.preview.books.filter((book) => {
+            if (query.category && book.category !== query.category) {
+              return false;
+            }
+            if (query.stored_only && !book.is_on_shelf) {
+              return false;
+            }
+            if (!query.q) {
+              return true;
+            }
+
+            const needle = query.q.toLowerCase();
+            return (
+              book.title.toLowerCase().includes(needle) ||
+              (book.author ?? '').toLowerCase().includes(needle)
+            );
+          })
+        );
+      }
+
+      return cabinet.client!.listBooks(query);
+    },
+    queryKey: cabinetQueryKeys.books(cabinet.baseUrl, filterKey),
+  });
+}
+
+export function useBookQuery(bookId?: number | null) {
+  const cabinet = useActiveCabinet();
+
+  return useQuery({
+    enabled: cabinet.enabled && Boolean(bookId),
+    queryFn: () =>
+      cabinet.isPreviewMode
+        ? Promise.resolve(cabinet.preview.books.find((book) => book.id === bookId) ?? null)
+        : cabinet.client!.getBook(bookId!),
+    queryKey: cabinetQueryKeys.book(cabinet.baseUrl, bookId ?? -1),
+  });
+}
+
+export function useReadingEventsQuery(
+  query: Record<string, string | number | boolean | null | undefined> = {}
+) {
+  const cabinet = useActiveCabinet();
+  const filterKey = serializeFilters(query);
+
+  return useQuery({
+    enabled: cabinet.enabled,
+    queryFn: () =>
+      cabinet.isPreviewMode
+        ? Promise.resolve(cabinet.preview.readingEvents)
+        : cabinet.client!.getReadingEvents(query),
+    queryKey: cabinetQueryKeys.readingEvents(cabinet.baseUrl, filterKey),
   });
 }
 
@@ -438,38 +661,29 @@ export function useMarkBooklistDoneMutation(memberId?: number | null) {
   });
 }
 
-export function useCreateUserMutation() {
+export function useUpdateFamilyMutation() {
   const cabinet = useActiveCabinet();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (payload: MemberDraft) =>
-      cabinet.isPreviewMode
-        ? Promise.resolve({
-            id: Date.now(),
-            user: {
-              id: Date.now(),
-              name: payload.name ?? '预览读者',
-              role: payload.role ?? 'child',
-            },
-          })
-        : cabinet.client!.createUser(payload),
-    onSuccess: async () => {
+    mutationFn: async (input: { familyId: number; payload: FamilyDraft }) => {
+      if (cabinet.isPreviewMode) {
+        return Promise.resolve({
+          family: {
+            ...cabinet.preview.familySummary,
+            ...input.payload,
+          },
+        });
+      }
+
+      return cabinet.client!.updateFamily(input.familyId, input.payload);
+    },
+    onSuccess: async (_, input) => {
       if (!cabinet.baseUrl) {
         return;
       }
 
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: cabinetQueryKeys.users(cabinet.baseUrl),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: cabinetQueryKeys.currentUser(cabinet.baseUrl),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: cabinetQueryKeys.monthlyReport(cabinet.baseUrl),
-        }),
-      ]);
+      await invalidateFamilyQueries(queryClient, cabinet.baseUrl, input.familyId);
     },
   });
 }
@@ -542,6 +756,98 @@ export function useDeleteUserMutation() {
           queryKey: cabinetQueryKeys.monthlyReport(cabinet.baseUrl),
         }),
       ]);
+    },
+  });
+}
+
+export function useCreateBookMutation() {
+  const cabinet = useActiveCabinet();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: BookDraft) => {
+      if (cabinet.isPreviewMode) {
+        return Promise.resolve({
+          book: {
+            id: Date.now(),
+            title: payload.title ?? '预览图书',
+          },
+          id: Date.now(),
+        });
+      }
+
+      return cabinet.client!.createBook(payload);
+    },
+    onSuccess: async (result) => {
+      if (!cabinet.baseUrl) {
+        return;
+      }
+
+      await invalidateBooksQueries(queryClient, cabinet.baseUrl, result.book.id);
+    },
+  });
+}
+
+export function useUpdateBookMutation() {
+  const cabinet = useActiveCabinet();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: { bookId: number; payload: BookDraft }) => {
+      if (cabinet.isPreviewMode) {
+        return Promise.resolve({
+          book: {
+            ...cabinet.preview.books.find((book) => book.id === input.bookId),
+            ...input.payload,
+            id: input.bookId,
+            title: input.payload.title ?? '预览图书',
+          },
+        });
+      }
+
+      return cabinet.client!.updateBook(input.bookId, input.payload);
+    },
+    onSuccess: async (result) => {
+      if (!cabinet.baseUrl) {
+        return;
+      }
+
+      await invalidateBooksQueries(queryClient, cabinet.baseUrl, result.book.id);
+    },
+  });
+}
+
+export function useCreateReadingEventMutation() {
+  const cabinet = useActiveCabinet();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: ReadingEventDraft) => {
+      if (cabinet.isPreviewMode) {
+        return Promise.resolve({
+          event: {
+            book_id: payload.book_id ?? null,
+            book_title: null,
+            event_time: payload.event_time ?? new Date().toISOString(),
+            event_type: payload.event_type,
+            id: Date.now(),
+            metadata_json: payload.metadata_json ?? null,
+            source: payload.source ?? 'preview',
+            user_id: payload.user_id ?? null,
+            user_name: null,
+          },
+          id: Date.now(),
+        });
+      }
+
+      return cabinet.client!.createReadingEvent(payload);
+    },
+    onSuccess: async () => {
+      if (!cabinet.baseUrl) {
+        return;
+      }
+
+      await invalidateReadingEventQueries(queryClient, cabinet.baseUrl);
     },
   });
 }

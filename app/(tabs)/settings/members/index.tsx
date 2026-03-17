@@ -50,18 +50,18 @@ export default function MembersScreen() {
       </Animated.View>
       <Animated.View entering={createStaggeredFadeIn(1)} layout={motionTransitions.gentle}>
         <SectionCard
-          description="新账号需要先通过扫码完成注册。这里不再新增成员，只负责管理现有家庭角色。"
+          description="在这里调整家庭成员的角色。新成员需通过注册流程加入。"
           title="家庭成员">
           {isPreviewMode ? (
             <StateCard
-              description="预览模式会展示角色管理布局，但不会真的写入角色变更。"
-              title="预览模式不可操作"
+              description="预览模式下不会保存任何修改。"
+              title="预览模式"
               variant="warning"
             />
           ) : null}
           {!canManage ? (
             <StateCard
-              description="你当前是普通用户，只能查看自己的家庭身份。需要管理员账号才能调整角色。"
+              description="你当前是普通用户，需要管理员账号才能调整成员角色。"
               title="当前为只读模式"
               variant="warning"
             />
@@ -81,7 +81,7 @@ export default function MembersScreen() {
           ) : null}
           {!usersQuery.isLoading && !members.length ? (
             <StateCard
-              description="当前家庭还没有成员。请先从扫码和注册流程创建账号。"
+              description="家庭还没有成员，请邀请成员注册后加入。"
               title="还没有成员"
             />
           ) : null}

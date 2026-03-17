@@ -164,8 +164,8 @@ export default function HomeRoute() {
             progress={Number.isFinite(progress) ? progress : 0}
             subtitle={
               statsQuery.data?.goal_reached
-                ? '本周目标进展顺利，打开孩子档案看看最近的阅读动态。'
-                : '这周再借几本书，就能把家庭阅读节奏重新带起来。'
+                ? '本周进展顺利。'
+                : '继续保持借阅节奏。'
             }
             targetValue={progressTarget}
             title="阅读目标"
@@ -174,29 +174,29 @@ export default function HomeRoute() {
         {/* 现在开始 */}
         <Animated.View entering={createStaggeredFadeIn(4)} layout={motionTransitions.gentle} style={{marginLeft:-4}}>
           <SectionCard
-            description="围绕家庭阅读最常用的操作，我已经替你铺成了四条快入口。"
+
             title="现在就开始">
             <TwoColumnGrid>
               <ShortcutCard
-                description="查看每一个格口的占用状态。"
+
                 icon="cabinet"
                 onPress={() => router.push(appRoutes.libraryShelf)}
                 title="看书架"
               />
               <ShortcutCard
-                description="拍书或选图，把书放回家庭书架。"
+
                 icon="camera"
                 onPress={() => router.push(appRoutes.libraryStoreBook)}
                 title="去存书"
               />
               <ShortcutCard
-                description="按书名搜索，直接替孩子取书。"
+
                 icon="search"
                 onPress={() => router.push(appRoutes.libraryTakeBook)}
                 title="帮孩子取书"
               />
               <ShortcutCard
-                description="调整每周借阅目标。"
+
                 icon="target"
                 onPress={() =>
                   activeMember?.id
@@ -226,7 +226,7 @@ export default function HomeRoute() {
                 ...theme.typography.semiBold,
                 fontSize: 15,
               }}>
-              书柜数据还在同步中
+              正在加载
             </Text>
             <Text
               selectable
@@ -236,7 +236,7 @@ export default function HomeRoute() {
                 fontSize: 13,
                 lineHeight: 18,
               }}>
-              在 Python 后端返回成员数据前，部分卡片可能暂时为空。
+                同步中...
             </Text>
           </Animated.View>
         ) : null}

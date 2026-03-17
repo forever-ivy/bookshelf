@@ -18,7 +18,6 @@ describe('ShortcutCard', () => {
     const onPress = jest.fn();
     const screen = render(
       <ShortcutCard
-        description="Jump into the bookshelf overview."
         icon="cabinet"
         onPress={onPress}
         title="View Shelf"
@@ -26,7 +25,6 @@ describe('ShortcutCard', () => {
     );
 
     expect(screen.getByText('View Shelf')).toBeTruthy();
-    expect(screen.getByText('Jump into the bookshelf overview.')).toBeTruthy();
 
     fireEvent.press(screen.getByRole('button'));
 
@@ -45,7 +43,6 @@ describe('ShortcutCard', () => {
     renderer.act(() => {
       tree = renderer.create(
         <ShortcutCard
-          description="Jump into the bookshelf overview."
           icon="cabinet"
           onPress={() => {}}
           title="View Shelf"
@@ -56,7 +53,7 @@ describe('ShortcutCard', () => {
     const contentWrap = tree!.root.findAllByType(View)[1];
 
     expect(contentWrap.props.style).toMatchObject({
-      gap: 18,
+      gap: 14,
       justifyContent: 'flex-start',
     });
   });
@@ -73,7 +70,6 @@ describe('ShortcutCard', () => {
     renderer.act(() => {
       tree = renderer.create(
         <ShortcutCard
-          description="A slightly longer description should not make this shortcut taller than its siblings."
           icon="cabinet"
           onPress={() => {}}
           title="View Shelf"
@@ -84,7 +80,35 @@ describe('ShortcutCard', () => {
     const pressable = tree!.root.findAllByType(View)[0];
 
     expect(pressable.props.style).toMatchObject({
-      height: 196,
+      height: 108,
+    });
+  });
+
+  it('supports a compact square-like variant for dense action grids', () => {
+    let tree:
+      | {
+          root: {
+            findAllByType: (type: unknown) => Array<{ props: { style?: unknown } }>;
+          };
+        }
+      | undefined;
+
+    renderer.act(() => {
+      tree = renderer.create(
+        <ShortcutCard
+          icon="cabinet"
+          onPress={() => {}}
+          size="compact"
+          title="View Shelf"
+        />
+      );
+    });
+
+    const pressable = tree!.root.findAllByType(View)[0];
+
+    expect(pressable.props.style).toMatchObject({
+      height: 96,
+      minHeight: 96,
     });
   });
 });

@@ -33,10 +33,6 @@ const booklistCreateSchema = z.object({
   id: z.number(),
 });
 const okSchema = z.null();
-const createUserSchema = z.object({
-  id: z.number(),
-  user: memberSummarySchema,
-});
 const updateUserSchema = z.object({
   user: memberSummarySchema,
 });
@@ -49,12 +45,6 @@ export function createUsersApi(baseUrl: string) {
       return http.post<{ id: number }>(`/api/users/${userId}/booklist`, {
         data: payload,
         schema: booklistCreateSchema,
-      });
-    },
-    createUser(payload: MemberDraft) {
-      return http.post<{ id: number; user: MemberSummary }>('/api/users', {
-        data: payload,
-        schema: createUserSchema,
       });
     },
     deleteBooklistItem(userId: number, booklistId: number) {
@@ -120,12 +110,6 @@ export function createUsersApi(baseUrl: string) {
       return http.post<MemberGoal>(`/api/users/${userId}/goal`, {
         data: { weekly_target: weeklyTarget },
         schema: memberGoalSchema,
-      });
-    },
-    switchUser(userId: number) {
-      return http.post<MemberSummary | null>('/api/users/switch', {
-        data: { user_id: userId },
-        schema: nullableMemberSummarySchema,
       });
     },
     updateUser(userId: number, payload: MemberDraft) {

@@ -62,6 +62,8 @@ export type AuthSession = {
   user: MemberSummary;
 };
 
+export type AuthIdentity = Omit<AuthSession, 'token'>;
+
 export type PairExchangeResult = {
   cabinet: CabinetBindingSummary;
   pair_code: string;
@@ -119,6 +121,103 @@ export type MonthlyReport = {
   total_books?: number;
 };
 
+export type FamilyMember = {
+  avatar?: string | null;
+  color?: string | null;
+  id: number;
+  name: string;
+  role?: 'parent' | 'child' | 'reader' | string;
+};
+
+export type FamilySummary = {
+  created_at?: string;
+  family_name: string;
+  id: number;
+  member_count?: number;
+  owner_account_id?: number | null;
+  owner_username?: string | null;
+};
+
+export type FamilyDetail = FamilySummary & {
+  members: FamilyMember[];
+};
+
+export type FamilyDraft = {
+  family_name?: string;
+  owner_account_id?: number | null;
+};
+
+export type AccountSummary = {
+  created_at?: string;
+  id: number;
+  last_login_at?: string | null;
+  linked_user_count?: number;
+  owned_family_count?: number;
+  phone?: string | null;
+  status?: string;
+  system_role?: 'admin' | 'user' | string;
+  updated_at?: string;
+  username?: string | null;
+};
+
+export type AccountUserRelation = {
+  account_id: number;
+  avatar?: string | null;
+  color?: string | null;
+  created_at?: string;
+  name?: string;
+  relation_type: string;
+  role?: 'parent' | 'child' | 'reader' | string;
+  user_id: number;
+};
+
+export type UserAccountRelation = {
+  account_id: number;
+  created_at?: string;
+  phone?: string | null;
+  relation_type: string;
+  status?: string;
+  user_id: number;
+  username?: string | null;
+};
+
+export type BookSummary = {
+  age_max?: number | null;
+  age_min?: number | null;
+  author?: string | null;
+  category?: string | null;
+  compartment_ids?: string | null;
+  cover_url?: string | null;
+  description?: string | null;
+  difficulty_level?: string | null;
+  id: number;
+  isbn?: string | null;
+  is_on_shelf?: boolean;
+  keywords?: string | null;
+  on_shelf_count?: number;
+  publish_year?: number | null;
+  publisher?: string | null;
+  tags?: string | null;
+  title: string;
+  updated_at?: string | null;
+};
+
+export type BookDraft = {
+  age_max?: number | null;
+  age_min?: number | null;
+  author?: string | null;
+  category?: string | null;
+  cover_url?: string | null;
+  description?: string | null;
+  difficulty_level?: string | null;
+  isbn?: string | null;
+  keywords?: string | null;
+  publish_year?: number | null;
+  publisher?: string | null;
+  tags?: string | null;
+  title?: string;
+};
+
 export type BooklistItem = {
   assigned_by_user_id?: number | null;
   author?: string | null;
@@ -132,6 +231,27 @@ export type BooklistItem = {
   id: number;
   note?: string | null;
   title: string;
+};
+
+export type ReadingEvent = {
+  book_id?: number | null;
+  book_title?: string | null;
+  event_time: string;
+  event_type: string;
+  id: number;
+  metadata_json?: string | null;
+  source?: string | null;
+  user_id?: number | null;
+  user_name?: string | null;
+};
+
+export type ReadingEventDraft = {
+  book_id?: number | null;
+  event_time?: string | null;
+  event_type: string;
+  metadata_json?: string | null;
+  source?: string | null;
+  user_id?: number | null;
 };
 
 export type BadgeSummary = {

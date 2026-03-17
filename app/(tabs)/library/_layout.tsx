@@ -6,6 +6,9 @@ export default function LibraryTabLayout() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
+      <Stack.Screen name="books/index" options={flowScreenOptions} />
+      <Stack.Screen name="books/new" options={flowScreenOptions} />
+      <Stack.Screen name="books/[bookId]" options={flowScreenOptions} />
       <Stack.Screen name="shelf" options={flowScreenOptions} />
       <Stack.Screen name="booklist" options={flowScreenOptions} />
       <Stack.Screen name="take-book" options={flowScreenOptions} />

@@ -62,7 +62,7 @@ export default function LibraryRoute() {
         entering={createStaggeredFadeIn(2)}
         layout={motionTransitions.gentle}>
         <SectionCard
-          description="在书库里不只是看书单，也可以直接进入书架、取书和存书流程。"
+
           title="继续操作">
           <Text
             selectable
@@ -79,25 +79,31 @@ export default function LibraryRoute() {
             layout={motionTransitions.gentle}>
             <TwoColumnGrid>
             <ShortcutCard
-              description="新增、删除、完成当前成员的阅读任务。"
+
               icon="bookmark"
               onPress={() => router.push(appRoutes.libraryBooklist)}
               title="管理书单"
             />
             <ShortcutCard
-              description="按书名搜索，立刻发起取书。"
+
               icon="search"
               onPress={() => router.push(appRoutes.libraryTakeBook)}
               title="去取书"
             />
             <ShortcutCard
-              description="拍照识别后，把书存回家庭书架。"
+
               icon="camera"
               onPress={() => router.push(appRoutes.libraryStoreBook)}
               title="去存书"
             />
             <ShortcutCard
-              description="查看当前书柜的每一个格口状态。"
+
+              icon="bookmark"
+              onPress={() => router.push(appRoutes.libraryBooks)}
+              title="图书管理"
+            />
+            <ShortcutCard
+
               icon="cabinet"
               onPress={() => router.push(appRoutes.libraryShelf)}
               title="家庭书架"

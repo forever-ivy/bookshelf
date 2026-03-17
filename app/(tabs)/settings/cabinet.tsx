@@ -96,7 +96,7 @@ export default function CabinetSettingsRoute() {
         </Text>
       </View>
       <SectionCard
-        description="Bookleaf 会先验证连接，再把你带回首页。修改地址和重新扫码都放在这里。"
+        description="退出账号、重新扫码或断开与书柜的连接。"
         title="连接操作">
         <PrimaryActionButton
           label="退出当前账号"

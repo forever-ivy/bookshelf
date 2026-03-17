@@ -5,19 +5,20 @@ import { AppIcon, type AppIconName } from '@/components/base/app-icon';
 import { useBookleafTheme } from '@/hooks/use-bookleaf-theme';
 
 type ShortcutCardProps = {
-  description: string;
   icon: AppIconName;
   onPress: () => void;
+  size?: 'default' | 'compact';
   title: string;
 };
 
 export function ShortcutCard({
-  description,
   icon,
   onPress,
+  size = 'default',
   title,
 }: ShortcutCardProps) {
   const { theme } = useBookleafTheme();
+  const isCompact = size === 'compact';
 
   return (
     <Pressable
@@ -29,44 +30,35 @@ export function ShortcutCard({
         borderCurve: 'continuous',
         borderRadius: theme.radii.lg,
         borderWidth: 1,
-        height: 196,
-        padding: 18,
+        height: isCompact ? 96 : 108,
+        minHeight: isCompact ? 96 : 108,
+        padding: isCompact ? 14 : 16,
         width: '100%',
       }}>
-      <View style={{ flex: 1, gap: 18, justifyContent: 'flex-start' }}>
+      <View style={{ flex: 1, gap: isCompact ? 10 : 14, justifyContent: 'flex-start' }}>
         <View
           style={{
             alignItems: 'center',
             backgroundColor: theme.colors.surfaceMuted,
             borderCurve: 'continuous',
-            borderRadius: 22,
-            height: 48,
+            borderRadius: isCompact ? 18 : 20,
+            height: isCompact ? 40 : 44,
             justifyContent: 'center',
-            width: 48,
+            width: isCompact ? 40 : 44,
           }}>
-          <AppIcon color={theme.colors.primaryStrong} name={icon} size={22} />
+          <AppIcon color={theme.colors.primaryStrong} name={icon} size={isCompact ? 20 : 22} />
         </View>
-        <View style={{ gap: 6 }}>
+        <View style={{ gap: 4 }}>
           <Text
             numberOfLines={2}
             selectable
             style={{
               color: theme.colors.text,
+              textAlign: 'left',
               ...theme.typography.semiBold,
-              fontSize: 16,
+              fontSize: isCompact ? 15 : 16,
             }}>
             {title}
-          </Text>
-          <Text
-            numberOfLines={3}
-            selectable
-            style={{
-              color: theme.colors.textMuted,
-              ...theme.typography.body,
-              fontSize: 13,
-              lineHeight: 18,
-            }}>
-            {description}
           </Text>
         </View>
       </View>

@@ -1,12 +1,17 @@
 import type {
+  AccountSummary,
   BadgeSummary,
+  BookSummary,
   BooklistItem,
   BorrowLog,
   CabinetCompartment,
+  FamilyDetail,
+  FamilySummary,
   MemberGoal,
   MemberStats,
   MemberSummary,
   MonthlyReport,
+  ReadingEvent,
   WeeklyReport,
 } from '@/lib/api/contracts/types';
 import { createConnectionProfile } from '@/lib/app/connection';
@@ -197,18 +202,114 @@ const previewGoalsByMember: Record<number, MemberGoal> = {
   },
 };
 
+const previewAccounts: AccountSummary[] = [
+  {
+    id: 1,
+    linked_user_count: 3,
+    owned_family_count: 1,
+    phone: '13800000000',
+    status: 'active',
+    system_role: 'admin',
+    username: 'preview-admin',
+  },
+  {
+    id: 2,
+    linked_user_count: 1,
+    owned_family_count: 0,
+    phone: null,
+    status: 'active',
+    system_role: 'user',
+    username: 'preview-reader',
+  },
+];
+
+const previewFamilySummary: FamilySummary = {
+  family_name: '暮光阅读家',
+  id: 1,
+  member_count: previewUsers.length,
+  owner_account_id: 1,
+  owner_username: 'preview-admin',
+};
+
+const previewFamilyDetail: FamilyDetail = {
+  ...previewFamilySummary,
+  members: previewUsers.map((member) => ({
+    avatar: member.avatar,
+    color: member.color,
+    id: member.id,
+    name: member.name,
+    role: member.role,
+  })),
+};
+
+const previewBooks: BookSummary[] = [
+  {
+    author: 'Lin Yue',
+    category: '自然故事',
+    id: 401,
+    is_on_shelf: true,
+    on_shelf_count: 1,
+    title: 'Where the Forest Meets the Sea',
+  },
+  {
+    author: 'Aster Chen',
+    category: '幻想冒险',
+    id: 402,
+    is_on_shelf: true,
+    on_shelf_count: 1,
+    title: 'Moonlight Library',
+  },
+  {
+    author: 'Mina Park',
+    category: '科普',
+    id: 403,
+    is_on_shelf: false,
+    on_shelf_count: 0,
+    title: 'Cloud Atlas for Kids',
+  },
+];
+
+const previewReadingEvents: ReadingEvent[] = [
+  {
+    book_id: 402,
+    book_title: 'Moonlight Library',
+    event_time: '2026-03-15T19:20:00.000Z',
+    event_type: 'take',
+    id: 7001,
+    source: 'app',
+    user_id: 2,
+    user_name: '米洛',
+  },
+  {
+    book_id: 401,
+    book_title: 'Where the Forest Meets the Sea',
+    event_time: '2026-03-14T17:00:00.000Z',
+    event_type: 'finish',
+    id: 7002,
+    source: 'parent-note',
+    user_id: 2,
+    user_name: '米洛',
+  },
+];
+
 export function createPreviewConnectionProfile() {
   return createConnectionProfile('preview://cabinet', '预览书柜');
 }
 
 export function getPreviewCabinetData() {
   return {
+    accounts: previewAccounts,
     badgesByMember: previewBadgesByMember,
     booklistByMember: previewBooklistByMember,
+    books: previewBooks,
     compartments: previewCompartments,
     connection: createPreviewConnectionProfile(),
     currentUser: previewUsers[1],
+    familyDetail: previewFamilyDetail,
+    familySummary: previewFamilySummary,
+    families: [previewFamilySummary],
     monthlyReport: previewMonthlyReport,
+    readingEvents: previewReadingEvents,
     stats: previewStatsByMember[2],
     statsByMember: previewStatsByMember,
     users: previewUsers,

@@ -64,7 +64,7 @@ jest.mock('expo-glass-effect', () => {
 
 jest.mock('@expo/ui/swift-ui', () => {
   const React = require('react');
-  const { TextInput, View } = require('react-native');
+  const { Pressable, Text, TextInput, View } = require('react-native');
   const MockTextField = React.forwardRef(
     (props: Record<string, unknown>, ref: ForwardedRef<unknown>) => {
       React.useImperativeHandle(ref, () => ({
@@ -81,12 +81,73 @@ jest.mock('@expo/ui/swift-ui', () => {
   return {
     BottomSheet: ({ children }: { children?: React.ReactNode }) =>
       React.createElement(View, { testID: 'swift-bottom-sheet' }, children),
-    Button: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement(View, { testID: 'swift-button' }, children),
-    Host: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement(View, { testID: 'swift-host' }, children),
+    Button: ({
+      children,
+      label,
+      modifiers,
+      onPress,
+      systemImage,
+    }: {
+      children?: React.ReactNode;
+      label?: string;
+      modifiers?: Array<{ type?: string; value?: boolean }>;
+      onPress?: () => void;
+      systemImage?: string;
+    }) => {
+      const isDisabled = modifiers?.some(
+        (modifier) => modifier.type === 'disabled' && modifier.value
+      );
+      const hasProgressDescendant = (node: React.ReactNode): boolean => {
+        return React.Children.toArray(node).some((child: any) => {
+          if (!React.isValidElement(child)) {
+            return false;
+          }
+
+          if (child.props?.testID === 'swift-progress') {
+            return true;
+          }
+
+          return hasProgressDescendant(child.props?.children);
+        });
+      };
+      const isBusy = hasProgressDescendant(children);
+
+      return (
+        React.createElement(
+          Pressable,
+          {
+            accessibilityRole: 'button',
+            accessibilityState: {
+              busy: isBusy || undefined,
+              disabled: isDisabled || undefined,
+            },
+            disabled: isDisabled,
+            onPress: isDisabled ? undefined : onPress,
+            testID: 'swift-button',
+          },
+          systemImage ? React.createElement(Text, null, systemImage) : null,
+          label ? React.createElement(Text, null, label) : null,
+          children
+        )
+      );
+    },
+    Host: ({
+      children,
+      ...props
+    }: {
+      children?: React.ReactNode;
+      [key: string]: unknown;
+    }) => React.createElement(View, { testID: 'swift-host', ...props }, children),
+    HStack: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(View, { testID: 'swift-hstack' }, children),
+    Image: ({ systemName }: { systemName?: string }) =>
+      React.createElement(Text, { testID: 'swift-image' }, systemName),
+    ProgressView: () => React.createElement(Text, { testID: 'swift-progress' }, 'progress-view'),
     RNHostView: ({ children }: { children?: React.ReactNode }) =>
       React.createElement(View, { testID: 'swift-rn-host' }, children),
+    Spacer: () => React.createElement(View, { testID: 'swift-spacer' }),
+    Text: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(Text, { testID: 'swift-text' }, children),
     TextField: MockTextField,
   };
 });
@@ -94,8 +155,13 @@ jest.mock('@expo/ui/swift-ui', () => {
 jest.mock('@expo/ui/swift-ui/modifiers', () => ({
   buttonStyle: jest.fn(() => ({ type: 'buttonStyle' })),
   controlSize: jest.fn(() => ({ type: 'controlSize' })),
-  disabled: jest.fn(() => ({ type: 'disabled' })),
+  disabled: jest.fn((value: boolean) => ({ type: 'disabled', value })),
   frame: jest.fn(() => ({ type: 'frame' })),
+  glassEffect: jest.fn(() => ({ type: 'glassEffect' })),
+  labelStyle: jest.fn(() => ({ type: 'labelStyle' })),
+  opacity: jest.fn(() => ({ type: 'opacity' })),
+  padding: jest.fn(() => ({ type: 'padding' })),
+  progressViewStyle: jest.fn(() => ({ type: 'progressViewStyle' })),
   textFieldStyle: jest.fn(() => ({ type: 'textFieldStyle' })),
   tint: jest.fn(() => ({ type: 'tint' })),
 }));
