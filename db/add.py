@@ -8,7 +8,7 @@
 import sqlite3
 from pathlib import Path
 
-DB_PATH = "data/bookshelf.db"
+DB_PATH = r"C:\Users\32140\Desktop\bookshelf-ziggy-client-auth\bookshelf-ziggy-client-auth\data\database.db"
 
 
 def migrate():

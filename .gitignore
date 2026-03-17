@@ -1,0 +1,9 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.db.bak-*
+"__pycache__/" 
+"*.pyc" 
+"*.db" 
+".wake.lock" 

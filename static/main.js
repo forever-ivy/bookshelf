@@ -92,15 +92,50 @@ function chat(role, text, isAudio = false) {
   chatBox.scrollTop = chatBox.scrollHeight;
 }
 
+async function readJsonEnvelope(response) {
+  const raw = await response.text();
+  let envelope;
+
+  try {
+    envelope = raw ? JSON.parse(raw) : null;
+  } catch (_) {
+    const snippet = raw ? raw.slice(0, 300) : "";
+    throw new Error(snippet || "接口返回了非 JSON 响应");
+  }
+
+  if (!envelope || typeof envelope !== "object" || typeof envelope.ok !== "boolean" || !("data" in envelope)) {
+    throw new Error("接口返回格式不正确");
+  }
+
+  return envelope;
+}
+
+async function fetchJsonEnvelope(url, options) {
+  const response = await fetch(url, options);
+  return readJsonEnvelope(response);
+}
+
+function requireEnvelopeSuccess(envelope, fallbackMessage) {
+  if (!envelope.ok) {
+    throw new Error(envelope.message || fallbackMessage || "请求失败");
+  }
+
+  return {
+    data: envelope.data,
+    message: envelope.message || "",
+  };
+}
+
 async function loadShelf() {
   const grid = getById("shelf_grid");
   try {
-    const r = await fetch("/api/compartments");
-    const data = await r.json();
+    const envelope = await fetchJsonEnvelope("/api/compartments");
+    const { data } = requireEnvelopeSuccess(envelope, "书架加载失败");
+    const compartments = Array.isArray(data) ? data : [];
     grid.innerHTML = "";
     let used = 0;
 
-    data.forEach((it) => {
+    compartments.forEach((it) => {
       const cell = document.createElement("div");
       cell.className = `shelf-cell animate-scale-in ${it.book ? "occupied" : "free"}`;
       if (it.book) {
@@ -122,7 +157,7 @@ async function loadShelf() {
       grid.appendChild(cell);
     });
 
-    const total = data.length, free = total - used;
+    const total = compartments.length, free = total - used;
     getById("stats_bar").innerHTML = `
       <span class="pill pill-total"><i class="fa-solid fa-warehouse"></i> \u603b\u8ba1: ${total}</span>
       <span class="pill pill-used"><i class="fa-solid fa-book"></i> \u5df2\u5b58: ${used}</span>
@@ -140,7 +175,7 @@ async function loadShelf() {
     const statUsed  = getById("stat-used");  if (statUsed)  statUsed.textContent  = used;
     const statFree  = getById("stat-free");  if (statFree)  statFree.textContent  = free;
     // 缓存供弹窗使用
-    window._shelfData = data;
+    window._shelfData = compartments;
   } catch (e) {
     grid.innerHTML = `<div class="error-placeholder">\u52a0\u8f7d\u5931\u8d25: ${e.message}</div>`;
   }
@@ -150,9 +185,9 @@ async function loadAiInsight() {
   const box = getById("ai_insight_box");
   if (!box) return;
   try {
-    const r = await fetch("/api/ai_insight");
-    const j = await r.json();
-    box.innerHTML = j.insight || "";
+    const envelope = await fetchJsonEnvelope("/api/ai_insight");
+    const { data } = requireEnvelopeSuccess(envelope, "AI insight 加载失败");
+    box.innerHTML = data?.insight || "";
   } catch (_) {
     box.innerText = "\u9986\u957f\u6682\u65f6\u65e0\u6cd5\u8fde\u63a5\u5230\u5927\u8111\u3002";
   }
@@ -294,26 +329,26 @@ async function storeByOcr(fromText, isAudio = false, opts = {}) {
     form.append("image", capturedBlob, "capture.jpg");
 
     const url = `/api/ocr/ingest?source=${encodeURIComponent(source)}${wantAudio ? "&audio=1" : ""}`;
-    const r = await fetch(url, { method: "POST", body: form });
-    const j = await r.json();
-    if (!j.ok) throw new Error(j.msg || "\u5b58\u4e66\u5931\u8d25");
+    const envelope = await fetchJsonEnvelope(url, { method: "POST", body: form });
+    const { data, message } = requireEnvelopeSuccess(envelope, "\u5b58\u4e66\u5931\u8d25");
+    const result = data || {};
 
-    log(j.msg || "存书完成");
-    const storeReply = j.ai_reply || j.reply || "好的，已完成存书。";
+    log(message || "存书完成");
+    const storeReply = result.ai_reply || result.reply || "好的，已完成存书。";
     chat(TXT.bot, storeReply);
-    if (j.audio_b64) {
+    if (result.audio_b64) {
       // 有现成音频直接播
-      playBase64Audio(j.audio_b64, j.audio_format || "mp3");
+      playBase64Audio(result.audio_b64, result.audio_format || "mp3");
     } else if (storeReply) {
       // 没有音频就主动请求 TTS
       try {
-        const ttsR = await fetch("/api/tts_say", {
+        const ttsEnvelope = await fetchJsonEnvelope("/api/tts_say", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: storeReply })
         });
-        const ttsJ = await ttsR.json();
-        if (ttsJ.audio_b64) playBase64Audio(ttsJ.audio_b64, ttsJ.audio_format || "mp3");
+        const { data: ttsData } = requireEnvelopeSuccess(ttsEnvelope, "语音播报失败");
+        if (ttsData?.audio_b64) playBase64Audio(ttsData.audio_b64, ttsData.audio_format || "mp3");
       } catch (_) {}
     }
     await loadShelf();
@@ -359,16 +394,16 @@ async function takeBook(cid, title) {
 
     if (!result.isConfirmed) return;
 
-    const r = await fetch("/api/take", {
+    const envelope = await fetchJsonEnvelope("/api/take", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cid, title })
     });
-    const j = await r.json();
-    if (!j.ok) throw new Error(j.msg || "\u53d6\u4e66\u5931\u8d25");
+    const { data, message } = requireEnvelopeSuccess(envelope, "\u53d6\u4e66\u5931\u8d25");
+    const resultData = data || {};
 
-    log(j.msg || "\u53d6\u4e66\u5b8c\u6210");
-    if (j.ai_reply) chat(TXT.bot, j.ai_reply);
+    log(message || "\u53d6\u4e66\u5b8c\u6210");
+    if (resultData.ai_reply) chat(TXT.bot, resultData.ai_reply);
     await loadShelf();
     await loadAiInsight();
   } catch (e) {
@@ -379,16 +414,16 @@ async function takeBook(cid, title) {
 async function takeByTextIntent(text, isAudio = false) {
   chat(isAudio ? TXT.userVoice : TXT.user, text, isAudio);
   try {
-    const r = await fetch("/api/take_by_text", {
+    const envelope = await fetchJsonEnvelope("/api/take_by_text", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text })
     });
-    const j = await r.json();
-    if (!j.ok) throw new Error(j.msg || "\u53d6\u4e66\u5931\u8d25");
+    const { data, message } = requireEnvelopeSuccess(envelope, "\u53d6\u4e66\u5931\u8d25");
+    const result = data || {};
 
-    log(j.msg || "\u53d6\u4e66\u5b8c\u6210");
-    chat(TXT.bot, j.ai_reply || (j.picked ? `\u5df2\u4e3a\u4f60\u53d6\u51fa\u300a${j.picked.title}\u300b` : "\u5df2\u6267\u884c\u53d6\u4e66\u6307\u4ee4"));
+    log(message || "\u53d6\u4e66\u5b8c\u6210");
+    chat(TXT.bot, result.ai_reply || (result.picked ? `\u5df2\u4e3a\u4f60\u53d6\u51fa\u300a${result.picked.title}\u300b` : "\u5df2\u6267\u884c\u53d6\u4e66\u6307\u4ee4"));
     await loadShelf();
     await loadAiInsight();
   } catch (e) {
@@ -403,9 +438,10 @@ getById("btn-search").onclick = async function () {
   const kw = input.value.trim();
   if (!kw) return;
 
-  const r = await fetch("/api/compartments");
-  const data = await r.json();
-  const hit = data.find((i) => i.book && i.book.includes(kw));
+  const envelope = await fetchJsonEnvelope("/api/compartments");
+  const { data } = requireEnvelopeSuccess(envelope, "书架加载失败");
+  const compartments = Array.isArray(data) ? data : [];
+  const hit = compartments.find((i) => i.book && i.book.includes(kw));
   if (hit) takeBook(hit.cid, hit.book);
   input.value = "";
 };
@@ -447,13 +483,13 @@ async function sendTextMessage() {
 
   chat(TXT.user, text);
   try {
-    const r = await fetch("/api/chat", {
+    const envelope = await fetchJsonEnvelope("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text })
     });
-    const j = await r.json();
-    if (j.ok) chat(TXT.bot, j.reply);
+    const { data } = requireEnvelopeSuccess(envelope, "聊天失败");
+    if (data?.reply) chat(TXT.bot, data.reply);
   } catch (_) {
     chat(TXT.sys, "\u8fde\u63a5 AI \u670d\u52a1\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002");
   }
@@ -471,7 +507,7 @@ let micSending = false;
 const WAKE_WINDOW_MS = 15000;
 let wakeActiveUntil = 0;
 let _sleepTimer = null;          // 30秒无操作自动休眠计时器
-const SLEEP_AFTER_MS = 30000;    // 30秒
+const SLEEP_AFTER_MS = WAKE_WINDOW_MS;    // 15秒无语音后退出唤醒态
 
 function isWakeActive() {
   return Date.now() < wakeActiveUntil;
@@ -490,10 +526,11 @@ function setWakeActive() {
 }
 
 function clearWakeActive() {
+  const wasActive = isWakeActive();
   wakeActiveUntil = 0;
   if (_sleepTimer) { clearTimeout(_sleepTimer); _sleepTimer = null; }
   updateMicStatus();
-  playSleepSound();
+  if (wasActive) playSleepSound();
   hideWakeOverlay();
 }
 
@@ -504,14 +541,14 @@ function scheduleSleep() {
     if (!isWakeActive()) return;  // 已经手动退出了，不重复处理
     // 1. 请求服务端生成"再见主人"语音
     try {
-      const r = await fetch("/api/tts_say", {
+      const envelope = await fetchJsonEnvelope("/api/tts_say", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: "再见主人，有需要再叫我哦" })
       });
-      const j = await r.json();
-      if (j.audio_b64) {
-        playBase64Audio(j.audio_b64, j.audio_format || "mp3");
+      const { data } = requireEnvelopeSuccess(envelope, "语音播报失败");
+      if (data?.audio_b64) {
+        playBase64Audio(data.audio_b64, data.audio_format || "mp3");
       }
     } catch (_) {}
     // 2. 聊天框显示告别
@@ -584,84 +621,86 @@ async function startMicLoop() {
     if (totalSamples < minSamples) return;
     flushing = true;
     try {
+      const wavBlob = encodeWav(chunks, audioCtx.sampleRate);
       const form = new FormData();
       form.append("audio", wavBlob, "audio.wav");
       const mode = isWakeActive() ? "command" : "wake";
       // 把当前书架书名传给后端，辅助ASR识别
       try {
-        const shelfR = await fetch("/api/compartments");
-        const shelfD = await shelfR.json();
-        const titles = shelfD.filter(i => i.book).map(i => i.book).join(",");
+        const shelfEnvelope = await fetchJsonEnvelope("/api/compartments");
+        const { data: shelfData } = requireEnvelopeSuccess(shelfEnvelope, "书架加载失败");
+        const titles = (Array.isArray(shelfData) ? shelfData : []).filter(i => i.book).map(i => i.book).join(",");
         if (titles) form.append("hints_extra", titles);
       } catch (_) {}
-      const r = await fetch(`/api/voice/ingest?source=web&mode=${mode}`, { method: "POST", body: form });
-      const j = await r.json();
+      const envelope = await fetchJsonEnvelope(`/api/voice/ingest?source=web&mode=${mode}`, { method: "POST", body: form });
+      const result = envelope.data || {};
 
-      if (j.ignore) return;
-      // 用户有说话，重置休眠倒计时
-      if (isWakeActive()) scheduleSleep();
+      if (result.ignore) return;
 
-      if (j.wake && j.intent === "wake") {
-        if (j.reply) {
-          chat(TXT.bot, j.reply);
-          if (j.audio_b64) {
-            playBase64Audio(j.audio_b64, j.audio_format || "mp3");
+      if (result.wake && result.intent === "wake") {
+        setWakeActive();
+        if (result.reply) {
+          chat(TXT.bot, result.reply);
+          if (result.audio_b64) {
+            playBase64Audio(result.audio_b64, result.audio_format || "mp3");
           }
         }
+        return;
+      }
+
+      if (result.need_image) {
         setWakeActive();
+        if (result.reply) {
+          chat(TXT.bot, result.reply);
+          if (result.audio_b64) {
+            playBase64Audio(result.audio_b64, result.audio_format || "mp3");
+          }
+        }
+        await storeByOcr(result.text || "帮我存书", true, { source: "web", wantAudio: true, skipChat: true });
         return;
       }
 
-      if (!j.ok) {
-        log(j.msg || "语音识别失败");
+      if (!envelope.ok) {
+        const message = (envelope.message || "").trim();
+        if (message && message !== "no speech detected") {
+          log(message);
+        }
         return;
       }
 
-      if (j.text) {
-        chat(TXT.userVoice, j.text, true);
+      if (result.text) {
+        chat(TXT.userVoice, result.text, true);
         // 检测语音里是否有切换用户意图
-        if (window._onVoiceResult) window._onVoiceResult(j.text);
+        if (window._onVoiceResult) window._onVoiceResult(result.text);
       }
       // msg 是操作结果（存书/取书），进操作日志
       // reply/ai_reply 是 AI 的话术，进聊天框
-      if (j.msg && j.msg !== j.reply) {
-        log(j.msg);
-      }
-
-      if (j.need_image) {
-        if (j.reply) {
-          chat(TXT.bot, j.reply);
-          if (j.audio_b64) {
-            playBase64Audio(j.audio_b64, j.audio_format || "mp3");
-          }
-        }
-        setWakeActive();
-        await storeByOcr(j.text || "帮我存书", true, { source: "web", wantAudio: true, skipChat: true });
-        return;
+      if (envelope.message && envelope.message !== result.reply) {
+        log(envelope.message);
       }
 
       // ai_reply 是 AI 人格化回复 → 聊天框
       // msg 是操作结果（如"已为你取出..."）→ 日志，不进聊天框
-      const aiSpeech = j.ai_reply || (j.intent === "chat" ? j.reply : null);
-      const opResult = (j.intent === "store" || j.intent === "take") ? (j.msg || j.reply) : null;
+      const aiSpeech = result.ai_reply || (result.intent === "chat" ? result.reply : null);
+      const opResult = (result.intent === "store" || result.intent === "take") ? (envelope.message || result.reply) : null;
       if (opResult) log(opResult);
       if (aiSpeech) {
         chat(TXT.bot, aiSpeech);
-        if (j.audio_b64) {
-          playBase64Audio(j.audio_b64, j.audio_format || "mp3");
+        if (result.audio_b64) {
+          playBase64Audio(result.audio_b64, result.audio_format || "mp3");
         }
-      } else if (!opResult && j.reply) {
+      } else if (!opResult && result.reply) {
         // 兜底：既不是操作结果也没有ai_reply，才直接显示reply
-        chat(TXT.bot, j.reply);
-        if (j.audio_b64) {
-          playBase64Audio(j.audio_b64, j.audio_format || "mp3");
+        chat(TXT.bot, result.reply);
+        if (result.audio_b64) {
+          playBase64Audio(result.audio_b64, result.audio_format || "mp3");
         }
       }
 
-      if (j.intent && j.intent !== "wake") {
+      if (result.intent && result.intent !== "wake") {
         setWakeActive();
         // 语音指令执行后立刻刷新书架
-        if (j.intent === "store" || j.intent === "take") {
+        if (result.intent === "store" || result.intent === "take") {
           await loadShelf();
           await loadAiInsight();
         }
@@ -850,9 +889,9 @@ async function openStatsModal() {
   if (insightEl) {
     insightEl.textContent = "加载中...";
     try {
-      const r = await fetch("/api/ai_insight");
-      const j = await r.json();
-      insightEl.textContent = j.insight || "馆长暂时没有留言～";
+      const envelope = await fetchJsonEnvelope("/api/ai_insight");
+      const { data } = requireEnvelopeSuccess(envelope, "AI insight 加载失败");
+      insightEl.textContent = data?.insight || "馆长暂时没有留言～";
     } catch (_) {
       insightEl.textContent = "馆长暂时无法连线，稍后再试。";
     }
@@ -877,12 +916,14 @@ if (_statsModal) _statsModal.onclick = (e) => {
 // 多用户体系
 // ══════════════════════════════════════════
 
+let _authState = null;
 let _currentUser = null;
 let _allUsers = [];
 
 // 角色中文映射
 const ROLE_LABEL = { parent: "家长", child: "孩子" };
 const ROLE_COLOR = { parent: "#7c5c3e", child: "#9aad82" };
+const SYSTEM_ROLE_LABEL = { admin: "管理员", user: "普通用户" };
 
 const THEME_LABEL = {
   warm: "家庭温馨",
@@ -1055,13 +1096,18 @@ function applyUserTheme(colorKey) {
   set("--card-grad", theme.cardGrad);
 }
 
-// ── 加载当前用户 ──
+// ── 加载当前身份 ──
 async function loadCurrentUser() {
   try {
-    const r = await fetch("/api/users/current");
-    _currentUser = await r.json();
+    const envelope = await fetchJsonEnvelope("/api/auth/me");
+    const { data } = requireEnvelopeSuccess(envelope, "加载当前身份失败");
+    _authState = data || null;
+    _currentUser = data?.user || null;
     renderCurrentUser();
-  } catch (_) {}
+    await loadAllUsers();
+  } catch (_) {
+    window.location.href = "/";
+  }
 }
 
 function renderCurrentUser() {
@@ -1069,12 +1115,27 @@ function renderCurrentUser() {
   const avatar = document.getElementById("current-avatar");
   const name   = document.getElementById("current-name");
   const role   = document.getElementById("current-role");
+  const meta   = document.getElementById("current-account-meta");
+  const familyMeta = document.getElementById("user-family-meta");
+  const manageBtn = document.getElementById("btn-manage-users");
+  const systemRole = _authState?.account?.system_role || "user";
+  const familyName = _currentUser.family_name || _authState?.cabinet?.family_name || "未加入家庭";
   if (avatar) avatar.textContent = _currentUser.avatar || "👤";
   if (name)   name.textContent   = _currentUser.name || "-";
   if (role) {
-    role.textContent = ROLE_LABEL[_currentUser.role] || _currentUser.role;
+    role.textContent = `${ROLE_LABEL[_currentUser.role] || _currentUser.role} · ${SYSTEM_ROLE_LABEL[systemRole] || systemRole}`;
     role.style.color = ROLE_COLOR[_currentUser.role] || "var(--muted)";
   }
+  if (meta) meta.textContent = `${familyName} · @${_authState?.account?.username || "-"}`;
+  if (familyMeta) {
+    familyMeta.innerHTML = `
+      <div class="user-chip user-chip-active" style="cursor:default;">
+        <span class="chip-avatar"><i class="fa-solid fa-house"></i></span>
+        <span class="chip-name">${familyName}</span>
+      </div>
+    `;
+  }
+  if (manageBtn) manageBtn.classList.toggle("hidden", systemRole !== "admin");
   // 应用该用户的专属色调
   if (_currentUser.color) applyUserTheme(_currentUser.color);
   // 同步到右侧小燕面板
@@ -1082,67 +1143,18 @@ function renderCurrentUser() {
   if (descEl) descEl.textContent = `正在为 ${_currentUser.name} 服务`;
 }
 
-// ── 加载全部用户，渲染切换按钮 ──
+// ── 加载当前家庭成员（管理员专用） ──
 async function loadAllUsers() {
-  try {
-    const r = await fetch("/api/users");
-    _allUsers = await r.json();
-    renderUserSwitcher();
+  if ((_authState?.account?.system_role || "user") !== "admin") {
+    _allUsers = [];
     renderUserManageList();
-  } catch (_) {}
-}
-
-function renderUserSwitcher() {
-  const box = document.getElementById("user-switcher");
-  if (!box || !_allUsers.length) return;
-  box.innerHTML = _allUsers.map(u => `
-    <button class="user-chip ${_currentUser && u.id === _currentUser.id ? 'user-chip-active' : ''}"
-            onclick="switchToUser(${u.id})">
-      <span class="chip-avatar">${u.avatar || "👤"}</span>
-      <span class="chip-name">${u.name}</span>
-    </button>
-  `).join("");
-}
-
-// ── 切换用户 ──
-async function switchToUser(userId) {
+    return;
+  }
   try {
-    const r = await fetch("/api/users/switch", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: userId })
-    });
-    const j = await r.json();
-    if (j.ok) {
-      _currentUser = j.user;
-      renderCurrentUser();
-      renderUserSwitcher();
-
-      // 1. 应用该用户的专属色调
-      if (j.user.color) applyUserTheme(j.user.color);
-
-      // 2. 清空前端聊天框
-      const chatBox = document.getElementById("chat_box");
-      if (chatBox) chatBox.innerHTML = "";
-
-      // 3. 清空后端该用户的对话上下文
-      await fetch("/api/chat/clear", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: userId })
-      }).catch(() => {});
-
-      // 4. 小燕语音播报切换，并发送欢迎消息
-      const ttsText = `好的，已切换到${j.user.name}，${ROLE_LABEL[j.user.role] || ""}模式`;
-      chat(TXT.bot, ttsText);
-      const ttsR = await fetch("/api/tts_say", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: ttsText })
-      });
-      const ttsJ = await ttsR.json();
-      if (ttsJ.audio_b64) playBase64Audio(ttsJ.audio_b64, ttsJ.audio_format || "mp3");
-    }
+    const envelope = await fetchJsonEnvelope("/api/users");
+    const { data } = requireEnvelopeSuccess(envelope, "加载成员列表失败");
+    _allUsers = Array.isArray(data) ? data : [];
+    renderUserManageList();
   } catch (_) {}
 }
 
@@ -1150,8 +1162,12 @@ async function switchToUser(userId) {
 function renderUserManageList() {
   const box = document.getElementById("user-list-manage");
   if (!box) return;
+  if ((_authState?.account?.system_role || "user") !== "admin") {
+    box.innerHTML = '<div style="color:var(--muted);font-size:13px;">仅管理员可以管理家庭角色。</div>';
+    return;
+  }
   if (!_allUsers.length) {
-    box.innerHTML = '<div style="color:var(--muted);font-size:13px;">暂无成员</div>';
+    box.innerHTML = '<div style="color:var(--muted);font-size:13px;">当前家庭还没有成员。</div>';
     return;
   }
   box.innerHTML = _allUsers.map(u => {
@@ -1170,27 +1186,66 @@ function renderUserManageList() {
           <span style="color:var(--muted);">${THEME_LABEL[u.color] || "默认主题"}</span>
         </div>
       </div>
-      <button class="btn-icon" style="color:#ef4444;font-size:14px;"
-              onclick="deleteUserById(${u.id},'${u.name}')">
-        <i class="fa-solid fa-trash"></i>
-      </button>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <select id="role-select-${u.id}" class="input-field" style="width:92px;flex:none;padding:8px 10px;">
+          <option value="parent" ${u.role === "parent" ? "selected" : ""}>家长</option>
+          <option value="child" ${u.role === "child" ? "selected" : ""}>孩子</option>
+        </select>
+        <button class="btn-text-sm" onclick="saveUserRole(${u.id})">保存</button>
+      </div>
     </div>`;
   }).join("");
 }
 
-async function deleteUserById(uid, name) {
-  const result = await Swal.fire({
-    title: `删除 ${name}？`,
-    text: "该成员的借阅记录将保留，仅移除账号。",
-    icon: "warning",
-    showCancelButton: true,
-    confirmButtonText: "确认删除",
-    cancelButtonText: "取消",
-    confirmButtonColor: "#ef4444",
-  });
-  if (!result.isConfirmed) return;
-  await fetch(`/api/users/${uid}`, { method: "DELETE" });
-  await loadAllUsers();
+async function saveUserRole(uid) {
+  const select = document.getElementById(`role-select-${uid}`);
+  const role = select?.value || "child";
+  try {
+    await requireEnvelopeSuccess(
+      await fetchJsonEnvelope(`/api/users/${uid}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role })
+      }),
+      "更新家庭角色失败"
+    );
+    if (typeof Swal !== "undefined") {
+      Swal.fire({
+        toast: true,
+        position: "top-end",
+        icon: "success",
+        title: "角色已更新",
+        showConfirmButton: false,
+        timer: 1800,
+        background: "#fefae0"
+      });
+    }
+    await loadCurrentUser();
+  } catch (e) {
+    if (typeof Swal !== "undefined") {
+      Swal.fire({
+        toast: true,
+        position: "top-end",
+        icon: "error",
+        title: e.message || "更新失败",
+        showConfirmButton: false,
+        timer: 2200,
+        background: "#fefae0"
+      });
+    }
+  }
+}
+
+window.saveUserRole = saveUserRole;
+
+async function logoutCurrentSession() {
+  try {
+    await requireEnvelopeSuccess(
+      await fetchJsonEnvelope("/api/auth/logout", { method: "POST" }),
+      "退出登录失败"
+    );
+  } catch (_) {}
+  window.location.href = "/";
 }
 
 // 主题选择交互
@@ -1218,11 +1273,14 @@ if (_btnAddUser) _btnAddUser.onclick = async () => {
                  (role === "parent" ? "👨" : "🧒");
   const color  = _selectedTheme || "warm";
   if (!name) { Swal.fire({ icon: "warning", title: "请输入姓名", timer: 1500, showConfirmButton: false }); return; }
-  await fetch("/api/users", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, role, avatar, color })
-  });
+  await requireEnvelopeSuccess(
+    await fetchJsonEnvelope("/api/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, role, avatar, color })
+    }),
+    "新增成员失败"
+  );
   document.getElementById("new-user-name").value = "";
   document.getElementById("new-user-avatar").value = "";
   syncThemePicker("warm");
@@ -1232,8 +1290,11 @@ if (_btnAddUser) _btnAddUser.onclick = async () => {
 // 打开/关闭管理弹窗
 const _btnManageUsers = document.getElementById("btn-manage-users");
 if (_btnManageUsers) _btnManageUsers.onclick = () => {
-  syncThemePicker(_currentUser?.color || "warm");
   document.getElementById("user-modal")?.classList.remove("hidden");
+};
+const _btnLogout = document.getElementById("btn-logout");
+if (_btnLogout) _btnLogout.onclick = () => {
+  logoutCurrentSession();
 };
 const _btnCloseUserModal = document.getElementById("btn-close-user-modal");
 if (_btnCloseUserModal) _btnCloseUserModal.onclick = () => {
@@ -1246,17 +1307,6 @@ if (_userModal) _userModal.onclick = (e) => {
 
 // ── 语音识别用户切换（"我是爸爸" / "切换到孩子"）──
 function detectUserSwitchIntent(text) {
-  if (!text || !_allUsers.length) return null;
-  // 匹配 "我是X" / "切换到X" / "换成X"
-  const patterns = [/我是(.+)/, /切换到(.+)/, /换成(.+)/, /(.+)在用/, /(.+)来了/];
-  for (const pat of patterns) {
-    const m = text.match(pat);
-    if (m) {
-      const keyword = m[1].trim();
-      const matched = _allUsers.find(u => u.name.includes(keyword) || keyword.includes(u.name));
-      if (matched) return matched;
-    }
-  }
   return null;
 }
 
@@ -1264,13 +1314,8 @@ function detectUserSwitchIntent(text) {
 // 原有的 flush 完成后，在 SSE 事件里也可以触发
 // 这里用一个全局 hook，在 voice ingest 返回后调用
 window._onVoiceResult = function(text) {
-  if (!text) return;
-  const targetUser = detectUserSwitchIntent(text);
-  if (targetUser) {
-    switchToUser(targetUser.id);
-  }
+  void text;
 };
 
 // ── 初始化 ──
 loadCurrentUser();
-loadAllUsers();

@@ -6,7 +6,7 @@ db/user_ops.py
 import sqlite3
 from datetime import datetime, timedelta
 
-DB_PATH = "data/bookshelf.db"
+DB_PATH = r"C:\Users\32140\Desktop\bookshelf-ziggy-client-auth\bookshelf-ziggy-client-auth\data\bookshelf.db"
 
 
 # ══════════════════════════════════════════

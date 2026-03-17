@@ -7,3 +7,5 @@ vosk
 requests
 sounddevice
 playsound==1.2.2
+PyJWT
+qrcode[pil]

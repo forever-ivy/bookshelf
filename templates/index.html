@@ -33,12 +33,18 @@
         <div class="current-user-info">
           <div id="current-name" class="current-user-name">当前成员</div>
           <div id="current-role" class="current-user-role">-</div>
+          <div id="current-account-meta" class="current-user-role" style="font-size:12px;">-</div>
         </div>
-        <button id="btn-manage-users" class="btn-text-sm" title="成员管理">
-          <i class="fa-solid fa-gear"></i>
-        </button>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+          <button id="btn-manage-users" class="btn-text-sm hidden" title="家庭管理">
+            <i class="fa-solid fa-gear"></i> 家庭
+          </button>
+          <button id="btn-logout" class="btn-text-sm" title="退出登录">
+            <i class="fa-solid fa-right-from-bracket"></i> 退出
+          </button>
+        </div>
       </div>
-      <div id="user-switcher" class="user-switcher"></div>
+      <div id="user-family-meta" class="user-switcher"></div>
     </div>
 
     <div class="panel-card action-panel">
@@ -154,79 +160,14 @@
 <div id="user-modal" class="modal-overlay hidden">
   <div class="modal-box modal-sm">
     <div class="modal-header">
-      <h2><i class="fa-solid fa-users"></i> 成员管理</h2>
+      <h2><i class="fa-solid fa-users"></i> 家庭角色管理</h2>
       <button id="btn-close-user-modal" class="btn-close"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <div class="modal-body">
+      <p style="margin-bottom:12px;color:var(--muted);font-size:13px;line-height:1.7;">
+        Web 端不提供注册。请先在 App 中完成扫码、注册和登录。管理员可以在这里把家庭成员设置为家长或孩子。
+      </p>
       <div id="user-list-manage" class="user-list-manage"></div>
-      <div class="divider-line"></div>
-      <div class="add-user-form">
-        <h4 style="margin-bottom:10px;font-size:14px;color:var(--text-2)"><i class="fa-solid fa-plus"></i> 新增成员</h4>
-        <div style="display:flex;gap:8px;margin-bottom:8px;">
-          <input id="new-user-avatar" type="text" class="input-field" placeholder="头像" style="width:52px;flex:none;text-align:center;">
-          <input id="new-user-name" type="text" class="input-field" placeholder="姓名">
-          <select id="new-user-role" class="input-field" style="flex:none;width:72px;">
-            <option value="parent">家长</option>
-            <option value="child">孩子</option>
-          </select>
-        </div>
-        <div style="margin-bottom:10px;">
-          <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">选择主题风格</div>
-          <div class="theme-picker-grid">
-            <button class="theme-option active" data-theme="warm" title="家庭温馨"
-                    style="--preview: linear-gradient(135deg, #8b5e3c 0%, #f3d3b0 50%, #c9d3a4 100%);">
-              <span class="theme-preview"></span>
-              <span class="theme-meta">
-                <span class="theme-name">家庭温馨</span>
-                <span class="theme-desc">暖木奶油 · 柔和灯光</span>
-              </span>
-            </button>
-            <button class="theme-option" data-theme="slate" title="科技炫酷"
-                    style="--preview: linear-gradient(135deg, #0f172a 0%, #28d7ff 55%, #8b5cff 100%);">
-              <span class="theme-preview"></span>
-              <span class="theme-meta">
-                <span class="theme-name">科技炫酷</span>
-                <span class="theme-desc">霓虹蓝紫 · 未来感</span>
-              </span>
-            </button>
-            <button class="theme-option" data-theme="rose" title="粉嫩甜心"
-                    style="--preview: linear-gradient(135deg, #ff7aa2 0%, #ffc1d6 60%, #ffdce8 100%);">
-              <span class="theme-preview"></span>
-              <span class="theme-meta">
-                <span class="theme-name">粉嫩甜心</span>
-                <span class="theme-desc">棉花糖 · 轻柔粉</span>
-              </span>
-            </button>
-            <button class="theme-option" data-theme="forest" title="森林清新"
-                    style="--preview: linear-gradient(135deg, #2f5b3d 0%, #78a082 60%, #cfe6d7 100%);">
-              <span class="theme-preview"></span>
-              <span class="theme-meta">
-                <span class="theme-name">森林清新</span>
-                <span class="theme-desc">草木气息 · 清爽绿</span>
-              </span>
-            </button>
-            <button class="theme-option" data-theme="ocean" title="海洋清爽"
-                    style="--preview: linear-gradient(135deg, #1e4f7a 0%, #56a7c2 60%, #d8eef7 100%);">
-              <span class="theme-preview"></span>
-              <span class="theme-meta">
-                <span class="theme-name">海洋清爽</span>
-                <span class="theme-desc">海风蓝 · 清透感</span>
-              </span>
-            </button>
-            <button class="theme-option" data-theme="golden" title="日落暖橙"
-                    style="--preview: linear-gradient(135deg, #f28c28 0%, #ffb703 60%, #ffe6b0 100%);">
-              <span class="theme-preview"></span>
-              <span class="theme-meta">
-                <span class="theme-name">日落暖橙</span>
-                <span class="theme-desc">暖阳 · 活力橙</span>
-              </span>
-            </button>
-          </div>
-        </div>
-        <button id="btn-add-user" class="btn-primary btn-block" style="font-size:14px;padding:10px;">
-          <i class="fa-solid fa-plus"></i> 添加成员
-        </button>
-      </div>
     </div>
   </div>
 </div>

@@ -2,7 +2,7 @@ import sqlite3
 from thefuzz import fuzz
 import re
 
-DB_PATH = "data/bookshelf.db"
+DB_PATH = r"C:\Users\32140\Desktop\bookshelf-ziggy-client-auth\bookshelf-ziggy-client-auth\data\bookshelf.db"
 
 
 def fetch_all_books():

@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ cabinet.cabinet_name or '智慧书架' }} · 绑定与登录</title>
+  <style>
+    :root {
+      --bg: #f6f1e8;
+      --card: rgba(255, 252, 246, 0.84);
+      --line: rgba(118, 87, 52, 0.15);
+      --text: #3f2f1f;
+      --muted: #7c6651;
+      --accent: #a96b38;
+      --accent-2: #d6ad74;
+      --shadow: 0 20px 50px rgba(86, 60, 32, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "PingFang SC", "Noto Sans SC", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(214, 173, 116, 0.28), transparent 30%),
+        radial-gradient(circle at right, rgba(169, 107, 56, 0.16), transparent 28%),
+        linear-gradient(180deg, #fbf7f1 0%, var(--bg) 100%);
+    }
+
+    .shell {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 48px 0 40px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.2fr 0.9fr;
+      gap: 24px;
+      align-items: stretch;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(16px);
+    }
+
+    .intro {
+      padding: 36px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .intro::after {
+      content: "";
+      position: absolute;
+      right: -80px;
+      bottom: -80px;
+      width: 220px;
+      height: 220px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(214, 173, 116, 0.34), transparent 68%);
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(169, 107, 56, 0.08);
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    h1 {
+      margin: 18px 0 12px;
+      font-size: clamp(32px, 5vw, 54px);
+      line-height: 1.02;
+      letter-spacing: -0.04em;
+    }
+
+    .subcopy {
+      margin: 0;
+      max-width: 560px;
+      font-size: 17px;
+      line-height: 1.75;
+      color: var(--muted);
+    }
+
+    .feature-list {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 28px;
+    }
+
+    .feature {
+      padding: 16px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.58);
+      border: 1px solid rgba(169, 107, 56, 0.08);
+    }
+
+    .feature strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 15px;
+    }
+
+    .feature span {
+      display: block;
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+
+    .auth-grid {
+      display: grid;
+      grid-template-rows: auto auto;
+      gap: 24px;
+    }
+
+    .qr-card, .login-card {
+      padding: 28px;
+    }
+
+    .card-title {
+      margin: 0 0 6px;
+      font-size: 22px;
+    }
+
+    .card-desc {
+      margin: 0 0 18px;
+      color: var(--muted);
+      line-height: 1.65;
+      font-size: 14px;
+    }
+
+    .qr-shell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      padding: 18px;
+      border-radius: 24px;
+      background: linear-gradient(180deg, rgba(255,255,255,.85), rgba(255,255,255,.55));
+      border: 1px solid rgba(169, 107, 56, 0.08);
+    }
+
+    #qrcode {
+      width: 240px;
+      height: 240px;
+      display: grid;
+      place-items: center;
+      border-radius: 20px;
+      background: white;
+      overflow: hidden;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,0.04);
+    }
+
+    #qrcode img {
+      display: block;
+      width: 240px;
+      height: 240px;
+    }
+
+    .pair-code {
+      font-size: 14px;
+      letter-spacing: 0.16em;
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .bind-meta {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .btn-link {
+      border: 0;
+      background: transparent;
+      color: var(--accent);
+      cursor: pointer;
+      font-weight: 600;
+      padding: 0;
+    }
+
+    form {
+      display: grid;
+      gap: 12px;
+    }
+
+    label {
+      display: grid;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    input {
+      width: 100%;
+      border: 1px solid rgba(118, 87, 52, 0.16);
+      border-radius: 16px;
+      padding: 14px 16px;
+      background: rgba(255,255,255,0.82);
+      color: var(--text);
+      font-size: 15px;
+      outline: none;
+    }
+
+    input:focus {
+      border-color: rgba(169, 107, 56, 0.5);
+      box-shadow: 0 0 0 4px rgba(169, 107, 56, 0.12);
+    }
+
+    button[type="submit"] {
+      border: 0;
+      border-radius: 16px;
+      padding: 14px 16px;
+      background: linear-gradient(135deg, var(--accent) 0%, #8c5325 100%);
+      color: white;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 12px 30px rgba(140, 83, 37, 0.22);
+    }
+
+    .hint {
+      margin-top: 12px;
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .status {
+      min-height: 22px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .status.error { color: #b33a24; }
+    .status.success { color: #3e7b3e; }
+
+    @media (max-width: 900px) {
+      .hero {
+        grid-template-columns: 1fr;
+      }
+
+      .feature-list {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="hero">
+      <section class="card intro">
+        <div class="eyebrow">智慧书架 · {{ cabinet.cabinet_name or "智慧书架" }}</div>
+        <h1>扫码绑定书柜，再从 App 注册和登录。</h1>
+        <p class="subcopy">
+          Web 端只负责展示当前书柜二维码和已有账号登录。新账号需要先在 App 中扫码绑定书柜，再完成注册。首个注册账号会自动成为管理员。
+        </p>
+        <div class="feature-list">
+          <div class="feature">
+            <strong>1. 扫二维码绑定</strong>
+            <span>App 扫描当前页面生成的配对码，自动绑定到这台书柜。</span>
+          </div>
+          <div class="feature">
+            <strong>2. App 注册账号</strong>
+            <span>首个账号是管理员和家长，后续账号默认是普通用户和孩子。</span>
+          </div>
+          <div class="feature">
+            <strong>3. Web 端登录使用</strong>
+            <span>只有 App 已注册的账号才能在这里登录并进入书柜后台。</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="auth-grid">
+        <div class="card qr-card">
+          <h2 class="card-title">扫码绑定书柜</h2>
+          <p class="card-desc">打开 App 的扫码页，对准下面二维码即可完成书柜绑定。配对码默认 5 分钟有效，可以随时刷新。</p>
+          <div class="qr-shell">
+            <div id="qrcode">生成中...</div>
+            <div id="pair-code" class="pair-code">--</div>
+            <div id="bind-meta" class="bind-meta"></div>
+            <button id="refresh-pair" class="btn-link" type="button">刷新二维码</button>
+          </div>
+        </div>
+
+        <div class="card login-card">
+          <h2 class="card-title">已有账号登录</h2>
+          <p class="card-desc">注册入口只在 App 中开放。这里仅支持已注册账号登录进入 Web 后台。</p>
+          <form id="login-form">
+            <label>
+              用户名
+              <input id="username" name="username" type="text" autocomplete="username" placeholder="请输入用户名">
+            </label>
+            <label>
+              密码
+              <input id="password" name="password" type="password" autocomplete="current-password" placeholder="请输入密码">
+            </label>
+            <button type="submit">登录后台</button>
+          </form>
+          <div id="login-status" class="status"></div>
+          <div class="hint">如果你是第一次使用，请先在 App 中扫码并完成注册，然后再回到这里登录。</div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const qrBox = document.getElementById("qrcode");
+    const pairCodeEl = document.getElementById("pair-code");
+    const bindMetaEl = document.getElementById("bind-meta");
+    const loginStatusEl = document.getElementById("login-status");
+
+    async function readEnvelope(response) {
+      const payload = await response.json();
+      if (!payload || typeof payload.ok !== "boolean") {
+        throw new Error("接口响应格式不正确");
+      }
+      return payload;
+    }
+
+    async function issuePairCode() {
+      qrBox.textContent = "生成中...";
+      const payload = await readEnvelope(await fetch("/api/auth/pair/issue", { method: "POST" }));
+      if (!payload.ok) {
+        throw new Error(payload.message || "二维码生成失败");
+      }
+      const data = payload.data || {};
+      qrBox.innerHTML = data.qr_image_url
+        ? `<img alt="书柜绑定二维码" src="${data.qr_image_url}" />`
+        : "二维码生成失败";
+      pairCodeEl.textContent = data.pair_code || "--";
+      bindMetaEl.innerHTML = `
+        <span>书柜：${(data.cabinet && data.cabinet.cabinet_name) || "{{ cabinet.cabinet_name or '智慧书架' }}"}</span>
+        <span>有效期至：${(data.expires_at || "").replace(" ", "  ")}</span>
+      `;
+    }
+
+    async function handleLogin(event) {
+      event.preventDefault();
+      loginStatusEl.className = "status";
+      loginStatusEl.textContent = "登录中...";
+
+      const username = document.getElementById("username").value.trim();
+      const password = document.getElementById("password").value;
+      const payload = await readEnvelope(await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      }));
+
+      if (!payload.ok) {
+        loginStatusEl.className = "status error";
+        loginStatusEl.textContent = payload.message || "登录失败";
+        return;
+      }
+
+      loginStatusEl.className = "status success";
+      loginStatusEl.textContent = "登录成功，正在进入后台...";
+      window.location.href = "/app";
+    }
+
+    document.getElementById("refresh-pair").addEventListener("click", () => {
+      issuePairCode().catch((error) => {
+        qrBox.textContent = error.message || "二维码生成失败";
+      });
+    });
+    document.getElementById("login-form").addEventListener("submit", (event) => {
+      handleLogin(event).catch((error) => {
+        loginStatusEl.className = "status error";
+        loginStatusEl.textContent = error.message || "登录失败";
+      });
+    });
+
+    issuePairCode().catch((error) => {
+      qrBox.textContent = error.message || "二维码生成失败";
+    });
+  </script>
+</body>
+</html>

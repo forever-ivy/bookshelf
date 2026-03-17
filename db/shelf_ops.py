@@ -1,6 +1,26 @@
 import sqlite3
 
-DB_PATH = "data/bookshelf.db"
+DB_PATH = r"C:\Users\32140\Desktop\bookshelf-ziggy-client-auth\bookshelf-ziggy-client-auth\data\bookshelf.db"
+
+
+def _clone_book_record(cur, book_id):
+    """Duplicate a book row so multiple physical copies can coexist."""
+    cur.execute("PRAGMA table_info(books)")
+    columns = [row[1] for row in cur.fetchall() if row[1] != "id"]
+    if not columns:
+        raise ValueError("books schema is invalid")
+
+    cur.execute(f"SELECT {', '.join(columns)} FROM books WHERE id = ?", (book_id,))
+    row = cur.fetchone()
+    if not row:
+        raise ValueError(f"book not found: {book_id}")
+
+    placeholders = ", ".join(["?"] * len(columns))
+    cur.execute(
+        f"INSERT INTO books ({', '.join(columns)}) VALUES ({placeholders})",
+        row,
+    )
+    return cur.lastrowid
 
 def find_free_compartment():
     conn = sqlite3.connect(DB_PATH)
@@ -27,7 +47,14 @@ def store_book(book_id, compartment_id, user_id=None):
 
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute("INSERT INTO stored_books (compartment_id, book_id) VALUES (?, ?)", (compartment_id, book_id))
+    try:
+        cur.execute("INSERT INTO stored_books (compartment_id, book_id) VALUES (?, ?)", (compartment_id, book_id))
+    except sqlite3.IntegrityError as exc:
+        if "stored_books.book_id" not in str(exc):
+            conn.close()
+            raise
+        book_id = _clone_book_record(cur, book_id)
+        cur.execute("INSERT INTO stored_books (compartment_id, book_id) VALUES (?, ?)", (compartment_id, book_id))
     cur.execute("UPDATE compartments SET status = 'occupied' WHERE compartment_id = ?", (compartment_id,))
     cur.execute(
         "INSERT INTO borrow_logs (book_id, action, compartment_id, user_id) VALUES (?, 'store', ?, ?)",
