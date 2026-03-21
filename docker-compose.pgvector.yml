@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    container_name: bookshelf
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: library
+      POSTGRES_PASSWORD: library
+      POSTGRES_DB: service
+    ports:
+      - "55432:5432"
+    volumes:
+      - bookshelf_pgvector18_data:/var/lib/postgresql
+
+volumes:
+  bookshelf_pgvector18_data:
