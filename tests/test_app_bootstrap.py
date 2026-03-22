@@ -18,7 +18,17 @@ def test_openapi_contains_expected_module_tags(client):
 
     assert response.status_code == 200
     tags = {tag["name"] for tag in response.json()["tags"]}
-    assert {"auth", "catalog", "orders", "robot_sim", "recommendation", "conversation", "admin"} <= tags
+    assert {"auth", "catalog", "orders", "robot_sim", "recommendation", "conversation", "admin", "readers"} <= tags
+
+
+def test_openapi_contains_readers_routes(client):
+    response = client.get("/openapi.json")
+
+    assert response.status_code == 200
+    paths = response.json()["paths"]
+    assert "/api/v1/readers/me/profile" in paths
+    assert "/api/v1/readers/me/overview" in paths
+    assert "/api/v1/readers/{reader_id}/overview" in paths
 
 
 def test_inventory_routes_do_not_require_legacy_sqlite_artifact(client):
