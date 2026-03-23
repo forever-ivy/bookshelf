@@ -87,7 +87,7 @@ describe('reader detail page', () => {
     ])
   })
 
-  it('renders the redesigned reader detail workspace', async () => {
+  it('renders the reader detail workspace with a path back to readers index', async () => {
     render(
       <TestProviders>
         <MemoryRouter initialEntries={['/readers/1']}>
@@ -99,9 +99,10 @@ describe('reader detail page', () => {
     )
 
     expect(await screen.findByText('林栀')).toBeInTheDocument()
-    expect(screen.getByText('互动与履约记录')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '行为概览' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '互动记录' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '记录' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '读者信息' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '偏好与标签' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '返回读者索引' })).toHaveAttribute('href', '/readers')
     expect(await screen.findAllByText(/AI 系统/)).not.toHaveLength(0)
     expect(screen.getByText('overdue / manual_review')).toBeInTheDocument()
   })

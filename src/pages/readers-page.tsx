@@ -5,7 +5,6 @@ import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 
 import { DataTable } from '@/components/shared/data-table'
 import { EmptyState } from '@/components/shared/empty-state'
-import { InspectorPanel } from '@/components/shared/inspector-panel'
 import { LoadingState } from '@/components/shared/loading-state'
 import { MetricStrip } from '@/components/shared/metric-strip'
 import { PageShell } from '@/components/shared/page-shell'
@@ -14,6 +13,7 @@ import { WorkspacePanel } from '@/components/shared/workspace-panel'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { getAdminReaders, updateAdminReader } from '@/lib/api/management'
 import { getAdminPageHero } from '@/lib/page-hero'
@@ -34,6 +34,7 @@ export function ReadersPage() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [selectedReaderId, setSelectedReaderId] = useState<number | null>(null)
+  const [isEditorOpen, setIsEditorOpen] = useState(false)
   const [editor, setEditor] = useState(EMPTY_READER_EDITOR)
   const deferredSearch = useDeferredValue(search)
 
@@ -83,6 +84,7 @@ export function ReadersPage() {
       if (selectedReader) {
         void queryClient.invalidateQueries({ queryKey: ['readers', selectedReader.id] })
       }
+      setIsEditorOpen(false)
     },
   })
 
@@ -132,7 +134,15 @@ export function ReadersPage() {
       id: 'profile',
       header: '画像编辑',
       cell: (info) => (
-        <Button type="button" size="sm" variant="secondary" onClick={() => setSelectedReaderId(info.row.original.id)}>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          onClick={() => {
+            setSelectedReaderId(info.row.original.id)
+            setIsEditorOpen(true)
+          }}
+        >
           编辑画像
         </Button>
       ),
@@ -154,15 +164,7 @@ export function ReadersPage() {
       eyebrow="读者管理"
       title="读者管理"
       description="查看读者信息、限制状态和风险标签。"
-      statusLine="读者列表"
-      actions={
-        <Input
-          className="w-full md:w-80"
-          placeholder="搜索账号、姓名、学院、分群..."
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
-      }
+      statusLine="读者索引"
     >
       <MetricStrip
         items={[
@@ -174,59 +176,92 @@ export function ReadersPage() {
         className="xl:grid-cols-4"
       />
 
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <WorkspacePanel title="读者列表" description="把搜索、分群、限制状态和风险标签放在一起。">
-          {readersQuery.isLoading ? (
-            <LoadingState label="加载中" />
-          ) : (
-            <DataTable
-              columns={columns}
-              data={readers}
-              emptyTitle="暂无数据"
-              emptyDescription="当前条件下没有可用数据。"
-            />
-          )}
-        </WorkspacePanel>
+      <WorkspacePanel
+        title="读者索引"
+        description="按账号、学院、分群和限制状态筛选读者，画像编辑从右侧抽屉进入。"
+        action={
+          <Input
+            className="w-full md:w-80"
+            placeholder="搜索账号、姓名、学院、分群..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        }
+      >
+        {readersQuery.isLoading ? (
+          <LoadingState label="加载中" />
+        ) : (
+          <DataTable
+            columns={columns}
+            data={readers}
+            emptyTitle="暂无数据"
+            emptyDescription="当前条件下没有可用数据。"
+          />
+        )}
+      </WorkspacePanel>
 
-        <div className="space-y-6">
-          <InspectorPanel title="读者信息" description="围绕当前选中的读者，快速调整限制、分群和风险标签。">
-            {!selectedReader ? (
-              readersQuery.isLoading ? (
-                <LoadingState label="加载中" />
-              ) : (
-                <EmptyState title="暂无数据" description="当前条件下没有可用数据。" />
-              )
+      <Sheet open={isEditorOpen} onOpenChange={setIsEditorOpen}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>画像编辑</SheetTitle>
+            <SheetDescription>围绕当前读者调整限制、分群和风险标签，并核对最近活跃与偏好信息。</SheetDescription>
+          </SheetHeader>
+
+          {!selectedReader ? (
+            readersQuery.isLoading ? (
+              <LoadingState label="加载中" />
             ) : (
-              <div className="space-y-5">
-                <div className="rounded-2xl bg-[var(--surface-container-low)] px-4 py-4">
-                  <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">当前读者</p>
-                  <p className="mt-2 text-lg font-semibold text-[var(--foreground)]">{selectedReader.display_name}</p>
-                  <p className="mt-1 text-sm text-[var(--muted-foreground)]">{selectedReader.username}</p>
+              <EmptyState title="暂无数据" description="当前条件下没有可用读者可供编辑。" />
+            )
+          ) : (
+            <>
+              <section className="space-y-5">
+                <div className="rounded-[1.5rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.78)] px-5 py-5">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">当前读者</p>
+                      <p className="text-xl font-semibold tracking-[-0.04em] text-[var(--foreground)]">{selectedReader.display_name}</p>
+                      <p className="text-sm text-[var(--muted-foreground)]">{selectedReader.username}</p>
+                    </div>
+                    <div className="space-y-2 text-right">
+                      <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">当前限制</p>
+                      <StatusBadge status={selectedReader.restriction_status ?? 'none'} />
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-3 text-sm text-[var(--muted-foreground)] sm:grid-cols-2">
+                    <p>{selectedReader.college ?? '学院待补充'}</p>
+                    <p>{selectedReader.major ?? '专业待补充'}</p>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="reader-restriction-status">限制状态</Label>
-                  <Input
-                    id="reader-restriction-status"
-                    value={editor.restrictionStatus}
-                    onChange={(event) => setEditor((current) => ({ ...current, restrictionStatus: event.target.value }))}
-                  />
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="reader-restriction-status">限制状态</Label>
+                    <Input
+                      id="reader-restriction-status"
+                      value={editor.restrictionStatus}
+                      onChange={(event) => setEditor((current) => ({ ...current, restrictionStatus: event.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="reader-restriction-until">限制到期</Label>
+                    <Input
+                      id="reader-restriction-until"
+                      value={editor.restrictionUntil}
+                      onChange={(event) => setEditor((current) => ({ ...current, restrictionUntil: event.target.value }))}
+                    />
+                  </div>
                 </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="reader-restriction-until">限制到期</Label>
-                  <Input
-                    id="reader-restriction-until"
-                    value={editor.restrictionUntil}
-                    onChange={(event) => setEditor((current) => ({ ...current, restrictionUntil: event.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="reader-segment-code">分群</Label>
+                  <Label htmlFor="reader-segment-code">用户分群</Label>
                   <Input
                     id="reader-segment-code"
                     value={editor.segmentCode}
                     onChange={(event) => setEditor((current) => ({ ...current, segmentCode: event.target.value }))}
                   />
                 </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="reader-risk-flags">风险标签</Label>
                   <Textarea
@@ -235,50 +270,42 @@ export function ReadersPage() {
                     onChange={(event) => setEditor((current) => ({ ...current, riskFlags: event.target.value }))}
                   />
                 </div>
+              </section>
+
+              <section className="space-y-4 border-t border-[var(--line-subtle)] pt-5">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.62)] px-4 py-4">
+                    <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">最近活跃</p>
+                    <p className="mt-2 text-sm font-semibold text-[var(--foreground)]">{formatDateTime(selectedReader.last_active_at)}</p>
+                  </div>
+                  <div className="rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.62)] px-4 py-4">
+                    <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">进行中订单</p>
+                    <p className="mt-2 text-sm font-semibold text-[var(--foreground)]">{selectedReader.active_orders_count}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.62)] px-4 py-4">
+                  <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">偏好信息</p>
+                  <pre className="mt-3 whitespace-pre-wrap break-all text-sm leading-6 text-[var(--foreground)]">
+                    {JSON.stringify(selectedReader.preference_profile_json ?? {}, null, 2)}
+                  </pre>
+                </div>
+              </section>
+
+              <SheetFooter>
                 <Button
                   type="button"
-                  className="w-full"
+                  className="min-w-36"
                   disabled={updateReaderMutation.isPending}
                   onClick={() => updateReaderMutation.mutate()}
                 >
-                  {updateReaderMutation.isPending ? '保存中…' : '保存修改'}
+                  {updateReaderMutation.isPending ? '保存中…' : '保存画像设置'}
                 </Button>
-              </div>
-            )}
-          </InspectorPanel>
-
-          <WorkspacePanel title="读者摘要" description="显示常看的偏好、活跃时间和风险信息。">
-            {!selectedReader ? (
-              readersQuery.isLoading ? (
-                <LoadingState label="加载中" />
-              ) : (
-                <EmptyState title="暂无数据" description="当前条件下没有可用数据。" />
-              )
-            ) : (
-              <div className="space-y-4">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl bg-[var(--surface-container-low)] px-4 py-4">
-                    <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">最近活跃</p>
-                    <p className="mt-2 text-sm font-semibold text-[var(--foreground)]">{formatDateTime(selectedReader.last_active_at)}</p>
-                  </div>
-                  <div className="rounded-2xl bg-[var(--surface-container-low)] px-4 py-4">
-                    <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">当前限制</p>
-                    <div className="mt-2">
-                      <StatusBadge status={selectedReader.restriction_status ?? 'none'} />
-                    </div>
-                  </div>
-                </div>
-                <div className="rounded-2xl bg-[var(--surface-container-low)] px-4 py-4">
-                  <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">偏好信息</p>
-                  <p className="mt-2 text-sm leading-6 text-[var(--foreground)]">
-                    {JSON.stringify(selectedReader.preference_profile_json ?? {}, null, 2)}
-                  </p>
-                </div>
-              </div>
-            )}
-          </WorkspacePanel>
-        </div>
-      </div>
+              </SheetFooter>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </PageShell>
   )
 }

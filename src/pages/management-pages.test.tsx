@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { PropsWithChildren } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { STORAGE_KEYS } from '@/constants/constant'
@@ -219,7 +219,7 @@ describe('management pages', () => {
       page_size: 20,
     })
     managementApi.getAdminInventoryAlerts.mockResolvedValue({
-      items: [{ id: 3, title: '库存异常', status: 'open', severity: 'warning', source_type: 'inventory', created_at: '2026-03-22T07:00:00Z' }],
+      items: [{ id: 3, title: '库存异常', status: 'open', severity: 'warning', source_type: 'inventory', source_id: 'cabinet-east', created_at: '2026-03-22T07:00:00Z' }],
       total: 1,
       page: 1,
       page_size: 20,
@@ -405,9 +405,9 @@ describe('management pages', () => {
       </TestProviders>,
     )
 
-    expect(await screen.findByText('运营快照')).toBeInTheDocument()
-    expect(screen.getByText('当日系统状态')).toBeInTheDocument()
-    expect(await screen.findByText('今日借阅量')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '总览' })).toBeInTheDocument()
+    expect(screen.getByText('查看今日借阅、配送进度和服务状态。')).toBeInTheDocument()
+    expect(await screen.findByText('今日借阅')).toBeInTheDocument()
     expect(screen.getByText('12')).toBeInTheDocument()
     expect(screen.getByText('智能系统设计')).toBeInTheDocument()
     expect(screen.getByText('东区')).toBeInTheDocument()
@@ -422,15 +422,15 @@ describe('management pages', () => {
       </TestProviders>,
     )
 
-    expect(await screen.findByText('图书管理')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '图书管理' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '馆藏目录' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '当前图书检视' })).toBeInTheDocument()
     expect(await screen.findAllByText('智能系统设计')).not.toHaveLength(0)
 
-    await user.click(screen.getByRole('tab', { name: '分类管理' }))
+    await user.click(screen.getByRole('tab', { name: '分类' }))
     expect(await screen.findByText('人工智能')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('tab', { name: '标签管理' }))
+    await user.click(screen.getByRole('tab', { name: '标签' }))
     expect(await screen.findByText('热门')).toBeInTheDocument()
   })
 
@@ -443,16 +443,18 @@ describe('management pages', () => {
       </TestProviders>,
     )
 
-    expect(await screen.findByText('图书管理')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '图书管理' })).toBeInTheDocument()
 
-    await user.type(screen.getByLabelText('新书标题'), '机器人路径规划')
-    await user.type(screen.getByLabelText('新书作者'), '乔远')
-    await user.type(screen.getByLabelText('新书分类 ID'), '1')
-    await user.type(screen.getByLabelText('新书标签 ID 列表'), '1')
-    await user.type(screen.getByLabelText('新书 ISBN'), '9787111000003')
-    await user.type(screen.getByLabelText('新书条码'), 'AI-0003')
-    await user.type(screen.getByLabelText('新书简介'), '调度与路径规划实战。')
-    await user.click(screen.getByRole('button', { name: '录入新书' }))
+    await user.click(screen.getByRole('button', { name: '新增图书' }))
+    const createDialog = await screen.findByRole('dialog', { name: '新增图书' })
+    await user.type(within(createDialog).getByLabelText('书名'), '机器人路径规划')
+    await user.type(within(createDialog).getByLabelText('作者'), '乔远')
+    await user.selectOptions(within(createDialog).getByLabelText('分类'), '1')
+    await user.click(within(createDialog).getByRole('button', { name: '热门' }))
+    await user.type(within(createDialog).getByLabelText('ISBN'), '9787111000003')
+    await user.type(within(createDialog).getByLabelText('条码'), 'AI-0003')
+    await user.type(within(createDialog).getByLabelText('简介'), '调度与路径规划实战。')
+    await user.click(within(createDialog).getByRole('button', { name: '新增图书' }))
 
     expect(managementApi.createAdminBook).toHaveBeenCalledWith({
       title: '机器人路径规划',
@@ -466,11 +468,16 @@ describe('management pages', () => {
     })
 
     await user.click(screen.getByRole('button', { name: '编辑此书' }))
-    await user.clear(screen.getByLabelText('编辑书名'))
-    await user.type(screen.getByLabelText('编辑书名'), '智能系统设计（新版）')
-    await user.clear(screen.getByLabelText('编辑简介'))
-    await user.type(screen.getByLabelText('编辑简介'), '更新后的图书简介。')
-    await user.click(screen.getByRole('button', { name: '保存图书编辑' }))
+    const editSheet = await screen.findByRole('dialog', { name: '编辑图书' })
+    await user.clear(within(editSheet).getByLabelText('书名'))
+    await user.type(within(editSheet).getByLabelText('书名'), '智能系统设计（新版）')
+    await user.clear(within(editSheet).getByLabelText('简介'))
+    await user.type(within(editSheet).getByLabelText('简介'), '更新后的图书简介。')
+    await user.selectOptions(within(editSheet).getByLabelText('上架状态'), 'off_shelf')
+    await user.click(within(editSheet).getByRole('button', { name: '保存修改' }))
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: '编辑图书' })).not.toBeInTheDocument()
+    })
 
     expect(managementApi.updateAdminBook).toHaveBeenCalledWith(1, {
       title: '智能系统设计（新版）',
@@ -480,29 +487,26 @@ describe('management pages', () => {
       isbn: '9787111000001',
       barcode: 'AI-0001',
       summary: '更新后的图书简介。',
-      shelf_status: 'on_shelf',
+      shelf_status: 'off_shelf',
     })
 
-    await user.selectOptions(screen.getByLabelText('上架状态切换'), 'off_shelf')
-    await user.click(screen.getByRole('button', { name: '仅更新上架状态' }))
-    expect(managementApi.setAdminBookStatus).toHaveBeenCalledWith(1, 'off_shelf')
-
-    await user.type(screen.getByLabelText('分类编码'), 'robot')
-    await user.type(screen.getByLabelText('分类名称'), '机器人')
-    await user.click(screen.getByRole('button', { name: '创建分类' }))
+    await user.click(screen.getByRole('button', { name: '管理分类和标签' }))
+    const taxonomyDialog = await screen.findByRole('dialog', { name: '分类和标签' })
+    await user.type(within(taxonomyDialog).getByLabelText('分类名称'), '机器人')
+    await user.click(within(taxonomyDialog).getByRole('button', { name: '创建分类' }))
     expect(managementApi.createAdminCategory).toHaveBeenCalledWith({
-      code: 'robot',
+      code: expect.stringMatching(/^category-/),
       name: '机器人',
       description: undefined,
       status: 'active',
     })
 
-    await user.type(screen.getByLabelText('标签编码'), 'robotics')
-    await user.type(screen.getByLabelText('标签名称'), '机器人专题')
-    await user.type(screen.getByLabelText('标签说明'), '机器人与调度书目')
-    await user.click(screen.getByRole('button', { name: '创建标签' }))
+    await user.click(within(taxonomyDialog).getByRole('tab', { name: '标签' }))
+    await user.type(within(taxonomyDialog).getByLabelText('标签名称'), '机器人专题')
+    await user.type(within(taxonomyDialog).getByLabelText('标签说明'), '机器人与调度书目')
+    await user.click(within(taxonomyDialog).getByRole('button', { name: '创建标签' }))
     expect(managementApi.createAdminTag).toHaveBeenCalledWith({
-      code: 'robotics',
+      code: expect.stringMatching(/^tag-/),
       name: '机器人专题',
       description: '机器人与调度书目',
     })
@@ -518,11 +522,11 @@ describe('management pages', () => {
     )
 
     expect(await screen.findByRole('heading', { name: '警告管理' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '待处理警告' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '警告列表' })).toBeInTheDocument()
     expect(await screen.findByText('机器人异常')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('tab', { name: '审计日志' }))
-    expect(await screen.findByRole('heading', { name: '审计回放' })).toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: '审计' }))
+    expect(await screen.findByRole('heading', { name: '审计记录' })).toBeInTheDocument()
     expect(await screen.findByText('管理后台手动更新图书简介')).toBeInTheDocument()
   })
 
@@ -559,32 +563,64 @@ describe('management pages', () => {
     )
 
     expect(await screen.findByText('分析简报')).toBeInTheDocument()
-    expect(screen.getByText('本周借阅走势')).toBeInTheDocument()
-    expect(await screen.findByText('数据分析')).toBeInTheDocument()
-    expect(await screen.findByText('信息学院')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '借阅趋势总览' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '学院借阅偏好' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '热门书目热度' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '时段与留存洞察' })).toBeInTheDocument()
+    expect(await screen.findAllByText('数据分析')).not.toHaveLength(0)
+    expect(await screen.findAllByText('信息学院')).not.toHaveLength(0)
     expect(await screen.findAllByText('75%')).not.toHaveLength(0)
-    expect(screen.getByText('cabinet-001')).toBeInTheDocument()
+    expect(screen.getAllByText('cabinet-001')).not.toHaveLength(0)
   })
 
-  it('renders the inventory workspace with cabinets, slots, records, and alerts', async () => {
+  it('renders the inventory overview with cabinet cards only', async () => {
+    render(
+      <TestProviders>
+        <MemoryRouter initialEntries={['/inventory']}>
+          <Routes>
+            <Route path="/inventory" element={<InventoryPage />} />
+            <Route path="/inventory/cabinets/:cabinetId" element={<InventoryPage />} />
+          </Routes>
+        </MemoryRouter>
+      </TestProviders>,
+    )
+
+    expect(await screen.findByRole('heading', { name: '库存管理' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '书柜列表' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '库存调整' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: '书柜详情' })).not.toHaveLength(0)
+    expect(screen.queryByRole('button', { name: '调整东区书柜库存' })).not.toBeInTheDocument()
+    expect(await screen.findByText('东区书柜')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '书柜明细' })).not.toBeInTheDocument()
+    expect(screen.queryByText('A01')).not.toBeInTheDocument()
+  })
+
+  it('renders cabinet detail as a switchable secondary board', async () => {
     const user = userEvent.setup()
 
     render(
       <TestProviders>
-        <InventoryPage />
+        <MemoryRouter initialEntries={['/inventory/cabinets/cabinet-east']}>
+          <Routes>
+            <Route path="/inventory" element={<InventoryPage />} />
+            <Route path="/inventory/cabinets/:cabinetId" element={<InventoryPage />} />
+          </Routes>
+        </MemoryRouter>
       </TestProviders>,
     )
 
-    expect(await screen.findByText('库存与书柜管理')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '作业概览' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '库存校正台' })).toBeInTheDocument()
-    expect(await screen.findByText('东区书柜')).toBeInTheDocument()
-
-    await user.click(screen.getByRole('tab', { name: '仓位明细' }))
+    expect(await screen.findByRole('heading', { name: '东区书柜' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '位置' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '记录' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '警告' })).toBeInTheDocument()
     expect(await screen.findByText('A01')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('tab', { name: '库存警告' }))
+    await user.click(screen.getByRole('tab', { name: '记录' }))
+    expect(await screen.findByText('入柜')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: '警告' }))
     expect(await screen.findByText('库存异常')).toBeInTheDocument()
+    expect(screen.getByText('待处理')).toBeInTheDocument()
   })
 
   it('renders the upgraded readers workspace from admin reader APIs', async () => {
@@ -596,12 +632,19 @@ describe('management pages', () => {
       </TestProviders>,
     )
 
-    expect(await screen.findByText('用户管理')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '读者管理' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '读者索引' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '画像编辑台' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '读者信息' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '读者摘要' })).not.toBeInTheDocument()
     expect(await screen.findAllByText('林栀')).not.toHaveLength(0)
     expect(screen.getByText('ai_power_user')).toBeInTheDocument()
     expect(screen.getByText('overdue / high_frequency')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: '编辑画像' }))
+    const editorDrawer = await screen.findByRole('dialog', { name: '画像编辑' })
+    expect(within(editorDrawer).getByText('林栀')).toBeInTheDocument()
+    expect(within(editorDrawer).getByText('reader-01')).toBeInTheDocument()
+    expect(within(editorDrawer).getByText('偏好信息')).toBeInTheDocument()
   })
 
   it('updates reader restrictions and segment from the readers workspace', async () => {
@@ -615,18 +658,19 @@ describe('management pages', () => {
       </TestProviders>,
     )
 
-    expect(await screen.findByText('用户管理')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '读者管理' })).toBeInTheDocument()
     expect(await screen.findAllByText('reader-01')).not.toHaveLength(0)
     await user.click(screen.getByRole('button', { name: '编辑画像' }))
-    await user.clear(screen.getByLabelText('限制状态'))
-    await user.type(screen.getByLabelText('限制状态'), 'blacklist')
-    await user.clear(screen.getByLabelText('限制到期'))
-    await user.type(screen.getByLabelText('限制到期'), '2026-04-05T10:00:00Z')
-    await user.clear(screen.getByLabelText('用户分群'))
-    await user.type(screen.getByLabelText('用户分群'), 'risk_watch')
-    await user.clear(screen.getByLabelText('风险标签'))
-    await user.type(screen.getByLabelText('风险标签'), 'overdue, manual_review')
-    await user.click(screen.getByRole('button', { name: '保存画像设置' }))
+    const editorDrawer = await screen.findByRole('dialog', { name: '画像编辑' })
+    await user.clear(within(editorDrawer).getByLabelText('限制状态'))
+    await user.type(within(editorDrawer).getByLabelText('限制状态'), 'blacklist')
+    await user.clear(within(editorDrawer).getByLabelText('限制到期'))
+    await user.type(within(editorDrawer).getByLabelText('限制到期'), '2026-04-05T10:00:00Z')
+    await user.clear(within(editorDrawer).getByLabelText('用户分群'))
+    await user.type(within(editorDrawer).getByLabelText('用户分群'), 'risk_watch')
+    await user.clear(within(editorDrawer).getByLabelText('风险标签'))
+    await user.type(within(editorDrawer).getByLabelText('风险标签'), 'overdue, manual_review')
+    await user.click(within(editorDrawer).getByRole('button', { name: '保存画像设置' }))
 
     expect(managementApi.updateAdminReader).toHaveBeenCalledWith(1, {
       restriction_status: 'blacklist',

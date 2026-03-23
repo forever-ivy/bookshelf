@@ -1,14 +1,16 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { PropsWithChildren } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { OrderDetailPage } from '@/pages/order-detail-page'
+import { OrdersPage } from '@/pages/orders-page'
 import { RobotsPage } from '@/pages/robots-page'
 
 const adminApi = vi.hoisted(() => ({
+  getAdminOrders: vi.fn(),
   getAdminOrder: vi.fn(),
   patchAdminOrderState: vi.fn(),
   prioritizeAdminOrder: vi.fn(),
@@ -42,6 +44,52 @@ function TestProviders({ children }: PropsWithChildren) {
 
 describe('operations pages', () => {
   beforeEach(() => {
+    adminApi.getAdminOrders.mockResolvedValue([
+      {
+        borrow_order: {
+          id: 12,
+          reader_id: 3,
+          book_id: 7,
+          assigned_copy_id: 18,
+          order_mode: 'robot_delivery',
+          status: 'delivering',
+          priority: 'high',
+          attempt_count: 1,
+          intervention_status: null,
+          failure_reason: null,
+          created_at: '2026-03-22T09:00:00Z',
+        },
+        delivery_order: {
+          id: 22,
+          borrow_order_id: 12,
+          delivery_target: '东区自习室 A7',
+          eta_minutes: 12,
+          status: 'delivering',
+          priority: 'high',
+        },
+        robot_task: {
+          id: 32,
+          robot_id: 1,
+          delivery_order_id: 22,
+          status: 'carrying',
+          attempt_count: 1,
+        },
+        robot_unit: {
+          id: 1,
+          code: 'robot-1',
+          status: 'carrying',
+          battery_level: 64,
+          heartbeat_at: '2026-03-22T10:15:00Z',
+        },
+        robot: {
+          id: 1,
+          code: 'robot-1',
+          status: 'carrying',
+          battery_level: 64,
+          heartbeat_at: '2026-03-22T10:15:00Z',
+        },
+      },
+    ])
     adminApi.getAdminOrder.mockResolvedValue({
       borrow_order: {
         id: 12,
@@ -176,6 +224,27 @@ describe('operations pages', () => {
     })
   })
 
+  it('opens a quick order detail sheet from the orders workspace', async () => {
+    const user = userEvent.setup()
+
+    render(
+      <TestProviders>
+        <MemoryRouter>
+          <OrdersPage />
+        </MemoryRouter>
+      </TestProviders>,
+    )
+
+    expect(await screen.findByRole('heading', { name: '订单管理' })).toBeInTheDocument()
+
+    await user.click(await screen.findByRole('button', { name: '查看详情' }))
+
+    const quickDetail = await screen.findByRole('dialog', { name: '订单 #12' })
+    expect(quickDetail).toBeInTheDocument()
+    expect(within(quickDetail).getByText('东区自习室 A7')).toBeInTheDocument()
+    expect(within(quickDetail).getByRole('link', { name: '进入完整详情' })).toHaveAttribute('href', '/orders/12')
+  })
+
   it('lets admins prioritize, intervene, and retry an order', async () => {
     const user = userEvent.setup()
 
@@ -190,28 +259,49 @@ describe('operations pages', () => {
     )
 
     expect(await screen.findByText('订单 #12')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '返回订单列表' })).toHaveAttribute('href', '/orders')
 
-    await user.click(screen.getByRole('button', { name: '更新优先级' }))
+    await user.click(screen.getByRole('button', { name: '修改状态' }))
+    const statusDialog = await screen.findByRole('dialog', { name: '修改状态' })
+    await user.selectOptions(within(statusDialog).getByLabelText('借阅状态'), 'delivered')
+    await user.click(within(statusDialog).getByRole('button', { name: '保存状态' }))
+    expect(adminApi.patchAdminOrderState).toHaveBeenCalledWith(12, {
+      borrow_status: 'delivered',
+      delivery_status: 'delivering',
+      task_status: 'carrying',
+      robot_status: 'carrying',
+    })
+
+    await user.click(screen.getByRole('button', { name: '调整优先级' }))
+    const priorityDialog = await screen.findByRole('dialog', { name: '调整优先级' })
+    await user.click(within(priorityDialog).getByRole('button', { name: '保存优先级' }))
     expect(adminApi.prioritizeAdminOrder).toHaveBeenCalledWith(12, 'urgent')
 
-    await user.type(screen.getByLabelText('异常说明'), '通道拥堵')
-    await user.click(screen.getByRole('button', { name: '提交人工介入' }))
+    await user.click(screen.getByRole('button', { name: '人工处理' }))
+    const interventionDialog = await screen.findByRole('dialog', { name: '人工处理' })
+    await user.type(within(interventionDialog).getByLabelText('原因说明'), '通道拥堵')
+    await user.click(within(interventionDialog).getByRole('button', { name: '提交处理' }))
     expect(adminApi.interveneAdminOrder).toHaveBeenCalledWith(12, {
       intervention_status: 'manual_review',
       failure_reason: '通道拥堵',
     })
 
-    await user.type(screen.getByLabelText('重试备注'), '人工确认后重新派单')
-    await user.click(screen.getByRole('button', { name: '失败订单重试' }))
+    await user.click(screen.getByRole('button', { name: '重试订单' }))
+    const retryDialog = await screen.findByRole('dialog', { name: '重试订单' })
+    await user.type(within(retryDialog).getByLabelText('重试备注'), '人工确认后重新派单')
+    await user.click(within(retryDialog).getByRole('button', { name: '确认重试' }))
     expect(adminApi.retryAdminOrder).toHaveBeenCalledWith(12, '人工确认后重新派单')
 
-    await user.type(screen.getByLabelText('归还处理备注'), '机器人已完成回收')
-    await user.click(screen.getByRole('button', { name: '接收归还' }))
+    await user.click(screen.getAllByRole('button', { name: '处理归还' })[0])
+    const returnDialog = await screen.findByRole('dialog', { name: '处理归还' })
+    await user.type(within(returnDialog).getByLabelText('处理备注'), '机器人已完成回收')
+    await user.click(within(returnDialog).getByRole('button', { name: '接收归还' }))
     expect(adminApi.receiveAdminReturnRequest).toHaveBeenCalledWith(99, '机器人已完成回收')
 
-    await user.clear(screen.getByLabelText('归还处理备注'))
-    await user.type(screen.getByLabelText('归还处理备注'), '书柜识别成功并完成上架')
-    await user.click(screen.getByRole('button', { name: '完成入库' }))
+    await user.click(screen.getAllByRole('button', { name: '处理归还' })[0])
+    const returnDialogAgain = await screen.findByRole('dialog', { name: '处理归还' })
+    await user.type(within(returnDialogAgain).getByLabelText('处理备注'), '书柜识别成功并完成上架')
+    await user.click(within(returnDialogAgain).getByRole('button', { name: '完成入库' }))
     expect(adminApi.completeAdminReturnRequest).toHaveBeenCalledWith(99, {
       cabinet_id: 'cabinet-001',
       slot_code: 'A01',
@@ -228,14 +318,14 @@ describe('operations pages', () => {
       </TestProviders>,
     )
 
-    expect(await screen.findByText('机器人调度管理')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '机器人管理' })).toBeInTheDocument()
     expect(await screen.findByText('robot-1')).toBeInTheDocument()
     expect(screen.getByText('91%')).toBeInTheDocument()
 
     await user.selectOptions(screen.getByLabelText('任务'), '32')
     await user.selectOptions(screen.getByLabelText('目标机器人'), '2')
     await user.type(screen.getByLabelText('重分配原因'), '原机器人电量过低')
-    await user.click(screen.getByRole('button', { name: '执行任务重分配' }))
+    await user.click(screen.getByRole('button', { name: '执行重分配' }))
 
     expect(adminApi.reassignAdminTask).toHaveBeenCalledWith(32, {
       robot_id: 2,

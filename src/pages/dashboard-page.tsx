@@ -12,6 +12,12 @@ import { getAdminDashboardHeatmap, getAdminDashboardOverview } from '@/lib/api/m
 import { getAdminPageHero } from '@/lib/page-hero'
 
 const pageHero = getAdminPageHero('dashboard')
+const dashboardHeroCopy = {
+  eyebrow: '',
+  title: '总览',
+  description: '查看今日借阅、配送进度和服务状态。',
+  heroLayout: 'stacked' as const,
+}
 
 export function DashboardPage() {
   const overviewQuery = useQuery({
@@ -27,10 +33,7 @@ export function DashboardPage() {
     return (
       <PageShell
         {...pageHero}
-        eyebrow="总览"
-        title="总览"
-        description="查看当天借阅、设备状态和警告情况。"
-        statusLine="今日状态"
+        {...dashboardHeroCopy}
       >
         <LoadingState label="加载中" />
       </PageShell>
@@ -44,10 +47,7 @@ export function DashboardPage() {
     return (
       <PageShell
         {...pageHero}
-        eyebrow="总览"
-        title="总览"
-        description="查看当天借阅、设备状态和警告情况。"
-        statusLine="今日状态"
+        {...dashboardHeroCopy}
       >
         <EmptyState title="暂无数据" description="当前条件下没有可用数据。" />
       </PageShell>
@@ -57,10 +57,7 @@ export function DashboardPage() {
   return (
     <PageShell
       {...pageHero}
-      eyebrow="总览"
-      title="总览"
-      description="查看当天借阅、设备状态和警告情况。"
-      statusLine="今日状态"
+      {...dashboardHeroCopy}
     >
       <MetricStrip
         items={[
@@ -71,13 +68,13 @@ export function DashboardPage() {
             icon: <Activity className="size-5" />,
           },
           {
-            label: '在线设备',
+            label: '进行中配送',
             value: overview.active_delivery_task_count,
-            hint: '当前仍在处理任务的设备',
+            hint: '当前仍在处理的配送单',
             icon: <PackageCheck className="size-5" />,
           },
           {
-            label: '书柜数量',
+            label: '在线机器人',
             value: `${overview.robots.online}/${overview.robots.total}`,
             hint: '在线数量 / 总数量',
             icon: <Bot className="size-5" />,
@@ -125,7 +122,7 @@ export function DashboardPage() {
 
         <WorkspacePanel
           title="区域热度映射"
-          description="按区域汇总借阅需求，用于查看哪些点最忙。"
+          description="按区域汇总借阅需求"
           tone="muted"
         >
           {heatmap.length === 0 ? (
@@ -156,15 +153,15 @@ export function DashboardPage() {
 
       <SectionIntro
         eyebrow="状态"
-        title="设备状态"
-        description="把设备和警告放在一起，方便快速查看。"
+        title="服务状态"
+        description="查看配送进度、书柜状态和告警概览"
       />
 
       <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-        <WorkspacePanel title="设备状态" description="快速判断今天是否需要人工处理。">
+        <WorkspacePanel title="配送与设备状态" description="快速了解当前是否有需要留意的异常">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.3)] px-5 py-5">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">在线设备</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">在线机器人</p>
               <p className="mt-3 text-[2.6rem] font-semibold tracking-[-0.07em] text-[var(--foreground)]">{overview.robots.online}</p>
               <div className="mt-4">
                 <StatusBadge status={overview.robots.offline > 0 ? 'offline' : 'active'} />
@@ -180,7 +177,7 @@ export function DashboardPage() {
           </div>
         </WorkspacePanel>
 
-        <WorkspacePanel title="书柜状态" description="按状态拆分书柜数量，方便查看设备压力。">
+        <WorkspacePanel title="书柜状态" description="按状态拆分书柜数量，方便查看设备压力">
           <div className="grid gap-3 md:grid-cols-2">
             {Object.entries(overview.cabinets.status_breakdown).map(([status, count]) => (
               <div key={status} className="flex items-center justify-between rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.3)] px-4 py-4">

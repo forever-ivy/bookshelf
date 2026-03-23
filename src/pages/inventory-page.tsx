@@ -1,22 +1,19 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { createColumnHelper, type ColumnDef } from '@tanstack/react-table'
-import { useEffect, useState } from 'react'
+import { useMemo } from 'react'
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 
 import { DataTable } from '@/components/shared/data-table'
 import { EmptyState } from '@/components/shared/empty-state'
-import { InspectorPanel } from '@/components/shared/inspector-panel'
 import { LoadingState } from '@/components/shared/loading-state'
 import { MetricStrip } from '@/components/shared/metric-strip'
 import { PageShell } from '@/components/shared/page-shell'
-import { StatusBadge } from '@/components/shared/status-badge'
+import { StatusBadge, formatStatusLabel } from '@/components/shared/status-badge'
 import { WorkspacePanel } from '@/components/shared/workspace-panel'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { getAdminPageHero } from '@/lib/page-hero'
 import {
-  applyAdminInventoryCorrection,
   getAdminCabinetSlots,
   getAdminCabinets,
   getAdminInventoryAlerts,
@@ -30,81 +27,147 @@ const pageHero = getAdminPageHero('inventory')
 const slotColumnHelper = createColumnHelper<AdminCabinetSlot>()
 const recordColumnHelper = createColumnHelper<AdminInventoryRecord>()
 
+type InventoryMode = 'overview' | 'cabinet-detail'
+type CabinetBoardTab = 'slots' | 'records' | 'alerts'
+
+function resolveInventoryMode(pathname: string): InventoryMode {
+  if (pathname.startsWith('/inventory/cabinets/')) {
+    return 'cabinet-detail'
+  }
+
+  return 'overview'
+}
+
+function resolveCabinetBoardTab(value: string | null): CabinetBoardTab {
+  if (value === 'records' || value === 'alerts') {
+    return value
+  }
+
+  return 'slots'
+}
+
+function formatInventorySlotLabel(status?: string | null) {
+  return formatStatusLabel(status)
+}
+
+function formatInventoryCopyLabel(status?: string | null) {
+  if (!status) {
+    return '未知状态'
+  }
+
+  switch (status) {
+    case 'reserved':
+      return '已预留'
+    case 'stored':
+      return '已存放'
+    case 'checked_out':
+      return '已借出'
+    case 'in_transit':
+      return '运输中'
+    default:
+      return formatStatusLabel(status)
+  }
+}
+
+function formatInventoryCabinetLabel(status?: string | null) {
+  return formatStatusLabel(status)
+}
+
+function formatInventoryAlertLabel(status?: string | null) {
+  return formatStatusLabel(status)
+}
+
+function formatInventoryEventType(eventType?: string | null) {
+  if (!eventType) {
+    return '未知记录'
+  }
+
+  switch (eventType) {
+    case 'book_stored':
+      return '入柜'
+    case 'book_removed':
+      return '出柜'
+    case 'manual_correction':
+      return '人工修正'
+    case 'slot_adjusted':
+      return '位置调整'
+    case 'inventory_adjustment':
+      return '库存调整'
+    default:
+      return '其他记录'
+  }
+}
+
+function formatInventorySourceType(sourceType?: string | null) {
+  if (!sourceType) {
+    return '未知来源'
+  }
+
+  switch (sourceType) {
+    case 'inventory':
+      return '库存'
+    case 'cabinet':
+      return '书柜'
+    case 'robot':
+      return '机器人'
+    default:
+      return formatStatusLabel(sourceType)
+  }
+}
+
+function SummaryTile({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="rounded-[1.5rem] border border-[var(--line-subtle)] bg-[var(--surface-bright)] p-5">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">{label}</p>
+      <div className="mt-2">{value}</div>
+    </div>
+  )
+}
+
 export function InventoryPage() {
-  const queryClient = useQueryClient()
-  const [selectedCabinetId, setSelectedCabinetId] = useState('')
-  const [correctionForm, setCorrectionForm] = useState({
-    cabinet_id: '',
-    book_id: '',
-    total_delta: '0',
-    available_delta: '0',
-    reserved_delta: '0',
-    slot_code: '',
-    reason: '',
-  })
+  const location = useLocation()
+  const { cabinetId } = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  const inventoryMode = resolveInventoryMode(location.pathname)
+  const activeBoardTab = resolveCabinetBoardTab(searchParams.get('tab'))
 
   const cabinetsQuery = useQuery({
     queryKey: ['admin', 'inventory', 'cabinets'],
     queryFn: () => getAdminCabinets(),
   })
 
-  const activeCabinetId = selectedCabinetId || cabinetsQuery.data?.items[0]?.id || ''
-
-  useEffect(() => {
-    if (!selectedCabinetId && cabinetsQuery.data?.items[0]?.id) {
-      setSelectedCabinetId(cabinetsQuery.data.items[0].id)
-      setCorrectionForm((current) => ({
-        ...current,
-        cabinet_id: cabinetsQuery.data?.items[0]?.id ?? '',
-      }))
-    }
-  }, [selectedCabinetId, cabinetsQuery.data])
+  const cabinets = cabinetsQuery.data?.items ?? []
+  const selectedCabinet = cabinets.find((item) => item.id === cabinetId) ?? null
 
   const slotsQuery = useQuery({
-    enabled: Boolean(activeCabinetId),
-    queryKey: ['admin', 'inventory', 'cabinet-slots', activeCabinetId],
-    queryFn: () => getAdminCabinetSlots(activeCabinetId),
+    enabled: inventoryMode === 'cabinet-detail' && Boolean(cabinetId) && activeBoardTab === 'slots',
+    queryKey: ['admin', 'inventory', 'cabinet-slots', cabinetId],
+    queryFn: () => getAdminCabinetSlots(cabinetId ?? ''),
   })
 
   const recordsQuery = useQuery({
-    queryKey: ['admin', 'inventory', 'records', activeCabinetId],
-    queryFn: () => getAdminInventoryRecords(activeCabinetId || undefined),
+    enabled: inventoryMode === 'cabinet-detail' && Boolean(cabinetId) && activeBoardTab === 'records',
+    queryKey: ['admin', 'inventory', 'records', cabinetId],
+    queryFn: () => getAdminInventoryRecords(cabinetId ?? undefined),
   })
 
   const alertsQuery = useQuery({
-    queryKey: ['admin', 'inventory', 'alerts'],
+    enabled: inventoryMode === 'cabinet-detail' && Boolean(cabinetId) && activeBoardTab === 'alerts',
+    queryKey: ['admin', 'inventory', 'alerts', cabinetId],
     queryFn: () => getAdminInventoryAlerts('open'),
   })
 
-  const correctionMutation = useMutation({
-    mutationFn: () =>
-      applyAdminInventoryCorrection({
-        cabinet_id: correctionForm.cabinet_id || activeCabinetId,
-        book_id: Number(correctionForm.book_id),
-        total_delta: Number(correctionForm.total_delta),
-        available_delta: Number(correctionForm.available_delta),
-        reserved_delta: Number(correctionForm.reserved_delta),
-        slot_code: correctionForm.slot_code || undefined,
-        reason: correctionForm.reason || undefined,
-      }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['admin', 'inventory'] })
-      setCorrectionForm((current) => ({
-        ...current,
-        book_id: '',
-        total_delta: '0',
-        available_delta: '0',
-        reserved_delta: '0',
-        slot_code: '',
-        reason: '',
-      }))
-    },
-  })
-
-  const cabinets = cabinetsQuery.data?.items ?? []
   const slots = slotsQuery.data?.items ?? []
   const records = recordsQuery.data?.items ?? []
-  const alerts = alertsQuery.data?.items ?? []
+  const alerts = useMemo(() => {
+    const items = alertsQuery.data?.items ?? []
+    if (!cabinetId) {
+      return items
+    }
+
+    return items.filter((alert) => alert.source_id === cabinetId)
+  }, [alertsQuery.data?.items, cabinetId])
 
   const summary = cabinets.reduce(
     (accumulator, cabinet) => {
@@ -117,32 +180,34 @@ export function InventoryPage() {
     { totalCabinets: 0, totalSlots: 0, occupiedSlots: 0, openAlerts: 0 },
   )
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const slotColumns: Array<ColumnDef<AdminCabinetSlot, any>> = [
-    slotColumnHelper.accessor('slot_code', { header: '仓位' }),
+    slotColumnHelper.accessor('slot_code', { header: '位置' }),
     slotColumnHelper.accessor('status', {
       header: '状态',
-      cell: (info) => <StatusBadge status={info.getValue()} />,
+      cell: (info) => <StatusBadge status={info.getValue()} label={formatInventorySlotLabel(info.getValue())} />,
     }),
     slotColumnHelper.accessor('book_title', {
-      header: '当前图书',
-      cell: (info) => info.getValue() ?? '空仓位',
+      header: '图书',
+      cell: (info) => info.getValue() ?? '空位',
     }),
     slotColumnHelper.accessor('copy_inventory_status', {
       header: '副本状态',
-      cell: (info) => info.getValue() ?? '—',
+      cell: (info) =>
+        info.getValue() ? <StatusBadge status={info.getValue()} label={formatInventoryCopyLabel(info.getValue())} /> : '—',
     }),
     slotColumnHelper.accessor('current_copy_id', {
-      header: '副本 ID',
+      header: '副本编号',
       cell: (info) => info.getValue() ?? '—',
     }),
   ]
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recordColumns: Array<ColumnDef<AdminInventoryRecord, any>> = [
-    recordColumnHelper.accessor('event_type', { header: '记录类型' }),
+    recordColumnHelper.accessor('event_type', {
+      header: '记录',
+      cell: (info) => formatInventoryEventType(info.getValue()),
+    }),
     recordColumnHelper.accessor('slot_code', {
-      header: '仓位',
+      header: '位置',
       cell: (info) => info.getValue() ?? '—',
     }),
     recordColumnHelper.accessor('book_title', {
@@ -163,203 +228,189 @@ export function InventoryPage() {
     return <LoadingState label="数据装载中" />
   }
 
+  function updateBoardTab(nextTab: string) {
+    const resolvedTab = resolveCabinetBoardTab(nextTab)
+    const nextSearchParams = new URLSearchParams(searchParams)
+    nextSearchParams.set('tab', resolvedTab)
+    setSearchParams(nextSearchParams, { replace: true })
+  }
+
+  function renderOverview() {
+    return (
+      <>
+        <MetricStrip
+          items={[
+            { label: '书柜数量', value: summary.totalCabinets, hint: '当前管理中的书柜总数' },
+            { label: '位置数量', value: summary.totalSlots, hint: '包含空闲和占用位置' },
+            { label: '占用位置', value: summary.occupiedSlots, hint: '正在存放图书的位置' },
+            { label: '待处理警告', value: summary.openAlerts, hint: '库存或书柜警告' },
+          ]}
+          className="xl:grid-cols-4"
+        />
+
+        <WorkspacePanel
+          title="书柜列表"
+          description="一级目录只展示书柜总览。进入书柜详情后，再切换查看位置、记录和警告。"
+        >
+          <div className="grid gap-4 xl:grid-cols-2">
+            {cabinets.map((cabinet) => (
+              <div
+                key={cabinet.id}
+                className="rounded-[1.65rem] border border-[var(--line-subtle)] bg-[var(--surface-bright)] px-5 py-5"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <p className="font-semibold text-[var(--foreground)]">{cabinet.name}</p>
+                    <p className="text-sm text-[var(--muted-foreground)]">{cabinet.location ?? '未配置位置'}</p>
+                  </div>
+                  <StatusBadge status={cabinet.status} label={formatInventoryCabinetLabel(cabinet.status)} />
+                </div>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <SummaryTile
+                    label="位置数"
+                    value={<p className="text-2xl font-semibold tracking-[-0.05em] text-[var(--foreground)]">{cabinet.slot_total}</p>}
+                  />
+                  <SummaryTile
+                    label="可借库存"
+                    value={
+                      <p className="text-2xl font-semibold tracking-[-0.05em] text-[var(--foreground)]">{cabinet.available_copies}</p>
+                    }
+                  />
+                </div>
+
+                <p className="mt-4 text-sm text-[var(--muted-foreground)]">
+                  警告 {cabinet.open_alert_count} · 占用 {cabinet.occupied_slots}
+                </p>
+
+                <div className="mt-5 flex items-center justify-between gap-3 border-t border-[var(--line-subtle)] pt-4">
+                  <Button asChild type="button" variant="secondary">
+                    <Link to={`/inventory/cabinets/${cabinet.id}`}>书柜详情</Link>
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </WorkspacePanel>
+      </>
+    )
+  }
+
+  function renderCabinetBoard() {
+    if (!selectedCabinet || !cabinetId) {
+      return <EmptyState title="暂无数据" description="当前条件下没有可用数据。" />
+    }
+
+    return (
+      <WorkspacePanel
+        title="书柜目录"
+        description="二级目录使用切换看板查看当前书柜的位置、记录和警告。"
+        action={
+          <Button asChild type="button" variant="secondary">
+            <Link to="/inventory">返回书柜列表</Link>
+          </Button>
+        }
+      >
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <SummaryTile
+            label="书柜状态"
+            value={<StatusBadge status={selectedCabinet.status} label={formatInventoryCabinetLabel(selectedCabinet.status)} />}
+          />
+          <SummaryTile
+            label="位置数"
+            value={<p className="text-2xl font-semibold tracking-[-0.05em] text-[var(--foreground)]">{selectedCabinet.slot_total}</p>}
+          />
+          <SummaryTile
+            label="可借库存"
+            value={<p className="text-2xl font-semibold tracking-[-0.05em] text-[var(--foreground)]">{selectedCabinet.available_copies}</p>}
+          />
+          <SummaryTile
+            label="待处理警告"
+            value={<p className="text-2xl font-semibold tracking-[-0.05em] text-[var(--foreground)]">{selectedCabinet.open_alert_count}</p>}
+          />
+        </div>
+
+        <p className="mt-4 text-sm text-[var(--muted-foreground)]">
+          {selectedCabinet.location ?? '未配置位置'} · 占用 {selectedCabinet.occupied_slots}
+        </p>
+
+        <Tabs value={activeBoardTab} onValueChange={updateBoardTab} className="mt-6 space-y-5 border-t border-[var(--line-subtle)] pt-5">
+          <TabsList className="grid w-full max-w-[20rem] grid-cols-3">
+            <TabsTrigger value="slots">位置</TabsTrigger>
+            <TabsTrigger value="records">记录</TabsTrigger>
+            <TabsTrigger value="alerts">警告</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="slots" className="mt-0">
+            {slotsQuery.isLoading ? (
+              <LoadingState label="加载中" />
+            ) : (
+              <DataTable columns={slotColumns} data={slots} emptyTitle="暂无数据" emptyDescription="当前条件下没有可用数据。" />
+            )}
+          </TabsContent>
+
+          <TabsContent value="records" className="mt-0">
+            {recordsQuery.isLoading ? (
+              <LoadingState label="加载中" />
+            ) : (
+              <DataTable columns={recordColumns} data={records} emptyTitle="暂无数据" emptyDescription="当前条件下没有可用数据。" />
+            )}
+          </TabsContent>
+
+          <TabsContent value="alerts" className="mt-0">
+            {alertsQuery.isLoading ? (
+              <LoadingState label="加载中" />
+            ) : alerts.length === 0 ? (
+              <EmptyState title="暂无数据" description="当前条件下没有可用数据。" />
+            ) : (
+              <div className="space-y-3">
+                {alerts.map((alert) => (
+                  <div
+                    key={alert.id}
+                    className="rounded-[1.35rem] border border-[var(--line-subtle)] bg-[var(--surface-bright)] px-5 py-4"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="font-semibold text-[var(--foreground)]">{alert.title}</p>
+                        <p className="mt-1 text-sm text-[var(--muted-foreground)]">{alert.message ?? '无补充说明'}</p>
+                      </div>
+                      <StatusBadge status={alert.status} label={formatInventoryAlertLabel(alert.status)} />
+                    </div>
+                    <p className="mt-3 text-xs text-[var(--muted-foreground)]">
+                      {formatInventorySourceType(alert.source_type)} · {formatDateTime(alert.created_at)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+      </WorkspacePanel>
+    )
+  }
+
+  const pageMeta = {
+    overview: {
+      title: '库存管理',
+      description: '进入一级目录先看书柜总览，再进入对应书柜的二级目录。',
+      statusLine: '库存总览',
+    },
+    'cabinet-detail': {
+      title: selectedCabinet?.name ?? '书柜详情',
+      description: '当前位置、记录和警告都收在当前书柜的切换看板里。',
+      statusLine: '书柜详情',
+    },
+  } satisfies Record<InventoryMode, { title: string; description: string; statusLine: string }>
+
   return (
     <PageShell
       {...pageHero}
       eyebrow="库存管理"
-      title="库存管理"
-      description="查看书柜库存、仓位和出入库记录，并支持人工调整。"
-      statusLine="库存概览"
+      title={pageMeta[inventoryMode].title}
+      description={pageMeta[inventoryMode].description}
+      statusLine={pageMeta[inventoryMode].statusLine}
     >
-      <MetricStrip
-        items={[
-          { label: '书柜数量', value: summary.totalCabinets, hint: '当前管理中的书柜总数' },
-          { label: '仓位数量', value: summary.totalSlots, hint: '包含空闲和占用仓位' },
-          { label: '占用仓位', value: summary.occupiedSlots, hint: '正在存放图书的仓位' },
-          { label: '待处理警告', value: summary.openAlerts, hint: '库存或书柜警告' },
-        ]}
-        className="xl:grid-cols-4"
-      />
-
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <WorkspacePanel title="库存列表" description="左侧查看书柜、仓位、记录和警告。">
-          <Tabs defaultValue="cabinets" className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="cabinets">书柜</TabsTrigger>
-              <TabsTrigger value="slots">仓位</TabsTrigger>
-              <TabsTrigger value="records">记录</TabsTrigger>
-              <TabsTrigger value="alerts">警告</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="cabinets">
-              <div className="grid gap-4 xl:grid-cols-2">
-                {cabinets.map((cabinet) => (
-                  <div
-                    key={cabinet.id}
-                    className={cabinet.id === activeCabinetId ? 'rounded-[1.5rem] border border-[var(--primary)]/35 bg-[rgba(33,73,140,0.06)] px-5 py-5' : 'rounded-[1.5rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.34)] px-5 py-5'}
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="font-semibold text-[var(--foreground)]">{cabinet.name}</p>
-                        <p className="mt-1 text-sm text-[var(--muted-foreground)]">{cabinet.location ?? '未配置位置'}</p>
-                      </div>
-                      <StatusBadge status={cabinet.status} />
-                    </div>
-                    <div className="mt-4 grid gap-3 md:grid-cols-2">
-                      <div className="rounded-2xl bg-[rgba(255,255,255,0.34)] px-4 py-4">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">仓位数</p>
-                        <p className="mt-2 text-2xl font-semibold tracking-[-0.05em] text-[var(--foreground)]">{cabinet.slot_total}</p>
-                      </div>
-                      <div className="rounded-2xl bg-[rgba(255,255,255,0.34)] px-4 py-4">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">可借库存</p>
-                        <p className="mt-2 text-2xl font-semibold tracking-[-0.05em] text-[var(--foreground)]">{cabinet.available_copies}</p>
-                      </div>
-                    </div>
-                    <div className="mt-4 flex items-center justify-between">
-                      <p className="text-sm text-[var(--muted-foreground)]">警告 {cabinet.open_alert_count} · 占用 {cabinet.occupied_slots}</p>
-                      <Button
-                        type="button"
-                        variant={cabinet.id === activeCabinetId ? 'default' : 'secondary'}
-                        onClick={() => {
-                          setSelectedCabinetId(cabinet.id)
-                          setCorrectionForm((current) => ({
-                            ...current,
-                            cabinet_id: cabinet.id,
-                          }))
-                        }}
-                      >
-                        查看该书柜明细
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="slots">
-              {slotsQuery.isLoading ? (
-                <LoadingState label="加载中" />
-              ) : activeCabinetId ? (
-                <DataTable columns={slotColumns} data={slots} emptyTitle="暂无数据" emptyDescription="当前条件下没有可用数据。" />
-              ) : (
-                <EmptyState title="暂无数据" description="当前条件下没有可用数据。" />
-              )}
-            </TabsContent>
-
-            <TabsContent value="records">
-              {recordsQuery.isLoading ? (
-                <LoadingState label="加载中" />
-              ) : (
-                <DataTable columns={recordColumns} data={records} emptyTitle="暂无数据" emptyDescription="当前条件下没有可用数据。" />
-              )}
-            </TabsContent>
-
-            <TabsContent value="alerts">
-              {alertsQuery.isLoading ? (
-                <LoadingState label="加载中" />
-              ) : alerts.length === 0 ? (
-                <EmptyState title="暂无数据" description="当前条件下没有可用数据。" />
-              ) : (
-                <div className="space-y-3">
-                  {alerts.map((alert) => (
-                    <div key={alert.id} className="rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.34)] px-5 py-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <p className="font-semibold text-[var(--foreground)]">{alert.title}</p>
-                          <p className="mt-1 text-sm text-[var(--muted-foreground)]">{alert.message ?? '无补充说明'}</p>
-                        </div>
-                        <StatusBadge status={alert.status} />
-                      </div>
-                      <p className="mt-3 text-xs text-[var(--muted-foreground)]">
-                        {alert.source_type} · {formatDateTime(alert.created_at)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </TabsContent>
-          </Tabs>
-        </WorkspacePanel>
-
-        <InspectorPanel title="库存调整" description="右侧可以直接做盘点补录、错位修正和识别失败修正。">
-          <div className="space-y-4">
-            <div className="rounded-2xl bg-[var(--surface-container-low)] p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">当前书柜</p>
-              <p className="mt-2 text-lg font-semibold text-[var(--foreground)]">{activeCabinetId || '未选择书柜'}</p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="correction-cabinet">书柜 ID</Label>
-              <Input
-                id="correction-cabinet"
-                value={correctionForm.cabinet_id}
-                onChange={(event) => setCorrectionForm((current) => ({ ...current, cabinet_id: event.target.value }))}
-                placeholder="cabinet-east"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="correction-book">图书 ID</Label>
-              <Input
-                id="correction-book"
-                value={correctionForm.book_id}
-                onChange={(event) => setCorrectionForm((current) => ({ ...current, book_id: event.target.value }))}
-                placeholder="1"
-              />
-            </div>
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="space-y-2">
-                <Label htmlFor="correction-total">总量增量</Label>
-                <Input
-                  id="correction-total"
-                  value={correctionForm.total_delta}
-                  onChange={(event) => setCorrectionForm((current) => ({ ...current, total_delta: event.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="correction-available">可借增量</Label>
-                <Input
-                  id="correction-available"
-                  value={correctionForm.available_delta}
-                  onChange={(event) => setCorrectionForm((current) => ({ ...current, available_delta: event.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="correction-reserved">预留增量</Label>
-                <Input
-                  id="correction-reserved"
-                  value={correctionForm.reserved_delta}
-                  onChange={(event) => setCorrectionForm((current) => ({ ...current, reserved_delta: event.target.value }))}
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="correction-slot">仓位</Label>
-              <Input
-                id="correction-slot"
-                value={correctionForm.slot_code}
-                onChange={(event) => setCorrectionForm((current) => ({ ...current, slot_code: event.target.value }))}
-                placeholder="A01"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="correction-reason">原因说明</Label>
-              <Input
-                id="correction-reason"
-                value={correctionForm.reason}
-                onChange={(event) => setCorrectionForm((current) => ({ ...current, reason: event.target.value }))}
-                placeholder="盘点补录 / 错位修正 / 识别失败修正"
-              />
-            </div>
-            <Button type="button" onClick={() => correctionMutation.mutate()} disabled={correctionMutation.isPending}>
-              {correctionMutation.isPending ? '提交中…' : '提交调整'}
-            </Button>
-            {correctionMutation.data ? (
-              <p className="text-sm text-[var(--muted-foreground)]">
-                已更新库存：总量 {correctionMutation.data.stock.total_copies}，可借 {correctionMutation.data.stock.available_copies}。
-              </p>
-            ) : null}
-          </div>
-        </InspectorPanel>
-      </div>
+      {inventoryMode === 'overview' ? renderOverview() : renderCabinetBoard()}
     </PageShell>
   )
 }

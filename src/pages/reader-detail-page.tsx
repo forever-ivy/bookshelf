@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { createColumnHelper, type ColumnDef } from '@tanstack/react-table'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 
 import { DataTable } from '@/components/shared/data-table'
 import { EmptyState } from '@/components/shared/empty-state'
@@ -10,6 +10,7 @@ import { MetricStrip } from '@/components/shared/metric-strip'
 import { PageShell } from '@/components/shared/page-shell'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { WorkspacePanel } from '@/components/shared/workspace-panel'
+import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { getAdminReader } from '@/lib/api/management'
 import { getAdminPageHero } from '@/lib/page-hero'
@@ -120,6 +121,12 @@ export function ReaderDetailPage() {
       description={`${detailQuery.data.college ?? '未填写学院'} · ${detailQuery.data.major ?? '未填写专业'}`}
       statusLine="读者信息"
     >
+      <div className="flex flex-wrap gap-3">
+        <Button asChild variant="secondary">
+          <Link to="/readers">返回读者索引</Link>
+        </Button>
+      </div>
+
       <MetricStrip
         items={[
           { label: '进行中订单', value: overview.stats.active_orders_count, hint: '当前还在处理的借阅数量' },

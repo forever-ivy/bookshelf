@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'framer-motion'
-import { BookCopy, Bot, ChartColumnIncreasing, LayoutDashboard, LibraryBig, PackageSearch, PanelLeftClose, PanelLeftOpen, ScrollText, Settings2, ShieldCheck, Sparkles, Users } from 'lucide-react'
+import { BookCopy, Bot, ChartColumnIncreasing, LayoutDashboard, LibraryBig, PanelLeftClose, PanelLeftOpen, ScrollText, ShieldCheck, Sparkles, Users } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
@@ -13,15 +13,15 @@ import { storageUtils } from '@/utils'
 const items = [
   { to: '/dashboard', label: '首页总览', icon: LayoutDashboard, permission: 'dashboard.view' },
   { to: '/books', label: '图书管理', icon: LibraryBig, permission: 'books.manage' },
-  { to: '/inventory', label: '库存作业', icon: BookCopy, permission: 'inventory.manage' },
-  { to: '/ocr', label: '感知落位', icon: PackageSearch, permission: 'inventory.manage' },
-  { to: '/orders', label: '履约链路', icon: ScrollText, permission: 'orders.manage' },
+  { to: '/inventory', label: '库存管理', icon: BookCopy, permission: 'inventory.manage' },
+  // { to: '/ocr', label: '感知落位', icon: PackageSearch, permission: 'inventory.manage' },
+  { to: '/orders', label: '订单管理', icon: ScrollText, permission: 'orders.manage' },
   { to: '/robots', label: '运力调度', icon: Bot, permission: 'robots.manage' },
-  { to: '/alerts', label: '告警中心', icon: ShieldCheck, permission: ['alerts.manage', 'system.audit.view'] },
-  { to: '/readers', label: '读者画像', icon: Users, permission: 'readers.manage' },
+  { to: '/alerts', label: '警告中心', icon: ShieldCheck, permission: ['alerts.manage', 'system.audit.view'] },
+  { to: '/readers', label: '用户管理', icon: Users, permission: 'readers.manage' },
   { to: '/recommendation', label: '推荐运营', icon: Sparkles, permission: 'recommendation.manage' },
   { to: '/analytics', label: '数据分析', icon: ChartColumnIncreasing, permission: 'analytics.view' },
-  { to: '/system', label: '系统配置', icon: Settings2, permission: ['system.settings.manage', 'system.roles.manage'] },
+  // { to: '/system', label: '系统配置', icon: Settings2, permission: ['system.settings.manage', 'system.roles.manage'] },
 ]
 
 type SidebarProps = {

@@ -53,6 +53,7 @@ export default function App() {
             <Route path="/catalog" element={<Navigate to="/books" replace />} />
             <Route path="/analytics" element={withPermission('analytics.view', <AnalyticsPage />)} />
             <Route path="/inventory" element={withPermission('inventory.manage', <InventoryPage />)} />
+            <Route path="/inventory/cabinets/:cabinetId" element={withPermission('inventory.manage', <InventoryPage />)} />
             <Route path="/ocr" element={withPermission('inventory.manage', <OcrPage />)} />
             <Route path="/orders" element={withPermission('orders.manage', <OrdersPage />)} />
             <Route path="/orders/:orderId" element={withPermission('orders.manage', <OrderDetailPage />)} />
