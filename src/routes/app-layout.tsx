@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Suspense, useLayoutEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useLocation, useOutlet } from 'react-router-dom'
 import { AnimatePresence, motion, useIsPresent, useReducedMotion } from 'framer-motion'
 
@@ -18,13 +18,13 @@ function RouteScene({ children }: { children: ReactNode }) {
     <motion.div
       data-testid="route-scene"
       data-route-scene-state={isPresent ? 'active' : 'exiting'}
-      initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 12, filter: 'blur(4px)' }}
-      animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
-      exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -8, filter: 'blur(4px)' }}
+      initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 12 }}
+      animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+      exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
       transition={
         prefersReducedMotion
           ? { duration: 0.08 }
-          : { duration: 0.5, ease: [0.22, 1, 0.36, 1] }
+          : { duration: 0.2, ease: 'easeOut' }
       }
       className={cn(
         'min-h-full w-full [will-change:transform,opacity]',
@@ -58,6 +58,22 @@ export function AppLayout() {
       node.scrollTo({ top: 0, left: 0, behavior: 'auto' })
     }
   }, [location.pathname])
+
+  // Proactively preload major route chunks after layout mounts to prevent Suspense lag on first navigation
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      Promise.allSettled([
+        import('@/pages/books-page'),
+        import('@/pages/inventory-page'),
+        import('@/pages/orders-page'),
+        import('@/pages/robots-page'),
+        import('@/pages/alerts-page'),
+        import('@/pages/readers-page'),
+        import('@/pages/dashboard-page'),
+      ]).catch(() => {})
+    }, 1000)
+    return () => clearTimeout(timer)
+  }, [])
 
 
   const handleToggleSidebar = () => {
