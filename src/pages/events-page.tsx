@@ -6,8 +6,11 @@ import { PageShell } from '@/components/shared/page-shell'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { useAdminEventsStream } from '@/hooks/use-admin-events-stream'
 import { getAdminEvents } from '@/lib/api/admin'
+import { getAdminPageHero } from '@/lib/page-hero'
 import type { RobotEvent } from '@/types/domain'
 import { formatDateTime } from '@/utils'
+
+const pageHero = getAdminPageHero('events')
 
 export function EventsPage() {
   const eventsQuery = useQuery({ queryKey: ['admin', 'events', 100], queryFn: () => getAdminEvents(100) })
@@ -33,9 +36,14 @@ export function EventsPage() {
   const visibleEvents = events ?? eventsQuery.data ?? []
 
   return (
-    <PageShell title="事件与审计页" description="高密度追踪最近事件流，便于定位机器人执行、订单推进和后台异常。">
+    <PageShell
+      {...pageHero}
+      eyebrow="事件记录"
+      title="事件记录"
+      description="查看最近的系统事件。"
+    >
       {visibleEvents.length === 0 ? (
-        <EmptyState title="当前没有事件" description="启动后端并触发一次机器人或订单动作后，这里会实时出现事件流。" />
+        <EmptyState title="暂无数据" description="当前条件下没有可用数据。" />
       ) : (
         <div className="grid gap-4">
           {visibleEvents.map((event) => (
@@ -48,7 +56,7 @@ export function EventsPage() {
                       机器人 #{event.robot_id} · 任务 #{event.task_id ?? '—'}
                     </p>
                     <p className="text-sm text-[var(--muted-foreground)]">
-                      {event.metadata?.borrow_order_id ? `借阅单 #${String(event.metadata.borrow_order_id)}` : '暂无借阅单关联信息'}
+                      {event.metadata?.borrow_order_id ? `订单 #${String(event.metadata.borrow_order_id)}` : '暂无关联信息'}
                     </p>
                   </div>
                 </div>

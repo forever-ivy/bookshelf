@@ -7,7 +7,7 @@ export function Table({ className, ...props }: React.TableHTMLAttributes<HTMLTab
 }
 
 export function TableHeader({ className, ...props }: React.HTMLAttributes<HTMLTableSectionElement>) {
-  return <thead className={cn('[&_tr]:border-b [&_tr]:border-[rgba(193,198,214,0.15)]', className)} {...props} />
+  return <thead className={cn('[&_tr]:border-b [&_tr]:border-[var(--line-subtle)]', className)} {...props} />
 }
 
 export function TableBody({ className, ...props }: React.HTMLAttributes<HTMLTableSectionElement>) {
@@ -19,6 +19,7 @@ export function TableRow({ className, ...props }: React.HTMLAttributes<HTMLTable
     <tr
       className={cn(
         'border-b border-[rgba(193,198,214,0.12)] transition-colors hover:bg-[rgba(255,255,255,0.65)]',
+        'border-b border-[var(--line-subtle)] transition-colors hover:bg-[rgba(33,73,140,0.035)]',
         className,
       )}
       {...props}
@@ -31,6 +32,7 @@ export function TableHead({ className, ...props }: React.ThHTMLAttributes<HTMLTa
     <th
       className={cn(
         'h-12 px-4 align-middle text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]',
+        'h-12 px-4 align-middle text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--muted-foreground)]',
         className,
       )}
       {...props}
@@ -39,5 +41,5 @@ export function TableHead({ className, ...props }: React.ThHTMLAttributes<HTMLTa
 }
 
 export function TableCell({ className, ...props }: React.TdHTMLAttributes<HTMLTableCellElement>) {
-  return <td className={cn('px-4 py-3 align-middle text-[var(--foreground)]', className)} {...props} />
+  return <td className={cn('px-4 py-3.5 align-middle text-[var(--foreground)]', className)} {...props} />
 }

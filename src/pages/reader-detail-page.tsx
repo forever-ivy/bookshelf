@@ -1,22 +1,26 @@
 import { useQuery } from '@tanstack/react-query'
+import { createColumnHelper, type ColumnDef } from '@tanstack/react-table'
 import { useParams } from 'react-router-dom'
 
 import { DataTable } from '@/components/shared/data-table'
 import { EmptyState } from '@/components/shared/empty-state'
+import { InspectorPanel } from '@/components/shared/inspector-panel'
 import { LoadingState } from '@/components/shared/loading-state'
+import { MetricStrip } from '@/components/shared/metric-strip'
 import { PageShell } from '@/components/shared/page-shell'
-import { StatCard } from '@/components/shared/stat-card'
 import { StatusBadge } from '@/components/shared/status-badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { WorkspacePanel } from '@/components/shared/workspace-panel'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { getReaderConversations, getReaderDetail, getReaderOrders, getReaderOverview, getReaderRecommendations } from '@/lib/api/readers'
-import { createColumnHelper, type ColumnDef } from '@tanstack/react-table'
+import { getAdminReader } from '@/lib/api/management'
+import { getAdminPageHero } from '@/lib/page-hero'
+import { getReaderConversations, getReaderOrders, getReaderOverview, getReaderRecommendations } from '@/lib/api/readers'
 import type { OrderBundle, ReaderConversation, ReaderRecommendation } from '@/types/domain'
 import { formatDateTime } from '@/utils'
 
 const orderColumnHelper = createColumnHelper<OrderBundle>()
 const conversationColumnHelper = createColumnHelper<ReaderConversation>()
 const recommendationColumnHelper = createColumnHelper<ReaderRecommendation>()
+const pageHero = getAdminPageHero('reader-detail')
 
 export function ReaderDetailPage() {
   const params = useParams()
@@ -25,7 +29,7 @@ export function ReaderDetailPage() {
   const detailQuery = useQuery({
     enabled: Number.isFinite(readerId),
     queryKey: ['readers', readerId, 'detail'],
-    queryFn: () => getReaderDetail(readerId),
+    queryFn: () => getAdminReader(readerId),
   })
   const overviewQuery = useQuery({
     enabled: Number.isFinite(readerId),
@@ -49,11 +53,11 @@ export function ReaderDetailPage() {
   })
 
   if (detailQuery.isLoading || overviewQuery.isLoading) {
-    return <LoadingState label="正在加载读者详情…" />
+    return <LoadingState label="加载中" />
   }
 
   if (!detailQuery.data || !overviewQuery.data) {
-    return <EmptyState title="读者不存在" description="请回到读者列表重新选择一个有效读者。" />
+    return <EmptyState title="暂无数据" description="当前条件下没有可用数据。" />
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -109,56 +113,105 @@ export function ReaderDetailPage() {
   const overview = overviewQuery.data
 
   return (
-    <PageShell title={detailQuery.data.display_name} description={`${detailQuery.data.college ?? '未填写学院'} · ${detailQuery.data.major ?? '未填写专业'}`}>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="活跃订单" value={overview.stats.active_orders_count} />
-        <StatCard title="借阅历史" value={overview.stats.borrow_history_count} />
-        <StatCard title="推荐记录" value={overview.stats.recommendation_count} />
-        <StatCard title="会话数量" value={overview.stats.conversation_count} />
+    <PageShell
+      {...pageHero}
+      eyebrow="读者"
+      title={detailQuery.data.display_name}
+      description={`${detailQuery.data.college ?? '未填写学院'} · ${detailQuery.data.major ?? '未填写专业'}`}
+      statusLine="读者信息"
+    >
+      <MetricStrip
+        items={[
+          { label: '进行中订单', value: overview.stats.active_orders_count, hint: '当前还在处理的借阅数量' },
+          { label: '借阅记录', value: overview.stats.borrow_history_count, hint: '累计借阅记录数' },
+          { label: '推荐记录', value: overview.stats.recommendation_count, hint: '推荐日志和点击记录' },
+          { label: '会话数', value: overview.stats.conversation_count, hint: '搜索和咨询会话数' },
+        ]}
+        className="xl:grid-cols-4"
+      />
+
+      <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+        <div className="space-y-6">
+          <WorkspacePanel title="记录" description="把借阅订单、会话和推荐记录放在一起。">
+            <Tabs defaultValue="orders">
+              <TabsList>
+                <TabsTrigger value="orders">借阅订单</TabsTrigger>
+                <TabsTrigger value="conversations">会话记录</TabsTrigger>
+                <TabsTrigger value="recommendations">推荐记录</TabsTrigger>
+              </TabsList>
+              <TabsContent value="orders">
+                <DataTable columns={orderColumns} data={ordersQuery.data ?? []} emptyTitle="暂无记录" emptyDescription="当前检视条件下无可用数据。" />
+              </TabsContent>
+              <TabsContent value="conversations">
+                <DataTable
+                  columns={conversationColumns}
+                  data={conversationsQuery.data ?? []}
+                  emptyTitle="暂无记录"
+                  emptyDescription="当前检视条件下无可用数据。"
+                />
+              </TabsContent>
+              <TabsContent value="recommendations">
+                <DataTable
+                  columns={recommendationColumns}
+                  data={recommendationsQuery.data ?? []}
+                  emptyTitle="暂无记录"
+                  emptyDescription="当前检视条件下无可用数据。"
+                />
+              </TabsContent>
+            </Tabs>
+          </WorkspacePanel>
+        </div>
+
+        <div className="space-y-6">
+          <InspectorPanel title="读者信息" description="查看账号、最近查询、限制状态和风险标签。">
+            <div className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl bg-[var(--surface-container-low)] px-4 py-4">
+                  <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">账号</p>
+                  <p className="mt-2 font-semibold text-[var(--foreground)]">{detailQuery.data.username}</p>
+                </div>
+                <div className="rounded-2xl bg-[var(--surface-container-low)] px-4 py-4">
+                  <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">身份</p>
+                  <p className="mt-2 font-semibold text-[var(--foreground)]">{detailQuery.data.affiliation_type ?? '未填写'}</p>
+                </div>
+                <div className="rounded-2xl bg-[var(--surface-container-low)] px-4 py-4">
+                  <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">最近活跃</p>
+                  <p className="mt-2 font-semibold text-[var(--foreground)]">{formatDateTime(detailQuery.data.last_active_at)}</p>
+                </div>
+                <div className="rounded-2xl bg-[var(--surface-container-low)] px-4 py-4">
+                  <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">最近查询</p>
+                  <p className="mt-2 text-sm text-[var(--foreground)]">{overview.recent_queries.join(' / ') || '暂无记录'}</p>
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl bg-[var(--surface-container-low)] px-4 py-4">
+                  <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">借阅限制</p>
+                  <div className="mt-2">
+                    <StatusBadge status={detailQuery.data.restriction_status ?? 'none'} />
+                  </div>
+                </div>
+                <div className="rounded-2xl bg-[var(--surface-container-low)] px-4 py-4">
+                  <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">用户分群</p>
+                  <p className="mt-2 font-semibold text-[var(--foreground)]">{detailQuery.data.segment_code ?? '未分群'}</p>
+                </div>
+              </div>
+            </div>
+          </InspectorPanel>
+
+          <WorkspacePanel title="偏好与标签" description="查看偏好、风险和最近搜索。">
+            <div className="space-y-4">
+              <div className="rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.38)] px-4 py-4">
+                <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">风险标签</p>
+                  <p className="mt-2 text-sm text-[var(--foreground)]">{detailQuery.data.risk_flags.join(' / ') || '暂无记录'}</p>
+              </div>
+              <div className="rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.38)] px-4 py-4">
+                <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">最近查询</p>
+                <p className="mt-2 text-sm text-[var(--foreground)]">{overview.recent_queries.join(' / ') || '暂无记录'}</p>
+              </div>
+            </div>
+          </WorkspacePanel>
+        </div>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>读者全景</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-2xl bg-[var(--surface-container-low)] p-4">
-              <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">账号</p>
-              <p className="mt-2 font-semibold text-[var(--foreground)]">{detailQuery.data.username}</p>
-            </div>
-            <div className="rounded-2xl bg-[var(--surface-container-low)] p-4">
-              <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">身份</p>
-              <p className="mt-2 font-semibold text-[var(--foreground)]">{detailQuery.data.affiliation_type ?? '未填写'}</p>
-            </div>
-            <div className="rounded-2xl bg-[var(--surface-container-low)] p-4">
-              <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">最近活跃</p>
-              <p className="mt-2 font-semibold text-[var(--foreground)]">{formatDateTime(detailQuery.data.last_active_at)}</p>
-            </div>
-            <div className="rounded-2xl bg-[var(--surface-container-low)] p-4">
-              <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">最近查询</p>
-              <p className="mt-2 text-sm text-[var(--foreground)]">{overview.recent_queries.join(' / ') || '暂无'}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Tabs defaultValue="orders">
-        <TabsList>
-          <TabsTrigger value="orders">借阅订单</TabsTrigger>
-          <TabsTrigger value="conversations">会话记录</TabsTrigger>
-          <TabsTrigger value="recommendations">推荐记录</TabsTrigger>
-        </TabsList>
-        <TabsContent value="orders">
-          <DataTable columns={orderColumns} data={ordersQuery.data ?? []} emptyTitle="暂无借阅订单" emptyDescription="该读者还没有借阅记录。" />
-        </TabsContent>
-        <TabsContent value="conversations">
-          <DataTable columns={conversationColumns} data={conversationsQuery.data ?? []} emptyTitle="暂无会话" emptyDescription="该读者还没有会话记录。" />
-        </TabsContent>
-        <TabsContent value="recommendations">
-          <DataTable columns={recommendationColumns} data={recommendationsQuery.data ?? []} emptyTitle="暂无推荐记录" emptyDescription="该读者还没有推荐历史。" />
-        </TabsContent>
-      </Tabs>
     </PageShell>
   )
 }

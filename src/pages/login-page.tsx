@@ -14,8 +14,8 @@ import { loginAsAdmin } from '@/lib/api/auth'
 import { useSession } from '@/providers/session-provider'
 
 const loginSchema = z.object({
-  username: z.string().min(1, '请输入管理员账号'),
-  password: z.string().min(1, '请输入登录密码'),
+  username: z.string().min(1, '请输入运营凭证'),
+  password: z.string().min(1, '请输入验证密钥'),
 })
 
 type LoginFormValues = z.infer<typeof loginSchema>
@@ -27,6 +27,33 @@ const BACKGROUNDS = [
   '/images/login-bg-4.jpg',
   '/images/login-bg-5.jpg',
   '/images/login-bg-6.jpg',
+]
+
+const HERO_MESSAGES = [
+  {
+    title: '知识流转与治理中台',
+    description: '整合馆藏实体、数字资产与自动化运力，构建前瞻性知识运营大脑。',
+  },
+  {
+    title: '馆藏编目与知识校准',
+    description: '统一元数据、分类体系与知识图谱标签，让每一次检索都指向更准确的内容秩序。',
+  },
+  {
+    title: '库存作业与格口落位',
+    description: '追踪书柜、仓位与流转日志，把盘点、订正和复核收束在同一条作业链路。',
+  },
+  {
+    title: '履约链路与运力调度',
+    description: '串联提取、配送、归还与重分配，维持履约节奏与人工介入的稳定平衡。',
+  },
+  {
+    title: '风险监控与系统治理',
+    description: '聚合告警、审计与权限边界，确保中台在可控、可追溯的秩序中运行。',
+  },
+  {
+    title: '策展推荐与运营洞察',
+    description: '将推荐位、专题版面和趋势洞察并排展开，让内容分发与运营判断彼此呼应。',
+  },
 ]
 
 // Animations
@@ -75,6 +102,7 @@ export function LoginPage() {
       password: 'admin123',
     },
   })
+  const currentHero = HERO_MESSAGES[currentBg] ?? HERO_MESSAGES[0]
 
   const loginMutation = useMutation({
     mutationFn: loginAsAdmin,
@@ -120,10 +148,10 @@ export function LoginPage() {
             className="mb-8 text-white drop-shadow-md"
           >
             <h2 className="mb-4 text-5xl font-semibold tracking-tight text-white/95">
-              重塑智能时代的<br />图书馆管理体验
+              {currentHero.title}
             </h2>
             <p className="max-w-xl text-lg leading-relaxed text-white/80">
-              整合馆藏流转、无人零售补库、读者信誉体系与数字化资产凭证，构建新一代知识分发大脑。
+              {currentHero.description}
             </p>
           </motion.div>
           
@@ -158,10 +186,10 @@ export function LoginPage() {
                 className="mx-auto mb-5 size-14 shadow-[0_18px_40px_-24px_rgba(0,91,191,0.9)]" 
               />
               <h1 className="text-3xl font-bold tracking-tight text-[var(--foreground)]">
-                知序
+                知序 
               </h1>
               <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-                欢迎回来，请输入您的管理员账号以继续访问后台
+                整合馆藏实体、数字资产与自动化运力，构建前瞻性知识运营大脑。
               </p>
             </motion.div>
 
@@ -172,10 +200,12 @@ export function LoginPage() {
               onSubmit={form.handleSubmit((values) => loginMutation.mutate(values))}
             >
               <div className="space-y-2.5">
-                <Label htmlFor="username" className="text-sm font-semibold text-[var(--foreground)]">管理员账号</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="username" className="text-sm font-semibold text-[var(--foreground)]">运营凭证</Label>
+                </div>
                 <Input 
                   id="username" 
-                  placeholder="请输入账号 (推荐: admin)" 
+                  placeholder="输入运营凭证" 
                   className="h-12 border-white/40 bg-white/50 text-base shadow-sm backdrop-blur-sm transition-all placeholder:text-[var(--muted-foreground)]/60 focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-[var(--primary)]/30"
                   {...form.register('username')} 
                 />
@@ -186,15 +216,12 @@ export function LoginPage() {
 
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="password" className="text-sm font-semibold text-[var(--foreground)]">登录密码</Label>
-                  <a href="#" className="text-sm font-medium text-[var(--primary)] hover:underline">
-                    忘记密码？
-                  </a>
+                  <Label htmlFor="password" className="text-sm font-semibold text-[var(--foreground)]">验证密钥</Label>
                 </div>
                 <Input 
                   id="password" 
                   type="password" 
-                  placeholder="请输入密码 (如: admin123)" 
+                  placeholder="验证密钥" 
                   className="h-12 border-white/40 bg-white/50 text-base shadow-sm backdrop-blur-sm transition-all placeholder:text-[var(--muted-foreground)]/60 focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-[var(--primary)]/30"
                   {...form.register('password')} 
                 />
@@ -208,13 +235,13 @@ export function LoginPage() {
                 type="submit" 
                 disabled={loginMutation.isPending}
               >
-                <span>{loginMutation.isPending ? '验证中…' : '登录系统'}</span>
+                <span>{loginMutation.isPending ? '验证中…' : '验证并进入'}</span>
                 <ArrowRight className="ml-2 size-5" />
               </Button>
             </motion.form>
             
             <motion.p variants={itemVariants} className="mt-8 text-center text-xs text-[var(--muted-foreground)]/80">
-              登录即代表您同意本系统的服务条款与隐私政策
+              登录即代表您同意本中台的治理规则与审计约束
             </motion.p>
           </motion.div>
         </div>

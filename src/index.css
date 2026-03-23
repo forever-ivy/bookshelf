@@ -2,25 +2,29 @@
 @import "tw-animate-css";
 
 :root {
-  --background: #f8f9fa;
-  --foreground: #191c1d;
-  --muted-foreground: #414754;
-  --surface: #f8f9fa;
-  --surface-container: #edeeef;
-  --surface-container-low: #f3f4f5;
-  --surface-container-lowest: #ffffff;
-  --surface-container-high: #e7e8e9;
-  --surface-container-highest: #e1e3e4;
-  --surface-bright: #ffffff;
-  --primary: #005bbf;
-  --primary-container: #1a73e8;
-  --secondary: #006e2c;
-  --secondary-container: #86f898;
-  --tertiary: #9e4300;
-  --error: #ba1a1a;
-  --outline-variant: #c1c6d6;
-  --ring: #1a73e8;
-  --radius: 0.875rem;
+  --background: #f3f1eb;
+  --foreground: #181814;
+  --muted-foreground: #5f6159;
+  --surface: #f7f5f0;
+  --surface-container: #f0eee8;
+  --surface-container-low: #f6f4ef;
+  --surface-container-lowest: #fbfaf6;
+  --surface-container-high: #ebe8e0;
+  --surface-container-highest: #e3ded4;
+  --surface-bright: #fffdf8;
+  --surface-panel: rgba(255, 252, 246, 0.88);
+  --surface-panel-strong: rgba(255, 252, 246, 0.96);
+  --line-subtle: rgba(32, 31, 27, 0.08);
+  --line-strong: rgba(32, 31, 27, 0.14);
+  --primary: #21498c;
+  --primary-container: #3f67aa;
+  --secondary: #2c6b52;
+  --secondary-container: #d8efe2;
+  --tertiary: #8a5a28;
+  --error: #b9382d;
+  --outline-variant: #d2cdc2;
+  --ring: #325caa;
+  --radius: 1rem;
   color: var(--foreground);
   background: var(--background);
   font-synthesis: none;
@@ -37,7 +41,7 @@ html,
 body,
 #root {
   min-height: 100%;
-  background-color: #f2f5f9;
+  background-color: var(--background);
   overscroll-behavior: none;
 }
 
@@ -51,11 +55,18 @@ body {
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
-  background-color: #f2f5f9;
+  background:
+    radial-gradient(circle at top left, rgba(33, 73, 140, 0.06), transparent 26%),
+    radial-gradient(circle at top right, rgba(138, 90, 40, 0.05), transparent 22%),
+    linear-gradient(180deg, #f7f4ee 0%, #f3f1eb 42%, #f1efe8 100%);
   color: var(--foreground);
 }
 
 a {
   color: inherit;
   text-decoration: none;
+}
+
+::selection {
+  background: rgba(33, 73, 140, 0.14);
 }

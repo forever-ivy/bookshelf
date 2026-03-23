@@ -2,6 +2,8 @@ export type AuthAccount = {
   id: number
   username: string
   role: 'admin' | 'reader' | string
+  role_codes?: string[]
+  permission_codes?: string[]
 }
 
 export type AuthProfile = {
@@ -43,6 +45,292 @@ export type Book = {
   storage_slots?: string[]
 }
 
+export type PaginatedResponse<T> = {
+  items: T[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export type AdminBookCategory = {
+  id: number
+  code: string
+  name: string
+  description?: string | null
+  status?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export type AdminBookTag = {
+  id: number
+  code: string
+  name: string
+  description?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export type AdminBook = Book & {
+  category_id?: number | null
+  isbn?: string | null
+  barcode?: string | null
+  cover_url?: string | null
+  shelf_status?: string | null
+  category_detail?: AdminBookCategory | null
+  tags: AdminBookTag[]
+  stock_summary?: {
+    total_copies: number
+    available_copies: number
+    reserved_copies: number
+  }
+}
+
+export type AdminDashboardOverview = {
+  today_borrow_count: number
+  active_delivery_task_count: number
+  robots: {
+    online: number
+    offline: number
+    total: number
+  }
+  cabinets: {
+    total: number
+    status_breakdown: Record<string, number>
+  }
+  top_books: Array<{
+    book_id: number
+    title: string
+    author?: string | null
+    borrow_count: number
+  }>
+  alerts: {
+    open: number
+    total: number
+  }
+}
+
+export type AdminHeatmapItem = {
+  area: string
+  demand_count: number
+  cabinet_count: number
+  locations: string[]
+}
+
+export type AdminAlert = {
+  id: number
+  source_type: string
+  source_id?: string | null
+  alert_type?: string
+  severity: string
+  status: string
+  title: string
+  message?: string | null
+  metadata_json?: Record<string, unknown>
+  acknowledged_by?: number | null
+  acknowledged_at?: string | null
+  resolved_by?: number | null
+  resolved_at?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export type AdminAuditLog = {
+  id: number
+  admin_id: number
+  target_type: string
+  target_id: number
+  action: string
+  before_state?: Record<string, unknown>
+  after_state?: Record<string, unknown>
+  note?: string | null
+  created_at?: string | null
+}
+
+export type AdminPermission = {
+  id: number
+  code: string
+  name: string
+  description?: string | null
+  created_at?: string | null
+}
+
+export type AdminRole = {
+  id: number
+  code: string
+  name: string
+  description?: string | null
+  permission_codes: string[]
+  assigned_admin_ids: number[]
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export type AdminSystemAdmin = {
+  id: number
+  username: string
+  role_codes: string[]
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export type AdminSystemSetting = {
+  id: number
+  setting_key: string
+  value_type: string
+  value_json: Record<string, unknown>
+  description?: string | null
+  created_by?: number | null
+  updated_by?: number | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export type AdminCabinet = {
+  id: string
+  name: string
+  location?: string | null
+  status: string
+  slot_total: number
+  occupied_slots: number
+  free_slots: number
+  slot_status_breakdown: Record<string, number>
+  total_copies: number
+  available_copies: number
+  reserved_copies: number
+  open_alert_count: number
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export type AdminCabinetSlot = {
+  id: number
+  cabinet_id: string
+  slot_code: string
+  status: string
+  current_copy_id?: number | null
+  copy_inventory_status?: string | null
+  book_id?: number | null
+  book_title?: string | null
+  book_author?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export type AdminInventoryRecord = {
+  id: number
+  cabinet_id: string
+  cabinet_name?: string | null
+  event_type: string
+  slot_code?: string | null
+  book_id?: number | null
+  book_title?: string | null
+  copy_id?: number | null
+  payload_json?: Record<string, unknown>
+  created_at?: string | null
+}
+
+export type AdminInventoryCorrection = {
+  cabinet_id: string
+  book_id: number
+  stock: {
+    total_copies: number
+    available_copies: number
+    reserved_copies: number
+  }
+  event: {
+    id: number
+    event_type: string
+    slot_code?: string | null
+    created_at?: string | null
+  }
+}
+
+export type BorrowTrendsAnalytics = {
+  items: Array<{ date: string; count: number }>
+  summary: {
+    days?: number
+    total_orders: number
+    peak_day?: string | null
+    peak_count: number
+  }
+}
+
+export type CollegePreferencesAnalytics = {
+  items: Array<{
+    college: string
+    total_orders: number
+    categories: Array<{ category: string; count: number }>
+  }>
+  summary: {
+    total_colleges: number
+  }
+}
+
+export type TimePeaksAnalytics = {
+  items: Array<{ hour: number; count: number }>
+  summary: {
+    peak_hour?: number | null
+    peak_count: number
+  }
+}
+
+export type PopularBooksAnalytics = {
+  items: Array<{
+    book_id: number
+    title: string
+    author?: string | null
+    borrow_count: number
+    recommendation_count?: number
+    prediction_score: number
+  }>
+  summary: {
+    total_ranked_books: number
+  }
+}
+
+export type CabinetTurnoverAnalytics = {
+  items: Array<{
+    cabinet_id: string
+    cabinet_name: string
+    location?: string | null
+    status?: string
+    copy_count?: number
+    event_count?: number
+    turnover_rate: number
+  }>
+  summary: {
+    total_cabinets: number
+  }
+}
+
+export type RobotEfficiencyAnalytics = {
+  items: Array<{
+    robot_id: number
+    code: string
+    status?: string
+    battery_level?: number | null
+    heartbeat_at?: string | null
+    total_tasks: number
+    completed_tasks?: number
+    active_tasks: number
+    completion_rate: number
+  }>
+  summary: {
+    total_robots: number
+  }
+}
+
+export type RetentionAnalytics = {
+  summary: {
+    total_readers: number
+    active_readers_7d: number
+    active_readers_30d?: number
+    retained_readers_7d: number
+    retention_rate_7d: number
+  }
+}
+
 export type InventorySlot = {
   slot_code: string
   status: string
@@ -73,6 +361,11 @@ export type BorrowOrder = {
   assigned_copy_id?: number | null
   order_mode: string
   status: string
+  priority?: string | null
+  due_at?: string | null
+  failure_reason?: string | null
+  intervention_status?: string | null
+  attempt_count?: number
   created_at?: string | null
   updated_at?: string | null
   completed_at?: string | null
@@ -84,6 +377,11 @@ export type DeliveryOrder = {
   delivery_target: string
   eta_minutes: number
   status: string
+  priority?: string | null
+  due_at?: string | null
+  failure_reason?: string | null
+  intervention_status?: string | null
+  attempt_count?: number
   created_at?: string | null
   updated_at?: string | null
   completed_at?: string | null
@@ -95,6 +393,10 @@ export type RobotTask = {
   delivery_order_id: number
   status: string
   borrow_order_id?: number | null
+  path_json?: Record<string, unknown> | null
+  reassigned_from_task_id?: number | null
+  failure_reason?: string | null
+  attempt_count?: number
   created_at?: string | null
   updated_at?: string | null
   completed_at?: string | null
@@ -105,6 +407,8 @@ export type RobotUnit = {
   id: number
   code: string
   status: string
+  battery_level?: number | null
+  heartbeat_at?: string | null
   current_task?: RobotTask | null
 }
 
@@ -123,6 +427,17 @@ export type OrderBundle = {
   robot_task?: RobotTask | null
   robot_unit?: RobotUnit | null
   robot?: RobotUnit | null
+}
+
+export type AdminReturnRequest = {
+  id: number
+  borrow_order_id: number
+  reader_id?: number | null
+  book_id?: number | null
+  status: string
+  note?: string | null
+  created_at?: string | null
+  updated_at?: string | null
 }
 
 export type ReaderProfile = {
@@ -148,6 +463,16 @@ export type ReaderListItem = {
   grade_year?: string | null
   active_orders_count: number
   last_active_at?: string | null
+}
+
+export type AdminReader = ReaderListItem & {
+  restriction_status?: string | null
+  restriction_until?: string | null
+  risk_flags: string[]
+  preference_profile_json?: Record<string, unknown>
+  segment_code?: string | null
+  created_at?: string | null
+  updated_at?: string | null
 }
 
 export type ReaderOverview = {
@@ -217,4 +542,55 @@ export type OcrIngestResult = {
     status: string
     current_copy_id?: number | null
   }
+}
+
+export type AdminRecommendationPlacement = {
+  id: number
+  code: string
+  name: string
+  status: string
+  placement_type: string
+  config_json?: Record<string, unknown>
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export type AdminTopicBooklist = {
+  id: number
+  slug: string
+  title: string
+  description?: string | null
+  status: string
+  audience_segment?: string | null
+  item_count: number
+  books: Array<{
+    book_id: number
+    title?: string | null
+    rank_position: number
+    note?: string | null
+  }>
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export type AdminRecommendationInsights = {
+  summary: {
+    total_recommendations: number
+    view_count: number
+    conversion_count: number
+    click_through_rate: number
+    conversion_rate: number
+    placement_count: number
+    topic_count: number
+  }
+  hot_tags: Array<{
+    tag_id: number
+    tag_name: string
+    recommendation_count: number
+  }>
+  top_queries: Array<{
+    query_text: string
+    count: number
+  }>
+  strategy_weights: Record<string, unknown>
 }

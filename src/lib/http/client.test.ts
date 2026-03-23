@@ -147,6 +147,32 @@ describe('HttpClient', () => {
     expect(toastError).toHaveBeenCalledWith(ERROR_MESSAGES.SERVER_ERROR)
   })
 
+  it('shows a helpful message for transport-level network failures', async () => {
+    const toastError = vi.fn()
+    const client = new HttpClient(
+      'http://192.168.31.15:8000',
+      1000,
+      {
+        request: vi.fn().mockRejectedValue({
+          message: 'Network Error',
+        }),
+      },
+      {
+        toastError,
+      },
+    )
+
+    await expect(client.get('/boom')).rejects.toMatchObject({
+      success: false,
+      status: 0,
+      message: `${ERROR_MESSAGES.NETWORK_ERROR} 当前接口地址：http://192.168.31.15:8000`,
+    })
+
+    expect(toastError).toHaveBeenCalledWith(
+      `${ERROR_MESSAGES.NETWORK_ERROR} 当前接口地址：http://192.168.31.15:8000`,
+    )
+  })
+
   it('uploads files with a default form field name and reports progress', async () => {
     const progressSpy = vi.fn()
     let captured: TransportConfig | undefined

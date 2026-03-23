@@ -5,18 +5,18 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]/60',
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-2xl text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]/40',
   {
     variants: {
       variant: {
         default:
-          'bg-[linear-gradient(135deg,var(--primary),var(--primary-container))] text-white shadow-[0_20px_40px_-24px_rgba(0,91,191,0.85)] hover:brightness-[1.03]',
+          'bg-[var(--primary)] text-white shadow-[0_18px_35px_-24px_rgba(33,73,140,0.75)] hover:bg-[var(--primary-container)]',
         secondary:
-          'bg-[var(--surface-container-lowest)] text-[var(--foreground)] shadow-[inset_0_0_0_1px_rgba(193,198,214,0.35)] hover:bg-[var(--surface-bright)]',
-        ghost: 'text-[var(--foreground)] hover:bg-[var(--surface-container-high)]',
+          'bg-[var(--surface-panel-strong)] text-[var(--foreground)] shadow-[inset_0_0_0_1px_var(--line-subtle)] hover:bg-[var(--surface-bright)]',
+        ghost: 'text-[var(--foreground)] hover:bg-[rgba(33,73,140,0.06)]',
         destructive: 'bg-[var(--error)] text-white hover:brightness-[0.98]',
         outline:
-          'bg-transparent text-[var(--foreground)] shadow-[inset_0_0_0_1px_rgba(193,198,214,0.5)] hover:bg-[var(--surface-container-high)]',
+          'bg-transparent text-[var(--foreground)] shadow-[inset_0_0_0_1px_var(--line-strong)] hover:bg-[var(--surface-container-high)]',
       },
       size: {
         default: 'h-10 px-4 py-2',

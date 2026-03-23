@@ -1,99 +1,198 @@
 import { useQuery } from '@tanstack/react-query'
-import { Activity, Bot, Boxes, BookOpenCheck, ChartLine } from 'lucide-react'
+import { Activity, Bot, ChartColumnIncreasing, Flame, MapPinned, PackageCheck } from 'lucide-react'
 
+import { EmptyState } from '@/components/shared/empty-state'
+import { LoadingState } from '@/components/shared/loading-state'
+import { MetricStrip } from '@/components/shared/metric-strip'
 import { PageShell } from '@/components/shared/page-shell'
-import { StatCard } from '@/components/shared/stat-card'
+import { SectionIntro } from '@/components/shared/section-intro'
 import { StatusBadge } from '@/components/shared/status-badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { getAdminEvents, getAdminOrders, getAdminRobots, getAdminTasks } from '@/lib/api/admin'
-import { getInventoryStatus } from '@/lib/api/inventory'
-import { formatDateTime } from '@/utils'
+import { WorkspacePanel } from '@/components/shared/workspace-panel'
+import { getAdminDashboardHeatmap, getAdminDashboardOverview } from '@/lib/api/management'
+import { getAdminPageHero } from '@/lib/page-hero'
+
+const pageHero = getAdminPageHero('dashboard')
 
 export function DashboardPage() {
-  const ordersQuery = useQuery({ queryKey: ['admin', 'orders'], queryFn: getAdminOrders })
-  const tasksQuery = useQuery({ queryKey: ['admin', 'tasks'], queryFn: getAdminTasks })
-  const robotsQuery = useQuery({ queryKey: ['admin', 'robots'], queryFn: getAdminRobots })
-  const inventoryQuery = useQuery({ queryKey: ['inventory', 'status'], queryFn: getInventoryStatus })
-  const eventsQuery = useQuery({ queryKey: ['admin', 'events', 12], queryFn: () => getAdminEvents(12) })
+  const overviewQuery = useQuery({
+    queryKey: ['admin', 'dashboard', 'overview'],
+    queryFn: getAdminDashboardOverview,
+  })
+  const heatmapQuery = useQuery({
+    queryKey: ['admin', 'dashboard', 'heatmap'],
+    queryFn: getAdminDashboardHeatmap,
+  })
 
-  const orders = ordersQuery.data ?? []
-  const tasks = tasksQuery.data ?? []
-  const robots = robotsQuery.data ?? []
-  const inventory = inventoryQuery.data
-  const events = eventsQuery.data ?? []
+  if (overviewQuery.isLoading || heatmapQuery.isLoading) {
+    return (
+      <PageShell
+        {...pageHero}
+        eyebrow="总览"
+        title="总览"
+        description="查看当天借阅、设备状态和警告情况。"
+        statusLine="今日状态"
+      >
+        <LoadingState label="加载中" />
+      </PageShell>
+    )
+  }
 
-  const deliveringCount = orders.filter((item) => item.borrow_order.status === 'delivering').length
-  const completedCount = orders.filter((item) => item.borrow_order.status === 'completed').length
-  const pendingCount = orders.filter((item) => item.borrow_order.status !== 'completed').length
+  const overview = overviewQuery.data
+  const heatmap = heatmapQuery.data?.items ?? []
+
+  if (!overview) {
+    return (
+      <PageShell
+        {...pageHero}
+        eyebrow="总览"
+        title="总览"
+        description="查看当天借阅、设备状态和警告情况。"
+        statusLine="今日状态"
+      >
+        <EmptyState title="暂无数据" description="当前条件下没有可用数据。" />
+      </PageShell>
+    )
+  }
 
   return (
     <PageShell
-      title="Dashboard 总览页"
-      description="用统一视角掌握当日借阅履约、库存占用、机器人任务与最近异常动态。"
+      {...pageHero}
+      eyebrow="总览"
+      title="总览"
+      description="查看当天借阅、设备状态和警告情况。"
+      statusLine="今日状态"
     >
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-5 space-y-6 " >
-        <StatCard title="待处理订单" value={pendingCount} hint="未完成借阅单" icon={<BookOpenCheck className="size-5 text-[var(--primary)]" />} />
-        <StatCard title="配送中" value={deliveringCount} hint="处于履约链路中的订单" icon={<ChartLine className="size-5 text-[var(--primary)]" />} />
-        <StatCard title="已完成" value={completedCount} hint="本地服务返回的完成订单" icon={<Activity className="size-5 text-[var(--secondary)]" />} />
-        <StatCard title="机器人任务" value={tasks.length} hint="当前机器人任务总数" icon={<Bot className="size-5 text-[var(--tertiary)]" />} />
-        <StatCard
-          title="库存占用"
-          value={`${inventory?.occupied_slots ?? 0}/${(inventory?.occupied_slots ?? 0) + (inventory?.free_slots ?? 0)}`}
-          hint="已占用格口 / 总格口"
-          icon={<Boxes className="size-5 text-[var(--primary)]" />}
-        />
+      <MetricStrip
+        items={[
+          {
+            label: '今日借阅',
+            value: overview.today_borrow_count,
+            hint: '当天新增的借阅单',
+            icon: <Activity className="size-5" />,
+          },
+          {
+            label: '在线设备',
+            value: overview.active_delivery_task_count,
+            hint: '当前仍在处理任务的设备',
+            icon: <PackageCheck className="size-5" />,
+          },
+          {
+            label: '书柜数量',
+            value: `${overview.robots.online}/${overview.robots.total}`,
+            hint: '在线数量 / 总数量',
+            icon: <Bot className="size-5" />,
+          },
+          {
+            label: '待处理警告',
+            value: overview.cabinets.total,
+            hint: `${overview.alerts.open ?? 0} 条待处理记录`,
+            icon: <ChartColumnIncreasing className="size-5" />,
+          },
+        ]}
+        className="xl:grid-cols-4"
+      />
+
+      <div className="grid gap-6 xl:grid-cols-[1.25fr_0.95fr]">
+        <WorkspacePanel
+          title="热门图书"
+          description="按借阅次数统计当前最受关注的图书。"
+        >
+          {overview.top_books.length === 0 ? (
+            <EmptyState title="暂无数据" description="数据还不够，稍后会自动展示热门图书。" />
+          ) : (
+            <div className="space-y-3">
+              {overview.top_books.map((book, index) => (
+                <div
+                  key={book.book_id}
+                  className="grid gap-4 border-b border-[var(--line-subtle)] py-4 last:border-b-0 first:pt-0 last:pb-0 md:grid-cols-[auto_1fr_auto]"
+                >
+                  <span className="inline-flex size-9 items-center justify-center rounded-full border border-[var(--line-subtle)] bg-[rgba(33,73,140,0.05)] text-sm font-semibold text-[var(--foreground)]">
+                    {index + 1}
+                  </span>
+                  <div className="space-y-1">
+                    <p className="font-semibold text-[var(--foreground)]">{book.title}</p>
+                    <p className="text-sm text-[var(--muted-foreground)]">{book.author ?? '作者待补充'}</p>
+                  </div>
+                  <div className="text-left md:text-right">
+                    <p className="text-2xl font-semibold tracking-[-0.05em] text-[var(--foreground)]">{book.borrow_count}</p>
+                    <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">借阅次数</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </WorkspacePanel>
+
+        <WorkspacePanel
+          title="区域热度映射"
+          description="按区域汇总借阅需求，用于查看哪些点最忙。"
+          tone="muted"
+        >
+          {heatmap.length === 0 ? (
+            <EmptyState title="暂无数据" description="数据还不够，稍后会自动展示区域热度。" />
+          ) : (
+            <div className="space-y-3">
+              {heatmap.map((item) => (
+                <div key={item.area} className="rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.34)] px-5 py-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <MapPinned className="mt-0.5 size-4 text-[var(--primary)]" />
+                      <div>
+                        <p className="font-semibold text-[var(--foreground)]">{item.area}</p>
+                        <p className="mt-1 text-sm leading-6 text-[var(--muted-foreground)]">{item.locations.join(' / ') || '未标注位置'}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-semibold tracking-[-0.05em] text-[var(--foreground)]">{item.demand_count}</p>
+                      <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">热度</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </WorkspacePanel>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.5fr_1fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>近期履约动态</CardTitle>
-            <CardDescription>最近的机器人与订单联动事件。</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {events.slice(0, 6).map((event) => (
-              <div
-                key={event.id}
-                className="flex items-start justify-between rounded-2xl border border-white/60 bg-white/40 shadow-sm backdrop-blur-md px-5 py-4 transition-all hover:bg-white/60"
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <StatusBadge status={event.event_type} />
-                    <span className="text-sm font-medium text-[var(--foreground)]">
-                      机器人 #{event.robot_id} · 任务 #{event.task_id ?? '—'}
-                    </span>
-                  </div>
-                  <p className="text-sm text-[var(--muted-foreground)]">
-                    {event.metadata?.delivery_target ? `目标位置：${String(event.metadata.delivery_target)}` : '等待更多附加信息'}
-                  </p>
-                </div>
-                <span className="text-xs text-[var(--muted-foreground)]">{formatDateTime(event.created_at)}</span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+      <SectionIntro
+        eyebrow="状态"
+        title="设备状态"
+        description="把设备和警告放在一起，方便快速查看。"
+      />
 
-        <Card>
-          <CardHeader>
-            <CardTitle>机器人状态</CardTitle>
-            <CardDescription>所有机器人与当前任务的快照。</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {robots.map((robot) => (
-              <div key={robot.id} className="rounded-2xl border border-white/60 bg-white/40 shadow-sm backdrop-blur-md p-5 transition-all hover:bg-white/60">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold text-[var(--foreground)]">{robot.code}</p>
-                    <p className="text-sm text-[var(--muted-foreground)]">
-                      当前任务：{robot.current_task?.delivery_order_id ?? '空闲'}
-                    </p>
-                  </div>
-                  <StatusBadge status={robot.status} />
+      <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+        <WorkspacePanel title="设备状态" description="快速判断今天是否需要人工处理。">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.3)] px-5 py-5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">在线设备</p>
+              <p className="mt-3 text-[2.6rem] font-semibold tracking-[-0.07em] text-[var(--foreground)]">{overview.robots.online}</p>
+              <div className="mt-4">
+                <StatusBadge status={overview.robots.offline > 0 ? 'offline' : 'active'} />
+              </div>
+            </div>
+            <div className="rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.3)] px-5 py-5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">待处理警告</p>
+              <p className="mt-3 text-[2.6rem] font-semibold tracking-[-0.07em] text-[var(--foreground)]">{overview.alerts.open}</p>
+              <div className="mt-4">
+                <StatusBadge status={overview.alerts.open > 0 ? 'error' : 'active'} />
+              </div>
+            </div>
+          </div>
+        </WorkspacePanel>
+
+        <WorkspacePanel title="书柜状态" description="按状态拆分书柜数量，方便查看设备压力。">
+          <div className="grid gap-3 md:grid-cols-2">
+            {Object.entries(overview.cabinets.status_breakdown).map(([status, count]) => (
+              <div key={status} className="flex items-center justify-between rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.3)] px-4 py-4">
+                <div className="flex items-center gap-3">
+                  <Flame className="size-4 text-[var(--primary)]" />
+                  <StatusBadge status={status} />
                 </div>
+                <span className="text-xl font-semibold tracking-[-0.05em] text-[var(--foreground)]">{count}</span>
               </div>
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        </WorkspacePanel>
       </div>
     </PageShell>
   )

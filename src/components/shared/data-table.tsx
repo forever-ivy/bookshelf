@@ -19,8 +19,8 @@ type DataTableProps<TData> = {
 export function DataTable<TData>({
   columns,
   data,
-  emptyTitle = '暂无数据',
-  emptyDescription = '当前筛选条件下还没有可展示的数据。',
+  emptyTitle = '暂无记录',
+  emptyDescription = '当前检视条件下无可用数据。',
 }: DataTableProps<TData>) {
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
@@ -34,7 +34,7 @@ export function DataTable<TData>({
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-[rgba(193,198,214,0.18)] bg-white/80">
+    <div className="overflow-hidden rounded-[1.75rem] border border-[var(--line-subtle)] bg-[var(--surface-panel-strong)]">
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>

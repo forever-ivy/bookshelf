@@ -165,10 +165,15 @@ export class HttpClient {
     }
   }
 
+  private getNetworkErrorMessage() {
+    return `${ERROR_MESSAGES.NETWORK_ERROR} 当前接口地址：${this.baseURL}`
+  }
+
   private toApiError(error: unknown): ApiError {
     if (axios.isAxiosError(error)) {
       const status = error.response?.status ?? 0
       const message =
+        (status === 0 ? this.getNetworkErrorMessage() : undefined) ||
         extractErrorMessage(error.response?.data) ||
         error.message ||
         (status >= 500 ? ERROR_MESSAGES.SERVER_ERROR : ERROR_MESSAGES.UNKNOWN_ERROR)
@@ -181,7 +186,7 @@ export class HttpClient {
       }
     }
 
-    if (error && typeof error === 'object' && 'response' in error) {
+    if (error && typeof error === 'object' && ('response' in error || 'message' in error)) {
       const maybe = error as {
         response?: {
           status?: number
@@ -195,6 +200,7 @@ export class HttpClient {
         status,
         code: String(status || 'REQUEST_ERROR'),
         message:
+          (status === 0 ? this.getNetworkErrorMessage() : undefined) ||
           extractErrorMessage(maybe.response?.data) ||
           maybe.message ||
           (status >= 500 ? ERROR_MESSAGES.SERVER_ERROR : ERROR_MESSAGES.UNKNOWN_ERROR),
@@ -206,7 +212,7 @@ export class HttpClient {
       success: false,
       status: 0,
       code: 'UNKNOWN_ERROR',
-      message: error instanceof Error ? error.message : ERROR_MESSAGES.UNKNOWN_ERROR,
+      message: this.getNetworkErrorMessage(),
       details: error,
     }
   }
