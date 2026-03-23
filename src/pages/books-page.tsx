@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/shared/empty-state'
 import { LoadingState } from '@/components/shared/loading-state'
 import { MetricStrip } from '@/components/shared/metric-strip'
 import { PageShell } from '@/components/shared/page-shell'
-import { StatusBadge } from '@/components/shared/status-badge'
+import { StatusBadge, formatStatusLabel } from '@/components/shared/status-badge'
 import { WorkspacePanel } from '@/components/shared/workspace-panel'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -36,7 +36,7 @@ import {
   getAdminTags,
   updateAdminBook,
 } from '@/lib/api/management'
-import type { AdminBook, AdminBookCategory, AdminBookTag } from '@/types/domain'
+import type { AdminBook, AdminBookCategory, AdminBookTag, PaginatedResponse } from '@/types/domain'
 
 const pageHero = getAdminPageHero('books')
 
@@ -76,6 +76,8 @@ const EMPTY_TAG_FORM = {
   description: '',
 }
 
+const BOOK_SHELF_STATUS_OPTIONS = ['draft', 'on_shelf', 'off_shelf'] as const
+
 function normalizeSelectedIds(values: string[]) {
   return values.map((item) => Number(item)).filter((item) => Number.isFinite(item) && item > 0)
 }
@@ -89,6 +91,20 @@ function buildInternalCode(kind: 'category' | 'tag', name: string) {
   const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
   const base = normalized || kind
   return `${kind}-${base}-${suffix}`.slice(0, 64)
+}
+
+function mergeUpdatedBook(
+  current: PaginatedResponse<AdminBook> | undefined,
+  updatedBook: AdminBook,
+) {
+  if (!current) {
+    return current
+  }
+
+  return {
+    ...current,
+    items: current.items.map((book) => (book.id === updatedBook.id ? { ...book, ...updatedBook } : book)),
+  }
 }
 
 export function BooksPage() {
@@ -181,8 +197,11 @@ export function BooksPage() {
         shelf_status: bookEditForm.shelfStatus,
       })
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['admin', 'books'] })
+    onSuccess: (updatedBook) => {
+      queryClient.setQueriesData<PaginatedResponse<AdminBook>>({ queryKey: ['admin', 'books'] }, (current) =>
+        mergeUpdatedBook(current, updatedBook),
+      )
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'books'], refetchType: 'none' })
       setIsEditDialogOpen(false)
     },
   })
@@ -731,9 +750,9 @@ export function BooksPage() {
                           }))
                         }
                       >
-                        {['draft', 'on_shelf', 'off_shelf'].map((value) => (
+                        {BOOK_SHELF_STATUS_OPTIONS.map((value) => (
                           <option key={value} value={value}>
-                            {value}
+                            {formatStatusLabel(value)}
                           </option>
                         ))}
                       </select>

@@ -19,7 +19,10 @@ const STATUS_LABELS: Record<string, string> = {
   idle: '空闲',
   in_delivery: '配送中',
   maintenance: '维护中',
+  draft: '草稿',
   offline: '离线',
+  off_shelf: '已下架',
+  on_shelf: '已上架',
   occupied: '占用',
   open: '待处理',
   pending: '待处理',
@@ -39,6 +42,7 @@ function resolveVariant(status?: string | null) {
     case 'stored':
     case 'active':
     case 'available':
+    case 'on_shelf':
       return {
         variant: 'success' as const,
         icon: CheckCircle2,
@@ -56,10 +60,16 @@ function resolveVariant(status?: string | null) {
         icon: LoaderCircle,
       }
     case 'created':
+    case 'draft':
     case 'pending':
     case 'returning':
       return {
         variant: 'warning' as const,
+        icon: Clock3,
+      }
+    case 'off_shelf':
+      return {
+        variant: 'outline' as const,
         icon: Clock3,
       }
     case 'offline':

@@ -129,7 +129,7 @@ describe('management pages', () => {
       author: '程墨',
       category: '人工智能',
       category_id: 1,
-      shelf_status: 'on_shelf',
+      shelf_status: 'off_shelf',
       isbn: '9787111000001',
       barcode: 'AI-0001',
       summary: '更新后的图书简介。',
@@ -473,6 +473,9 @@ describe('management pages', () => {
     await user.type(within(editSheet).getByLabelText('书名'), '智能系统设计（新版）')
     await user.clear(within(editSheet).getByLabelText('简介'))
     await user.type(within(editSheet).getByLabelText('简介'), '更新后的图书简介。')
+    expect(within(editSheet).getByRole('option', { name: '草稿' })).toBeInTheDocument()
+    expect(within(editSheet).getByRole('option', { name: '已上架' })).toBeInTheDocument()
+    expect(within(editSheet).getByRole('option', { name: '已下架' })).toBeInTheDocument()
     await user.selectOptions(within(editSheet).getByLabelText('上架状态'), 'off_shelf')
     await user.click(within(editSheet).getByRole('button', { name: '保存修改' }))
     await waitFor(() => {
@@ -489,6 +492,8 @@ describe('management pages', () => {
       summary: '更新后的图书简介。',
       shelf_status: 'off_shelf',
     })
+    expect(await screen.findByText('已下架')).toBeInTheDocument()
+    expect(screen.queryByText('off_shelf')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '管理分类和标签' }))
     const taxonomyDialog = await screen.findByRole('dialog', { name: '分类和标签' })
