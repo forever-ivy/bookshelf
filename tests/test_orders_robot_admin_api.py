@@ -446,3 +446,147 @@ def test_admin_correction_rejects_unknown_status_values(client):
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "invalid_status_transition"
+
+
+def test_admin_can_prioritize_retry_and_intervene_order_bundle(client):
+    clear_broker_history()
+    state = seed_state()
+
+    create_response = post_borrow_order(client, state["profile"].id, state["book"].id)
+    order_id = create_response.json()["borrow_order"]["id"]
+
+    priority_response = client.post(
+        f"/api/v1/admin/orders/{order_id}/priority",
+        headers=admin_headers(state["admin"].id),
+        json={"priority": "urgent"},
+    )
+    assert priority_response.status_code == 200
+    assert priority_response.json()["borrow_order"]["priority"] == "urgent"
+    assert priority_response.json()["delivery_order"]["priority"] == "urgent"
+
+    intervene_response = client.post(
+        f"/api/v1/admin/orders/{order_id}/intervene",
+        headers=admin_headers(state["admin"].id),
+        json={"intervention_status": "manual_review", "failure_reason": "机器人在通道口等待人工处理"},
+    )
+    assert intervene_response.status_code == 200
+    intervention_bundle = intervene_response.json()
+    assert intervention_bundle["borrow_order"]["intervention_status"] == "manual_review"
+    assert intervention_bundle["borrow_order"]["failure_reason"] == "机器人在通道口等待人工处理"
+
+    retry_response = client.post(
+        f"/api/v1/admin/orders/{order_id}/retry",
+        headers=admin_headers(state["admin"].id),
+        json={"note": "人工确认后重新派单"},
+    )
+    assert retry_response.status_code == 200
+    retry_bundle = retry_response.json()
+    assert retry_bundle["borrow_order"]["status"] == "created"
+    assert retry_bundle["delivery_order"]["status"] == "awaiting_pick"
+    assert retry_bundle["robot_task"]["status"] == "assigned"
+    assert retry_bundle["robot_unit"]["status"] == "assigned"
+    assert retry_bundle["borrow_order"]["attempt_count"] == 1
+
+
+def test_admin_can_reassign_robot_task(client):
+    clear_broker_history()
+    state = seed_state()
+
+    session = get_session_factory()()
+    try:
+        second_robot = RobotUnit(code="robot-2", status="idle", battery_level=91)
+        session.add(second_robot)
+        session.commit()
+        second_robot_id = second_robot.id
+    finally:
+        session.close()
+
+    create_response = post_borrow_order(client, state["profile"].id, state["book"].id)
+    task_id = create_response.json()["robot_task"]["id"]
+    old_robot_id = create_response.json()["robot_unit"]["id"]
+
+    reassign_response = client.post(
+        f"/api/v1/admin/tasks/{task_id}/reassign",
+        headers=admin_headers(state["admin"].id),
+        json={"robot_id": second_robot_id, "reason": "原机器人电量过低"},
+    )
+    assert reassign_response.status_code == 200
+    payload = reassign_response.json()
+    assert payload["task"]["robot_id"] == second_robot_id
+    assert payload["robot"]["id"] == second_robot_id
+
+    session = get_session_factory()()
+    try:
+        task = session.get(RobotTask, task_id)
+        old_robot = session.get(RobotUnit, old_robot_id)
+        new_robot = session.get(RobotUnit, second_robot_id)
+        assert task is not None
+        assert old_robot is not None
+        assert new_robot is not None
+        assert task.robot_id == second_robot_id
+        assert old_robot.status == "idle"
+        assert new_robot.status == "assigned"
+    finally:
+        session.close()
+
+
+def test_admin_can_receive_and_complete_return_request(client):
+    clear_broker_history()
+    state = seed_state()
+
+    create_response = post_borrow_order(client, state["profile"].id, state["book"].id)
+    order_id = create_response.json()["borrow_order"]["id"]
+
+    worker = RobotAutoProgressWorker()
+    for _ in range(5):
+        worker.tick()
+
+    return_response = client.post(
+        f"/api/v1/orders/borrow-orders/{order_id}/return-requests",
+        headers=reader_headers(state["profile"].id),
+        json={"note": "下课后归还"},
+    )
+    assert return_response.status_code == 201
+    return_request_id = return_response.json()["return_request"]["id"]
+
+    list_response = client.get(
+        "/api/v1/admin/return-requests",
+        headers=admin_headers(state["admin"].id),
+        params={"status": "created", "borrow_order_id": order_id},
+    )
+    assert list_response.status_code == 200
+    assert list_response.json()["items"][0]["id"] == return_request_id
+
+    receive_response = client.post(
+        f"/api/v1/admin/return-requests/{return_request_id}/receive",
+        headers=admin_headers(state["admin"].id),
+        json={"note": "机器人已完成回收"},
+    )
+    assert receive_response.status_code == 200
+    assert receive_response.json()["return_request"]["status"] == "received"
+
+    complete_response = client.post(
+        f"/api/v1/admin/return-requests/{return_request_id}/complete",
+        headers=admin_headers(state["admin"].id),
+        json={"cabinet_id": "cabinet-001", "slot_code": "A01", "note": "书柜识别成功并完成上架"},
+    )
+    assert complete_response.status_code == 200
+    assert complete_response.json()["return_request"]["status"] == "completed"
+
+    session = get_session_factory()()
+    try:
+        request_row = session.get(ReturnRequest, return_request_id)
+        copy = session.get(BookCopy, state["copy"].id)
+        slot = session.query(CabinetSlot).filter_by(cabinet_id="cabinet-001", slot_code="A01").one()
+        stock = session.query(BookStock).filter_by(book_id=state["book"].id, cabinet_id="cabinet-001").one()
+        assert request_row is not None
+        assert copy is not None
+        assert request_row.status == "completed"
+        assert copy.inventory_status == "stored"
+        assert slot.current_copy_id == copy.id
+        assert slot.status == "occupied"
+        assert stock.total_copies == 1
+        assert stock.available_copies == 1
+        assert stock.reserved_copies == 0
+    finally:
+        session.close()

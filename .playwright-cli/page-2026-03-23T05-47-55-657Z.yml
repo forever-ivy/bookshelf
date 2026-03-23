@@ -1,0 +1,200 @@
+- generic [ref=e2]:
+  - generic [ref=e6]:
+    - complementary [ref=e7]:
+      - generic [ref=e8]:
+        - img [ref=e9]:
+          - img "知序" [ref=e10]
+        - generic [ref=e11]:
+          - paragraph [ref=e12]: 知序
+          - paragraph [ref=e13]: 馆藏运营控制台
+        - button "收起侧边栏" [ref=e15]:
+          - img [ref=e16]
+      - paragraph [ref=e20]: Workspace
+      - navigation [ref=e21]:
+        - link "首页总览" [ref=e22] [cursor=pointer]:
+          - /url: /dashboard
+          - img [ref=e24]
+          - generic [ref=e29]: 首页总览
+        - link "图书管理" [ref=e30] [cursor=pointer]:
+          - /url: /books
+          - img [ref=e32]
+          - generic [ref=e35]: 图书管理
+        - link "库存作业" [ref=e36] [cursor=pointer]:
+          - /url: /inventory
+          - img [ref=e38]
+          - generic [ref=e42]: 库存作业
+        - link "感知落位" [ref=e43] [cursor=pointer]:
+          - /url: /ocr
+          - img [ref=e45]
+          - generic [ref=e51]: 感知落位
+        - link "履约链路" [ref=e52] [cursor=pointer]:
+          - /url: /orders
+          - img [ref=e54]
+          - generic [ref=e57]: 履约链路
+        - link "运力调度" [ref=e58] [cursor=pointer]:
+          - /url: /robots
+          - img [ref=e60]
+          - generic [ref=e63]: 运力调度
+        - link "告警中心" [ref=e64] [cursor=pointer]:
+          - /url: /alerts
+          - img [ref=e66]
+          - generic [ref=e69]: 告警中心
+        - link "读者画像" [ref=e70] [cursor=pointer]:
+          - /url: /readers
+          - img [ref=e72]
+          - generic [ref=e77]: 读者画像
+        - link "推荐运营" [ref=e78] [cursor=pointer]:
+          - /url: /recommendation
+          - img [ref=e80]
+          - generic [ref=e83]: 推荐运营
+        - link "数据分析" [ref=e84] [cursor=pointer]:
+          - /url: /analytics
+          - img [ref=e86]
+          - generic [ref=e88]: 数据分析
+        - link "系统配置" [ref=e89] [cursor=pointer]:
+          - /url: /system
+          - img [ref=e91]
+          - generic [ref=e94]: 系统配置
+    - generic [ref=e95]:
+      - img
+      - banner [ref=e96]:
+        - generic [ref=e97]:
+          - img
+          - textbox "搜索图书、订单、读者与告警" [ref=e98]
+          - generic: Cmd K
+        - generic [ref=e99]:
+          - generic [ref=e100]:
+            - paragraph [ref=e101]: admin
+            - paragraph [ref=e102]: 当班治理席
+          - generic [ref=e104]: AD
+      - main [ref=e105]:
+        - generic [ref=e108]:
+          - generic [ref=e114]:
+            - generic [ref=e116]:
+              - paragraph [ref=e117]: 总览
+              - generic [ref=e118]:
+                - heading "总览" [level=1] [ref=e119]
+                - paragraph [ref=e120]: 查看当天借阅、设备状态和警告情况。
+            - generic [ref=e121]:
+              - generic [ref=e122]: 知序
+              - generic [ref=e124]: 今日状态
+          - generic [ref=e125]:
+            - generic [ref=e126]:
+              - generic [ref=e127]:
+                - generic [ref=e128]:
+                  - paragraph [ref=e129]: 今日借阅
+                  - img [ref=e131]
+                - generic [ref=e133]:
+                  - paragraph [ref=e134]: "0"
+                  - paragraph [ref=e135]: 当天新增的借阅单
+              - generic [ref=e136]:
+                - generic [ref=e137]:
+                  - paragraph [ref=e138]: 在线设备
+                  - img [ref=e140]
+                - generic [ref=e145]:
+                  - paragraph [ref=e146]: "2"
+                  - paragraph [ref=e147]: 当前仍在处理任务的设备
+              - generic [ref=e148]:
+                - generic [ref=e149]:
+                  - paragraph [ref=e150]: 书柜数量
+                  - img [ref=e152]
+                - generic [ref=e155]:
+                  - paragraph [ref=e156]: 2/2
+                  - paragraph [ref=e157]: 在线数量 / 总数量
+              - generic [ref=e158]:
+                - generic [ref=e159]:
+                  - paragraph [ref=e160]: 待处理警告
+                  - img [ref=e162]
+                - generic [ref=e164]:
+                  - paragraph [ref=e165]: "2"
+                  - paragraph [ref=e166]: 0 条待处理记录
+            - generic [ref=e167]:
+              - generic [ref=e168]:
+                - generic [ref=e170]:
+                  - heading "热门图书" [level=3] [ref=e171]
+                  - paragraph [ref=e172]: 按借阅次数统计当前最受关注的图书。
+                - generic [ref=e174]:
+                  - generic [ref=e175]:
+                    - generic [ref=e176]: "1"
+                    - generic [ref=e177]:
+                      - paragraph [ref=e178]: 智能图书馆运营实战
+                      - paragraph [ref=e179]: 馆务创新组
+                    - generic [ref=e180]:
+                      - paragraph [ref=e181]: "1"
+                      - paragraph [ref=e182]: 借阅次数
+                  - generic [ref=e183]:
+                    - generic [ref=e184]: "2"
+                    - generic [ref=e185]:
+                      - paragraph [ref=e186]: 生成式 AI 管理实践
+                      - paragraph [ref=e187]: 程墨
+                    - generic [ref=e188]:
+                      - paragraph [ref=e189]: "1"
+                      - paragraph [ref=e190]: 借阅次数
+                  - generic [ref=e191]:
+                    - generic [ref=e192]: "3"
+                    - generic [ref=e193]:
+                      - paragraph [ref=e194]: 数据密集型产品设计
+                      - paragraph [ref=e195]: 裴知行
+                    - generic [ref=e196]:
+                      - paragraph [ref=e197]: "1"
+                      - paragraph [ref=e198]: 借阅次数
+                  - generic [ref=e199]:
+                    - generic [ref=e200]: "4"
+                    - generic [ref=e201]:
+                      - paragraph [ref=e202]: Python 自动化与管理脚本
+                      - paragraph [ref=e203]: 罗景川
+                    - generic [ref=e204]:
+                      - paragraph [ref=e205]: "1"
+                      - paragraph [ref=e206]: 借阅次数
+                  - generic [ref=e207]:
+                    - generic [ref=e208]: "5"
+                    - generic [ref=e209]:
+                      - paragraph [ref=e210]: 校园服务系统架构
+                      - paragraph [ref=e211]: 沈知白
+                    - generic [ref=e212]:
+                      - paragraph [ref=e213]: "1"
+                      - paragraph [ref=e214]: 借阅次数
+              - generic [ref=e215]:
+                - generic [ref=e217]:
+                  - heading "区域热度映射" [level=3] [ref=e218]
+                  - paragraph [ref=e219]: 按区域汇总借阅需求，用于查看哪些点最忙。
+                - generic [ref=e221]:
+                  - img [ref=e223]
+                  - generic [ref=e226]:
+                    - heading "暂无数据" [level=3] [ref=e227]
+                    - paragraph [ref=e228]: 数据还不够，稍后会自动展示区域热度。
+            - generic [ref=e230]:
+              - paragraph [ref=e231]: 状态
+              - generic [ref=e232]:
+                - heading "设备状态" [level=2] [ref=e233]
+                - paragraph [ref=e234]: 把设备和警告放在一起，方便快速查看。
+            - generic [ref=e235]:
+              - generic [ref=e236]:
+                - generic [ref=e238]:
+                  - heading "设备状态" [level=3] [ref=e239]
+                  - paragraph [ref=e240]: 快速判断今天是否需要人工处理。
+                - generic [ref=e242]:
+                  - generic [ref=e243]:
+                    - paragraph [ref=e244]: 在线设备
+                    - paragraph [ref=e245]: "2"
+                    - generic [ref=e247]:
+                      - img [ref=e248]
+                      - generic [ref=e251]: active
+                  - generic [ref=e252]:
+                    - paragraph [ref=e253]: 待处理警告
+                    - paragraph [ref=e254]: "0"
+                    - generic [ref=e256]:
+                      - img [ref=e257]
+                      - generic [ref=e260]: active
+              - generic [ref=e261]:
+                - generic [ref=e263]:
+                  - heading "书柜状态" [level=3] [ref=e264]
+                  - paragraph [ref=e265]: 按状态拆分书柜数量，方便查看设备压力。
+                - generic [ref=e268]:
+                  - generic [ref=e269]:
+                    - img [ref=e270]
+                    - generic [ref=e272]:
+                      - img [ref=e273]
+                      - generic [ref=e276]: active
+                  - generic [ref=e277]: "2"
+  - region "Notifications alt+T"

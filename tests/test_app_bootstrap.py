@@ -39,3 +39,33 @@ def test_inventory_routes_do_not_require_legacy_sqlite_artifact(client):
     response = client.get("/api/v1/inventory/status")
 
     assert response.status_code == 200
+
+
+def test_cors_preflight_allows_local_admin_login(client):
+    response = client.options(
+        "/api/v1/auth/login",
+        headers={
+            "Origin": "http://127.0.0.1:5173",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5173"
+    assert "POST" in response.headers["access-control-allow-methods"]
+
+
+def test_cors_preflight_allows_private_network_admin_origin(client):
+    response = client.options(
+        "/api/v1/auth/login",
+        headers={
+            "Origin": "http://192.168.31.15:5173",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://192.168.31.15:5173"
+    assert "POST" in response.headers["access-control-allow-methods"]

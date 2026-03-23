@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import Base, utc_now
+from app.db.base import Base, JSON_VARIANT, utc_now
 
 
 class ReaderAccount(Base):
@@ -28,5 +28,10 @@ class ReaderProfile(Base):
     college: Mapped[str | None] = mapped_column(String(128), nullable=True)
     major: Mapped[str | None] = mapped_column(String(128), nullable=True)
     grade_year: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    restriction_status: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    restriction_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    risk_flags: Mapped[list[str] | None] = mapped_column(JSON_VARIANT, nullable=True)
+    preference_profile_json: Mapped[dict | None] = mapped_column(JSON_VARIANT, nullable=True)
+    segment_code: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     created_at: Mapped[datetime | None] = mapped_column(default=utc_now, nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(default=utc_now, onupdate=utc_now, nullable=True)

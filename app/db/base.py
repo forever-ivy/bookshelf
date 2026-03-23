@@ -26,6 +26,7 @@ class TimestampMixin:
 
 
 MODEL_MODULES = (
+    "app.admin.models",
     "app.auth.models",
     "app.readers.models",
     "app.catalog.models",
@@ -35,6 +36,7 @@ MODEL_MODULES = (
     "app.recommendation.models",
     "app.conversation.models",
     "app.analytics.models",
+    "app.system.models",
 )
 
 

@@ -19,6 +19,8 @@ class AuthAccountOut(BaseModel):
     id: int
     username: str
     role: str
+    role_codes: list[str] | None = None
+    permission_codes: list[str] | None = None
 
 
 class AuthProfileOut(BaseModel):

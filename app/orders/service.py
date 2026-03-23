@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.analytics.models import ReadingEvent
@@ -12,7 +12,8 @@ from app.catalog.models import Book
 from app.core.errors import ApiError
 from app.core.events import broker
 from app.db.base import utc_now
-from app.inventory.models import BookCopy, BookStock, CabinetSlot
+from app.inventory.models import BookCopy, BookStock, Cabinet, CabinetSlot, InventoryEvent
+from app.inventory.service import adjust_stock_counts
 from app.orders.models import BorrowOrder, DeliveryOrder, ReturnRequest
 from app.readers.models import ReaderProfile
 from app.robot_sim.models import RobotStatusEvent, RobotTask, RobotUnit
@@ -52,6 +53,7 @@ BORROW_STATUSES = set(BORROW_FLOW) | set(BORROW_FLOW.values())
 DELIVERY_STATUSES = set(DELIVERY_FLOW) | set(DELIVERY_FLOW.values())
 TASK_STATUSES = set(TASK_FLOW) | set(TASK_FLOW.values())
 ROBOT_STATUSES = {"idle", "assigned", "carrying", "arriving", "returning", "offline"}
+ORDER_PRIORITIES = {"urgent", "high", "normal", "low"}
 
 
 @dataclass
@@ -222,6 +224,11 @@ def serialize_order(bundle: OrderBundle) -> dict:
             "assigned_copy_id": bundle.borrow_order.assigned_copy_id,
             "order_mode": bundle.borrow_order.order_mode,
             "status": bundle.borrow_order.status,
+            "priority": bundle.borrow_order.priority,
+            "due_at": _iso(bundle.borrow_order.due_at),
+            "failure_reason": bundle.borrow_order.failure_reason,
+            "intervention_status": bundle.borrow_order.intervention_status,
+            "attempt_count": bundle.borrow_order.attempt_count,
             "created_at": _iso(bundle.borrow_order.created_at),
             "updated_at": _iso(bundle.borrow_order.updated_at),
             "completed_at": _iso(bundle.borrow_order.completed_at),
@@ -234,6 +241,11 @@ def serialize_order(bundle: OrderBundle) -> dict:
             "delivery_target": bundle.delivery_order.delivery_target,
             "eta_minutes": bundle.delivery_order.eta_minutes,
             "status": bundle.delivery_order.status,
+            "priority": bundle.delivery_order.priority,
+            "due_at": _iso(bundle.delivery_order.due_at),
+            "failure_reason": bundle.delivery_order.failure_reason,
+            "intervention_status": bundle.delivery_order.intervention_status,
+            "attempt_count": bundle.delivery_order.attempt_count,
             "created_at": _iso(bundle.delivery_order.created_at),
             "updated_at": _iso(bundle.delivery_order.updated_at),
             "completed_at": _iso(bundle.delivery_order.completed_at),
@@ -245,6 +257,10 @@ def serialize_order(bundle: OrderBundle) -> dict:
             "robot_id": bundle.robot_task.robot_id,
             "delivery_order_id": bundle.robot_task.delivery_order_id,
             "status": bundle.robot_task.status,
+            "path_json": bundle.robot_task.path_json,
+            "reassigned_from_task_id": bundle.robot_task.reassigned_from_task_id,
+            "failure_reason": bundle.robot_task.failure_reason,
+            "attempt_count": bundle.robot_task.attempt_count,
             "created_at": _iso(bundle.robot_task.created_at),
             "updated_at": _iso(bundle.robot_task.updated_at),
             "completed_at": _iso(bundle.robot_task.completed_at),
@@ -255,6 +271,8 @@ def serialize_order(bundle: OrderBundle) -> dict:
             "id": bundle.robot_unit.id,
             "code": bundle.robot_unit.code,
             "status": bundle.robot_unit.status,
+            "battery_level": bundle.robot_unit.battery_level,
+            "heartbeat_at": _iso(bundle.robot_unit.heartbeat_at),
         },
         "robot": None
         if bundle.robot_unit is None
@@ -262,6 +280,8 @@ def serialize_order(bundle: OrderBundle) -> dict:
             "id": bundle.robot_unit.id,
             "code": bundle.robot_unit.code,
             "status": bundle.robot_unit.status,
+            "battery_level": bundle.robot_unit.battery_level,
+            "heartbeat_at": _iso(bundle.robot_unit.heartbeat_at),
         },
     }
 
@@ -278,6 +298,10 @@ def serialize_task(task: RobotTask, robot: RobotUnit | None = None, delivery: De
         "delivery_order_id": task.delivery_order_id,
         "status": task.status,
         "borrow_order_id": delivery.borrow_order_id if delivery is not None else None,
+        "path_json": task.path_json,
+        "reassigned_from_task_id": task.reassigned_from_task_id,
+        "failure_reason": task.failure_reason,
+        "attempt_count": task.attempt_count,
         "created_at": _iso(task.created_at),
         "updated_at": _iso(task.updated_at),
         "robot": None
@@ -286,6 +310,8 @@ def serialize_task(task: RobotTask, robot: RobotUnit | None = None, delivery: De
             "id": robot.id,
             "code": robot.code,
             "status": robot.status,
+            "battery_level": robot.battery_level,
+            "heartbeat_at": _iso(robot.heartbeat_at),
         },
     }
 
@@ -295,6 +321,8 @@ def serialize_robot(robot: RobotUnit, task: RobotTask | None = None, delivery: D
         "id": robot.id,
         "code": robot.code,
         "status": robot.status,
+        "battery_level": robot.battery_level,
+        "heartbeat_at": _iso(robot.heartbeat_at),
         "current_task": None if task is None else serialize_task(task, robot, delivery),
     }
 
@@ -342,6 +370,50 @@ def list_recent_robot_events(session: Session, *, limit: int = 20) -> list[dict]
         }
         for event in events
     ]
+
+
+def serialize_return_request(return_request: ReturnRequest, borrow_order: BorrowOrder | None = None) -> dict:
+    return {
+        "id": return_request.id,
+        "borrow_order_id": return_request.borrow_order_id,
+        "reader_id": borrow_order.reader_id if borrow_order is not None else None,
+        "book_id": borrow_order.book_id if borrow_order is not None else None,
+        "status": return_request.status,
+        "note": return_request.note,
+        "created_at": _iso(return_request.created_at),
+        "updated_at": _iso(return_request.updated_at),
+    }
+
+
+def list_return_requests(
+    session: Session,
+    *,
+    page: int,
+    page_size: int,
+    status: str | None = None,
+    borrow_order_id: int | None = None,
+) -> dict:
+    normalized_page = max(page, 1)
+    normalized_page_size = max(1, min(page_size, 100))
+    stmt = select(ReturnRequest).order_by(ReturnRequest.created_at.desc(), ReturnRequest.id.desc())
+    if status:
+        stmt = stmt.where(ReturnRequest.status == status)
+    if borrow_order_id is not None:
+        stmt = stmt.where(ReturnRequest.borrow_order_id == borrow_order_id)
+    total = session.scalar(select(func.count()).select_from(stmt.order_by(None).subquery())) or 0
+    rows = session.scalars(
+        stmt.offset((normalized_page - 1) * normalized_page_size).limit(normalized_page_size)
+    ).all()
+    items = []
+    for row in rows:
+        borrow_order = session.get(BorrowOrder, row.borrow_order_id)
+        items.append(serialize_return_request(row, borrow_order))
+    return {
+        "items": items,
+        "total": int(total),
+        "page": normalized_page,
+        "page_size": normalized_page_size,
+    }
 
 
 def _resolve_robot(session: Session) -> RobotUnit:
@@ -478,6 +550,194 @@ def create_return_request(
     return return_request
 
 
+def _resolve_return_slot(session: Session, *, cabinet_id: str, slot_code: str | None) -> CabinetSlot:
+    cabinet = session.get(Cabinet, cabinet_id)
+    if cabinet is None:
+        raise ApiError(404, "cabinet_not_found", "Cabinet not found")
+
+    if slot_code:
+        slot = session.scalars(
+            select(CabinetSlot).where(CabinetSlot.cabinet_id == cabinet_id, CabinetSlot.slot_code == slot_code)
+        ).first()
+        if slot is None:
+            slot = CabinetSlot(cabinet_id=cabinet_id, slot_code=slot_code, status="empty", current_copy_id=None)
+            session.add(slot)
+            session.flush()
+    else:
+        slot = session.scalars(
+            select(CabinetSlot)
+            .where(
+                CabinetSlot.cabinet_id == cabinet_id,
+                CabinetSlot.current_copy_id.is_(None),
+                CabinetSlot.status.in_(["empty", "free"]),
+            )
+            .order_by(CabinetSlot.slot_code.asc(), CabinetSlot.id.asc())
+        ).first()
+        if slot is None:
+            raise ApiError(409, "cabinet_full", "No free slot available in the selected cabinet")
+
+    if slot.current_copy_id is not None or slot.status not in {"empty", "free"}:
+        raise ApiError(409, "slot_not_available", "The selected slot is not available")
+    return slot
+
+
+def receive_return_request(
+    session: Session,
+    *,
+    return_request_id: int,
+    admin_id: int,
+    note: str | None = None,
+) -> ReturnRequest:
+    request_row = session.get(ReturnRequest, return_request_id)
+    if request_row is None:
+        raise ApiError(404, "return_request_not_found", "Return request not found")
+
+    bundle = get_order_bundle(session, request_row.borrow_order_id)
+    before_state = serialize_return_request(request_row, bundle.borrow_order)
+    if request_row.status == "completed":
+        raise ApiError(409, "return_request_completed", "Return request has already been completed")
+    copy = session.get(BookCopy, bundle.borrow_order.assigned_copy_id) if bundle.borrow_order.assigned_copy_id else None
+
+    request_row.status = "received"
+    session.add(
+        AdminActionLog(
+            admin_id=admin_id,
+            target_type="return_request",
+            target_id=request_row.id,
+            action="receive_return_request",
+            before_state=before_state,
+            after_state=serialize_return_request(request_row, bundle.borrow_order),
+            note=note,
+        )
+    )
+    session.add(
+        ReadingEvent(
+            reader_id=bundle.borrow_order.reader_id,
+            event_type="return_request_received",
+            metadata_json={"borrow_order_id": bundle.borrow_order.id, "return_request_id": request_row.id, "note": note},
+        )
+    )
+    if copy is not None:
+        session.add(
+            InventoryEvent(
+                cabinet_id=copy.cabinet_id,
+                event_type="return_received",
+                book_id=bundle.borrow_order.book_id,
+                copy_id=copy.id,
+                payload_json={"return_request_id": request_row.id, "note": note},
+            )
+        )
+    session.commit()
+    _publish_event_sync(
+        {
+            **_event_payload(
+                event_type="return_request_received",
+                borrow_order=bundle.borrow_order,
+                delivery_order=bundle.delivery_order,
+                robot_task=bundle.robot_task,
+                robot_unit=bundle.robot_unit,
+                note=note,
+            ),
+            "return_request_id": request_row.id,
+            "return_request_status": request_row.status,
+        }
+    )
+    return request_row
+
+
+def complete_return_request(
+    session: Session,
+    *,
+    return_request_id: int,
+    admin_id: int,
+    cabinet_id: str,
+    slot_code: str | None = None,
+    note: str | None = None,
+) -> ReturnRequest:
+    request_row = session.get(ReturnRequest, return_request_id)
+    if request_row is None:
+        raise ApiError(404, "return_request_not_found", "Return request not found")
+    if request_row.status == "completed":
+        return request_row
+
+    bundle = get_order_bundle(session, request_row.borrow_order_id)
+    if bundle.borrow_order.assigned_copy_id is None:
+        raise ApiError(409, "return_copy_missing", "The borrow order has no assigned copy")
+
+    copy = session.get(BookCopy, bundle.borrow_order.assigned_copy_id)
+    if copy is None:
+        raise ApiError(404, "book_copy_not_found", "Assigned book copy not found")
+
+    before_state = serialize_return_request(request_row, bundle.borrow_order)
+    target_slot = _resolve_return_slot(session, cabinet_id=cabinet_id, slot_code=slot_code)
+
+    original_cabinet_id = copy.cabinet_id
+    if original_cabinet_id == cabinet_id:
+        adjust_stock_counts(session, book_id=copy.book_id, cabinet_id=cabinet_id, available_delta=1)
+    else:
+        adjust_stock_counts(session, book_id=copy.book_id, cabinet_id=original_cabinet_id, total_delta=-1)
+        adjust_stock_counts(session, book_id=copy.book_id, cabinet_id=cabinet_id, total_delta=1, available_delta=1)
+
+    copy.cabinet_id = cabinet_id
+    copy.inventory_status = "stored"
+    target_slot.status = "occupied"
+    target_slot.current_copy_id = copy.id
+    request_row.status = "completed"
+
+    session.add(
+        InventoryEvent(
+            cabinet_id=cabinet_id,
+            event_type="return_completed",
+            slot_code=target_slot.slot_code,
+            book_id=copy.book_id,
+            copy_id=copy.id,
+            payload_json={"return_request_id": request_row.id, "note": note},
+        )
+    )
+    session.add(
+        ReadingEvent(
+            reader_id=bundle.borrow_order.reader_id,
+            event_type="return_completed",
+            metadata_json={
+                "borrow_order_id": bundle.borrow_order.id,
+                "return_request_id": request_row.id,
+                "cabinet_id": cabinet_id,
+                "slot_code": target_slot.slot_code,
+                "note": note,
+            },
+        )
+    )
+    session.add(
+        AdminActionLog(
+            admin_id=admin_id,
+            target_type="return_request",
+            target_id=request_row.id,
+            action="complete_return_request",
+            before_state=before_state,
+            after_state=serialize_return_request(request_row, bundle.borrow_order),
+            note=note,
+        )
+    )
+    session.commit()
+    _publish_event_sync(
+        {
+            **_event_payload(
+                event_type="return_request_completed",
+                borrow_order=bundle.borrow_order,
+                delivery_order=bundle.delivery_order,
+                robot_task=bundle.robot_task,
+                robot_unit=bundle.robot_unit,
+                note=note,
+            ),
+            "return_request_id": request_row.id,
+            "return_request_status": request_row.status,
+            "cabinet_id": cabinet_id,
+            "slot_code": target_slot.slot_code,
+        }
+    )
+    return request_row
+
+
 def advance_order_bundle(session: Session, bundle: OrderBundle) -> OrderBundle:
     if bundle.delivery_order is None and bundle.robot_task is None and bundle.robot_unit is None:
         return bundle
@@ -595,3 +855,282 @@ def correct_order_bundle(
     session.commit()
     _publish_event_sync(after_state)
     return get_order_bundle(session, borrow_order_id)
+
+
+def prioritize_order_bundle(
+    session: Session,
+    *,
+    borrow_order_id: int,
+    admin_id: int,
+    priority: str,
+) -> OrderBundle:
+    normalized_priority = (priority or "").strip().lower()
+    if normalized_priority not in ORDER_PRIORITIES:
+        raise ApiError(400, "invalid_order_priority", f"Unsupported order priority: {priority}")
+
+    bundle = get_order_bundle(session, borrow_order_id)
+    before_state = _event_payload(
+        event_type="order_priority_before",
+        borrow_order=bundle.borrow_order,
+        delivery_order=bundle.delivery_order,
+        robot_task=bundle.robot_task,
+        robot_unit=bundle.robot_unit,
+    )
+    bundle.borrow_order.priority = normalized_priority
+    if bundle.delivery_order is not None:
+        bundle.delivery_order.priority = normalized_priority
+    after_state = {
+        **_event_payload(
+            event_type="order_prioritized",
+            borrow_order=bundle.borrow_order,
+            delivery_order=bundle.delivery_order,
+            robot_task=bundle.robot_task,
+            robot_unit=bundle.robot_unit,
+        ),
+        "priority": normalized_priority,
+    }
+    session.add(
+        AdminActionLog(
+            admin_id=admin_id,
+            target_type="borrow_order_bundle",
+            target_id=borrow_order_id,
+            action="prioritize_order",
+            before_state=before_state,
+            after_state=after_state,
+        )
+    )
+    _record_robot_event(
+        session,
+        robot_id=bundle.robot_unit.id if bundle.robot_unit is not None else None,
+        task_id=bundle.robot_task.id if bundle.robot_task is not None else None,
+        event_type="order_prioritized",
+        payload=after_state,
+    )
+    session.commit()
+    _publish_event_sync(after_state)
+    return get_order_bundle(session, borrow_order_id)
+
+
+def intervene_order_bundle(
+    session: Session,
+    *,
+    borrow_order_id: int,
+    admin_id: int,
+    intervention_status: str,
+    failure_reason: str | None = None,
+) -> OrderBundle:
+    normalized_intervention = (intervention_status or "").strip()
+    if not normalized_intervention:
+        raise ApiError(400, "intervention_status_required", "Intervention status is required")
+
+    bundle = get_order_bundle(session, borrow_order_id)
+    before_state = _event_payload(
+        event_type="order_intervention_before",
+        borrow_order=bundle.borrow_order,
+        delivery_order=bundle.delivery_order,
+        robot_task=bundle.robot_task,
+        robot_unit=bundle.robot_unit,
+    )
+    bundle.borrow_order.intervention_status = normalized_intervention
+    bundle.borrow_order.failure_reason = failure_reason
+    if bundle.delivery_order is not None:
+        bundle.delivery_order.intervention_status = normalized_intervention
+        bundle.delivery_order.failure_reason = failure_reason
+    if bundle.robot_task is not None:
+        bundle.robot_task.failure_reason = failure_reason
+    after_state = {
+        **_event_payload(
+            event_type="order_intervened",
+            borrow_order=bundle.borrow_order,
+            delivery_order=bundle.delivery_order,
+            robot_task=bundle.robot_task,
+            robot_unit=bundle.robot_unit,
+            note=failure_reason,
+        ),
+        "intervention_status": normalized_intervention,
+        "failure_reason": failure_reason,
+    }
+    session.add(
+        AdminActionLog(
+            admin_id=admin_id,
+            target_type="borrow_order_bundle",
+            target_id=borrow_order_id,
+            action="intervene_order",
+            before_state=before_state,
+            after_state=after_state,
+        )
+    )
+    _record_robot_event(
+        session,
+        robot_id=bundle.robot_unit.id if bundle.robot_unit is not None else None,
+        task_id=bundle.robot_task.id if bundle.robot_task is not None else None,
+        event_type="order_intervened",
+        payload=after_state,
+    )
+    session.commit()
+    _publish_event_sync(after_state)
+    return get_order_bundle(session, borrow_order_id)
+
+
+def retry_order_bundle(
+    session: Session,
+    *,
+    borrow_order_id: int,
+    admin_id: int,
+    note: str | None = None,
+) -> OrderBundle:
+    bundle = get_order_bundle(session, borrow_order_id)
+    before_state = _event_payload(
+        event_type="order_retry_before",
+        borrow_order=bundle.borrow_order,
+        delivery_order=bundle.delivery_order,
+        robot_task=bundle.robot_task,
+        robot_unit=bundle.robot_unit,
+        note=note,
+    )
+
+    bundle.borrow_order.status = "created" if bundle.delivery_order is not None else "awaiting_pick"
+    bundle.borrow_order.attempt_count = int(bundle.borrow_order.attempt_count or 0) + 1
+    bundle.borrow_order.failure_reason = None
+    bundle.borrow_order.intervention_status = None
+
+    if bundle.delivery_order is not None:
+        bundle.delivery_order.status = "awaiting_pick"
+        bundle.delivery_order.attempt_count = int(bundle.delivery_order.attempt_count or 0) + 1
+        bundle.delivery_order.failure_reason = None
+        bundle.delivery_order.intervention_status = None
+
+    if bundle.robot_task is not None:
+        bundle.robot_task.status = "assigned"
+        bundle.robot_task.attempt_count = int(bundle.robot_task.attempt_count or 0) + 1
+        bundle.robot_task.failure_reason = None
+
+    if bundle.robot_unit is not None:
+        bundle.robot_unit.status = "assigned"
+        bundle.robot_unit.heartbeat_at = utc_now()
+
+    after_state = {
+        **_event_payload(
+            event_type="order_retried",
+            borrow_order=bundle.borrow_order,
+            delivery_order=bundle.delivery_order,
+            robot_task=bundle.robot_task,
+            robot_unit=bundle.robot_unit,
+            note=note,
+        ),
+        "attempt_count": bundle.borrow_order.attempt_count,
+    }
+    session.add(
+        AdminActionLog(
+            admin_id=admin_id,
+            target_type="borrow_order_bundle",
+            target_id=borrow_order_id,
+            action="retry_order",
+            before_state=before_state,
+            after_state=after_state,
+            note=note,
+        )
+    )
+    _record_robot_event(
+        session,
+        robot_id=bundle.robot_unit.id if bundle.robot_unit is not None else None,
+        task_id=bundle.robot_task.id if bundle.robot_task is not None else None,
+        event_type="order_retried",
+        payload=after_state,
+    )
+    session.commit()
+    _publish_event_sync(after_state)
+    return get_order_bundle(session, borrow_order_id)
+
+
+def reassign_robot_task(
+    session: Session,
+    *,
+    task_id: int,
+    admin_id: int,
+    robot_id: int,
+    reason: str | None = None,
+) -> dict:
+    task = session.get(RobotTask, task_id)
+    if task is None:
+        raise ApiError(404, "robot_task_not_found", "Robot task not found")
+    next_robot = session.get(RobotUnit, robot_id)
+    if next_robot is None:
+        raise ApiError(404, "robot_not_found", "Robot not found")
+
+    previous_robot = session.get(RobotUnit, task.robot_id)
+    delivery = session.get(DeliveryOrder, task.delivery_order_id)
+    if delivery is None:
+        raise ApiError(404, "delivery_order_not_found", "Delivery order not found")
+    borrow_order = session.get(BorrowOrder, delivery.borrow_order_id)
+    if borrow_order is None:
+        raise ApiError(404, "borrow_order_not_found", "Borrow order not found")
+
+    before_state = {
+        "task": serialize_task(task, previous_robot, delivery),
+        "robot": None if previous_robot is None else serialize_robot(previous_robot),
+    }
+
+    previous_robot_id = task.robot_id
+    task.robot_id = next_robot.id
+    next_robot.status = "assigned"
+    next_robot.heartbeat_at = utc_now()
+
+    if previous_robot is not None and previous_robot.id != next_robot.id:
+        has_other_active_tasks = session.scalar(
+            select(RobotTask.id)
+            .where(RobotTask.robot_id == previous_robot_id, RobotTask.id != task.id, RobotTask.status != "completed")
+            .limit(1)
+        )
+        if has_other_active_tasks is None:
+            previous_robot.status = "idle"
+
+    after_state = {
+        "task": serialize_task(task, next_robot, delivery),
+        "robot": serialize_robot(next_robot, task, delivery),
+        "reason": reason,
+    }
+    session.add(
+        AdminActionLog(
+            admin_id=admin_id,
+            target_type="robot_task",
+            target_id=task.id,
+            action="reassign_robot_task",
+            before_state=before_state,
+            after_state=after_state,
+            note=reason,
+        )
+    )
+    _record_robot_event(
+        session,
+        robot_id=next_robot.id,
+        task_id=task.id,
+        event_type="task_reassigned",
+        payload={
+            "reason": reason,
+            "previous_robot_id": previous_robot_id,
+            "next_robot_id": next_robot.id,
+            **_event_payload(
+                event_type="task_reassigned",
+                borrow_order=borrow_order,
+                delivery_order=delivery,
+                robot_task=task,
+                robot_unit=next_robot,
+                note=reason,
+            ),
+        },
+    )
+    session.commit()
+    _publish_event_sync(
+        {
+            "event_type": "task_reassigned",
+            "task_id": task.id,
+            "previous_robot_id": previous_robot_id,
+            "next_robot_id": next_robot.id,
+            "reason": reason,
+        }
+    )
+    return {
+        "task": serialize_task(task, next_robot, delivery),
+        "robot": serialize_robot(next_robot, task, delivery),
+    }

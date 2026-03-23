@@ -131,6 +131,25 @@ uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - OpenAPI JSON: [http://127.0.0.1:8000/openapi.json](http://127.0.0.1:8000/openapi.json)
 - 健康检查: [http://127.0.0.1:8000/api/v1/health](http://127.0.0.1:8000/api/v1/health)
 
+### 5. 写入演示数据
+
+如果你要联调前后端，建议直接灌一套本地演示数据：
+
+```bash
+uv run python scripts/seed_demo_data.py
+```
+
+这个脚本会：
+
+- 重建当前数据库 schema
+- 写入管理员、读者、图书、书柜、格口、副本、订单、小车、事件、推荐和会话
+- 生成可直接用于联调的演示数据
+
+默认管理员账号：
+
+- Username: `admin`
+- Password: `admin123`
+
 ## 测试
 
 运行全部测试：
@@ -215,6 +234,9 @@ uv sync
 
 # 初始化 PostgreSQL
 uv run python scripts/init_postgres.py
+
+# 重建并写入演示数据
+uv run python scripts/seed_demo_data.py
 
 # 启动开发服务器
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000

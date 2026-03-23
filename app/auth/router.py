@@ -12,7 +12,7 @@ from app.auth.schemas import (
     LoginRequest,
     RefreshRequest,
 )
-from app.core.auth_context import get_identity, require_admin, require_reader
+from app.core.auth_context import get_admin_access_snapshot, get_identity, require_admin, require_reader
 from app.core.database import get_db
 from app.core.errors import ApiError
 from app.core.security import AuthIdentity, decode_token
@@ -26,7 +26,14 @@ def _account_out(session: Session, identity: AuthIdentity):
         account = session.scalar(select(AdminAccount).where(AdminAccount.id == identity.account_id))
         if account is None:
             raise ApiError(404, "account_not_found", "Account not found")
-        return {"id": account.id, "username": account.username, "role": "admin"}, None
+        snapshot = get_admin_access_snapshot(session, account.id)
+        return {
+            "id": account.id,
+            "username": account.username,
+            "role": "admin",
+            "role_codes": list(snapshot["role_codes"]),
+            "permission_codes": list(snapshot["permission_codes"]),
+        }, None
 
     account = session.scalar(select(ReaderAccount).where(ReaderAccount.id == identity.account_id))
     if account is None:
