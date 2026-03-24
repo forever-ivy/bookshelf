@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, type TextStyle, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { StyleSheet, Text, type StyleProp, type TextStyle, View } from 'react-native';
 import Svg, { Rect } from 'react-native-svg';
 
 import { appTheme } from '@/constants/app-theme';
@@ -12,7 +12,7 @@ import {
 type MarkerHighlightTextProps = {
   text: string;
   highlight: string;
-  textStyle?: TextStyle;
+  textStyle?: StyleProp<TextStyle>;
   highlightColor?: string;
   markerIntensity?: MarkerIntensity;
   numberOfLines?: number;
@@ -25,6 +25,11 @@ type HighlightLine = {
   y: number;
 };
 
+type HighlightLayout = {
+  key: string;
+  lines: HighlightLine[];
+};
+
 export function MarkerHighlightText({
   text,
   highlight,
@@ -34,15 +39,14 @@ export function MarkerHighlightText({
   numberOfLines,
 }: MarkerHighlightTextProps) {
   const parts = splitHighlightText(text, highlight);
-  const [lines, setLines] = useState<HighlightLine[]>([]);
-
-  useEffect(() => {
-    setLines([]);
-  }, [text, highlight]);
+  const layoutKey = `${text}\u0000${highlight}`;
+  const [layout, setLayout] = useState<HighlightLayout | null>(null);
+  const hasFreshLayout = layout?.key === layoutKey;
 
   const rects = useMemo(
-    () => buildMarkerRects(lines, markerIntensity),
-    [lines, markerIntensity]
+    () =>
+      hasFreshLayout ? buildMarkerRects(layout.lines, markerIntensity) : [],
+    [hasFreshLayout, layout, markerIntensity]
   );
 
   if (!parts) {
@@ -77,7 +81,13 @@ export function MarkerHighlightText({
       ) : null}
       <Text numberOfLines={numberOfLines} style={textStyle}>
         {parts.prefix}
-        <Text onTextLayout={(event) => setLines(event.nativeEvent.lines)}>
+        <Text
+          onTextLayout={(event) => {
+            setLayout({
+              key: layoutKey,
+              lines: event.nativeEvent.lines,
+            });
+          }}>
           {parts.highlight}
         </Text>
         {parts.suffix}
