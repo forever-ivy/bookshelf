@@ -4,10 +4,12 @@ import React from 'react';
 import { MarkerHighlightText } from '@/components/base/marker-highlight-text';
 
 describe('MarkerHighlightText', () => {
-  it('falls back to plain text when the highlight is missing', () => {
-    render(<MarkerHighlightText highlight="自然语言" text="搜索书名" />);
+  it('falls back to plain text and forwards numberOfLines when the highlight is missing', () => {
+    render(
+      <MarkerHighlightText highlight="自然语言" numberOfLines={2} text="搜索书名" />
+    );
 
-    expect(screen.getByText('搜索书名')).toBeTruthy();
+    expect(screen.getByText('搜索书名').props.numberOfLines).toBe(2);
     expect(screen.queryByTestId('marker-highlight-overlay')).toBeNull();
   });
 

@@ -46,7 +46,11 @@ export function MarkerHighlightText({
   );
 
   if (!parts) {
-    return <Text style={textStyle}>{text}</Text>;
+    return (
+      <Text numberOfLines={numberOfLines} style={textStyle}>
+        {text}
+      </Text>
+    );
   }
 
   return (
