@@ -1,0 +1,64 @@
+import React from 'react';
+import { Text, View } from 'react-native';
+
+import { AppIcon } from '@/components/base/app-icon';
+import { useAppTheme } from '@/hooks/use-app-theme';
+
+export function SoftSearchBar({
+  mode = 'teaser',
+}: {
+  mode?: 'full' | 'teaser';
+}) {
+  const { theme } = useAppTheme();
+  const isFull = mode === 'full';
+
+  return (
+    <View
+      style={{
+        backgroundColor: theme.colors.surface,
+        borderColor: theme.colors.borderStrong,
+        borderRadius: theme.radii.lg,
+        borderWidth: 1,
+      }}>
+      <View
+        style={{
+          alignItems: 'center',
+          flexDirection: 'row',
+          gap: 12,
+          minHeight: isFull ? 56 : 52,
+          paddingHorizontal: 16,
+        }}>
+        <View
+          style={{
+            alignItems: 'center',
+            backgroundColor: theme.colors.iconSurface,
+            borderRadius: theme.radii.md,
+            height: 28,
+            justifyContent: 'center',
+            width: 28,
+          }}>
+          <AppIcon color={theme.colors.iconInk} name="search" size={14} strokeWidth={1.68} />
+        </View>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text
+            style={{
+              color: theme.colors.text,
+              ...theme.typography.medium,
+              fontSize: 14,
+            }}>
+            搜索书名、作者、课程或自然语言
+          </Text>
+          <Text
+            style={{
+              color: theme.colors.textMuted,
+              ...theme.typography.body,
+              fontSize: 12,
+            }}>
+            {isFull ? '支持课程名、关键词与自然语言检索' : '比如：机器学习入门、适合新手的心理学书'}
+          </Text>
+        </View>
+        <AppIcon color={theme.colors.textSoft} name="chevronRight" size={16} strokeWidth={1.7} />
+      </View>
+    </View>
+  );
+}

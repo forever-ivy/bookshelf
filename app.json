@@ -1,15 +1,15 @@
 {
   "expo": {
-    "name": "bookleaf",
-    "slug": "bookleaf",
+    "name": "app",
+    "slug": "app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "bookleaf",
+    "scheme": "app",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.bookleaf",
+      "bundleIdentifier": "com.liuxuan.bookshelf.app",
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
@@ -18,9 +18,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
@@ -30,7 +29,7 @@
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ],
-      "package": "com.anonymous.bookleaf"
+      "package": "com.liuxuan.bookshelf.app"
     },
     "web": {
       "output": "static",
@@ -41,7 +40,7 @@
         "expo-dev-client",
         {
           "ios": {
-            "launchMode": "launcher"
+            "launchMode": "most-recent"
           }
         }
       ],
@@ -52,9 +51,9 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
+          "backgroundColor": "#F7F1E8",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#F7F1E8"
           }
         }
       ],
@@ -62,7 +61,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Bookleaf scans the cabinet QR code so your family app can connect to the bookshelf."
+          "cameraPermission": "App uses the camera when you enable scanning features."
         }
       ]
     ],

@@ -1,0 +1,18 @@
+export const appArtwork = {
+  appIcon: require('../../assets/images/icon.png'),
+  borrowSuccess: require('../../assets/illustrations/borrow-success.png'),
+  borrowingEmpty: require('../../assets/illustrations/borrowing-empty.png'),
+  interestSelection: require('../../assets/illustrations/interest-selection.png'),
+  loginWelcome: require('../../assets/illustrations/login-welcome.png'),
+  noResults: require('../../assets/illustrations/no-results.png'),
+  notionBorrowSuccess: require('../../assets/illustrations/notion-style/borrow-success-alpha.png'),
+  notionFirstEntry: require('../../assets/illustrations/notion-style/first-entry-alpha.png'),
+  notionInterestSelection: require('../../assets/illustrations/notion-style/interest-selection-alpha.png'),
+  notionNoResults: require('../../assets/illustrations/notion-style/no-results-alpha.png'),
+  notionReadingProgress: require('../../assets/illustrations/notion-style/reading-in-progress-alpha.png'),
+  profileHero: require('../../assets/illustrations/interest-selection.png'),
+  recommendationHero: require('../../assets/illustrations/recommendation-hero.png'),
+  returnSuccess: require('../../assets/illustrations/return-success.png'),
+  robotDelivery: require('../../assets/illustrations/robot-delivery.png'),
+  seatPickup: require('../../assets/illustrations/seat-pickup.png'),
+} as const;
