@@ -26,6 +26,7 @@ export const appTheme = {
     knowledgeSoft: '#F3F5F7',
     knowledgeStrong: '#4E6379',
     knowledgeTint: 'rgba(78, 99, 121, 0.08)',
+    markerHighlightBlue: '#9FD4F6',
     inkBlue: '#4E6379',
     primary: '#64748B',
     primarySoft: '#E9EEF3',
