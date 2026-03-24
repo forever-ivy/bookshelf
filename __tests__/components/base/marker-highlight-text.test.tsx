@@ -138,4 +138,43 @@ describe('MarkerHighlightText', () => {
 
     expect(screen.queryByTestId('marker-highlight-overlay')).toBeNull();
   });
+
+  it('clears stale marker rects when letterSpacing changes', () => {
+    const styles = StyleSheet.create({
+      normalSpacing: {
+        fontSize: 18,
+        letterSpacing: 0,
+      },
+      looseSpacing: {
+        fontSize: 18,
+        letterSpacing: 1.5,
+      },
+    });
+
+    const { rerender } = render(
+      <MarkerHighlightText
+        highlight="课程或自然语言"
+        text="搜索书名、作者、课程或自然语言"
+        textStyle={styles.normalSpacing}
+      />
+    );
+
+    fireEvent(screen.getByText('课程或自然语言'), 'textLayout', {
+      nativeEvent: {
+        lines: [{ height: 20, width: 72, x: 0, y: 0 }],
+      },
+    });
+
+    expect(screen.getByTestId('marker-highlight-overlay')).toBeTruthy();
+
+    rerender(
+      <MarkerHighlightText
+        highlight="课程或自然语言"
+        text="搜索书名、作者、课程或自然语言"
+        textStyle={styles.looseSpacing}
+      />
+    );
+
+    expect(screen.queryByTestId('marker-highlight-overlay')).toBeNull();
+  });
 });
