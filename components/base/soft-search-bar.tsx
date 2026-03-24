@@ -2,6 +2,7 @@ import React from 'react';
 import { Text, View } from 'react-native';
 
 import { AppIcon } from '@/components/base/app-icon';
+import { MarkerHighlightText } from '@/components/base/marker-highlight-text';
 import { useAppTheme } from '@/hooks/use-app-theme';
 
 export function SoftSearchBar({
@@ -40,14 +41,15 @@ export function SoftSearchBar({
           <AppIcon color={theme.colors.iconInk} name="search" size={14} strokeWidth={1.68} />
         </View>
         <View style={{ flex: 1, gap: 2 }}>
-          <Text
-            style={{
+          <MarkerHighlightText
+            highlight="课程或自然语言"
+            text="搜索书名、作者、课程或自然语言"
+            textStyle={{
               color: theme.colors.text,
               ...theme.typography.medium,
               fontSize: 14,
-            }}>
-            搜索书名、作者、课程或自然语言
-          </Text>
+            }}
+          />
           <Text
             style={{
               color: theme.colors.textMuted,
