@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import React from 'react';
+import { StyleSheet } from 'react-native';
 
 import { MarkerHighlightText } from '@/components/base/marker-highlight-text';
 
@@ -66,6 +67,73 @@ describe('MarkerHighlightText', () => {
 
     rerender(
       <MarkerHighlightText highlight="自然语言" text="搜索书名、作者、自然语言" />
+    );
+
+    expect(screen.queryByTestId('marker-highlight-overlay')).toBeNull();
+  });
+
+  it('clears stale marker rects when numberOfLines changes', () => {
+    const { rerender } = render(
+      <MarkerHighlightText
+        highlight="课程或自然语言"
+        numberOfLines={2}
+        text="搜索书名、作者、课程或自然语言"
+      />
+    );
+
+    fireEvent(screen.getByText('课程或自然语言'), 'textLayout', {
+      nativeEvent: {
+        lines: [{ height: 20, width: 72, x: 0, y: 0 }],
+      },
+    });
+
+    expect(screen.getByTestId('marker-highlight-overlay')).toBeTruthy();
+
+    rerender(
+      <MarkerHighlightText
+        highlight="课程或自然语言"
+        numberOfLines={1}
+        text="搜索书名、作者、课程或自然语言"
+      />
+    );
+
+    expect(screen.queryByTestId('marker-highlight-overlay')).toBeNull();
+  });
+
+  it('clears stale marker rects when typography-related textStyle values change', () => {
+    const styles = StyleSheet.create({
+      largeText: {
+        fontSize: 20,
+        fontWeight: '600',
+      },
+      smallText: {
+        fontSize: 16,
+        fontWeight: '400',
+      },
+    });
+
+    const { rerender } = render(
+      <MarkerHighlightText
+        highlight="课程或自然语言"
+        text="搜索书名、作者、课程或自然语言"
+        textStyle={styles.largeText}
+      />
+    );
+
+    fireEvent(screen.getByText('课程或自然语言'), 'textLayout', {
+      nativeEvent: {
+        lines: [{ height: 20, width: 72, x: 0, y: 0 }],
+      },
+    });
+
+    expect(screen.getByTestId('marker-highlight-overlay')).toBeTruthy();
+
+    rerender(
+      <MarkerHighlightText
+        highlight="课程或自然语言"
+        text="搜索书名、作者、课程或自然语言"
+        textStyle={styles.smallText}
+      />
     );
 
     expect(screen.queryByTestId('marker-highlight-overlay')).toBeNull();

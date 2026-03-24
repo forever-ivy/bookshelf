@@ -39,7 +39,20 @@ export function MarkerHighlightText({
   numberOfLines,
 }: MarkerHighlightTextProps) {
   const parts = splitHighlightText(text, highlight);
-  const layoutKey = `${text}\u0000${highlight}`;
+  const textStyleSignature = useMemo(() => {
+    const flattenedStyle = StyleSheet.flatten(textStyle);
+
+    return JSON.stringify({
+      fontFamily: flattenedStyle?.fontFamily ?? null,
+      fontSize: flattenedStyle?.fontSize ?? null,
+      fontStyle: flattenedStyle?.fontStyle ?? null,
+      fontWeight: flattenedStyle?.fontWeight ?? null,
+      letterSpacing: flattenedStyle?.letterSpacing ?? null,
+      lineHeight: flattenedStyle?.lineHeight ?? null,
+      numberOfLines: numberOfLines ?? null,
+    });
+  }, [numberOfLines, textStyle]);
+  const layoutKey = `${text}\u0000${highlight}\u0000${textStyleSignature}`;
   const [layout, setLayout] = useState<HighlightLayout | null>(null);
   const hasFreshLayout = layout?.key === layoutKey;
 
@@ -62,7 +75,7 @@ export function MarkerHighlightText({
       {rects.length > 0 ? (
         <Svg
           pointerEvents="none"
-          style={StyleSheet.absoluteFill}
+          style={[styles.overlay]}
           testID="marker-highlight-overlay">
           {rects.map((rect) => (
             <Rect
@@ -99,5 +112,8 @@ export function MarkerHighlightText({
 const styles = StyleSheet.create({
   container: {
     position: 'relative',
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
   },
 });
