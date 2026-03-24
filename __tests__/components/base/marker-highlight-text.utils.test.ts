@@ -14,6 +14,16 @@ describe('splitHighlightText', () => {
     });
   });
 
+  it('uses the first exact match when the highlight appears more than once', () => {
+    expect(
+      splitHighlightText('搜索书名、课程或自然语言、课程或自然语言', '课程或自然语言')
+    ).toEqual({
+      prefix: '搜索书名、',
+      highlight: '课程或自然语言',
+      suffix: '、课程或自然语言',
+    });
+  });
+
   it('returns null when highlight is empty or not found', () => {
     expect(splitHighlightText('搜索书名', '')).toBeNull();
     expect(splitHighlightText('搜索书名', '自然语言')).toBeNull();
@@ -31,26 +41,46 @@ describe('buildMarkerRects', () => {
         'medium'
       )
     ).toEqual([
-      expect.objectContaining({
+      {
         lineIndex: 0,
         layer: 0,
-        width: expect.any(Number),
-      }),
-      expect.objectContaining({
+        opacity: 0.34,
+        x: -2,
+        y: 3,
+        width: 50,
+        height: 12.4,
+        rx: 6,
+      },
+      {
         lineIndex: 0,
         layer: 1,
-        width: expect.any(Number),
-      }),
-      expect.objectContaining({
+        opacity: 0.22,
+        x: 0,
+        y: 5,
+        width: 46,
+        height: 10.8,
+        rx: 6,
+      },
+      {
         lineIndex: 1,
         layer: 0,
-        width: expect.any(Number),
-      }),
-      expect.objectContaining({
+        opacity: 0.34,
+        x: -2,
+        y: 23,
+        width: 76,
+        height: 12.4,
+        rx: 6,
+      },
+      {
         lineIndex: 1,
         layer: 1,
-        width: expect.any(Number),
-      }),
+        opacity: 0.22,
+        x: 0,
+        y: 25,
+        width: 72,
+        height: 10.8,
+        rx: 6,
+      },
     ]);
   });
 });

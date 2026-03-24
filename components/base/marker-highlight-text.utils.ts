@@ -34,7 +34,6 @@ export function buildMarkerRects(
 
   return lines.flatMap((line, lineIndex) =>
     layers.map((layer, layerIndex) => ({
-      key: `marker-${lineIndex}-${layerIndex}`,
       lineIndex,
       layer: layerIndex,
       opacity: layer.opacity,
