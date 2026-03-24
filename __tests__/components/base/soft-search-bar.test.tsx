@@ -9,6 +9,7 @@ describe('SoftSearchBar', () => {
 
     expect(screen.getByText('搜索书名、作者、课程或自然语言')).toBeTruthy();
     expect(screen.getByText('比如：机器学习入门、适合新手的心理学书')).toBeTruthy();
+    expect(screen.queryByTestId('marker-highlight-overlay')).toBeNull();
 
     fireEvent(screen.getByText(/课程或自然语言/), 'textLayout', {
       nativeEvent: {
