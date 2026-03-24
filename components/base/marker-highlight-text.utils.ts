@@ -18,7 +18,7 @@ export function splitHighlightText(text: string, highlight: string) {
 }
 
 export function buildMarkerRects(
-  lines: Array<{ width: number; height: number; x: number; y: number }>,
+  lines: { width: number; height: number; x: number; y: number }[],
   intensity: MarkerIntensity
 ) {
   const layers =

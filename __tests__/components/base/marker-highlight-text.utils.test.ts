@@ -83,4 +83,30 @@ describe('buildMarkerRects', () => {
       },
     ]);
   });
+
+  it('builds deterministic layered marker rectangles for soft intensity', () => {
+    const rects = buildMarkerRects([{ height: 20, width: 46, x: 0, y: 0 }], 'soft');
+
+    expect(rects).toHaveLength(2);
+    expect(rects[0]).toEqual({
+      lineIndex: 0,
+      layer: 0,
+      opacity: 0.28,
+      x: -1,
+      y: 2,
+      width: 48,
+      height: 10.8,
+      rx: 6,
+    });
+    expect(rects[1]).toMatchObject({
+      lineIndex: 0,
+      layer: 1,
+      opacity: 0.18,
+      x: 0,
+      y: 4,
+      width: 46,
+      rx: 6,
+    });
+    expect(rects[1].height).toBeCloseTo(9.2, 5);
+  });
 });
