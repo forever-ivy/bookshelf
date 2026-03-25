@@ -21,16 +21,6 @@ export function ReadingProfileHero() {
         <View style={{ gap: 4 }}>
           <Text
             style={{
-              color: theme.colors.textSoft,
-              ...theme.typography.medium,
-              fontSize: 11,
-              letterSpacing: 0.2,
-              textTransform: 'uppercase',
-            }}>
-            Report
-          </Text>
-          <Text
-            style={{
               color: theme.colors.text,
               ...theme.typography.heading,
               fontSize: 30,
@@ -38,15 +28,6 @@ export function ReadingProfileHero() {
               lineHeight: 36,
             }}>
             {profilePortrait.headline}
-          </Text>
-          <Text
-            style={{
-              color: theme.colors.textMuted,
-              ...theme.typography.body,
-              fontSize: 14,
-              lineHeight: 20,
-            }}>
-            {profilePortrait.subtitle}
           </Text>
         </View>
         <EditorialIllustration

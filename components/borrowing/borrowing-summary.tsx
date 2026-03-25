@@ -31,15 +31,6 @@ export function BorrowingSummary() {
             }}>
           {borrowingSummary.headline}
         </Text>
-        <Text
-          style={{
-            color: theme.colors.textMuted,
-            ...theme.typography.body,
-            fontSize: 14,
-            lineHeight: 20,
-          }}>
-          {borrowingSummary.subtitle}
-        </Text>
       </View>
       <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
         {[

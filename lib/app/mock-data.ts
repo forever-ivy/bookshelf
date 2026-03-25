@@ -127,7 +127,7 @@ export const searchCollections = [
 
 export const borrowingSummary = {
   dueSoonCount: 2,
-  focus: '《时间简史》今天 21:00 到期，建议先续借，再决定是否发起归还。',
+  focus: '时间简史 · 今天 21:00',
   headline: '借阅任务面板',
   renewableCount: 3,
   subtitle: '先处理会影响今晚学习节奏的事项，再回到阅读本身。',
@@ -215,11 +215,11 @@ export const meSummary = {
 
 export const meFocus = [
   {
-    description: '《时间简史》今晚 21:00 前需要处理，建议先决定续借还是归还。',
+    description: '时间简史 · 今天 21:00',
     title: '1 条借阅提醒',
   },
   {
-    description: '《机器学习》章节总结和 5 道练习题已经生成，适合今晚继续。',
+    description: '2 条待继续',
     title: '2 条 AI 学习记录',
   },
 ] as const;
@@ -250,6 +250,11 @@ export const meMenus = [
     description: '进入阅读画像、学习偏好线索和成就中心',
     icon: 'profile',
     title: '个人中心',
+  },
+  {
+    description: '查看块状高亮、底部下划线、颜色预设和自定义颜色',
+    icon: 'spark',
+    title: '文字高亮示例',
   },
 ] as const;
 

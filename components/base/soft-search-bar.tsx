@@ -1,7 +1,8 @@
 import React from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 
 import { AppIcon } from '@/components/base/app-icon';
+import { MarkerHighlightText } from '@/components/base/marker-highlight-text';
 import { useAppTheme } from '@/hooks/use-app-theme';
 
 export function SoftSearchBar({
@@ -20,12 +21,12 @@ export function SoftSearchBar({
         borderRadius: theme.radii.lg,
         borderWidth: 1,
       }}>
-      <View
-        style={{
-          alignItems: 'center',
-          flexDirection: 'row',
-          gap: 12,
-          minHeight: isFull ? 56 : 52,
+        <View
+          style={{
+            alignItems: 'center',
+            flexDirection: 'row',
+            gap: 12,
+          minHeight: isFull ? 52 : 48,
           paddingHorizontal: 16,
         }}>
         <View
@@ -39,23 +40,16 @@ export function SoftSearchBar({
           }}>
           <AppIcon color={theme.colors.iconInk} name="search" size={14} strokeWidth={1.68} />
         </View>
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text
-            style={{
+        <View style={{ flex: 1 }}>
+          <MarkerHighlightText
+            highlight="课程或自然语言"
+            text="搜索书名、作者、课程或自然语言"
+            textStyle={{
               color: theme.colors.text,
               ...theme.typography.medium,
               fontSize: 14,
-            }}>
-            搜索书名、作者、课程或自然语言
-          </Text>
-          <Text
-            style={{
-              color: theme.colors.textMuted,
-              ...theme.typography.body,
-              fontSize: 12,
-            }}>
-            {isFull ? '支持课程名、关键词与自然语言检索' : '比如：机器学习入门、适合新手的心理学书'}
-          </Text>
+            }}
+          />
         </View>
         <AppIcon color={theme.colors.textSoft} name="chevronRight" size={16} strokeWidth={1.7} />
       </View>

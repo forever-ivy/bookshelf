@@ -19,16 +19,6 @@ export default function MeRoute() {
       <View style={{ gap: theme.spacing.md }}>
         <Text
           style={{
-            color: theme.colors.textSoft,
-            ...theme.typography.medium,
-            fontSize: 11,
-            letterSpacing: 0.2,
-            textTransform: 'uppercase',
-          }}>
-          Workspace
-        </Text>
-        <Text
-          style={{
             color: theme.colors.text,
             ...theme.typography.heading,
             fontSize: 30,
@@ -36,19 +26,10 @@ export default function MeRoute() {
           }}>
           我的
         </Text>
-        <Text
-          style={{
-            color: theme.colors.textMuted,
-            ...theme.typography.body,
-            fontSize: 14,
-            lineHeight: 20,
-          }}>
-          把提醒、收藏和画像入口收在一个更清楚的工作台里，先处理今晚最该处理的事。
-        </Text>
       </View>
 
       <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle description="先处理最影响今晚节奏的两件事。" title="今日提醒" />
+        <SectionTitle title="今日提醒" />
         <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
           {meFocus.map((item, index) => (
             <View
@@ -88,7 +69,7 @@ export default function MeRoute() {
       <ProfileSummaryCard onProfilePress={() => router.push('/profile')} />
 
       <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle description="把想借、待看和进行中的记录分开放，决策会更轻。" title="收藏与书单" />
+        <SectionTitle title="收藏与书单" />
         <CollectionPreview items={collectionPreview} />
       </View>
 
@@ -99,6 +80,11 @@ export default function MeRoute() {
           onPressItem={(title) => {
             if (title === '个人中心') {
               router.push('/profile');
+              return;
+            }
+
+            if (title === '文字高亮示例') {
+              router.push('/marker-examples');
             }
           }}
         />

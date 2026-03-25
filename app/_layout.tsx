@@ -29,6 +29,12 @@ export default function RootLayout() {
                 presentation: 'card',
               }}
             />
+            <Stack.Screen
+              name="marker-examples"
+              options={{
+                presentation: 'card',
+              }}
+            />
           </Stack>
           <StatusBar style="dark" />
         </AppProviders>

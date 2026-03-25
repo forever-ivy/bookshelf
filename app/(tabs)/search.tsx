@@ -30,31 +30,12 @@ export default function SearchRoute() {
       <View style={{ gap: theme.spacing.md }}>
         <Text
           style={{
-            color: theme.colors.textSoft,
-            ...theme.typography.medium,
-            fontSize: 11,
-            letterSpacing: 0.2,
-            textTransform: 'uppercase',
-          }}>
-          Database
-        </Text>
-        <Text
-          style={{
             color: theme.colors.text,
             ...theme.typography.heading,
             fontSize: 30,
             letterSpacing: -0.6,
           }}>
           找书
-        </Text>
-        <Text
-          style={{
-            color: theme.colors.textMuted,
-            ...theme.typography.body,
-            fontSize: 14,
-            lineHeight: 20,
-          }}>
-          用一条搜索和一组筛选，先把可借、可送达、适合课程的书排到最前面。
         </Text>
       </View>
 
@@ -63,10 +44,7 @@ export default function SearchRoute() {
       </Animated.View>
 
       <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle
-          description="先限定可借、履约和课程相关条件，再看结果。"
-          title="筛选"
-        />
+        <SectionTitle title="筛选" />
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm }}>
           {searchFilters.map((filter) => (
             (() => {
@@ -122,26 +100,13 @@ export default function SearchRoute() {
               }}>
               {item.title}
             </Text>
-            <Text
-              style={{
-                color: theme.colors.textMuted,
-                ...theme.typography.body,
-                fontSize: 12,
-                lineHeight: 17,
-              }}>
-              {item.detail}
-            </Text>
           </View>
           );
         })}
       </View>
 
       <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle
-          description="先看现在能借到、能送到、也最适合今晚开始的几本。"
-          eyebrow="Results"
-          title="搜索结果"
-        />
+        <SectionTitle title="搜索结果" />
         <View style={{ gap: theme.spacing.lg }}>
           {searchResults.map((item) => (
             <SearchResultCard key={item.title} {...item} />
@@ -150,11 +115,7 @@ export default function SearchRoute() {
       </View>
 
       <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle
-          description="没看到目标书时，换课程名、作者名或自然语言描述，系统会继续从相似主题里找。"
-          eyebrow="Fallback"
-          title="没看到想找的书？"
-        />
+        <SectionTitle title="没看到想找的书？" />
         <EditorialIllustration
           height={178}
           source={appArtwork.notionNoResults}

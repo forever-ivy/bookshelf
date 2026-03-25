@@ -5,6 +5,7 @@ import { Text, View } from 'react-native';
 
 import { AppIcon } from '@/components/base/app-icon';
 import { EditorialIllustration } from '@/components/base/editorial-illustration';
+import { MarkerHighlightText } from '@/components/base/marker-highlight-text';
 import { PillButton } from '@/components/base/pill-button';
 import { SectionTitle } from '@/components/base/section-title';
 import { SoftSearchBar } from '@/components/base/soft-search-bar';
@@ -31,31 +32,12 @@ export default function HomeRoute() {
       <View style={{ gap: theme.spacing.md }}>
         <Text
           style={{
-            color: theme.colors.textSoft,
-            ...theme.typography.medium,
-            fontSize: 11,
-            letterSpacing: 0.2,
-            textTransform: 'uppercase',
-          }}>
-          {homeHero.eyebrow}
-        </Text>
-        <Text
-          style={{
             color: theme.colors.text,
             ...theme.typography.heading,
             fontSize: 30,
             letterSpacing: -0.6,
           }}>
           {homeHero.title}
-        </Text>
-        <Text
-          style={{
-            color: theme.colors.textMuted,
-            ...theme.typography.body,
-            fontSize: 14,
-            lineHeight: 20,
-          }}>
-          {homeHero.subtitle}
         </Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm }}>
           {homeHero.chips.map((chip, index) => {
@@ -135,23 +117,27 @@ export default function HomeRoute() {
                 <AppIcon color={palette.iconColor} name={item.icon} size={15} strokeWidth={1.7} />
               </View>
               <View style={{ flex: 1, gap: 4 }}>
-                <Text
-                  style={{
-                    color: theme.colors.text,
-                    ...theme.typography.semiBold,
-                    fontSize: 15,
-                  }}>
-                  {item.title}
-                </Text>
-                <Text
-                  style={{
-                    color: theme.colors.textMuted,
-                    ...theme.typography.body,
-                    fontSize: 13,
-                    lineHeight: 18,
-                  }}>
-                  {item.description}
-                </Text>
+                {item.title === '今晚待开始' ? (
+                  <MarkerHighlightText
+                    highlight="今晚待开始"
+                    highlightTone="orange"
+                    text={item.title}
+                    textStyle={{
+                      color: theme.colors.text,
+                      ...theme.typography.semiBold,
+                      fontSize: 15,
+                    }}
+                  />
+                ) : (
+                  <Text
+                    style={{
+                      color: theme.colors.text,
+                      ...theme.typography.semiBold,
+                      fontSize: 15,
+                    }}>
+                    {item.title}
+                  </Text>
+                )}
               </View>
               <Text
                 style={{
@@ -169,10 +155,7 @@ export default function HomeRoute() {
       </Animated.View>
 
       <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle
-          description={homeLearningFocus.summary}
-          title={homeLearningFocus.title}
-        />
+        <SectionTitle title={homeLearningFocus.title} />
         <View
           style={{
             backgroundColor: theme.colors.surface,
@@ -201,16 +184,33 @@ export default function HomeRoute() {
                   width: 6,
                 }}
               />
-              <Text
-                style={{
-                  color: theme.colors.text,
-                  ...theme.typography.medium,
-                  flex: 1,
-                  fontSize: 14,
-                  lineHeight: 20,
-                }}>
-                {item}
-              </Text>
+              {item.includes('35 分钟') ? (
+                <MarkerHighlightText
+                  highlight="35 分钟"
+                  highlightColor="#F28A14"
+                  highlightTone="orange"
+                  text={item}
+                  variant="underline"
+                  textStyle={{
+                    color: theme.colors.text,
+                    ...theme.typography.medium,
+                    flex: 1,
+                    fontSize: 14,
+                    lineHeight: 20,
+                  }}
+                />
+              ) : (
+                <Text
+                  style={{
+                    color: theme.colors.text,
+                    ...theme.typography.medium,
+                    flex: 1,
+                    fontSize: 14,
+                    lineHeight: 20,
+                  }}>
+                  {item}
+                </Text>
+              )}
             </View>
           ))}
           <Link asChild href="/borrowing">
@@ -222,10 +222,7 @@ export default function HomeRoute() {
       </View>
 
       <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle
-          description="从能借到、能送到、适合课程的起点里直接开始。"
-          title="推荐起点"
-        />
+        <SectionTitle title="推荐起点" />
         <View
           style={{
             backgroundColor: theme.colors.surface,
@@ -251,23 +248,27 @@ export default function HomeRoute() {
                 }}>
                 {item.kicker}
               </Text>
-              <Text
-                style={{
-                  color: theme.colors.text,
-                  ...theme.typography.semiBold,
-                  fontSize: 15,
-                }}>
-                {item.title}
-              </Text>
-              <Text
-                style={{
-                  color: theme.colors.textMuted,
-                  ...theme.typography.body,
-                  fontSize: 13,
-                  lineHeight: 18,
-                }}>
-                {item.description}
-              </Text>
+              {item.title === '机器学习从零到一' ? (
+                <MarkerHighlightText
+                  highlight="机器学习从零到一"
+                  highlightTone="green"
+                  text={item.title}
+                  textStyle={{
+                    color: theme.colors.text,
+                    ...theme.typography.semiBold,
+                    fontSize: 15,
+                  }}
+                />
+              ) : (
+                <Text
+                  style={{
+                    color: theme.colors.text,
+                    ...theme.typography.semiBold,
+                    fontSize: 15,
+                  }}>
+                  {item.title}
+                </Text>
+              )}
             </View>
           ))}
         </View>

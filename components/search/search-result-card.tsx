@@ -10,7 +10,6 @@ type SearchResultCardProps = {
   coverTone: 'apricot' | 'blue' | 'coral' | 'lavender' | 'mint';
   eta: string;
   location: string;
-  reason: string;
   title: string;
 };
 
@@ -35,7 +34,6 @@ export function SearchResultCard({
   coverTone,
   eta,
   location,
-  reason,
   title,
 }: SearchResultCardProps) {
   const { theme } = useAppTheme();
@@ -117,15 +115,6 @@ export function SearchResultCard({
               fontSize: 13,
             }}>
             {author}
-          </Text>
-          <Text
-            style={{
-              color: theme.colors.textMuted,
-              ...theme.typography.body,
-              fontSize: 13,
-              lineHeight: 18,
-            }}>
-            {reason}
           </Text>
         </View>
       </View>

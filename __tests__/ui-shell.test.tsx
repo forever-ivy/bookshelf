@@ -97,13 +97,13 @@ import MeRoute from '@/app/(tabs)/me';
 import SearchRoute from '@/app/(tabs)/search';
 import TabsLayout from '@/app/(tabs)/_layout';
 import WebTabsLayout from '@/app/(tabs)/_layout.web';
+import MarkerExamplesRoute from '@/app/marker-examples';
 import ProfileRoute from '@/app/profile';
 
 describe('UI shell routes', () => {
   it('renders the home route hero and search entry', () => {
     render(<HomeRoute />);
 
-    expect(screen.getByText('Tonight')).toBeTruthy();
     expect(screen.getByText('今晚路径')).toBeTruthy();
     expect(screen.getByTestId('home-artwork')).toBeTruthy();
     expect(screen.getByText('搜索书名、作者、课程或自然语言')).toBeTruthy();
@@ -140,6 +140,23 @@ describe('UI shell routes', () => {
     expect(screen.getByText('今日提醒')).toBeTruthy();
     expect(screen.getByText('打开个人中心')).toBeTruthy();
     expect(screen.getAllByText('收藏与书单').length).toBeGreaterThan(0);
+    expect(screen.getByText('文字高亮示例')).toBeTruthy();
+  });
+
+  it('renders the marker examples route with both highlight variants', () => {
+    render(<MarkerExamplesRoute />);
+
+    expect(screen.getByText('文字高亮示例')).toBeTruthy();
+    expect(screen.getByText('块状高亮')).toBeTruthy();
+    expect(screen.getByText('底部下划线')).toBeTruthy();
+    expect(screen.getAllByText('highlight').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('underline').length).toBeGreaterThan(0);
+    expect(screen.getByText('蓝色信息')).toBeTruthy();
+    expect(screen.getByText('黄色时长')).toBeTruthy();
+    expect(screen.getByText('橙色路径')).toBeTruthy();
+    expect(screen.getByText('绿色完成')).toBeTruthy();
+    expect(screen.getAllByText('红色提醒').length).toBeGreaterThan(0);
+    expect(screen.getByText('自定义下划线')).toBeTruthy();
   });
 
   it('renders the profile route reading portrait sections', () => {

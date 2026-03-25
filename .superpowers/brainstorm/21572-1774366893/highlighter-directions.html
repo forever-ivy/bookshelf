@@ -1,0 +1,74 @@
+<h2>原生静态高亮，选哪种更对味？</h2>
+<p class="subtitle">我先按你现在这个 App 的气质做了 3 个方向，重点看“像不像手写标注”，不是看颜色本身。</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">A · 手写下划线</div>
+        <div class="mockup-body" style="padding: 24px; background: #fbfaf7;">
+          <div style="font-size: 16px; line-height: 1.8; color: #2f2b25; font-weight: 500;">
+            搜索书名、作者、
+            <span style="position: relative; display: inline-block; padding: 0 2px;">
+              <span style="position: absolute; left: 0; right: 0; bottom: 3px; height: 9px; background: #f6b04a; border-radius: 999px; transform: rotate(-0.8deg) scaleX(1.02);"></span>
+              <span style="position: absolute; left: 4px; right: 6px; bottom: 1px; height: 3px; background: #ee9321; border-radius: 999px; transform: rotate(0.4deg); opacity: 0.9;"></span>
+              <span style="position: relative;">课程或自然语言</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>更像重点标注</h3>
+      <p>轻、克制、适合标题或短句，不会把信息面压得太满。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">B · 马克笔底色</div>
+        <div class="mockup-body" style="padding: 24px; background: #fbfaf7;">
+          <div style="font-size: 16px; line-height: 1.8; color: #2f2b25; font-weight: 500;">
+            搜索书名、作者、
+            <span style="position: relative; display: inline-block; padding: 0 4px;">
+              <span style="position: absolute; inset: 3px -2px 2px -2px; background: #9fd4f6; border-radius: 6px 10px 7px 9px; transform: rotate(-4deg); opacity: 0.95;"></span>
+              <span style="position: absolute; inset: 4px 2px 3px 0; background: #83c8f4; border-radius: 8px 6px 10px 5px; transform: rotate(1.5deg); opacity: 0.9;"></span>
+              <span style="position: relative;">课程或自然语言</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>更像 Magic UI 那张图</h3>
+      <p>识别度最高，视觉更活，但面积会比下划线更大一点。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">C · 便签感色块</div>
+        <div class="mockup-body" style="padding: 24px; background: #fbfaf7;">
+          <div style="font-size: 16px; line-height: 1.8; color: #2f2b25; font-weight: 500;">
+            搜索书名、作者、
+            <span style="position: relative; display: inline-block; padding: 0 5px;">
+              <span style="position: absolute; left: -1px; right: -1px; top: 2px; bottom: 2px; background: linear-gradient(90deg, #f7d987, #f3c75a); border-radius: 4px; transform: rotate(-2.2deg); opacity: 0.92;"></span>
+              <span style="position: absolute; left: 2px; right: 6px; top: 4px; bottom: 4px; border-top: 1px solid rgba(120, 88, 18, 0.14); transform: rotate(-1deg);"></span>
+              <span style="position: relative;">课程或自然语言</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>更有纸质笔记感</h3>
+      <p>风格化更强，适合首页氛围，但如果频繁使用会更抢戏。</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <p class="subtitle">问题只问一个：你更想让这个效果偏向哪一类？直接点选 A / B / C 就行，也可以在终端里补一句你想微调的地方。</p>
+</div>

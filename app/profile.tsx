@@ -17,7 +17,7 @@ export default function ProfileRoute() {
       <ReadingProfileHero />
 
       <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle description="系统会根据这些主题更新推荐与借阅排序。" title="兴趣标签" />
+        <SectionTitle title="兴趣标签" />
         <InterestTagCloud tags={interestTags} />
       </View>
 
@@ -27,7 +27,7 @@ export default function ProfileRoute() {
       </View>
 
       <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle description="这些线索会决定你更适合怎样开始一轮新学习。" title="学习偏好线索" />
+        <SectionTitle title="学习偏好线索" />
         <View
           style={{
             backgroundColor: theme.colors.surface,
@@ -69,7 +69,7 @@ export default function ProfileRoute() {
       </View>
 
       <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle description="先让成就像阅读节奏的回声，不做后台式 KPI 墙。" title="成就与积分" />
+        <SectionTitle title="成就与积分" />
         <AchievementStrip items={achievementStrip} />
       </View>
 

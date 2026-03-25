@@ -75,15 +75,6 @@ export function MenuList({
                 }}>
                 {item.title}
               </Text>
-              <Text
-                style={{
-                  color: theme.colors.textMuted,
-                  ...theme.typography.body,
-                  fontSize: 13,
-                  lineHeight: 18,
-                }}>
-                {item.description}
-              </Text>
             </View>
             <AppIcon color={theme.colors.textSoft} name="chevronRight" size={16} strokeWidth={1.7} />
           </View>

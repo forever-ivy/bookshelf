@@ -1,6 +1,6 @@
 {
   "name": "app",
-  "main": "expo-router/entry",
+  "main": "index",
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
@@ -8,11 +8,13 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "setup-skia-web": "setup-skia-web",
     "lint": "expo lint",
     "test": "jest"
   },
   "dependencies": {
     "@expo/ui": "~55.0.2",
+    "@shopify/react-native-skia": "2.4.18",
     "@tanstack/react-query": "^5.90.21",
     "expo": "~55.0.6",
     "expo-blur": "~55.0.9",

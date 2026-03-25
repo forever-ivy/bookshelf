@@ -22,7 +22,7 @@ export default function BorrowingRoute() {
       <BorrowingSummary />
 
       <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle description="把最常处理的借阅放在最前面。" title="当前借阅" />
+        <SectionTitle title="当前借阅" />
         <View style={{ gap: theme.spacing.lg }}>
           {currentBorrowings.map((item) => (
             <BorrowingCard key={item.title} {...item} />
@@ -31,7 +31,7 @@ export default function BorrowingRoute() {
       </View>
 
       <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle description="这些图书建议你优先处理。" title="即将到期" />
+        <SectionTitle title="即将到期" />
         <View style={{ gap: theme.spacing.lg }}>
           {dueSoonBorrowings.map((item) => (
             <BorrowingCard key={item.title} {...item} />
@@ -40,7 +40,7 @@ export default function BorrowingRoute() {
       </View>
 
       <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle description="保留你的阅读轨迹，但不抢当前任务的焦点。" title="历史借阅" />
+        <SectionTitle title="历史借阅" />
         <View
           style={{
             backgroundColor: theme.colors.surface,
@@ -80,11 +80,7 @@ export default function BorrowingRoute() {
       </View>
 
       <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle
-          description="完成借阅后，系统会把成功记录、后续提醒和下一步阅读动作继续串起来。"
-          eyebrow="Flow"
-          title="借阅闭环"
-        />
+        <SectionTitle title="借阅闭环" />
         <EditorialIllustration
           height={176}
           source={appArtwork.notionBorrowSuccess}
