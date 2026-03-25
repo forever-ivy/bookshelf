@@ -21,11 +21,11 @@ export function SoftSearchBar({
         borderRadius: theme.radii.lg,
         borderWidth: 1,
       }}>
-        <View
-          style={{
-            alignItems: 'center',
-            flexDirection: 'row',
-            gap: 12,
+      <View
+        style={{
+          alignItems: 'center',
+          flexDirection: 'row',
+          gap: 12,
           minHeight: isFull ? 52 : 48,
           paddingHorizontal: 16,
         }}>
