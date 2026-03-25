@@ -5,6 +5,7 @@ import { Text, View } from 'react-native';
 
 import { AppIcon } from '@/components/base/app-icon';
 import { EditorialIllustration } from '@/components/base/editorial-illustration';
+import { MarkerHighlightText } from '@/components/base/marker-highlight-text';
 import { PillButton } from '@/components/base/pill-button';
 import { SectionTitle } from '@/components/base/section-title';
 import { SoftSearchBar } from '@/components/base/soft-search-bar';
@@ -48,15 +49,16 @@ export default function HomeRoute() {
           }}>
           {homeHero.title}
         </Text>
-        <Text
-          style={{
+        <MarkerHighlightText
+          highlight="今晚最该开始的一章"
+          text={homeHero.subtitle}
+          textStyle={{
             color: theme.colors.textMuted,
             ...theme.typography.body,
             fontSize: 14,
             lineHeight: 20,
-          }}>
-          {homeHero.subtitle}
-        </Text>
+          }}
+        />
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm }}>
           {homeHero.chips.map((chip, index) => {
             const palette = chipPalettes[index % chipPalettes.length];
@@ -170,6 +172,7 @@ export default function HomeRoute() {
 
       <View style={{ gap: theme.spacing.lg }}>
         <SectionTitle
+          descriptionHighlight="最短路径"
           description={homeLearningFocus.summary}
           title={homeLearningFocus.title}
         />
@@ -223,6 +226,7 @@ export default function HomeRoute() {
 
       <View style={{ gap: theme.spacing.lg }}>
         <SectionTitle
+          descriptionHighlight="直接开始"
           description="从能借到、能送到、适合课程的起点里直接开始。"
           title="推荐起点"
         />
