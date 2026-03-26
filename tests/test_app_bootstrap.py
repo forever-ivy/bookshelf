@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlalchemy import create_engine, inspect, text
+
+from app.core.database import init_engine, init_schema, reset_engine
+
 
 def test_healthcheck_reports_database_and_modules(client):
     response = client.get("/api/v1/health")
@@ -84,3 +88,43 @@ def test_cors_preflight_allows_private_network_admin_origin(client):
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://192.168.31.15:5173"
     assert "POST" in response.headers["access-control-allow-methods"]
+
+
+def test_init_schema_adds_missing_reader_profile_columns(monkeypatch, tmp_path):
+    db_path = tmp_path / "legacy-reader-profile.db"
+    engine = create_engine(f"sqlite+pysqlite:///{db_path}", future=True)
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE reader_accounts (id INTEGER PRIMARY KEY, username VARCHAR(64), password_hash VARCHAR(128))"))
+        connection.execute(
+            text(
+                """
+                CREATE TABLE reader_profiles (
+                    id INTEGER PRIMARY KEY,
+                    account_id INTEGER UNIQUE,
+                    display_name VARCHAR(128) NOT NULL,
+                    affiliation_type VARCHAR(32),
+                    college VARCHAR(128),
+                    major VARCHAR(128),
+                    grade_year VARCHAR(32),
+                    created_at DATETIME,
+                    updated_at DATETIME
+                )
+                """
+            )
+        )
+        connection.execute(text("CREATE TABLE cabinets (id VARCHAR(64) PRIMARY KEY, name VARCHAR(128), status VARCHAR(32))"))
+    engine.dispose()
+
+    monkeypatch.setenv("LIBRARY_DATABASE_URL", f"sqlite+pysqlite:///{db_path}")
+    monkeypatch.setenv("LIBRARY_AUTO_CREATE_SCHEMA", "true")
+    reset_engine()
+
+    try:
+        init_engine()
+        init_schema()
+    finally:
+        reset_engine()
+
+    inspector = inspect(create_engine(f"sqlite+pysqlite:///{db_path}", future=True))
+    columns = {column["name"] for column in inspector.get_columns("reader_profiles")}
+    assert {"restriction_status", "restriction_until", "risk_flags", "preference_profile_json", "segment_code"} <= columns

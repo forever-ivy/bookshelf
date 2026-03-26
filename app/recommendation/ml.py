@@ -270,30 +270,59 @@ def build_recommendation_ml_reranker() -> RecommendationMLReranker:
     return RecommendationMLReranker(model)
 
 
-def train_implicit_mf_model(
-    session: Session,
+def filter_implicit_mf_interactions(
+    interactions: list[tuple[int, int]],
+    *,
+    min_reader_interactions: int,
+    min_book_interactions: int,
+) -> list[tuple[int, int]]:
+    filtered = {
+        (int(reader_id), int(book_id))
+        for reader_id, book_id in interactions
+        if reader_id is not None and book_id is not None
+    }
+    if not filtered:
+        return []
+
+    while True:
+        reader_counts: dict[int, int] = {}
+        book_counts: dict[int, int] = {}
+        for reader_id, book_id in filtered:
+            reader_counts[reader_id] = reader_counts.get(reader_id, 0) + 1
+            book_counts[book_id] = book_counts.get(book_id, 0) + 1
+        next_filtered = {
+            (reader_id, book_id)
+            for reader_id, book_id in filtered
+            if reader_counts.get(reader_id, 0) >= min_reader_interactions
+            and book_counts.get(book_id, 0) >= min_book_interactions
+        }
+        if next_filtered == filtered:
+            break
+        filtered = next_filtered
+        if not filtered:
+            break
+
+    return sorted(filtered)
+
+
+def train_implicit_mf_model_from_interactions(
+    interactions: list[tuple[int, int]],
     *,
     config: ImplicitMFTrainingConfig | None = None,
     progress: Callable[[str], None] | None = None,
 ) -> ImplicitMFModel:
     config = config or ImplicitMFTrainingConfig()
-    if progress is not None:
-        progress("正在收集借阅交互数据...")
-    interactions = _collect_interactions(
-        session,
-        min_reader_interactions=config.min_reader_interactions,
-        min_book_interactions=config.min_book_interactions,
-    )
     if not interactions:
         raise RuntimeError("Not enough borrow interactions to train the recommendation model")
 
-    rng = random.Random(config.seed)
     reader_ids = sorted({reader_id for reader_id, _book_id in interactions})
     book_ids = sorted({book_id for _reader_id, book_id in interactions})
     if progress is not None:
         progress(
             f"训练样本准备完成：读者 {len(reader_ids)}，图书 {len(book_ids)}，交互 {len(interactions)}"
         )
+
+    rng = random.Random(config.seed)
     reader_to_books = _build_reader_to_books(interactions)
     negative_pool = {
         reader_id: [book_id for book_id in book_ids if book_id not in reader_to_books[reader_id]]
@@ -369,7 +398,7 @@ def train_implicit_mf_model(
     if progress is not None:
         progress("正在整理训练结果...")
 
-    model = ImplicitMFModel(
+    return ImplicitMFModel(
         latent_dim=config.latent_dim,
         global_bias=global_bias,
         reader_factors=reader_factors,
@@ -402,7 +431,27 @@ def train_implicit_mf_model(
             ),
         },
     )
-    return model
+
+
+def train_implicit_mf_model(
+    session: Session,
+    *,
+    config: ImplicitMFTrainingConfig | None = None,
+    progress: Callable[[str], None] | None = None,
+) -> ImplicitMFModel:
+    config = config or ImplicitMFTrainingConfig()
+    if progress is not None:
+        progress("正在收集借阅交互数据...")
+    interactions = _collect_interactions(
+        session,
+        min_reader_interactions=config.min_reader_interactions,
+        min_book_interactions=config.min_book_interactions,
+    )
+    return train_implicit_mf_model_from_interactions(
+        interactions,
+        config=config,
+        progress=progress,
+    )
 
 
 def save_implicit_mf_model(model: ImplicitMFModel, output_path: str | Path) -> Path:
@@ -462,34 +511,15 @@ def _collect_interactions(
         .where(BorrowOrder.status.in_(BORROW_SIGNAL_STATUSES))
         .group_by(BorrowOrder.reader_id, BorrowOrder.book_id)
     ).all()
-    interaction_pairs = {
-        (int(row.reader_id), int(row.book_id))
-        for row in rows
-        if row.reader_id is not None and row.book_id is not None
-    }
-    if not interaction_pairs:
-        return []
-
-    filtered = set(interaction_pairs)
-    while True:
-        reader_counts: dict[int, int] = {}
-        book_counts: dict[int, int] = {}
-        for reader_id, book_id in filtered:
-            reader_counts[reader_id] = reader_counts.get(reader_id, 0) + 1
-            book_counts[book_id] = book_counts.get(book_id, 0) + 1
-        next_filtered = {
-            (reader_id, book_id)
-            for reader_id, book_id in filtered
-            if reader_counts.get(reader_id, 0) >= min_reader_interactions
-            and book_counts.get(book_id, 0) >= min_book_interactions
-        }
-        if next_filtered == filtered:
-            break
-        filtered = next_filtered
-        if not filtered:
-            break
-
-    return sorted(filtered)
+    return filter_implicit_mf_interactions(
+        [
+            (int(row.reader_id), int(row.book_id))
+            for row in rows
+            if row.reader_id is not None and row.book_id is not None
+        ],
+        min_reader_interactions=min_reader_interactions,
+        min_book_interactions=min_book_interactions,
+    )
 
 
 def _build_reader_to_books(interactions: list[tuple[int, int]]) -> dict[int, set[int]]:

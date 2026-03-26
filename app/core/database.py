@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Generator
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.schema import CreateColumn, CreateIndex
 
 from app.core.config import Settings, get_settings
 from app.db.base import Base, import_model_modules
@@ -75,6 +76,40 @@ def _seed_default_cabinet() -> None:
         )
 
 
+def _ensure_metadata_columns_exist() -> None:
+    engine = get_engine()
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+    preparer = engine.dialect.identifier_preparer
+
+    with engine.begin() as connection:
+        connection_inspector = inspect(connection)
+        for table in Base.metadata.sorted_tables:
+            if table.name not in existing_tables:
+                continue
+
+            existing_columns = {column["name"] for column in connection_inspector.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in existing_columns:
+                    continue
+                if column.primary_key:
+                    continue
+                if not column.nullable and column.server_default is None:
+                    continue
+
+                compiled = str(CreateColumn(column).compile(dialect=engine.dialect)).strip().rstrip(",")
+                table_name = preparer.quote(table.name)
+                connection.exec_driver_sql(f"ALTER TABLE {table_name} ADD COLUMN {compiled}")
+
+            existing_indexes = {index["name"] for index in connection_inspector.get_indexes(table.name)}
+            for index in table.indexes:
+                if not index.name or index.name in existing_indexes:
+                    continue
+                statement = str(CreateIndex(index).compile(dialect=engine.dialect))
+                statement = statement.replace("CREATE INDEX ", "CREATE INDEX IF NOT EXISTS ", 1)
+                connection.exec_driver_sql(statement)
+
+
 def init_schema() -> None:
     import_model_modules()
     engine = get_engine()
@@ -82,6 +117,7 @@ def init_schema() -> None:
         if engine.url.get_backend_name() == "postgresql":
             connection.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS vector")
     Base.metadata.create_all(bind=engine)
+    _ensure_metadata_columns_exist()
     _seed_default_cabinet()
 
 

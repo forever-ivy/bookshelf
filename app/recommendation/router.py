@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, or_, select
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -17,7 +17,8 @@ from app.recommendation.embeddings import build_embedding_provider
 from app.recommendation.service import RecommendationService
 
 router = APIRouter(prefix="/api/v1/recommendation", tags=["recommendation"])
-DEMO_READER_USERNAME_PREFIX = "demo_cf_reader_"
+DEMO_READER_USERNAME_PREFIXES = ("demo_cf_reader_", "demo_ml_reader_")
+ML_DEMO_READER_USERNAME_PREFIX = "demo_ml_reader_"
 
 
 def resolve_llm_provider():
@@ -115,9 +116,23 @@ def demo_readers(
         )
         .join(ReaderAccount, ReaderAccount.id == ReaderProfile.account_id)
         .outerjoin(BorrowOrder, BorrowOrder.reader_id == ReaderProfile.id)
-        .where(ReaderAccount.username.like(f"{DEMO_READER_USERNAME_PREFIX}%"))
+        .where(
+            or_(
+                *[
+                    ReaderAccount.username.like(f"{prefix}%")
+                    for prefix in DEMO_READER_USERNAME_PREFIXES
+                ]
+            )
+        )
         .group_by(ReaderProfile.id, ReaderProfile.display_name, ReaderAccount.username)
-        .order_by(func.count(BorrowOrder.id).desc(), ReaderProfile.id.asc())
+        .order_by(
+            case(
+                (ReaderAccount.username.like(f"{ML_DEMO_READER_USERNAME_PREFIX}%"), 0),
+                else_=1,
+            ).asc(),
+            func.count(BorrowOrder.id).desc(),
+            ReaderProfile.id.asc(),
+        )
         .limit(limit)
     ).all()
     return {
