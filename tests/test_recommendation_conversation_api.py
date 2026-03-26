@@ -34,6 +34,11 @@ class FakeRecommendationProvider:
     def parse_book_from_ocr(self, ocr_texts: list[str]) -> dict:
         return {"title": ocr_texts[0] if ocr_texts else "未知书籍"}
 
+class FakeConversationProvider:
+    def chat(self, *, text: str, context: dict) -> str:
+        messages = context.get("conversation_session", {}).get("messages", [])
+        return f"Auto reply for '{text}' with {len(messages)} message(s)."
+
 
 def test_recommendation_search_logs_and_falls_back_without_provider(client):
     engine = get_engine()
@@ -237,6 +242,157 @@ def test_conversation_messages_persist_metadata_and_snapshot(client):
     history = history_resp.json()["messages"]
     assert len(history) == 1
     assert history[0]["content"] == "帮我找机器人相关的书"
+
+
+def test_conversation_reply_creates_assistant_message_and_persists_history(client, monkeypatch):
+    from app.conversation import router as conversation_router
+
+    monkeypatch.setattr(conversation_router, "build_llm_provider", lambda: FakeConversationProvider())
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        seed_rows(
+            conn,
+            [
+                ("INSERT INTO reader_accounts (username, password_hash) VALUES (?, ?)", ("reader-auto", "hash")),
+                (
+                    "INSERT INTO reader_profiles (account_id, display_name, affiliation_type, college, major, grade_year) VALUES (?, ?, ?, ?, ?, ?)",
+                    (1, "Fiona", "student", "CS", "AI", "2026"),
+                ),
+                (
+                    "INSERT INTO books (title, author, category, keywords, summary) VALUES (?, ?, ?, ?, ?)",
+                    ("Robot Tales", "R. Author", "Engineering", "robotics,systems", "book"),
+                ),
+                (
+                    "INSERT INTO book_stock (book_id, cabinet_id, total_copies, available_copies, reserved_copies) VALUES (?, ?, ?, ?, ?)",
+                    (1, "cabinet-001", 2, 2, 0),
+                ),
+            ],
+        )
+
+    session_resp = client.post("/api/v1/conversation/sessions", headers=reader_headers())
+    assert session_resp.status_code == 200
+    session_id = session_resp.json()["session"]["id"]
+
+    reply_resp = client.post(
+        f"/api/v1/conversation/sessions/{session_id}/reply",
+        headers=reader_headers(),
+        json={
+            "content": "帮我推荐机器人相关的书",
+            "metadata": {"source": "demo_page"},
+        },
+    )
+    assert reply_resp.status_code == 200
+    payload = reply_resp.json()
+    assert payload["reply"] == "Auto reply for '帮我推荐机器人相关的书' with 1 message(s)."
+    assert payload["user_message"]["role"] == "user"
+    assert payload["assistant_message"]["role"] == "assistant"
+    assert json.loads(payload["assistant_message"]["metadata_json"])["source"] == "conversation_auto_reply"
+    assert payload["snapshot"]["inventory"]["available_titles"] == ["Robot Tales"]
+
+    history_resp = client.get(
+        f"/api/v1/conversation/sessions/{session_id}/messages",
+        headers=reader_headers(),
+    )
+    assert history_resp.status_code == 200
+    history = history_resp.json()["messages"]
+    assert [item["role"] for item in history] == ["user", "assistant"]
+    assert history[0]["content"] == "帮我推荐机器人相关的书"
+    assert history[1]["content"] == "Auto reply for '帮我推荐机器人相关的书' with 1 message(s)."
+
+
+def test_conversation_sessions_list_returns_only_current_reader_sessions(client):
+    engine = get_engine()
+    with engine.begin() as conn:
+        seed_rows(
+            conn,
+            [
+                ("INSERT INTO reader_accounts (username, password_hash) VALUES (?, ?)", ("reader-sessions", "hash")),
+                (
+                    "INSERT INTO reader_profiles (account_id, display_name, affiliation_type, college, major, grade_year) VALUES (?, ?, ?, ?, ?, ?)",
+                    (1, "Helen", "student", "CS", "AI", "2026"),
+                ),
+                ("INSERT INTO reader_accounts (username, password_hash) VALUES (?, ?)", ("reader-sessions-2", "hash")),
+                (
+                    "INSERT INTO reader_profiles (account_id, display_name, affiliation_type, college, major, grade_year) VALUES (?, ?, ?, ?, ?, ?)",
+                    (2, "Irene", "student", "History", "Archive", "2027"),
+                ),
+            ],
+        )
+
+    first_session_resp = client.post("/api/v1/conversation/sessions", headers=reader_headers())
+    second_session_resp = client.post("/api/v1/conversation/sessions", headers=reader_headers())
+    assert first_session_resp.status_code == 200
+    assert second_session_resp.status_code == 200
+    first_session_id = first_session_resp.json()["session"]["id"]
+    second_session_id = second_session_resp.json()["session"]["id"]
+
+    message_resp = client.post(
+        f"/api/v1/conversation/sessions/{first_session_id}/messages",
+        headers=reader_headers(),
+        json={
+            "role": "user",
+            "content": "Need one robotics book",
+            "metadata": {"source": "session_list_test"},
+        },
+    )
+    assert message_resp.status_code == 200
+
+    with engine.begin() as conn:
+        seed_rows(
+            conn,
+            [
+                ("INSERT INTO conversation_sessions (reader_id, status) VALUES (?, ?)", (2, "active")),
+                (
+                    "INSERT INTO conversation_messages (session_id, role, content, metadata_json) VALUES (?, ?, ?, ?)",
+                    (3, "user", "Other reader session", json.dumps({"source": "other"})),
+                ),
+            ],
+        )
+
+    sessions_resp = client.get("/api/v1/conversation/sessions", headers=reader_headers())
+    assert sessions_resp.status_code == 200
+    payload = sessions_resp.json()
+    assert payload["ok"] is True
+    items = payload["items"]
+    assert [item["id"] for item in items] == [first_session_id, second_session_id]
+    assert [item["reader_id"] for item in items] == [1, 1]
+    assert items[0]["message_count"] == 1
+    assert items[0]["last_message_preview"] == "Need one robotics book"
+    assert items[0]["last_message_at"] is not None
+    assert items[1]["message_count"] == 0
+    assert items[1]["last_message_preview"] is None
+
+
+def test_conversation_reply_returns_controlled_error_when_llm_is_misconfigured(client, monkeypatch):
+    engine = get_engine()
+    with engine.begin() as conn:
+        seed_rows(
+            conn,
+            [
+                ("INSERT INTO reader_accounts (username, password_hash) VALUES (?, ?)", ("reader-auto-misconfig", "hash")),
+                (
+                    "INSERT INTO reader_profiles (account_id, display_name, affiliation_type, college, major, grade_year) VALUES (?, ?, ?, ?, ?, ?)",
+                    (1, "Grace", "student", "CS", "AI", "2026"),
+                ),
+            ],
+        )
+
+    session_resp = client.post("/api/v1/conversation/sessions", headers=reader_headers())
+    assert session_resp.status_code == 200
+    session_id = session_resp.json()["session"]["id"]
+
+    monkeypatch.setenv("LIBRARY_LLM_PROVIDER", "openai-compatible")
+    monkeypatch.delenv("LIBRARY_LLM_API_KEY", raising=False)
+    get_settings.cache_clear()
+
+    reply_resp = client.post(
+        f"/api/v1/conversation/sessions/{session_id}/reply",
+        headers=reader_headers(),
+        json={"content": "推荐一本 AI 书"},
+    )
+    assert reply_resp.status_code == 503
+    assert reply_resp.json()["error"]["code"] == "llm_provider_misconfigured"
 
 
 def test_recommendation_and_conversation_require_reader_identity(client):

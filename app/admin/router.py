@@ -47,12 +47,14 @@ from app.core.sse import sse_response
 from app.orders.service import (
     correct_order_bundle,
     get_order_bundle,
+    get_return_request_detail,
     intervene_order_bundle,
     list_order_bundles,
     list_recent_robot_events,
     list_return_requests,
     list_robot_tasks,
     list_robots,
+    process_return_request,
     prioritize_order_bundle,
     reassign_robot_task,
     receive_return_request,
@@ -490,6 +492,7 @@ def list_return_requests_endpoint(
     page_size: int = Query(default=20, ge=1, le=100),
     status_filter: str | None = Query(default=None, alias="status"),
     borrow_order_id: int | None = None,
+    reader_id: int | None = Query(default=None, ge=1),
     _identity: AuthIdentity = Depends(require_admin_permission("orders.manage")),
     session: Session = Depends(get_db),
 ):
@@ -499,7 +502,17 @@ def list_return_requests_endpoint(
         page_size=page_size,
         status=status_filter,
         borrow_order_id=borrow_order_id,
+        reader_id=reader_id,
     )
+
+
+@router.get("/return-requests/{return_request_id}")
+def get_return_request_endpoint(
+    return_request_id: int,
+    _identity: AuthIdentity = Depends(require_admin_permission("orders.manage")),
+    session: Session = Depends(get_db),
+):
+    return get_return_request_detail(session, return_request_id=return_request_id)
 
 
 @router.get("/tasks")
@@ -639,19 +652,26 @@ def receive_return_request_endpoint(
 @router.post("/return-requests/{return_request_id}/complete")
 def complete_return_request_endpoint(
     return_request_id: int,
-    payload: dict,
+    payload: dict | None = None,
     identity: AuthIdentity = Depends(require_admin_permission("orders.manage")),
     session: Session = Depends(get_db),
 ):
-    request_row = complete_return_request(
+    payload = payload or {}
+    cabinet_id = str(payload.get("cabinet_id") or "").strip()
+    if not cabinet_id:
+        return process_return_request(
+            session,
+            return_request_id=return_request_id,
+            admin_id=identity.account_id,
+        )
+    return complete_return_request(
         session,
         return_request_id=return_request_id,
         admin_id=identity.account_id,
-        cabinet_id=str(payload.get("cabinet_id") or ""),
+        cabinet_id=cabinet_id,
         slot_code=payload.get("slot_code"),
         note=payload.get("note"),
     )
-    return {"return_request": serialize_return_request(request_row)}
 
 
 @router.get("/events/stream")

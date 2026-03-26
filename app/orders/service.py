@@ -49,9 +49,11 @@ ROBOT_FLOW = {
 }
 
 ORDER_MODES = {"cabinet_pickup", "robot_delivery"}
-BORROW_STATUSES = set(BORROW_FLOW) | set(BORROW_FLOW.values())
-DELIVERY_STATUSES = set(DELIVERY_FLOW) | set(DELIVERY_FLOW.values())
-TASK_STATUSES = set(TASK_FLOW) | set(TASK_FLOW.values())
+FINAL_BORROW_STATUSES = {"completed", "cancelled", "returned"}
+RETURN_REQUEST_FINAL_STATUSES = {"completed"}
+BORROW_STATUSES = set(BORROW_FLOW) | set(BORROW_FLOW.values()) | {"cancelled", "returned"}
+DELIVERY_STATUSES = set(DELIVERY_FLOW) | set(DELIVERY_FLOW.values()) | {"cancelled"}
+TASK_STATUSES = set(TASK_FLOW) | set(TASK_FLOW.values()) | {"cancelled"}
 ROBOT_STATUSES = {"idle", "assigned", "carrying", "arriving", "returning", "offline"}
 ORDER_PRIORITIES = {"urgent", "high", "normal", "low"}
 
@@ -171,6 +173,9 @@ def _sync_copy_status_with_order(session: Session, order: BorrowOrder) -> None:
         return
     stock = _stock_for_copy(session, copy)
 
+    if order.status == "returned":
+        return
+
     if order.status in {"delivered", "completed"}:
         if copy.inventory_status != "borrowed":
             if stock is not None and stock.reserved_copies > 0:
@@ -188,6 +193,53 @@ def _sync_copy_status_with_order(session: Session, order: BorrowOrder) -> None:
     copy.inventory_status = desired_status
     if order.status == "picked_from_cabinet" and order.picked_at is None:
         order.picked_at = utc_now()
+
+
+def _find_free_slot_for_copy(session: Session, *, cabinet_id: str) -> CabinetSlot | None:
+    return session.scalars(
+        select(CabinetSlot)
+        .where(
+            CabinetSlot.cabinet_id == cabinet_id,
+            CabinetSlot.current_copy_id.is_(None),
+            CabinetSlot.status.in_(["empty", "free"]),
+        )
+        .order_by(CabinetSlot.slot_code.asc(), CabinetSlot.id.asc())
+    ).first()
+
+
+def _restore_copy_for_cancelled_order(session: Session, *, order: BorrowOrder) -> None:
+    if order.assigned_copy_id is None:
+        return
+    copy = session.get(BookCopy, order.assigned_copy_id)
+    if copy is None:
+        return
+    slot = _find_free_slot_for_copy(session, cabinet_id=copy.cabinet_id)
+    if slot is None:
+        raise ApiError(409, "slot_unavailable", "No free slot available to restore the cancelled order")
+
+    slot.status = "occupied"
+    slot.current_copy_id = copy.id
+    copy.inventory_status = "stored"
+    adjust_stock_counts(
+        session,
+        book_id=copy.book_id,
+        cabinet_id=copy.cabinet_id,
+        available_delta=1,
+        reserved_delta=-1,
+    )
+    session.add(
+        InventoryEvent(
+            cabinet_id=copy.cabinet_id,
+            event_type="book_restored",
+            slot_code=slot.slot_code,
+            book_id=copy.book_id,
+            copy_id=copy.id,
+            payload_json={
+                "reason": "borrow_order_cancelled",
+                "borrow_order_id": order.id,
+            },
+        )
+    )
 
 
 def get_order_bundle(session: Session, borrow_order_id: int) -> OrderBundle:
@@ -291,6 +343,64 @@ def list_order_bundles(session: Session) -> list[OrderBundle]:
     return [get_order_bundle(session, borrow_order.id) for borrow_order in borrow_orders]
 
 
+def list_reader_order_bundles(
+    session: Session,
+    *,
+    reader_profile_id: int,
+    status: str | None = None,
+    active_only: bool = False,
+) -> list[OrderBundle]:
+    stmt = select(BorrowOrder.id).where(BorrowOrder.reader_id == reader_profile_id)
+    normalized_status = (status or "").strip()
+    if active_only:
+        stmt = stmt.where(BorrowOrder.status.not_in(FINAL_BORROW_STATUSES))
+    if normalized_status:
+        stmt = stmt.where(BorrowOrder.status == normalized_status)
+    stmt = stmt.order_by(BorrowOrder.created_at.desc(), BorrowOrder.id.desc())
+    return [get_order_bundle(session, borrow_order_id) for borrow_order_id in session.execute(stmt).scalars()]
+
+
+def get_reader_order_bundle(session: Session, *, reader_profile_id: int, borrow_order_id: int) -> OrderBundle:
+    bundle = get_order_bundle(session, borrow_order_id)
+    if bundle.borrow_order.reader_id != reader_profile_id:
+        raise ApiError(403, "borrow_order_forbidden", "Borrow order does not belong to the current reader")
+    return bundle
+
+
+def _is_bundle_cancellable(bundle: OrderBundle) -> bool:
+    if bundle.borrow_order.order_mode == "cabinet_pickup":
+        return bundle.borrow_order.status == "awaiting_pick"
+    if bundle.borrow_order.order_mode == "robot_delivery":
+        return (
+            bundle.borrow_order.status == "created"
+            and (bundle.delivery_order is None or bundle.delivery_order.status == "awaiting_pick")
+            and (bundle.robot_task is None or bundle.robot_task.status == "assigned")
+        )
+    return False
+
+
+def _find_open_return_request(session: Session, *, borrow_order_id: int) -> ReturnRequest | None:
+    return session.scalars(
+        select(ReturnRequest)
+        .where(
+            ReturnRequest.borrow_order_id == borrow_order_id,
+            ReturnRequest.status.not_in(RETURN_REQUEST_FINAL_STATUSES),
+        )
+        .order_by(ReturnRequest.created_at.desc(), ReturnRequest.id.desc())
+    ).first()
+
+
+def _get_return_request_with_order(session: Session, *, return_request_id: int) -> tuple[ReturnRequest, BorrowOrder]:
+    row = session.execute(
+        select(ReturnRequest, BorrowOrder)
+        .join(BorrowOrder, ReturnRequest.borrow_order_id == BorrowOrder.id)
+        .where(ReturnRequest.id == return_request_id)
+    ).first()
+    if row is None:
+        raise ApiError(404, "return_request_not_found", "Return request not found")
+    return row
+
+
 def serialize_task(task: RobotTask, robot: RobotUnit | None = None, delivery: DeliveryOrder | None = None) -> dict:
     return {
         "id": task.id,
@@ -378,10 +488,40 @@ def serialize_return_request(return_request: ReturnRequest, borrow_order: Borrow
         "borrow_order_id": return_request.borrow_order_id,
         "reader_id": borrow_order.reader_id if borrow_order is not None else None,
         "book_id": borrow_order.book_id if borrow_order is not None else None,
+        "assigned_copy_id": borrow_order.assigned_copy_id if borrow_order is not None else None,
+        "borrow_order_status": borrow_order.status if borrow_order is not None else None,
+        "order_mode": borrow_order.order_mode if borrow_order is not None else None,
         "status": return_request.status,
         "note": return_request.note,
         "created_at": _iso(return_request.created_at),
         "updated_at": _iso(return_request.updated_at),
+    }
+
+
+def _serialize_copy(copy: BookCopy | None) -> dict | None:
+    if copy is None:
+        return None
+    return {
+        "id": copy.id,
+        "book_id": copy.book_id,
+        "cabinet_id": copy.cabinet_id,
+        "inventory_status": copy.inventory_status,
+        "created_at": _iso(copy.created_at),
+        "updated_at": _iso(copy.updated_at),
+    }
+
+
+def _serialize_slot(slot: CabinetSlot | None) -> dict | None:
+    if slot is None:
+        return None
+    return {
+        "id": slot.id,
+        "cabinet_id": slot.cabinet_id,
+        "slot_code": slot.slot_code,
+        "status": slot.status,
+        "current_copy_id": slot.current_copy_id,
+        "created_at": _iso(slot.created_at),
+        "updated_at": _iso(slot.updated_at),
     }
 
 
@@ -392,24 +532,31 @@ def list_return_requests(
     page_size: int,
     status: str | None = None,
     borrow_order_id: int | None = None,
+    reader_id: int | None = None,
 ) -> dict:
     normalized_page = max(page, 1)
     normalized_page_size = max(1, min(page_size, 100))
-    stmt = select(ReturnRequest).order_by(ReturnRequest.created_at.desc(), ReturnRequest.id.desc())
-    if status:
-        stmt = stmt.where(ReturnRequest.status == status)
+    stmt = (
+        select(ReturnRequest, BorrowOrder)
+        .join(BorrowOrder, ReturnRequest.borrow_order_id == BorrowOrder.id)
+        .order_by(ReturnRequest.created_at.desc(), ReturnRequest.id.desc())
+    )
+    normalized_status = (status or "").strip()
+    if normalized_status:
+        stmt = stmt.where(ReturnRequest.status == normalized_status)
     if borrow_order_id is not None:
         stmt = stmt.where(ReturnRequest.borrow_order_id == borrow_order_id)
+    if reader_id is not None:
+        stmt = stmt.where(BorrowOrder.reader_id == reader_id)
     total = session.scalar(select(func.count()).select_from(stmt.order_by(None).subquery())) or 0
-    rows = session.scalars(
+    rows = session.execute(
         stmt.offset((normalized_page - 1) * normalized_page_size).limit(normalized_page_size)
     ).all()
-    items = []
-    for row in rows:
-        borrow_order = session.get(BorrowOrder, row.borrow_order_id)
-        items.append(serialize_return_request(row, borrow_order))
     return {
-        "items": items,
+        "items": [
+            serialize_return_request(request_row, borrow_order=borrow_order)
+            for request_row, borrow_order in rows
+        ],
         "total": int(total),
         "page": normalized_page,
         "page_size": normalized_page_size,
@@ -524,6 +671,14 @@ def create_return_request(
     bundle = get_order_bundle(session, borrow_order_id)
     if bundle.borrow_order.reader_id != reader_profile_id:
         raise ApiError(403, "borrow_order_forbidden", "Borrow order does not belong to the current reader")
+    if bundle.borrow_order.assigned_copy_id is None:
+        raise ApiError(409, "borrow_copy_missing", "Borrow order does not have an assigned copy")
+    copy = session.get(BookCopy, bundle.borrow_order.assigned_copy_id)
+    if copy is None or copy.inventory_status != "borrowed":
+        raise ApiError(409, "borrow_order_not_returnable", "Borrow order is not currently returnable")
+    existing_request = _find_open_return_request(session, borrow_order_id=bundle.borrow_order.id)
+    if existing_request is not None:
+        raise ApiError(409, "return_request_already_exists", "An open return request already exists for this order")
     return_request = ReturnRequest(borrow_order_id=bundle.borrow_order.id, note=note, status="created")
     session.add(return_request)
     session.add(
@@ -548,6 +703,176 @@ def create_return_request(
         )
     )
     return return_request
+
+
+def list_reader_return_requests(
+    session: Session,
+    *,
+    reader_profile_id: int,
+    status: str | None = None,
+) -> list[dict]:
+    stmt = (
+        select(ReturnRequest, BorrowOrder)
+        .join(BorrowOrder, ReturnRequest.borrow_order_id == BorrowOrder.id)
+        .where(BorrowOrder.reader_id == reader_profile_id)
+        .order_by(ReturnRequest.created_at.desc(), ReturnRequest.id.desc())
+    )
+    normalized_status = (status or "").strip()
+    if normalized_status:
+        stmt = stmt.where(ReturnRequest.status == normalized_status)
+    return [
+        serialize_return_request(request_row, borrow_order=borrow_order)
+        for request_row, borrow_order in session.execute(stmt).all()
+    ]
+
+
+def get_reader_return_request_detail(
+    session: Session,
+    *,
+    reader_profile_id: int,
+    return_request_id: int,
+) -> dict:
+    request_row, borrow_order = _get_return_request_with_order(session, return_request_id=return_request_id)
+    if borrow_order.reader_id != reader_profile_id:
+        raise ApiError(403, "return_request_forbidden", "Return request does not belong to the current reader")
+    return {
+        "return_request": serialize_return_request(request_row, borrow_order=borrow_order),
+        "order": serialize_order(get_order_bundle(session, borrow_order.id)),
+    }
+
+
+def get_return_request_detail(
+    session: Session,
+    *,
+    return_request_id: int,
+) -> dict:
+    request_row, borrow_order = _get_return_request_with_order(session, return_request_id=return_request_id)
+    bundle = get_order_bundle(session, borrow_order.id)
+    copy = None if borrow_order.assigned_copy_id is None else session.get(BookCopy, borrow_order.assigned_copy_id)
+    slot = None
+    if copy is not None:
+        slot = session.scalars(
+            select(CabinetSlot)
+            .where(CabinetSlot.current_copy_id == copy.id)
+            .order_by(CabinetSlot.id.asc())
+        ).first()
+    return {
+        "return_request": serialize_return_request(request_row, borrow_order=borrow_order),
+        "order": serialize_order(bundle),
+        "copy": _serialize_copy(copy),
+        "slot": _serialize_slot(slot),
+    }
+
+
+def process_return_request(
+    session: Session,
+    *,
+    return_request_id: int,
+    admin_id: int,
+) -> dict:
+    request_row = session.get(ReturnRequest, return_request_id)
+    if request_row is None:
+        raise ApiError(404, "return_request_not_found", "Return request not found")
+    if request_row.status in RETURN_REQUEST_FINAL_STATUSES:
+        raise ApiError(409, "return_request_already_processed", "Return request is already processed")
+
+    bundle = get_order_bundle(session, request_row.borrow_order_id)
+    order = bundle.borrow_order
+    if order.assigned_copy_id is None:
+        raise ApiError(409, "borrow_copy_missing", "Borrow order does not have an assigned copy")
+    copy = session.get(BookCopy, order.assigned_copy_id)
+    if copy is None:
+        raise ApiError(404, "book_copy_not_found", "Assigned book copy not found")
+    if copy.inventory_status != "borrowed":
+        raise ApiError(409, "copy_not_borrowed", "Assigned copy is not currently in borrowed status")
+
+    slot = _find_free_slot_for_copy(session, cabinet_id=copy.cabinet_id)
+    if slot is None:
+        raise ApiError(409, "slot_unavailable", "No free slot available to store the returned book")
+
+    before_state = {
+        "return_request": serialize_return_request(request_row, borrow_order=order),
+        "copy_inventory_status": copy.inventory_status,
+        "slot_code": slot.slot_code,
+    }
+
+    slot.status = "occupied"
+    slot.current_copy_id = copy.id
+    copy.inventory_status = "stored"
+    adjust_stock_counts(
+        session,
+        book_id=copy.book_id,
+        cabinet_id=copy.cabinet_id,
+        available_delta=1,
+    )
+    order.status = "returned"
+    request_row.status = "completed"
+    if order.completed_at is None:
+        order.completed_at = utc_now()
+
+    session.add(
+        InventoryEvent(
+            cabinet_id=copy.cabinet_id,
+            event_type="book_returned",
+            slot_code=slot.slot_code,
+            book_id=copy.book_id,
+            copy_id=copy.id,
+            payload_json={
+                "return_request_id": request_row.id,
+                "borrow_order_id": order.id,
+            },
+        )
+    )
+    session.add(
+        ReadingEvent(
+            reader_id=order.reader_id,
+            event_type="return_request_completed",
+            metadata_json={
+                "return_request_id": request_row.id,
+                "borrow_order_id": order.id,
+                "slot_code": slot.slot_code,
+            },
+        )
+    )
+
+    after_state = {
+        "return_request": serialize_return_request(request_row, borrow_order=order),
+        "copy_inventory_status": copy.inventory_status,
+        "slot_code": slot.slot_code,
+    }
+    session.add(
+        AdminActionLog(
+            admin_id=admin_id,
+            target_type="return_request",
+            target_id=request_row.id,
+            action="process_return_request",
+            before_state=before_state,
+            after_state=after_state,
+        )
+    )
+    session.commit()
+
+    payload = {
+        **_event_payload(
+            event_type="return_request_completed",
+            borrow_order=order,
+            delivery_order=bundle.delivery_order,
+            robot_task=bundle.robot_task,
+            robot_unit=bundle.robot_unit,
+        ),
+        "return_request_id": request_row.id,
+        "slot_code": slot.slot_code,
+    }
+    _publish_event_sync(payload)
+    return {
+        "return_request": serialize_return_request(request_row, borrow_order=order),
+        "slot": {
+            "slot_code": slot.slot_code,
+            "status": slot.status,
+            "current_copy_id": slot.current_copy_id,
+        },
+        "order": serialize_order(get_order_bundle(session, order.id)),
+    }
 
 
 def _resolve_return_slot(session: Session, *, cabinet_id: str, slot_code: str | None) -> CabinetSlot:
@@ -682,6 +1007,9 @@ def complete_return_request(
     copy.inventory_status = "stored"
     target_slot.status = "occupied"
     target_slot.current_copy_id = copy.id
+    bundle.borrow_order.status = "returned"
+    if bundle.borrow_order.completed_at is None:
+        bundle.borrow_order.completed_at = utc_now()
     request_row.status = "completed"
 
     session.add(
@@ -736,6 +1064,72 @@ def complete_return_request(
         }
     )
     return request_row
+
+
+def cancel_borrow_order(
+    session: Session,
+    *,
+    borrow_order_id: int,
+    reader_profile_id: int,
+) -> OrderBundle:
+    bundle = get_order_bundle(session, borrow_order_id)
+    if bundle.borrow_order.reader_id != reader_profile_id:
+        raise ApiError(403, "borrow_order_forbidden", "Borrow order does not belong to the current reader")
+    if bundle.borrow_order.status in FINAL_BORROW_STATUSES:
+        raise ApiError(409, "borrow_order_already_finalized", "Borrow order is already finalized")
+    if not _is_bundle_cancellable(bundle):
+        raise ApiError(409, "borrow_order_not_cancellable", "Borrow order cannot be cancelled at the current stage")
+
+    order = bundle.borrow_order
+    delivery = bundle.delivery_order
+    task = bundle.robot_task
+    robot = bundle.robot_unit
+
+    _restore_copy_for_cancelled_order(session, order=order)
+
+    order.status = "cancelled"
+    order.completed_at = utc_now()
+
+    if delivery is not None:
+        delivery.status = "cancelled"
+        if delivery.completed_at is None:
+            delivery.completed_at = utc_now()
+
+    if task is not None:
+        task.status = "cancelled"
+        if task.completed_at is None:
+            task.completed_at = utc_now()
+
+    if robot is not None:
+        robot.status = "idle"
+
+    session.add(
+        ReadingEvent(
+            reader_id=order.reader_id,
+            event_type="borrow_order_cancelled",
+            metadata_json={
+                "borrow_order_id": order.id,
+                "assigned_copy_id": order.assigned_copy_id,
+            },
+        )
+    )
+    payload = _event_payload(
+        event_type="order_cancelled",
+        borrow_order=order,
+        delivery_order=delivery,
+        robot_task=task,
+        robot_unit=robot,
+    )
+    _record_robot_event(
+        session,
+        robot_id=robot.id if robot is not None else None,
+        task_id=task.id if task is not None else None,
+        event_type="order_cancelled",
+        payload=payload,
+    )
+    session.commit()
+    _publish_event_sync(payload)
+    return get_order_bundle(session, order.id)
 
 
 def advance_order_bundle(session: Session, bundle: OrderBundle) -> OrderBundle:

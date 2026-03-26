@@ -2,17 +2,18 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.analytics.models import ReadingEvent, SearchLog
 from app.catalog.models import Book
+from app.conversation.models import ConversationSession
 from app.db.base import utc_now
 from app.inventory.models import BookCopy, Cabinet, InventoryEvent
 from app.orders.models import BorrowOrder
-from app.readers.models import ReaderProfile
+from app.readers.models import ReaderAccount, ReaderProfile
 from app.recommendation.models import RecommendationLog
 from app.robot_sim.models import RobotTask, RobotUnit
 
@@ -29,6 +30,238 @@ def record_reading_event(session: Session, *, reader_id: int | None, event_type:
             metadata_json=json.loads(metadata_json) if metadata_json else None,
         )
     )
+
+
+def _iso(value: datetime | None) -> str | None:
+    return value.isoformat() if value is not None else None
+
+
+def _window_start(*, days: int) -> datetime:
+    return datetime.now(UTC) - timedelta(days=days)
+
+
+def _count_rows(session: Session, model, *, since: datetime | None = None, timestamp_column=None) -> int:
+    stmt = select(func.count()).select_from(model)
+    if since is not None and timestamp_column is not None:
+        stmt = stmt.where(timestamp_column >= since)
+    return int(session.execute(stmt).scalar_one())
+
+
+def _latest_timestamp(session: Session, column) -> str | None:
+    return _iso(session.execute(select(func.max(column))).scalar_one())
+
+
+def _reader_ids_since(session: Session, *, reader_column, timestamp_column, since: datetime) -> set[int]:
+    rows = session.execute(
+        select(reader_column)
+        .where(reader_column.is_not(None))
+        .where(timestamp_column >= since)
+    ).all()
+    return {int(row[0]) for row in rows if row[0] is not None}
+
+
+def _grouped_counts(session: Session, *, value_column, label: str, limit: int) -> list[dict]:
+    rows = session.execute(
+        select(value_column.label(label), func.count().label("count"))
+        .group_by(value_column)
+        .order_by(func.count().desc(), value_column.asc())
+        .limit(limit)
+    ).all()
+    return [
+        {label: row[0], "count": int(row[1] or 0)}
+        for row in rows
+        if row[0] not in {None, ""}
+    ]
+
+
+def _reader_activity_leaderboard(session: Session, *, limit: int) -> list[dict]:
+    profiles = session.execute(
+        select(ReaderProfile.id, ReaderProfile.display_name, ReaderAccount.username)
+        .join(ReaderAccount, ReaderAccount.id == ReaderProfile.account_id)
+    ).all()
+    search_counts = {
+        int(reader_id): int(count or 0)
+        for reader_id, count in session.execute(
+            select(SearchLog.reader_id, func.count())
+            .where(SearchLog.reader_id.is_not(None))
+            .group_by(SearchLog.reader_id)
+        ).all()
+        if reader_id is not None
+    }
+    reading_counts = {
+        int(reader_id): int(count or 0)
+        for reader_id, count in session.execute(
+            select(ReadingEvent.reader_id, func.count())
+            .where(ReadingEvent.reader_id.is_not(None))
+            .group_by(ReadingEvent.reader_id)
+        ).all()
+        if reader_id is not None
+    }
+    recommendation_counts = {
+        int(reader_id): int(count or 0)
+        for reader_id, count in session.execute(
+            select(RecommendationLog.reader_id, func.count())
+            .where(RecommendationLog.reader_id.is_not(None))
+            .group_by(RecommendationLog.reader_id)
+        ).all()
+        if reader_id is not None
+    }
+    borrow_counts = {
+        int(reader_id): int(count or 0)
+        for reader_id, count in session.execute(
+            select(BorrowOrder.reader_id, func.count())
+            .where(BorrowOrder.reader_id.is_not(None))
+            .group_by(BorrowOrder.reader_id)
+        ).all()
+        if reader_id is not None
+    }
+    conversation_counts = {
+        int(reader_id): int(count or 0)
+        for reader_id, count in session.execute(
+            select(ConversationSession.reader_id, func.count())
+            .where(ConversationSession.reader_id.is_not(None))
+            .group_by(ConversationSession.reader_id)
+        ).all()
+        if reader_id is not None
+    }
+
+    items = []
+    for profile_id, display_name, username in profiles:
+        activity = {
+            "search_count": search_counts.get(int(profile_id), 0),
+            "reading_event_count": reading_counts.get(int(profile_id), 0),
+            "recommendation_count": recommendation_counts.get(int(profile_id), 0),
+            "borrow_count": borrow_counts.get(int(profile_id), 0),
+            "conversation_count": conversation_counts.get(int(profile_id), 0),
+        }
+        total_activity = sum(activity.values())
+        if total_activity == 0:
+            continue
+        items.append(
+            {
+                "reader_id": int(profile_id),
+                "display_name": display_name,
+                "username": username,
+                "total_activity": total_activity,
+                **activity,
+            }
+        )
+
+    items.sort(key=lambda item: (-item["total_activity"], item["reader_id"]))
+    return items[:limit]
+
+
+def build_overview_snapshot(
+    session: Session,
+    *,
+    recent_days: int = 7,
+    active_reader_days: int = 30,
+) -> dict:
+    recent_since = _window_start(days=recent_days)
+    active_since = _window_start(days=active_reader_days)
+
+    totals = {
+        "search_count": _count_rows(session, SearchLog),
+        "reading_event_count": _count_rows(session, ReadingEvent),
+        "recommendation_count": _count_rows(session, RecommendationLog),
+        "conversation_session_count": _count_rows(session, ConversationSession),
+        "borrow_order_count": _count_rows(session, BorrowOrder),
+        "reader_count": _count_rows(session, ReaderProfile),
+    }
+    recent = {
+        "search_count": _count_rows(session, SearchLog, since=recent_since, timestamp_column=SearchLog.created_at),
+        "reading_event_count": _count_rows(
+            session,
+            ReadingEvent,
+            since=recent_since,
+            timestamp_column=ReadingEvent.created_at,
+        ),
+        "recommendation_count": _count_rows(
+            session,
+            RecommendationLog,
+            since=recent_since,
+            timestamp_column=RecommendationLog.created_at,
+        ),
+        "conversation_session_count": _count_rows(
+            session,
+            ConversationSession,
+            since=recent_since,
+            timestamp_column=ConversationSession.updated_at,
+        ),
+        "borrow_order_count": _count_rows(
+            session,
+            BorrowOrder,
+            since=recent_since,
+            timestamp_column=BorrowOrder.updated_at,
+        ),
+    }
+
+    active_reader_ids = set()
+    active_reader_ids |= _reader_ids_since(
+        session,
+        reader_column=SearchLog.reader_id,
+        timestamp_column=SearchLog.created_at,
+        since=active_since,
+    )
+    active_reader_ids |= _reader_ids_since(
+        session,
+        reader_column=ReadingEvent.reader_id,
+        timestamp_column=ReadingEvent.created_at,
+        since=active_since,
+    )
+    active_reader_ids |= _reader_ids_since(
+        session,
+        reader_column=RecommendationLog.reader_id,
+        timestamp_column=RecommendationLog.created_at,
+        since=active_since,
+    )
+    active_reader_ids |= _reader_ids_since(
+        session,
+        reader_column=ConversationSession.reader_id,
+        timestamp_column=ConversationSession.updated_at,
+        since=active_since,
+    )
+    active_reader_ids |= _reader_ids_since(
+        session,
+        reader_column=BorrowOrder.reader_id,
+        timestamp_column=BorrowOrder.updated_at,
+        since=active_since,
+    )
+
+    return {
+        "totals": totals,
+        "recent_window_days": recent_days,
+        "recent_activity": recent,
+        "active_reader_window_days": active_reader_days,
+        "active_reader_count": len(active_reader_ids),
+        "data_freshness": {
+            "latest_search_at": _latest_timestamp(session, SearchLog.created_at),
+            "latest_reading_event_at": _latest_timestamp(session, ReadingEvent.created_at),
+            "latest_recommendation_at": _latest_timestamp(session, RecommendationLog.created_at),
+            "latest_conversation_at": _latest_timestamp(session, ConversationSession.updated_at),
+            "latest_borrow_order_at": _latest_timestamp(session, BorrowOrder.updated_at),
+        },
+    }
+
+
+def build_trends_snapshot(session: Session, *, limit: int = 10) -> dict:
+    return {
+        "top_queries": _grouped_counts(session, value_column=SearchLog.query_text, label="query_text", limit=limit),
+        "query_modes": _grouped_counts(session, value_column=SearchLog.query_mode, label="query_mode", limit=limit),
+        "recommendation_providers": _grouped_counts(
+            session,
+            value_column=RecommendationLog.provider_note,
+            label="provider_note",
+            limit=limit,
+        ),
+        "reading_event_types": _grouped_counts(
+            session,
+            value_column=ReadingEvent.event_type,
+            label="event_type",
+            limit=limit,
+        ),
+        "most_active_readers": _reader_activity_leaderboard(session, limit=limit),
+    }
 
 
 def get_borrow_trends(session: Session, *, days: int = 7) -> dict:
@@ -146,9 +379,7 @@ def get_cabinet_turnover(session: Session, *, days: int = 7) -> dict:
     cabinets = session.scalars(select(Cabinet).order_by(Cabinet.id.asc())).all()
     items: list[dict] = []
     for cabinet in cabinets:
-        copy_count = session.scalar(
-            select(func.count()).select_from(BookCopy).where(BookCopy.cabinet_id == cabinet.id)
-        ) or 0
+        copy_count = session.scalar(select(func.count()).select_from(BookCopy).where(BookCopy.cabinet_id == cabinet.id)) or 0
         event_count = session.scalar(
             select(func.count())
             .select_from(InventoryEvent)

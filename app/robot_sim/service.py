@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from app.orders.service import advance_order_bundle, list_order_bundles, serialize_order
+from app.orders.service import advance_order_bundle, get_order_bundle, list_order_bundles, serialize_order
 from app.robot_sim.models import RobotStatusEvent, RobotTask, RobotUnit
 
 
@@ -21,6 +21,69 @@ def tick_once(session: Session) -> int:
 def get_robot_state(session: Session) -> list[dict]:
     bundles = list_order_bundles(session)
     return [serialize_order(bundle) for bundle in bundles]
+
+
+def tick_steps(session: Session, *, steps: int) -> dict:
+    step_items: list[dict] = []
+    total_progressed = 0
+
+    for index in range(steps):
+        progressed = tick_once(session)
+        step_items.append(
+            {
+                "step": index + 1,
+                "progressed_orders": progressed,
+            }
+        )
+        total_progressed += progressed
+        if progressed <= 0:
+            break
+
+    return {
+        "requested_steps": steps,
+        "executed_steps": len(step_items),
+        "total_progressed_orders": total_progressed,
+        "stopped_early": len(step_items) < steps,
+        "steps": step_items,
+        "items": get_robot_state(session),
+    }
+
+
+def tick_order_steps(session: Session, *, borrow_order_id: int, steps: int) -> dict:
+    bundle = get_order_bundle(session, borrow_order_id)
+    step_items: list[dict] = []
+    progressed_steps = 0
+
+    for index in range(steps):
+        before = serialize_order(bundle)
+        bundle = advance_order_bundle(session, bundle)
+        after = serialize_order(bundle)
+        progressed = before != after
+        step_items.append(
+            {
+                "step": index + 1,
+                "progressed": progressed,
+                "borrow_status": after["borrow_order"]["status"],
+                "delivery_status": None if after["delivery_order"] is None else after["delivery_order"]["status"],
+                "task_status": None if after["robot_task"] is None else after["robot_task"]["status"],
+                "robot_status": None if after["robot_unit"] is None else after["robot_unit"]["status"],
+            }
+        )
+        if progressed:
+            progressed_steps += 1
+        else:
+            break
+
+    final_item = serialize_order(bundle)
+    return {
+        "borrow_order_id": borrow_order_id,
+        "requested_steps": steps,
+        "executed_steps": len(step_items),
+        "progressed_steps": progressed_steps,
+        "stopped_early": len(step_items) < steps,
+        "steps": step_items,
+        "item": final_item,
+    }
 
 
 def list_robot_tasks(session: Session) -> list[dict]:

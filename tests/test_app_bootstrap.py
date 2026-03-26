@@ -13,6 +13,21 @@ def test_healthcheck_reports_database_and_modules(client):
     assert "robot_sim" in response.json()["modules"]
 
 
+def test_root_page_provides_entry_links(client):
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "/docs" in response.text
+    assert "/demo/recommendation" in response.text
+    assert "/api/v1/health" in response.text
+
+
+def test_favicon_endpoint_does_not_404(client):
+    response = client.get("/favicon.ico")
+
+    assert response.status_code == 204
+
+
 def test_openapi_contains_expected_module_tags(client):
     response = client.get("/openapi.json")
 

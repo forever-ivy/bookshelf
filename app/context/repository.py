@@ -8,6 +8,7 @@ from app.catalog.models import Book
 from app.conversation.models import ConversationMessage, ConversationSession
 from app.inventory.models import BookStock
 from app.orders.models import BorrowOrder
+from app.orders.service import FINAL_BORROW_STATUSES
 from app.readers.models import ReaderProfile
 
 
@@ -59,7 +60,7 @@ def get_active_orders(session: Session, reader_id: int | None) -> list[dict]:
     stmt = (
         select(BorrowOrder.id, BorrowOrder.book_id, BorrowOrder.status, BorrowOrder.order_mode)
         .where(BorrowOrder.reader_id == reader_id)
-        .where(BorrowOrder.status.not_in(["completed"]))
+        .where(BorrowOrder.status.not_in(FINAL_BORROW_STATUSES))
         .order_by(BorrowOrder.created_at.desc(), BorrowOrder.id.desc())
     )
     rows = session.execute(stmt).all()

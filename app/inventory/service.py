@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from difflib import SequenceMatcher
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.catalog.models import Book
@@ -14,7 +14,8 @@ from app.inventory.models import BookCopy, BookStock, Cabinet, CabinetSlot, Inve
 def _ensure_cabinet(session: Session, cabinet_id: str) -> Cabinet:
     cabinet = session.get(Cabinet, cabinet_id)
     if cabinet is None:
-        cabinet = Cabinet(id=cabinet_id, name=f"书柜 {cabinet_id}", status="active")
+        cabinet_name = "主书柜" if cabinet_id == "cabinet-001" else f"智能书柜 {cabinet_id}"
+        cabinet = Cabinet(id=cabinet_id, name=cabinet_name, status="active")
         session.add(cabinet)
         session.flush()
     return cabinet
@@ -83,56 +84,135 @@ def _similarity(left: str | None, right: str | None) -> float:
     return SequenceMatcher(a=left_normalized, b=right_normalized).ratio()
 
 
+def _normalized_column(column):
+    return func.lower(
+        func.replace(
+            func.replace(
+                func.replace(func.coalesce(column, ""), " ", ""),
+                "\t",
+                "",
+            ),
+            "\n",
+            "",
+        )
+    )
+
+
+def _candidate_terms(texts: list[str], *, max_terms: int = 12) -> list[str]:
+    items: list[str] = []
+    seen: set[str] = set()
+    for text in texts:
+        raw_text = (text or "").strip()
+        if not raw_text:
+            continue
+        candidates = [_normalize(raw_text)]
+        candidates.extend(_normalize(part) for part in re.split(r"[^\w\u4e00-\u9fff]+", raw_text))
+        for candidate in candidates:
+            if len(candidate) < 2 or candidate in seen:
+                continue
+            seen.add(candidate)
+            items.append(candidate)
+            if len(items) >= max_terms:
+                return items
+    return items
+
+
+def _score_catalog_match(book: Book, texts: list[str]) -> float:
+    best_score = 0.0
+    normalized_title = _normalize(book.title)
+    normalized_author = _normalize(book.author)
+    for text in texts:
+        normalized_text = _normalize(text)
+        score = max(_similarity(text, book.title), _similarity(text, book.author))
+        if normalized_text and normalized_text in normalized_title:
+            score += 0.15
+        if normalized_text and normalized_author and normalized_text in normalized_author:
+            score += 0.1
+        best_score = max(best_score, score)
+    return best_score
+
+
 def _extract_take_title(text: str) -> str:
     source = (text or "").strip()
     if not source:
         return ""
 
-    wrapped = re.search(r"《([^》]{1,80})》", source)
+    wrapped = re.search(r"[《\"]([^》\"]{1,80})[》\"]", source)
     if wrapped:
         return wrapped.group(1).strip()
 
     cleaned = re.sub(r"\s+", "", source)
-    cleaned = re.sub(r"(帮我|请|请你|麻烦|我要|我想|给我|想要)", "", cleaned)
-    cleaned = re.sub(r"(取书|拿书|借书|找书|取出|拿出|取|拿|借|找)+", "", cleaned)
-    cleaned = re.sub(r"(这本书|那本书|一本书|这本|那本|本书)", "", cleaned)
-    cleaned = re.sub(r"[，。！？,.!?]+", "", cleaned)
-    return cleaned.strip()
+    cleaned = re.sub(r"^(请|麻烦|帮我|请帮我|我想|我要|想要)+", "", cleaned)
+    cleaned = re.sub(
+        r"(拿一下|取一下|借一下|拿书|取书|借书|拿出|取出|帮我拿|帮我取|帮我借|take|get)",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(r"(这本书|一本书|图书|书籍|那本书)", "", cleaned)
+    cleaned = re.sub(r"[，。、“”‘’\"'!！?？:：]+", "", cleaned)
+    return cleaned.strip("《》")
 
 
 def _find_free_slot(session: Session, cabinet_id: str) -> CabinetSlot | None:
-    slots = session.scalars(
+    return session.scalars(
         select(CabinetSlot)
-        .where(CabinetSlot.cabinet_id == cabinet_id)
-        .order_by(CabinetSlot.slot_code.asc())
-    ).all()
-    for slot in slots:
-        if slot.status in {"empty", "free"} and slot.current_copy_id is None:
-            return slot
-    return None
-
-
-def _find_best_catalog_match(session: Session, texts: list[str], threshold: float = 0.6) -> Book | None:
-    books = session.scalars(select(Book).order_by(Book.id.asc())).all()
-    best: Book | None = None
-    best_score = 0.0
-    for book in books:
-        for text in texts:
-            score = _similarity(text, book.title)
-            if score > best_score:
-                best = book
-                best_score = score
-    if best is not None and best_score >= threshold:
-        return best
-    return None
+        .where(
+            CabinetSlot.cabinet_id == cabinet_id,
+            CabinetSlot.current_copy_id.is_(None),
+            CabinetSlot.status.in_(["empty", "free"]),
+        )
+        .order_by(CabinetSlot.slot_code.asc(), CabinetSlot.id.asc())
+    ).first()
 
 
 def _find_book_by_title(session: Session, title: str) -> Book | None:
-    books = session.scalars(select(Book).order_by(Book.id.asc())).all()
     normalized_title = _normalize(title)
-    for book in books:
-        if _normalize(book.title) == normalized_title:
-            return book
+    if not normalized_title:
+        return None
+    return session.scalars(
+        select(Book)
+        .where(_normalized_column(Book.title) == normalized_title)
+        .order_by(Book.id.asc())
+        .limit(1)
+    ).first()
+
+
+def _find_best_catalog_match(session: Session, texts: list[str], threshold: float = 0.6) -> Book | None:
+    for text in texts:
+        exact_match = _find_book_by_title(session, text)
+        if exact_match is not None:
+            return exact_match
+
+    terms = _candidate_terms(texts)
+    if not terms:
+        return None
+
+    searchable_columns = [
+        _normalized_column(Book.title),
+        _normalized_column(Book.author),
+        _normalized_column(Book.category),
+        _normalized_column(Book.keywords),
+    ]
+    predicates = [column.like(f"%{term}%") for term in terms for column in searchable_columns]
+    candidates = session.scalars(
+        select(Book)
+        .where(or_(*predicates))
+        .order_by(Book.id.asc())
+        .limit(200)
+    ).all()
+    if not candidates:
+        return None
+
+    best: Book | None = None
+    best_score = 0.0
+    for candidate in candidates:
+        score = _score_catalog_match(candidate, texts)
+        if score > best_score:
+            best = candidate
+            best_score = score
+    if best is not None and best_score >= threshold:
+        return best
     return None
 
 
@@ -289,20 +369,31 @@ def take_by_text(session: Session, *, cabinet_id: str, text: str) -> dict:
     if not title_query:
         raise ApiError(400, "missing_book_title", "Please provide the title to take")
 
-    rows = session.execute(
+    base_stmt = (
         select(CabinetSlot, BookCopy, Book)
         .join(BookCopy, CabinetSlot.current_copy_id == BookCopy.id)
         .join(Book, BookCopy.book_id == Book.id)
         .where(CabinetSlot.cabinet_id == cabinet_id, CabinetSlot.status == "occupied")
-        .order_by(CabinetSlot.slot_code.asc())
-    ).all()
+    )
+    candidate_terms = _candidate_terms([title_query], max_terms=6)
+    rows = []
+    if candidate_terms:
+        rows = session.execute(
+            base_stmt.where(
+                or_(*[_normalized_column(Book.title).like(f"%{term}%") for term in candidate_terms])
+            ).order_by(CabinetSlot.slot_code.asc())
+        ).all()
+    if not rows:
+        rows = session.execute(base_stmt.order_by(CabinetSlot.slot_code.asc())).all()
+
     best_slot: CabinetSlot | None = None
     best_copy: BookCopy | None = None
     best_book: Book | None = None
     best_score = 0.0
     for slot, copy, book in rows:
         score = _similarity(title_query, book.title)
-        if title_query and title_query in book.title:
+        normalized_query = _normalize(title_query)
+        if normalized_query and normalized_query in _normalize(book.title):
             score += 0.2
         if score > best_score:
             best_slot = slot

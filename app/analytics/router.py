@@ -1,7 +1,11 @@
+from __future__ import annotations
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.analytics.service import (
+    build_overview_snapshot,
+    build_trends_snapshot,
     get_borrow_trends,
     get_cabinet_turnover,
     get_college_preferences,
@@ -14,10 +18,27 @@ from app.core.auth_context import require_admin
 from app.core.database import get_db
 from app.core.security import AuthIdentity
 
-router = APIRouter(prefix="/api/v1/admin/analytics", tags=["analytics"])
+router = APIRouter(tags=["analytics"])
 
 
-@router.get("/borrow-trends")
+@router.get("/api/v1/analytics/overview")
+def analytics_overview(
+    _identity: AuthIdentity = Depends(require_admin),
+    session: Session = Depends(get_db),
+) -> dict:
+    return {"overview": build_overview_snapshot(session)}
+
+
+@router.get("/api/v1/analytics/trends")
+def analytics_trends(
+    limit: int = Query(default=10, ge=1, le=50),
+    _identity: AuthIdentity = Depends(require_admin),
+    session: Session = Depends(get_db),
+) -> dict:
+    return {"trends": build_trends_snapshot(session, limit=limit)}
+
+
+@router.get("/api/v1/admin/analytics/borrow-trends")
 def borrow_trends_endpoint(
     days: int = Query(default=7, ge=1, le=365),
     _identity: AuthIdentity = Depends(require_admin),
@@ -26,7 +47,7 @@ def borrow_trends_endpoint(
     return get_borrow_trends(session, days=days)
 
 
-@router.get("/college-preferences")
+@router.get("/api/v1/admin/analytics/college-preferences")
 def college_preferences_endpoint(
     _identity: AuthIdentity = Depends(require_admin),
     session: Session = Depends(get_db),
@@ -34,7 +55,7 @@ def college_preferences_endpoint(
     return get_college_preferences(session)
 
 
-@router.get("/time-peaks")
+@router.get("/api/v1/admin/analytics/time-peaks")
 def time_peaks_endpoint(
     days: int = Query(default=7, ge=1, le=365),
     _identity: AuthIdentity = Depends(require_admin),
@@ -43,7 +64,7 @@ def time_peaks_endpoint(
     return get_time_peaks(session, days=days)
 
 
-@router.get("/popular-books")
+@router.get("/api/v1/admin/analytics/popular-books")
 def popular_books_endpoint(
     limit: int = Query(default=10, ge=1, le=50),
     _identity: AuthIdentity = Depends(require_admin),
@@ -52,7 +73,7 @@ def popular_books_endpoint(
     return get_popular_books(session, limit=limit)
 
 
-@router.get("/cabinet-turnover")
+@router.get("/api/v1/admin/analytics/cabinet-turnover")
 def cabinet_turnover_endpoint(
     days: int = Query(default=7, ge=1, le=365),
     _identity: AuthIdentity = Depends(require_admin),
@@ -61,7 +82,7 @@ def cabinet_turnover_endpoint(
     return get_cabinet_turnover(session, days=days)
 
 
-@router.get("/robot-efficiency")
+@router.get("/api/v1/admin/analytics/robot-efficiency")
 def robot_efficiency_endpoint(
     _identity: AuthIdentity = Depends(require_admin),
     session: Session = Depends(get_db),
@@ -69,7 +90,7 @@ def robot_efficiency_endpoint(
     return get_robot_efficiency(session)
 
 
-@router.get("/retention")
+@router.get("/api/v1/admin/analytics/retention")
 def retention_endpoint(
     _identity: AuthIdentity = Depends(require_admin),
     session: Session = Depends(get_db),

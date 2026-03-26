@@ -13,7 +13,16 @@ from app.core.database import get_db
 from app.core.errors import ApiError
 from app.core.security import AuthIdentity
 from app.conversation.models import ConversationSession
-from app.conversation.repository import add_message, add_reading_event, create_session, list_messages
+from app.conversation.repository import (
+    add_message,
+    add_reading_event,
+    create_session,
+    list_messages,
+    list_sessions,
+    touch_session,
+)
+from app.conversation.service import create_auto_reply
+from app.llm.provider import build_llm_provider
 
 router = APIRouter(prefix="/api/v1/conversation", tags=["conversation"])
 
@@ -22,6 +31,18 @@ class MessageCreateRequest(BaseModel):
     role: Literal["user", "assistant", "system", "tool"]
     content: str
     metadata: dict | None = None
+
+
+class AutoReplyRequest(BaseModel):
+    content: str
+    metadata: dict | None = None
+
+
+def resolve_llm_provider():
+    try:
+        return build_llm_provider()
+    except RuntimeError as exc:
+        raise ApiError(503, "llm_provider_misconfigured", str(exc)) from exc
 
 
 def _owned_session(db: Session, session_id: int, *, reader_profile_id: int | None) -> ConversationSession:
@@ -43,6 +64,14 @@ def create_conversation_session(
     return {"ok": True, "session": {"id": new_session.id, "reader_id": new_session.reader_id, "status": new_session.status}}
 
 
+@router.get("/sessions")
+def list_conversation_sessions(
+    identity: AuthIdentity = Depends(require_reader),
+    db: Session = Depends(get_db),
+) -> dict:
+    return {"ok": True, "items": list_sessions(db, identity.profile_id)}
+
+
 @router.post("/sessions/{session_id}/messages")
 def create_message(
     session_id: int,
@@ -59,12 +88,14 @@ def create_message(
         content=payload.content,
         metadata_json=metadata_json,
     )
+    touch_session(db, conversation_session)
     add_reading_event(
         db,
         reader_id=conversation_session.reader_id,
         event_type="conversation_message",
         metadata_json=metadata_json,
     )
+    db.flush()
     snapshot = ContextEngine(db).build_snapshot(reader_id=conversation_session.reader_id, query=payload.content)
     db.commit()
     return {
@@ -77,6 +108,49 @@ def create_message(
             "metadata_json": json.dumps(message.metadata_json, ensure_ascii=False) if message.metadata_json is not None else None,
         },
         "snapshot": snapshot.__dict__,
+    }
+
+
+@router.post("/sessions/{session_id}/reply")
+def create_reply(
+    session_id: int,
+    payload: AutoReplyRequest,
+    identity: AuthIdentity = Depends(require_reader),
+    db: Session = Depends(get_db),
+) -> dict:
+    conversation_session = _owned_session(db, session_id, reader_profile_id=identity.profile_id)
+    if not (payload.content or "").strip():
+        raise ApiError(400, "missing_content", "Content is required")
+    result = create_auto_reply(
+        db,
+        conversation_session=conversation_session,
+        content=payload.content,
+        metadata=payload.metadata,
+        llm_provider=resolve_llm_provider(),
+    )
+    db.commit()
+    return {
+        "ok": True,
+        "reply": result["reply"],
+        "user_message": {
+            "id": result["user_message"].id,
+            "session_id": result["user_message"].session_id,
+            "role": result["user_message"].role,
+            "content": result["user_message"].content,
+            "metadata_json": json.dumps(result["user_message"].metadata_json, ensure_ascii=False)
+            if result["user_message"].metadata_json is not None
+            else None,
+        },
+        "assistant_message": {
+            "id": result["assistant_message"].id,
+            "session_id": result["assistant_message"].session_id,
+            "role": result["assistant_message"].role,
+            "content": result["assistant_message"].content,
+            "metadata_json": json.dumps(result["assistant_message"].metadata_json, ensure_ascii=False)
+            if result["assistant_message"].metadata_json is not None
+            else None,
+        },
+        "snapshot": result["snapshot"].__dict__,
     }
 
 

@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.core.config import Settings, get_settings
 from app.db.base import Base, import_model_modules
 
+DEFAULT_CABINET_NAME = "主书柜"
+
 _engine: Engine | None = None
 _session_factory: sessionmaker[Session] | None = None
 
@@ -54,14 +56,8 @@ def get_db() -> Generator[Session, None, None]:
         session.close()
 
 
-def init_schema() -> None:
-    import_model_modules()
-    engine = get_engine()
-    with engine.begin() as connection:
-        if engine.url.get_backend_name() == "postgresql":
-            connection.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS vector")
-    Base.metadata.create_all(bind=engine)
-    with engine.begin() as connection:
+def _seed_default_cabinet() -> None:
+    with get_engine().begin() as connection:
         settings = get_settings()
         connection.execute(
             text(
@@ -73,10 +69,20 @@ def init_schema() -> None:
             ),
             {
                 "cabinet_id": settings.cabinet_id,
-                "name": "默认书柜",
+                "name": DEFAULT_CABINET_NAME,
                 "status": "active",
             },
         )
+
+
+def init_schema() -> None:
+    import_model_modules()
+    engine = get_engine()
+    with engine.begin() as connection:
+        if engine.url.get_backend_name() == "postgresql":
+            connection.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS vector")
+    Base.metadata.create_all(bind=engine)
+    _seed_default_cabinet()
 
 
 def rebuild_schema() -> None:
@@ -87,19 +93,4 @@ def rebuild_schema() -> None:
             connection.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS vector")
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
-    with engine.begin() as connection:
-        settings = get_settings()
-        connection.execute(
-            text(
-                """
-                INSERT INTO cabinets (id, name, status)
-                VALUES (:cabinet_id, :name, :status)
-                ON CONFLICT (id) DO NOTHING
-                """
-            ),
-            {
-                "cabinet_id": settings.cabinet_id,
-                "name": "默认书柜",
-                "status": "active",
-            },
-        )
+    _seed_default_cabinet()

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -49,7 +48,7 @@ class NullLLMProvider:
 
     def parse_book_from_ocr(self, ocr_texts: list[str]) -> dict:
         return {
-            "title": ocr_texts[0] if ocr_texts else "未知书籍",
+            "title": ocr_texts[0] if ocr_texts else "未识别图书",
             "author": "",
             "category": "",
             "keywords": "",
@@ -60,7 +59,7 @@ class NullLLMProvider:
         available_titles = context.get("inventory", {}).get("available_titles", [])
         if available_titles:
             return f"可以先看看这些书：{'、'.join(available_titles[:3])}。"
-        return f"我可以帮你找书，或者推荐和「{text}」相关的内容。"
+        return f"我已经收到你的问题：{text}。如果你愿意，我可以继续帮你找书或推荐图书。"
 
 
 class OpenAICompatibleLLMProvider:
@@ -160,7 +159,7 @@ class OpenAICompatibleLLMProvider:
                 },
                 {
                     "role": "user",
-                    "content": "OCR 文本:\n" + "\n".join(ocr_texts),
+                    "content": "OCR 文本如下：\n" + "\n".join(ocr_texts),
                 },
             ]
         )
@@ -171,7 +170,7 @@ class OpenAICompatibleLLMProvider:
         except Exception:
             pass
         return {
-            "title": ocr_texts[0] if ocr_texts else "未知书籍",
+            "title": ocr_texts[0] if ocr_texts else "未识别图书",
             "author": "",
             "category": "",
             "keywords": "",
@@ -241,6 +240,15 @@ class MockLLMProvider:
 
     def chat(self, *, text: str, context: dict) -> str:
         return f"Mock reply for '{text}'."
+
+    def parse_book_from_ocr(self, ocr_texts: list[str]) -> dict:
+        return {
+            "title": ocr_texts[0] if ocr_texts else "未识别图书",
+            "author": "",
+            "category": "",
+            "keywords": "",
+            "description": "",
+        }
 
 
 def build_llm_provider() -> LLMProvider:

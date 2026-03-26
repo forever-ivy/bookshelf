@@ -101,7 +101,7 @@ def test_inventory_ocr_ingest_and_take_by_text_flow(client, monkeypatch):
     assert events[1][2] is not None
     assert copy == ("stored",)
 
-    take_response = client.post("/api/v1/inventory/take-by-text", json={"text": "帮我取深度学习"})
+    take_response = client.post("/api/v1/inventory/take-by-text", json={"text": "帮我拿《深度学习》"})
     assert take_response.status_code == 200
     take_payload = take_response.json()
     assert take_payload["ok"] is True

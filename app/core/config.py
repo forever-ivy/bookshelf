@@ -17,10 +17,18 @@ class Settings(BaseSettings):
     refresh_token_ttl_minutes: int = 60 * 24 * 14
     cabinet_id: str = "cabinet-001"
     auto_create_schema: bool = True
-    llm_provider: str = "openai-compatible"
+    llm_provider: str = "null"
     llm_model: str = "gpt-4.1-mini"
     llm_api_key: str = ""
     llm_base_url: str | None = None
+    embedding_provider: str = "hash"
+    embedding_model: str = "text-embedding-3-small"
+    embedding_api_key: str = ""
+    embedding_base_url: str | None = None
+    embedding_dimensions: int = 1536
+    embedding_batch_size: int = 20
+    recommendation_ml_enabled: bool = True
+    recommendation_ml_model_path: str = "artifacts/recommendation_mf_model.json"
     cors_allow_origins: str = (
         "http://127.0.0.1:5173,"
         "http://localhost:5173,"

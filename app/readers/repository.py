@@ -10,7 +10,7 @@ from app.catalog.models import Book
 from app.conversation.models import ConversationMessage, ConversationSession
 from app.core.errors import ApiError
 from app.orders.models import BorrowOrder
-from app.orders.service import get_order_bundle, serialize_order
+from app.orders.service import FINAL_BORROW_STATUSES, get_order_bundle, serialize_order
 from app.readers.models import ReaderAccount, ReaderProfile
 from app.recommendation.models import RecommendationLog
 
@@ -100,7 +100,7 @@ def list_readers(session: Session, *, q: str | None = None) -> list[dict]:
                 select(func.count())
                 .select_from(BorrowOrder)
                 .where(BorrowOrder.reader_id == profile.id)
-                .where(BorrowOrder.status != "completed")
+                .where(BorrowOrder.status.not_in(FINAL_BORROW_STATUSES))
             ).scalar_one()
         )
         items.append(
@@ -135,7 +135,7 @@ def get_reader_detail(session: Session, reader_id: int) -> dict:
             select(func.count())
             .select_from(BorrowOrder)
             .where(BorrowOrder.reader_id == profile.id)
-            .where(BorrowOrder.status != "completed")
+            .where(BorrowOrder.status.not_in(FINAL_BORROW_STATUSES))
         ).scalar_one()
     )
     return {
@@ -260,7 +260,7 @@ def get_reader_overview(session: Session, reader_id: int) -> dict:
             select(func.count())
             .select_from(BorrowOrder)
             .where(BorrowOrder.reader_id == reader_id)
-            .where(BorrowOrder.status != "completed")
+            .where(BorrowOrder.status.not_in(FINAL_BORROW_STATUSES))
         ).scalar_one()
     )
     borrow_history_count = int(

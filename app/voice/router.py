@@ -24,6 +24,10 @@ from app.voice.speech import NullSpeechConnector, build_speech_connector as _bui
 router = APIRouter(prefix="/api/v1/voice", tags=["voice"])
 voice_broker = EventBroker()
 
+DEFAULT_CHAT_REPLY = "我可以帮你找书、推荐图书，或者处理上架和取书请求。"
+DEFAULT_CLARIFY_REPLY = "我可以帮你上架或取书，请再说完整一点，比如“帮我拿《深度学习》”或“把这本书上架”。"
+STORE_IMAGE_HINT = "如果要上架，请上传书封面或书脊图片，我来识别。"
+
 
 def build_llm_provider():
     return _build_llm_provider()
@@ -52,14 +56,18 @@ def _publish(role: str, text: str, *, reader_id: int | None) -> None:
     clean_text = (text or "").strip()
     if not clean_text:
         return
-    event = {"reader_id": reader_id, "role": role, "text": clean_text, "ts": time.time()}
-    voice_broker.publish_nowait(event)
+    voice_broker.publish_nowait(
+        {
+            "reader_id": reader_id,
+            "role": role,
+            "text": clean_text,
+            "ts": time.time(),
+        }
+    )
 
 
 def _event_history(*, reader_id: int | None, limit: int = 20) -> list[dict]:
-    filtered = [
-        event for event in voice_broker.history() if event.get("reader_id") in {None, reader_id}
-    ]
+    filtered = [event for event in voice_broker.history() if event.get("reader_id") in {None, reader_id}]
     return filtered[-limit:]
 
 
@@ -116,8 +124,13 @@ async def _extract_request_payload(request: Request) -> tuple[str, bytes | None,
 
 def _handle_store(db: Session, *, cabinet_id: str, image_bytes: bytes | None) -> dict:
     if not image_bytes:
-        hint = "好的，请对准书脊上传图片，我来帮你存书。"
-        return {"ok": True, "intent": "store", "need_image": True, "msg": hint, "reply": hint}
+        return {
+            "ok": True,
+            "intent": "store",
+            "need_image": True,
+            "msg": STORE_IMAGE_HINT,
+            "reply": STORE_IMAGE_HINT,
+        }
 
     try:
         llm_provider = resolve_llm_provider()
@@ -131,7 +144,7 @@ def _handle_store(db: Session, *, cabinet_id: str, image_bytes: bytes | None) ->
         ocr_connector=build_ocr_connector(),
         llm_provider=llm_provider,
     )
-    msg = f"已将《{result['book']['title']}》存入 {result['slot']['slot_code']}"
+    msg = f"已识别并上架《{result['book']['title']}》，放入槽位 {result['slot']['slot_code']}。"
     return {
         "ok": True,
         "intent": "store",
@@ -145,7 +158,7 @@ def _handle_store(db: Session, *, cabinet_id: str, image_bytes: bytes | None) ->
 
 def _handle_take(db: Session, *, cabinet_id: str, text: str) -> dict:
     take_result = take_by_text(db, cabinet_id=cabinet_id, text=text)
-    reply = f"已帮你取出《{take_result['book']['title']}》。"
+    reply = f"已为你找到《{take_result['book']['title']}》，位置在槽位 {take_result['slot_code']}。"
     return {
         "ok": True,
         "intent": "take",
@@ -160,21 +173,21 @@ def _handle_take(db: Session, *, cabinet_id: str, text: str) -> dict:
 def _handle_chat(db: Session, *, reader_id: int | None, raw_text: str, normalized_text: str) -> dict:
     llm_provider = resolve_llm_provider()
     snapshot = ContextEngine(db).build_snapshot(reader_id=reader_id, query=normalized_text)
-    reply = llm_provider.chat(text=raw_text, context=snapshot.__dict__)
-    reply = (reply or "").strip() or "我可以帮你找书或推荐相关内容。"
+    reply = (llm_provider.chat(text=raw_text, context=snapshot.__dict__) or "").strip()
+    if not reply:
+        reply = DEFAULT_CHAT_REPLY
     return {"ok": True, "intent": "chat", "text": normalized_text, "reply": reply}
 
 
 def _route_text(db: Session, identity: AuthIdentity, text: str, *, raw_text: str, image_bytes: bytes | None) -> dict:
     normalized = normalize_voice_text(text)
-    original = (raw_text or text).strip()
-    _publish("user", normalized, reader_id=identity.profile_id)
+    original = (raw_text or text).strip() or normalized
+    _publish("user", normalized or original, reader_id=identity.profile_id)
     intent = detect_voice_intent(normalized)
 
-    if intent == "chat" and looks_unclear_action(normalized):
-        reply = "我听到了，但还不够明确。你可以说：帮我取《书名》。"
-        _publish("assistant", reply, reader_id=identity.profile_id)
-        return {"ok": True, "intent": "clarify", "text": normalized, "reply": reply}
+    if looks_unclear_action(normalized):
+        _publish("assistant", DEFAULT_CLARIFY_REPLY, reader_id=identity.profile_id)
+        return {"ok": True, "intent": "clarify", "text": normalized, "reply": DEFAULT_CLARIFY_REPLY}
 
     settings = get_settings()
     if intent == "take":

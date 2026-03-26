@@ -79,11 +79,11 @@ def seed_reader_hub_state() -> dict[str, int]:
             order_mode="robot_delivery",
             status="delivering",
         )
-        completed_order = BorrowOrder(
+        returned_order = BorrowOrder(
             reader_id=profile.id,
             book_id=book2.id,
             order_mode="cabinet_pickup",
-            status="completed",
+            status="returned",
         )
         other_order = BorrowOrder(
             reader_id=other_profile.id,
@@ -91,7 +91,7 @@ def seed_reader_hub_state() -> dict[str, int]:
             order_mode="cabinet_pickup",
             status="awaiting_pick",
         )
-        session.add_all([active_order, completed_order, other_order])
+        session.add_all([active_order, returned_order, other_order])
         session.flush()
 
         session.add(
