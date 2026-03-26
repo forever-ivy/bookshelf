@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timezone, timedelta
 from typing import Any
 
 from sqlalchemy import func, select
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.analytics.models import ReadingEvent
 from app.auth.models import AdminActionLog
 from app.catalog.models import Book
+from app.catalog.service import build_book_payload
 from app.core.errors import ApiError
 from app.core.events import broker
 from app.db.base import utc_now
@@ -267,8 +269,93 @@ def _iso(value: Any) -> str | None:
     return value.isoformat() if value is not None else None
 
 
-def serialize_order(bundle: OrderBundle) -> dict:
+def _as_utc(value):
+    if value is None:
+        return None
+    if getattr(value, "tzinfo", None) is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _is_order_renewable(order: BorrowOrder) -> bool:
+    due_at = _as_utc(order.due_at)
+    now = utc_now()
+    return (
+        order.status == "delivered"
+        and due_at is not None
+        and due_at >= now
+        and due_at <= now + timedelta(days=3)
+    )
+
+
+def _reader_status(bundle: OrderBundle) -> str:
+    order = bundle.borrow_order
+    now = utc_now()
+    due_at = _as_utc(order.due_at)
+    if order.status in FINAL_BORROW_STATUSES:
+        return "completed"
+    if due_at is not None and due_at < now:
+        return "overdue"
+    if _is_order_renewable(order):
+        return "renewable"
+    if due_at is not None and due_at <= now + timedelta(days=2):
+        return "dueSoon"
+    return "active"
+
+
+def _reader_status_label(status: str) -> str:
     return {
+        "active": "进行中",
+        "completed": "已完成",
+        "dueSoon": "临近到期",
+        "overdue": "已逾期",
+        "renewable": "可续借",
+    }.get(status, "进行中")
+
+
+def _reader_due_date_label(order: BorrowOrder) -> str:
+    due_at = _as_utc(order.due_at)
+    if due_at is None:
+        return "归还日期待定"
+    return f"{due_at.date().isoformat()} 到期"
+
+
+def _reader_timeline(bundle: OrderBundle) -> list[dict]:
+    order = bundle.borrow_order
+    if order.status in FINAL_BORROW_STATUSES:
+        return [{"completed": True, "label": "已完成", "timestamp": _iso(order.completed_at or order.updated_at)}]
+
+    if order.order_mode == "robot_delivery":
+        labels = ["待取书", "机器人配送中", "已送达"]
+        status_rank = {
+            "created": 1,
+            "awaiting_pick": 1,
+            "picked_from_cabinet": 2,
+            "delivering": 2,
+            "delivered": 3,
+        }
+    else:
+        labels = ["待取书", "书柜出书中", "已送达"]
+        status_rank = {
+            "awaiting_pick": 1,
+            "picked_from_cabinet": 2,
+            "delivering": 2,
+            "delivered": 3,
+        }
+
+    completed_count = status_rank.get(order.status, 1)
+    return [
+        {
+            "completed": index <= completed_count,
+            "label": label,
+            "timestamp": _iso(order.updated_at) if index == completed_count else None,
+        }
+        for index, label in enumerate(labels, start=1)
+    ]
+
+
+def serialize_order(bundle: OrderBundle, *, session: Session | None = None) -> dict:
+    payload = {
         "borrow_order": {
             "id": bundle.borrow_order.id,
             "reader_id": bundle.borrow_order.reader_id,
@@ -336,6 +423,51 @@ def serialize_order(bundle: OrderBundle) -> dict:
             "heartbeat_at": _iso(bundle.robot_unit.heartbeat_at),
         },
     }
+    if session is None:
+        return payload
+
+    book = session.get(Book, bundle.borrow_order.book_id)
+    book_payload = (
+        build_book_payload(session, book)
+        if book is not None
+        else {
+            "id": bundle.borrow_order.book_id,
+            "title": "未知图书",
+            "author": "未知作者",
+            "summary": "",
+            "availability_label": "暂不可借",
+            "cabinet_label": "主书柜",
+            "cover_tone": "blue",
+            "delivery_available": False,
+            "eta_label": "到柜自取",
+            "eta_minutes": None,
+            "shelf_label": "主馆 2 楼",
+            "stock_status": "out_of_stock",
+            "tags": [],
+        }
+    )
+    status = _reader_status(bundle)
+    renewable = _is_order_renewable(bundle.borrow_order)
+    payload["borrow_order"]["renewable"] = renewable
+    payload.update(
+        {
+            "actionableLabel": "去续借" if renewable else "查看借阅",
+            "book": book_payload,
+            "dueDateLabel": _reader_due_date_label(bundle.borrow_order),
+            "mode": bundle.borrow_order.order_mode,
+            "note": bundle.borrow_order.failure_reason
+            or (
+                f"配送目标：{bundle.delivery_order.delivery_target}"
+                if bundle.delivery_order is not None
+                else "订单状态由后端履约流转驱动。"
+            ),
+            "renewable": renewable,
+            "status": status,
+            "statusLabel": _reader_status_label(status),
+            "timeline": _reader_timeline(bundle),
+        }
+    )
+    return payload
 
 
 def list_order_bundles(session: Session) -> list[OrderBundle]:
@@ -599,6 +731,7 @@ def create_borrow_order(
         assigned_copy_id=allocated_copy.id,
         order_mode=normalized_order_mode,
         status="created" if normalized_order_mode == "robot_delivery" else "awaiting_pick",
+        due_at=utc_now() + timedelta(days=14),
     )
     session.add(borrow_order)
     session.flush()
@@ -703,6 +836,31 @@ def create_return_request(
         )
     )
     return return_request
+
+
+def renew_borrow_order(
+    session: Session,
+    *,
+    borrow_order_id: int,
+    reader_profile_id: int,
+) -> OrderBundle:
+    bundle = get_reader_order_bundle(session, reader_profile_id=reader_profile_id, borrow_order_id=borrow_order_id)
+    order = bundle.borrow_order
+    if order.status in FINAL_BORROW_STATUSES:
+        raise ApiError(409, "borrow_order_already_finalized", "Borrow order is already finalized")
+    if not _is_order_renewable(order):
+        raise ApiError(409, "borrow_order_not_renewable", "Borrow order is not renewable at the current stage")
+    base_due_at = _as_utc(order.due_at) or utc_now()
+    order.due_at = base_due_at + timedelta(days=7)
+    session.add(
+        ReadingEvent(
+            reader_id=order.reader_id,
+            event_type="borrow_order_renewed",
+            metadata_json={"borrow_order_id": order.id, "due_at": _iso(order.due_at)},
+        )
+    )
+    session.commit()
+    return get_order_bundle(session, borrow_order_id)
 
 
 def list_reader_return_requests(

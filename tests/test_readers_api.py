@@ -162,6 +162,8 @@ def test_reader_can_get_own_profile(client):
     assert payload["profile"]["id"] == ids["profile_id"]
     assert payload["profile"]["display_name"] == "张三"
     assert payload["profile"]["college"] == "计算机学院"
+    assert payload["profile"]["interest_tags"] == []
+    assert payload["profile"]["reading_profile_summary"] is None
 
 
 def test_reader_can_update_own_profile(client):
@@ -170,13 +172,20 @@ def test_reader_can_update_own_profile(client):
     response = client.patch(
         "/api/v1/readers/me/profile",
         headers=auth_headers("reader", state["reader_account_id"], state["reader_profile_id"]),
-        json={"display_name": "李四同学", "major": "智能科学与技术"},
+        json={
+            "display_name": "李四同学",
+            "major": "智能科学与技术",
+            "interest_tags": ["AI", "机器人"],
+            "reading_profile_summary": "偏好先看案例，再补理论。",
+        },
     )
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["profile"]["display_name"] == "李四同学"
     assert payload["profile"]["major"] == "智能科学与技术"
+    assert payload["profile"]["interest_tags"] == ["AI", "机器人"]
+    assert payload["profile"]["reading_profile_summary"] == "偏好先看案例，再补理论。"
 
 
 def test_reader_can_get_own_overview_and_orders(client):

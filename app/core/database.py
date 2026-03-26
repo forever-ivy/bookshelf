@@ -33,6 +33,7 @@ def reset_engine() -> None:
         _engine.dispose()
     _engine = None
     _session_factory = None
+    get_settings.cache_clear()
 
 
 def get_engine() -> Engine:

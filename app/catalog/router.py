@@ -3,7 +3,14 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.catalog.service import build_book_payload, build_book_payloads, get_book_by_id, search_books
+from app.catalog.service import (
+    build_book_detail_payload,
+    build_book_payload,
+    build_book_payloads,
+    find_related_books,
+    get_book_by_id,
+    search_books,
+)
 from app.core.database import get_db
 from app.core.errors import ApiError
 
@@ -35,4 +42,12 @@ def get_book(book_id: int, db: Session = Depends(get_db)) -> dict:
     book = get_book_by_id(db, book_id)
     if book is None:
         raise ApiError(404, "book_not_found", "Book not found")
-    return build_book_payload(db, book)
+    return build_book_detail_payload(db, book)
+
+
+@router.get("/books/{book_id}/related")
+def get_related_books(book_id: int, db: Session = Depends(get_db)) -> dict:
+    book = get_book_by_id(db, book_id)
+    if book is None:
+        raise ApiError(404, "book_not_found", "Book not found")
+    return {"items": build_book_payloads(db, find_related_books(db, source_book=book, limit=6))}

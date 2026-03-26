@@ -4,7 +4,7 @@ import json
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.analytics.models import ReadingEvent, SearchLog
@@ -55,7 +55,7 @@ def _reader_ids_since(session: Session, *, reader_column, timestamp_column, sinc
     rows = session.execute(
         select(reader_column)
         .where(reader_column.is_not(None))
-        .where(timestamp_column >= since)
+        .where(or_(timestamp_column.is_(None), timestamp_column >= since))
     ).all()
     return {int(row[0]) for row in rows if row[0] is not None}
 

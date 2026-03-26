@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.catalog.models import Book
+from app.catalog.service import build_book_payload, get_book_by_id
 from app.core.auth_context import require_reader
 from app.core.config import get_settings
 from app.core.database import get_db
@@ -12,6 +14,7 @@ from app.core.errors import ApiError
 from app.core.security import AuthIdentity, create_token
 from app.llm.provider import build_llm_provider
 from app.orders.models import BorrowOrder
+from app.readers.app_service import list_system_booklists
 from app.readers.models import ReaderAccount, ReaderProfile
 from app.recommendation.embeddings import build_embedding_provider
 from app.recommendation.service import RecommendationService
@@ -48,6 +51,136 @@ def ensure_demo_mode() -> None:
     environment = (get_settings().environment or "development").strip().lower()
     if environment in {"production", "prod"}:
         raise ApiError(403, "demo_mode_disabled", "Demo helpers are disabled outside development")
+
+
+def _feed_item_from_book_payload(payload: dict, *, explanation: str | None = None) -> dict:
+    return {
+        "book_id": payload["id"],
+        "title": payload["title"],
+        "author": payload.get("author"),
+        "summary": payload.get("summary"),
+        "tags": payload.get("tag_names") or payload.get("tags") or [],
+        "cabinet_label": payload.get("cabinet_label"),
+        "shelf_label": payload.get("shelf_label"),
+        "deliverable": payload.get("delivery_available", False),
+        "eta_minutes": payload.get("eta_minutes"),
+        "available_copies": payload.get("available_copies", 0),
+        "explanation": explanation,
+        "cover_tone": payload.get("cover_tone"),
+    }
+
+
+def _popular_books(db: Session, *, limit: int) -> list[Book]:
+    rows = db.execute(
+        select(Book, func.count(BorrowOrder.id).label("borrow_count"))
+        .join(BorrowOrder, BorrowOrder.book_id == Book.id, isouter=True)
+        .group_by(Book.id)
+        .order_by(func.count(BorrowOrder.id).desc(), Book.id.asc())
+        .limit(limit)
+    ).all()
+    return [row[0] for row in rows]
+
+
+@router.get("/home-feed")
+def home_feed(
+    identity: AuthIdentity = Depends(require_reader),
+    db: Session = Depends(get_db),
+) -> dict:
+    if identity.profile_id is None:
+        raise ApiError(404, "reader_profile_not_found", "Reader profile not found")
+    profile = db.get(ReaderProfile, int(identity.profile_id))
+    if profile is None:
+        raise ApiError(404, "reader_profile_not_found", "Reader profile not found")
+
+    service = RecommendationService(db)
+    personalized_results: list[dict] = []
+    try:
+        personalized_results = service.personalized_books(reader_id=profile.id, limit=3, history_limit=3)["results"]
+    except RuntimeError:
+        personalized_results = []
+
+    today_recommendations: list[dict] = []
+    for result in personalized_results:
+        book = get_book_by_id(db, int(result["book_id"]))
+        if book is None:
+            continue
+        payload = build_book_payload(db, book)
+        today_recommendations.append(
+            _feed_item_from_book_payload(payload, explanation=result.get("explanation"))
+        )
+
+    if not today_recommendations:
+        for book in _popular_books(db, limit=3):
+            payload = build_book_payload(db, book)
+            today_recommendations.append(
+                _feed_item_from_book_payload(payload, explanation="近期在馆内较受欢迎")
+            )
+
+    system_booklists = list_system_booklists(db, limit=3)
+    exam_zone: list[dict] = []
+    for booklist in system_booklists[:2]:
+        for book in booklist.get("books", [])[:2]:
+            exam_zone.append(
+                _feed_item_from_book_payload(
+                    book,
+                    explanation=f"来自系统书单《{booklist['title']}》",
+                )
+            )
+    if not exam_zone:
+        for book in _popular_books(db, limit=2):
+            payload = build_book_payload(db, book)
+            exam_zone.append(_feed_item_from_book_payload(payload, explanation="馆内高频借阅图书"))
+
+    tag_label = "、".join((profile.interest_tags or [])[:3]) or "你的借阅历史"
+    active_orders = int(
+        db.scalar(
+            select(func.count())
+            .select_from(BorrowOrder)
+            .where(BorrowOrder.reader_id == profile.id, BorrowOrder.status.not_in(["completed", "cancelled", "returned"]))
+        )
+        or 0
+    )
+    return {
+        "today_recommendations": today_recommendations[:3],
+        "exam_zone": exam_zone[:3],
+        "explanation_card": {
+            "title": "为什么推荐给你",
+            "body": f"系统会结合 {tag_label}、最近借阅和馆内热度，优先展示当前可借的图书。",
+        },
+        "quick_actions": [
+            {
+                "code": "borrow_now",
+                "title": "一键借书",
+                "description": "优先查看当前可借并支持配送的图书。",
+                "meta": f"{len(today_recommendations[:3])} 本推荐已准备好",
+            },
+            {
+                "code": "delivery_status",
+                "title": "配送状态",
+                "description": "查看借阅和归还履约的最新状态。",
+                "meta": f"{active_orders} 单进行中",
+            },
+            {
+                "code": "recommendation_reason",
+                "title": "推荐解释",
+                "description": "了解这些推荐和你的课程、兴趣是如何关联的。",
+                "meta": "解释型推荐",
+            },
+        ],
+        "hot_lists": [
+            {"id": "popular-now", "title": "本周热门", "description": "近期馆内借阅最活跃的图书集合。"},
+            {"id": "exam-focus", "title": "考试专区", "description": "适合在考试周快速补强的主题内容。"},
+            {"id": "reader-focus", "title": "与你相关", "description": "根据你的兴趣和借阅行为生成。"},
+        ],
+        "system_booklists": [
+            {
+                "id": item["id"],
+                "title": item["title"],
+                "description": item.get("description") or "系统精选主题阅读清单。",
+            }
+            for item in system_booklists[:3]
+        ],
+    }
 
 
 @router.post("/search")

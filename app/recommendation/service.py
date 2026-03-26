@@ -519,6 +519,9 @@ class RecommendationService:
                 entry["score"] += 0.08
             ranked_rows.append(entry)
 
+        if any(int(entry["available_copies"] or 0) > 0 for entry in ranked_rows):
+            ranked_rows = [entry for entry in ranked_rows if int(entry["available_copies"] or 0) > 0]
+
         ranked_rows.sort(
             key=lambda item: (-item["score"], -item["overlap_reader_count"], item["book_id"])
         )

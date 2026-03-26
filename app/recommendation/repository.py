@@ -330,6 +330,7 @@ def get_reader_recent_history(
                     BorrowOrder.created_at,
                 )
             ).label("borrowed_at"),
+            func.max(BorrowOrder.id).label("latest_order_id"),
         )
         .where(BorrowOrder.reader_id == reader_id)
         .where(BorrowOrder.status.in_(BORROW_SIGNAL_STATUSES))
@@ -349,7 +350,12 @@ def get_reader_recent_history(
         )
         .join(latest_borrow, latest_borrow.c.book_id == Book.id)
         .outerjoin(stock_counts, stock_counts.c.book_id == Book.id)
-        .order_by(latest_borrow.c.borrowed_at.desc(), Book.id.asc())
+        .order_by(
+            latest_borrow.c.borrowed_at.is_(None).asc(),
+            latest_borrow.c.borrowed_at.desc(),
+            latest_borrow.c.latest_order_id.desc(),
+            Book.id.asc(),
+        )
         .limit(limit)
     ).all()
     return [_row_to_reader_history_book(row) for row in rows]
@@ -952,9 +958,11 @@ def hybrid_merge_candidates(
         metadata_score = float(candidate.score)
         existing.score = semantic_score + metadata_score
         evidence = dict(existing.evidence or {})
-        evidence["retrieval_mode"] = "hybrid_query_search"
         evidence["semantic_score"] = semantic_score
         evidence["metadata_score"] = metadata_score
+        evidence["metadata_retrieval_mode"] = (
+            candidate.evidence or {}
+        ).get("retrieval_mode", "metadata_query_match")
         existing.evidence = evidence
         if candidate.explanation and candidate.explanation != existing.explanation:
             existing.explanation = candidate.explanation

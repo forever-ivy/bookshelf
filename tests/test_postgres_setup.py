@@ -70,6 +70,7 @@ def test_init_schema_enables_pgvector_extension_on_postgres(monkeypatch):
 
     monkeypatch.setattr(database_module, "get_engine", lambda: fake_engine)
     monkeypatch.setattr(database_module, "import_model_modules", lambda: None)
+    monkeypatch.setattr(database_module, "_ensure_metadata_columns_exist", lambda: None)
     monkeypatch.setattr(
         database_module.Base.metadata,
         "create_all",
@@ -89,6 +90,7 @@ def test_init_schema_skips_pgvector_extension_on_sqlite(monkeypatch):
 
     monkeypatch.setattr(database_module, "get_engine", lambda: fake_engine)
     monkeypatch.setattr(database_module, "import_model_modules", lambda: None)
+    monkeypatch.setattr(database_module, "_ensure_metadata_columns_exist", lambda: None)
     monkeypatch.setattr(
         database_module.Base.metadata,
         "create_all",
@@ -170,3 +172,17 @@ def test_init_postgres_builds_psycopg_admin_url():
     )
 
     assert admin_url == "postgresql://library:library@localhost:5432/postgres"
+
+
+def test_init_postgres_defaults_to_non_destructive_schema_init(monkeypatch):
+    calls: list[str] = []
+
+    monkeypatch.setattr(init_postgres_script, "ensure_database_exists", lambda _url: calls.append("ensure"))
+    monkeypatch.setattr(init_postgres_script, "reset_engine", lambda: calls.append("reset"))
+    monkeypatch.setattr(init_postgres_script, "init_engine", lambda _settings: calls.append("engine"))
+    monkeypatch.setattr(init_postgres_script, "init_schema", lambda: calls.append("init"))
+    monkeypatch.setattr(init_postgres_script, "rebuild_schema", lambda: calls.append("rebuild"))
+
+    init_postgres_script.main()
+
+    assert calls == ["ensure", "reset", "engine", "init"]

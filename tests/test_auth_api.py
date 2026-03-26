@@ -91,6 +91,55 @@ def test_reader_login_and_role_gates(client):
     assert reader_gate.json()["profile_id"] == ids["profile_id"]
 
 
+def test_reader_can_register_and_receive_session(client):
+    response = client.post(
+        "/api/v1/auth/register/reader",
+        json={
+            "username": "new-reader",
+            "password": "new-reader-pass",
+            "display_name": "新同学",
+            "college": "信息学院",
+            "major": "数据科学",
+            "grade_year": "2026",
+            "interest_tags": ["AI", "推荐系统"],
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["account"]["username"] == "new-reader"
+    assert payload["account"]["role"] == "reader"
+    assert payload["profile"]["display_name"] == "新同学"
+    assert payload["profile"]["interest_tags"] == ["AI", "推荐系统"]
+    assert "access_token" in payload
+    assert "refresh_token" in payload
+
+    session = get_session_factory()()
+    try:
+        account = session.query(ReaderAccount).filter_by(username="new-reader").one()
+        profile = session.query(ReaderProfile).filter_by(account_id=account.id).one()
+        assert profile.display_name == "新同学"
+        assert profile.interest_tags == ["AI", "推荐系统"]
+    finally:
+        session.close()
+
+
+def test_reader_registration_rejects_duplicate_username(client):
+    seed_accounts()
+
+    response = client.post(
+        "/api/v1/auth/register/reader",
+        json={
+            "username": "reader",
+            "password": "another-pass",
+            "display_name": "重复用户",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "reader_username_taken"
+
+
 def test_pair_init_routes_are_removed_for_single_library_backend(client):
     seed_accounts()
     admin_login = login(client, "admin", "admin-pass", "admin").json()

@@ -11,6 +11,18 @@ class LoginRequest(BaseModel):
     role: Literal["admin", "reader"]
 
 
+class ReaderRegisterRequest(BaseModel):
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+    display_name: str = Field(min_length=1)
+    affiliation_type: str | None = None
+    college: str | None = None
+    major: str | None = None
+    grade_year: str | None = None
+    interest_tags: list[str] = []
+    reading_profile_summary: str | None = None
+
+
 class RefreshRequest(BaseModel):
     refresh_token: str = Field(min_length=1)
 
@@ -30,6 +42,8 @@ class AuthProfileOut(BaseModel):
     college: str | None = None
     major: str | None = None
     grade_year: str | None = None
+    interest_tags: list[str] = []
+    reading_profile_summary: str | None = None
 
 
 class AuthResponse(BaseModel):

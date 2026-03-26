@@ -28,6 +28,8 @@ def _profile_out(profile: ReaderProfile) -> dict:
         "college": profile.college,
         "major": profile.major,
         "grade_year": profile.grade_year,
+        "interest_tags": list(profile.interest_tags or []),
+        "reading_profile_summary": profile.reading_profile_summary,
         "created_at": _iso(profile.created_at),
         "updated_at": _iso(profile.updated_at),
     }
@@ -71,7 +73,15 @@ def update_reader_profile(session: Session, reader_id: int, payload: dict) -> di
     profile = _require_profile(session, reader_id)
     if not payload:
         raise ApiError(400, "empty_profile_update", "At least one profile field is required")
-    for field_name in ("display_name", "affiliation_type", "college", "major", "grade_year"):
+    for field_name in (
+        "display_name",
+        "affiliation_type",
+        "college",
+        "major",
+        "grade_year",
+        "interest_tags",
+        "reading_profile_summary",
+    ):
         if field_name in payload:
             setattr(profile, field_name, payload[field_name])
     session.commit()

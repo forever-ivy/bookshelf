@@ -11,6 +11,8 @@ class ReaderProfileOut(BaseModel):
     college: str | None = None
     major: str | None = None
     grade_year: str | None = None
+    interest_tags: list[str] = []
+    reading_profile_summary: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
 
@@ -25,6 +27,8 @@ class ReaderProfileUpdate(BaseModel):
     college: str | None = None
     major: str | None = None
     grade_year: str | None = None
+    interest_tags: list[str] | None = None
+    reading_profile_summary: str | None = None
 
 
 class ReaderListItem(BaseModel):
