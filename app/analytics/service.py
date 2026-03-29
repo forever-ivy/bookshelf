@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -40,10 +40,32 @@ def _window_start(*, days: int) -> datetime:
     return datetime.now(UTC) - timedelta(days=days)
 
 
-def _count_rows(session: Session, model, *, since: datetime | None = None, timestamp_column=None) -> int:
+def _resolve_anchor_date(anchor_date: date | None) -> date:
+    return anchor_date or utc_now().date()
+
+
+def _window_bounds(*, days: int, anchor_date: date | None) -> tuple[datetime, datetime, date]:
+    normalized_days = max(days, 1)
+    resolved_anchor = _resolve_anchor_date(anchor_date)
+    anchor_start = datetime.combine(resolved_anchor, time.min, tzinfo=UTC)
+    window_start = anchor_start - timedelta(days=normalized_days - 1)
+    window_end = anchor_start + timedelta(days=1)
+    return window_start, window_end, resolved_anchor
+
+
+def _count_rows(
+    session: Session,
+    model,
+    *,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    timestamp_column=None,
+) -> int:
     stmt = select(func.count()).select_from(model)
     if since is not None and timestamp_column is not None:
         stmt = stmt.where(timestamp_column >= since)
+    if until is not None and timestamp_column is not None:
+        stmt = stmt.where(timestamp_column < until)
     return int(session.execute(stmt).scalar_one())
 
 
@@ -51,11 +73,19 @@ def _latest_timestamp(session: Session, column) -> str | None:
     return _iso(session.execute(select(func.max(column))).scalar_one())
 
 
-def _reader_ids_since(session: Session, *, reader_column, timestamp_column, since: datetime) -> set[int]:
+def _reader_ids_in_window(
+    session: Session,
+    *,
+    reader_column,
+    timestamp_column,
+    since: datetime,
+    until: datetime,
+) -> set[int]:
     rows = session.execute(
         select(reader_column)
         .where(reader_column.is_not(None))
         .where(or_(timestamp_column.is_(None), timestamp_column >= since))
+        .where(or_(timestamp_column.is_(None), timestamp_column < until))
     ).all()
     return {int(row[0]) for row in rows if row[0] is not None}
 
@@ -264,12 +294,12 @@ def build_trends_snapshot(session: Session, *, limit: int = 10) -> dict:
     }
 
 
-def get_borrow_trends(session: Session, *, days: int = 7) -> dict:
+def get_borrow_trends(session: Session, *, days: int = 7, anchor_date: date | None = None) -> dict:
+    since, until, resolved_anchor = _window_bounds(days=days, anchor_date=anchor_date)
     window_days = max(days, 1)
-    since = utc_now() - timedelta(days=window_days)
     orders = session.scalars(
         select(BorrowOrder)
-        .where(BorrowOrder.created_at >= since)
+        .where(BorrowOrder.created_at >= since, BorrowOrder.created_at < until)
         .order_by(BorrowOrder.created_at.asc(), BorrowOrder.id.asc())
     ).all()
     grouped: dict[str, int] = defaultdict(int)
@@ -283,6 +313,7 @@ def get_borrow_trends(session: Session, *, days: int = 7) -> dict:
         "items": items,
         "summary": {
             "days": window_days,
+            "anchor_date": resolved_anchor.isoformat(),
             "total_orders": len(orders),
             "peak_day": None if peak is None else peak["date"],
             "peak_count": 0 if peak is None else peak["count"],
@@ -290,11 +321,13 @@ def get_borrow_trends(session: Session, *, days: int = 7) -> dict:
     }
 
 
-def get_college_preferences(session: Session) -> dict:
+def get_college_preferences(session: Session, *, days: int = 7, anchor_date: date | None = None) -> dict:
+    since, until, resolved_anchor = _window_bounds(days=days, anchor_date=anchor_date)
     rows = session.execute(
         select(ReaderProfile.college, Book.category, func.count(BorrowOrder.id))
         .join(BorrowOrder, BorrowOrder.reader_id == ReaderProfile.id)
         .join(Book, Book.id == BorrowOrder.book_id)
+        .where(BorrowOrder.created_at >= since, BorrowOrder.created_at < until)
         .group_by(ReaderProfile.college, Book.category)
     ).all()
     grouped: dict[str, dict] = defaultdict(lambda: {"college": "", "total_orders": 0, "categories": []})
@@ -308,14 +341,14 @@ def get_college_preferences(session: Session) -> dict:
     for item in items:
         item["categories"].sort(key=lambda row: (-row["count"], row["category"]))
     items.sort(key=lambda row: (-row["total_orders"], row["college"]))
-    return {"items": items, "summary": {"total_colleges": len(items)}}
+    return {"items": items, "summary": {"total_colleges": len(items), "anchor_date": resolved_anchor.isoformat(), "days": max(days, 1)}}
 
 
-def get_time_peaks(session: Session, *, days: int = 7) -> dict:
-    since = utc_now() - timedelta(days=max(days, 1))
+def get_time_peaks(session: Session, *, days: int = 7, anchor_date: date | None = None) -> dict:
+    since, until, resolved_anchor = _window_bounds(days=days, anchor_date=anchor_date)
     orders = session.scalars(
         select(BorrowOrder)
-        .where(BorrowOrder.created_at >= since)
+        .where(BorrowOrder.created_at >= since, BorrowOrder.created_at < until)
         .order_by(BorrowOrder.created_at.asc(), BorrowOrder.id.asc())
     ).all()
     buckets: dict[int, int] = defaultdict(int)
@@ -328,17 +361,27 @@ def get_time_peaks(session: Session, *, days: int = 7) -> dict:
     return {
         "items": items,
         "summary": {
+            "anchor_date": resolved_anchor.isoformat(),
+            "days": max(days, 1),
             "peak_hour": None if peak is None else peak["hour"],
             "peak_count": 0 if peak is None else peak["count"],
         },
     }
 
 
-def get_popular_books(session: Session, *, limit: int = 10) -> dict:
+def get_popular_books(
+    session: Session,
+    *,
+    limit: int = 10,
+    days: int = 7,
+    anchor_date: date | None = None,
+) -> dict:
+    since, until, resolved_anchor = _window_bounds(days=days, anchor_date=anchor_date)
     order_counts = {
         int(book_id): int(count)
         for book_id, count in session.execute(
             select(BorrowOrder.book_id, func.count(BorrowOrder.id))
+            .where(BorrowOrder.created_at >= since, BorrowOrder.created_at < until)
             .group_by(BorrowOrder.book_id)
             .order_by(func.count(BorrowOrder.id).desc(), BorrowOrder.book_id.asc())
         ).all()
@@ -348,6 +391,7 @@ def get_popular_books(session: Session, *, limit: int = 10) -> dict:
         for book_id, count in session.execute(
             select(RecommendationLog.book_id, func.count(RecommendationLog.id))
             .where(RecommendationLog.book_id.is_not(None))
+            .where(RecommendationLog.created_at >= since, RecommendationLog.created_at < until)
             .group_by(RecommendationLog.book_id)
         ).all()
     }
@@ -371,11 +415,14 @@ def get_popular_books(session: Session, *, limit: int = 10) -> dict:
             }
         )
     items.sort(key=lambda item: (-item["borrow_count"], -item["prediction_score"], item["book_id"]))
-    return {"items": items[:limit], "summary": {"total_ranked_books": len(items)}}
+    return {
+        "items": items[:limit],
+        "summary": {"total_ranked_books": len(items), "anchor_date": resolved_anchor.isoformat(), "days": max(days, 1)},
+    }
 
 
-def get_cabinet_turnover(session: Session, *, days: int = 7) -> dict:
-    since = utc_now() - timedelta(days=max(days, 1))
+def get_cabinet_turnover(session: Session, *, days: int = 7, anchor_date: date | None = None) -> dict:
+    since, until, resolved_anchor = _window_bounds(days=days, anchor_date=anchor_date)
     cabinets = session.scalars(select(Cabinet).order_by(Cabinet.id.asc())).all()
     items: list[dict] = []
     for cabinet in cabinets:
@@ -383,7 +430,7 @@ def get_cabinet_turnover(session: Session, *, days: int = 7) -> dict:
         event_count = session.scalar(
             select(func.count())
             .select_from(InventoryEvent)
-            .where(InventoryEvent.cabinet_id == cabinet.id, InventoryEvent.created_at >= since)
+            .where(InventoryEvent.cabinet_id == cabinet.id, InventoryEvent.created_at >= since, InventoryEvent.created_at < until)
         ) or 0
         turnover_rate = round((event_count / max(int(copy_count), 1)), 2)
         items.append(
@@ -398,15 +445,18 @@ def get_cabinet_turnover(session: Session, *, days: int = 7) -> dict:
             }
         )
     items.sort(key=lambda item: (-item["turnover_rate"], item["cabinet_id"]))
-    return {"items": items, "summary": {"total_cabinets": len(items)}}
+    return {"items": items, "summary": {"total_cabinets": len(items), "anchor_date": resolved_anchor.isoformat(), "days": max(days, 1)}}
 
 
-def get_robot_efficiency(session: Session) -> dict:
+def get_robot_efficiency(session: Session, *, anchor_date: date | None = None) -> dict:
+    _window_start, until, resolved_anchor = _window_bounds(days=1, anchor_date=anchor_date)
     robots = session.scalars(select(RobotUnit).order_by(RobotUnit.id.asc())).all()
     items: list[dict] = []
     for robot in robots:
         tasks = session.scalars(
-            select(RobotTask).where(RobotTask.robot_id == robot.id).order_by(RobotTask.created_at.asc(), RobotTask.id.asc())
+            select(RobotTask)
+            .where(RobotTask.robot_id == robot.id, RobotTask.created_at < until)
+            .order_by(RobotTask.created_at.asc(), RobotTask.id.asc())
         ).all()
         total_tasks = len(tasks)
         completed_tasks = sum(1 for task in tasks if task.status == "completed")
@@ -426,17 +476,17 @@ def get_robot_efficiency(session: Session) -> dict:
             }
         )
     items.sort(key=lambda item: item["robot_id"])
-    return {"items": items, "summary": {"total_robots": len(items)}}
+    return {"items": items, "summary": {"total_robots": len(items), "anchor_date": resolved_anchor.isoformat()}}
 
 
-def _active_reader_ids(session: Session, *, since_days: int) -> set[int]:
-    since = utc_now() - timedelta(days=max(since_days, 1))
+def _active_reader_ids(session: Session, *, since_days: int, anchor_date: date | None = None) -> set[int]:
+    since, until, _resolved_anchor = _window_bounds(days=since_days, anchor_date=anchor_date)
     reader_ids: set[int] = set()
     query_specs = (
-        select(SearchLog.reader_id).where(SearchLog.created_at >= since),
-        select(RecommendationLog.reader_id).where(RecommendationLog.created_at >= since),
-        select(ReadingEvent.reader_id).where(ReadingEvent.created_at >= since),
-        select(BorrowOrder.reader_id).where(BorrowOrder.created_at >= since),
+        select(SearchLog.reader_id).where(SearchLog.created_at >= since, SearchLog.created_at < until),
+        select(RecommendationLog.reader_id).where(RecommendationLog.created_at >= since, RecommendationLog.created_at < until),
+        select(ReadingEvent.reader_id).where(ReadingEvent.created_at >= since, ReadingEvent.created_at < until),
+        select(BorrowOrder.reader_id).where(BorrowOrder.created_at >= since, BorrowOrder.created_at < until),
     )
     for stmt in query_specs:
         for reader_id in session.scalars(stmt).all():
@@ -445,13 +495,15 @@ def _active_reader_ids(session: Session, *, since_days: int) -> set[int]:
     return reader_ids
 
 
-def get_retention_metrics(session: Session) -> dict:
-    active_7d = _active_reader_ids(session, since_days=7)
-    active_30d = _active_reader_ids(session, since_days=30)
+def get_retention_metrics(session: Session, *, anchor_date: date | None = None) -> dict:
+    resolved_anchor = _resolve_anchor_date(anchor_date)
+    active_7d = _active_reader_ids(session, since_days=7, anchor_date=resolved_anchor)
+    active_30d = _active_reader_ids(session, since_days=30, anchor_date=resolved_anchor)
     total_readers = session.scalar(select(func.count()).select_from(ReaderProfile)) or 0
     retained_7d = active_7d & active_30d
     return {
         "summary": {
+            "anchor_date": resolved_anchor.isoformat(),
             "total_readers": int(total_readers),
             "active_readers_7d": len(active_7d),
             "active_readers_30d": len(active_30d),

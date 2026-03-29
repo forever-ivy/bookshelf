@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import os
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -43,6 +44,8 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="LIBRARY_",
+        env_file=(".env.local", ".env"),
+        env_file_encoding="utf-8",
         extra="ignore",
     )
 
@@ -56,4 +59,6 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    if os.getenv("LIBRARY_IGNORE_ENV_FILE", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return Settings(_env_file=None)
     return Settings()

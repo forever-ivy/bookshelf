@@ -1,27 +1,33 @@
 from __future__ import annotations
 
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import func, select
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.admin.service import get_recommendation_studio_live_feed
 from app.catalog.models import Book
 from app.catalog.service import build_book_payload, get_book_by_id
 from app.core.auth_context import require_reader
-from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.errors import ApiError
-from app.core.security import AuthIdentity, create_token
+from app.core.security import AuthIdentity
 from app.llm.provider import build_llm_provider
 from app.orders.models import BorrowOrder
 from app.readers.app_service import list_system_booklists
-from app.readers.models import ReaderAccount, ReaderProfile
+from app.readers.models import ReaderProfile
 from app.recommendation.embeddings import build_embedding_provider
+from app.recommendation.feed_contract import (
+    RecommendationFeedPayload,
+    build_recommendation_feed_payload,
+    build_system_quick_actions,
+    copy_default_hot_lists,
+    serialize_recommendation_feed_book,
+    serialize_recommendation_feed_card,
+)
 from app.recommendation.service import RecommendationService
 
 router = APIRouter(prefix="/api/v1/recommendation", tags=["recommendation"])
-DEMO_READER_USERNAME_PREFIXES = ("demo_cf_reader_", "demo_ml_reader_")
-ML_DEMO_READER_USERNAME_PREFIX = "demo_ml_reader_"
 
 
 def resolve_llm_provider():
@@ -42,34 +48,6 @@ class SearchRequest(BaseModel):
     query: str
     limit: int = 5
 
-
-class DemoSessionRequest(BaseModel):
-    profile_id: int
-
-
-def ensure_demo_mode() -> None:
-    environment = (get_settings().environment or "development").strip().lower()
-    if environment in {"production", "prod"}:
-        raise ApiError(403, "demo_mode_disabled", "Demo helpers are disabled outside development")
-
-
-def _feed_item_from_book_payload(payload: dict, *, explanation: str | None = None) -> dict:
-    return {
-        "book_id": payload["id"],
-        "title": payload["title"],
-        "author": payload.get("author"),
-        "summary": payload.get("summary"),
-        "tags": payload.get("tag_names") or payload.get("tags") or [],
-        "cabinet_label": payload.get("cabinet_label"),
-        "shelf_label": payload.get("shelf_label"),
-        "deliverable": payload.get("delivery_available", False),
-        "eta_minutes": payload.get("eta_minutes"),
-        "available_copies": payload.get("available_copies", 0),
-        "explanation": explanation,
-        "cover_tone": payload.get("cover_tone"),
-    }
-
-
 def _popular_books(db: Session, *, limit: int) -> list[Book]:
     rows = db.execute(
         select(Book, func.count(BorrowOrder.id).label("borrow_count"))
@@ -81,7 +59,7 @@ def _popular_books(db: Session, *, limit: int) -> list[Book]:
     return [row[0] for row in rows]
 
 
-@router.get("/home-feed")
+@router.get("/home-feed", response_model=RecommendationFeedPayload)
 def home_feed(
     identity: AuthIdentity = Depends(require_reader),
     db: Session = Depends(get_db),
@@ -91,6 +69,10 @@ def home_feed(
     profile = db.get(ReaderProfile, int(identity.profile_id))
     if profile is None:
         raise ApiError(404, "reader_profile_not_found", "Reader profile not found")
+
+    published_feed = get_recommendation_studio_live_feed(db)
+    if published_feed is not None:
+        return published_feed
 
     service = RecommendationService(db)
     personalized_results: list[dict] = []
@@ -106,14 +88,14 @@ def home_feed(
             continue
         payload = build_book_payload(db, book)
         today_recommendations.append(
-            _feed_item_from_book_payload(payload, explanation=result.get("explanation"))
+            serialize_recommendation_feed_book(payload, explanation=result.get("explanation"))
         )
 
     if not today_recommendations:
         for book in _popular_books(db, limit=3):
             payload = build_book_payload(db, book)
             today_recommendations.append(
-                _feed_item_from_book_payload(payload, explanation="近期在馆内较受欢迎")
+                serialize_recommendation_feed_book(payload, explanation="近期在馆内较受欢迎")
             )
 
     system_booklists = list_system_booklists(db, limit=3)
@@ -121,7 +103,7 @@ def home_feed(
     for booklist in system_booklists[:2]:
         for book in booklist.get("books", [])[:2]:
             exam_zone.append(
-                _feed_item_from_book_payload(
+                serialize_recommendation_feed_book(
                     book,
                     explanation=f"来自系统书单《{booklist['title']}》",
                 )
@@ -129,7 +111,7 @@ def home_feed(
     if not exam_zone:
         for book in _popular_books(db, limit=2):
             payload = build_book_payload(db, book)
-            exam_zone.append(_feed_item_from_book_payload(payload, explanation="馆内高频借阅图书"))
+            exam_zone.append(serialize_recommendation_feed_book(payload, explanation="馆内高频借阅图书"))
 
     tag_label = "、".join((profile.interest_tags or [])[:3]) or "你的借阅历史"
     active_orders = int(
@@ -140,47 +122,27 @@ def home_feed(
         )
         or 0
     )
-    return {
-        "today_recommendations": today_recommendations[:3],
-        "exam_zone": exam_zone[:3],
-        "explanation_card": {
+    return build_recommendation_feed_payload(
+        today_recommendations=today_recommendations[:3],
+        exam_zone=exam_zone[:3],
+        explanation_card={
             "title": "为什么推荐给你",
             "body": f"系统会结合 {tag_label}、最近借阅和馆内热度，优先展示当前可借的图书。",
         },
-        "quick_actions": [
-            {
-                "code": "borrow_now",
-                "title": "一键借书",
-                "description": "优先查看当前可借并支持配送的图书。",
-                "meta": f"{len(today_recommendations[:3])} 本推荐已准备好",
-            },
-            {
-                "code": "delivery_status",
-                "title": "配送状态",
-                "description": "查看借阅和归还履约的最新状态。",
-                "meta": f"{active_orders} 单进行中",
-            },
-            {
-                "code": "recommendation_reason",
-                "title": "推荐解释",
-                "description": "了解这些推荐和你的课程、兴趣是如何关联的。",
-                "meta": "解释型推荐",
-            },
-        ],
-        "hot_lists": [
-            {"id": "popular-now", "title": "本周热门", "description": "近期馆内借阅最活跃的图书集合。"},
-            {"id": "exam-focus", "title": "考试专区", "description": "适合在考试周快速补强的主题内容。"},
-            {"id": "reader-focus", "title": "与你相关", "description": "根据你的兴趣和借阅行为生成。"},
-        ],
-        "system_booklists": [
-            {
-                "id": item["id"],
-                "title": item["title"],
-                "description": item.get("description") or "系统精选主题阅读清单。",
-            }
+        quick_actions=build_system_quick_actions(
+            len(today_recommendations[:3]),
+            delivery_meta=f"{active_orders} 单进行中",
+        ),
+        hot_lists=copy_default_hot_lists(),
+        system_booklists=[
+            serialize_recommendation_feed_card(
+                card_id=str(item["id"]),
+                title=str(item["title"]),
+                description=str(item.get("description") or "系统精选主题阅读清单。"),
+            )
             for item in system_booklists[:3]
         ],
-    }
+    )
 
 
 @router.post("/search")
@@ -232,90 +194,6 @@ def collaborative_books(
     except RuntimeError as exc:
         raise ApiError(409, "book_borrow_history_missing", str(exc)) from exc
     return {"ok": True, **payload}
-
-
-@router.get("/demo/readers")
-def demo_readers(
-    limit: int = Query(default=12, ge=1, le=50),
-    db: Session = Depends(get_db),
-) -> dict:
-    ensure_demo_mode()
-    rows = db.execute(
-        select(
-            ReaderProfile.id.label("profile_id"),
-            ReaderProfile.display_name,
-            ReaderAccount.username,
-            func.count(BorrowOrder.id).label("borrow_count"),
-        )
-        .join(ReaderAccount, ReaderAccount.id == ReaderProfile.account_id)
-        .outerjoin(BorrowOrder, BorrowOrder.reader_id == ReaderProfile.id)
-        .where(
-            or_(
-                *[
-                    ReaderAccount.username.like(f"{prefix}%")
-                    for prefix in DEMO_READER_USERNAME_PREFIXES
-                ]
-            )
-        )
-        .group_by(ReaderProfile.id, ReaderProfile.display_name, ReaderAccount.username)
-        .order_by(
-            case(
-                (ReaderAccount.username.like(f"{ML_DEMO_READER_USERNAME_PREFIX}%"), 0),
-                else_=1,
-            ).asc(),
-            func.count(BorrowOrder.id).desc(),
-            ReaderProfile.id.asc(),
-        )
-        .limit(limit)
-    ).all()
-    return {
-        "items": [
-            {
-                "profile_id": int(row.profile_id),
-                "display_name": row.display_name,
-                "username": row.username,
-                "borrow_count": int(row.borrow_count or 0),
-            }
-            for row in rows
-        ]
-    }
-
-
-@router.post("/demo/session")
-def demo_session(
-    payload: DemoSessionRequest,
-    db: Session = Depends(get_db),
-) -> dict:
-    ensure_demo_mode()
-    row = db.execute(
-        select(
-            ReaderProfile.id.label("profile_id"),
-            ReaderProfile.display_name,
-            ReaderAccount.id.label("account_id"),
-            ReaderAccount.username,
-        )
-        .join(ReaderAccount, ReaderAccount.id == ReaderProfile.account_id)
-        .where(ReaderProfile.id == payload.profile_id)
-    ).one_or_none()
-    if row is None:
-        raise ApiError(404, "reader_not_found", f"Reader profile {payload.profile_id} was not found")
-
-    identity = AuthIdentity(
-        account_id=int(row.account_id),
-        role="reader",
-        profile_id=int(row.profile_id),
-    )
-    access_token = create_token(identity, ttl_minutes=60 * 12, token_type="access")
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "reader": {
-            "profile_id": int(row.profile_id),
-            "account_id": int(row.account_id),
-            "display_name": row.display_name,
-            "username": row.username,
-        },
-    }
 
 
 @router.get("/books/{book_id}/hybrid")

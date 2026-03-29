@@ -15,19 +15,28 @@ from app.admin.models import (
     AdminRolePermission,
     AlertRecord,
     RecommendationPlacement,
+    RecommendationStudioPublication,
     TopicBooklist,
     TopicBooklistItem,
 )
 from app.analytics.models import ReadingEvent, SearchLog
 from app.auth.models import AdminAccount, AdminActionLog
 from app.catalog.models import Book, BookCategory, BookTag, BookTagLink
-from app.catalog.service import build_book_payload
+from app.catalog.service import build_book_payload, build_book_payloads
 from app.core.errors import ApiError
 from app.db.base import utc_now
 from app.inventory.models import BookCopy, BookStock, Cabinet, CabinetSlot, InventoryEvent
 from app.inventory.service import adjust_stock_counts
 from app.orders.models import BorrowOrder, DeliveryOrder
 from app.readers.models import ReaderAccount, ReaderProfile
+from app.recommendation.feed_contract import (
+    build_recommendation_feed_payload,
+    build_system_quick_actions,
+    copy_default_explanation_card,
+    copy_default_hot_lists,
+    serialize_recommendation_feed_book,
+    serialize_recommendation_feed_card,
+)
 from app.recommendation.models import RecommendationLog
 from app.robot_sim.models import RobotUnit
 from app.system.models import SystemSetting
@@ -40,7 +49,7 @@ DEFAULT_ADMIN_PERMISSIONS = [
     {"code": "orders.manage", "name": "管理订单", "description": "处理借阅订单、归还流程与异常介入"},
     {"code": "robots.manage", "name": "管理机器人", "description": "查看机器人状态并重分配任务"},
     {"code": "readers.manage", "name": "管理用户", "description": "查看用户画像、限制与分群"},
-    {"code": "recommendation.manage", "name": "管理推荐运营", "description": "配置推荐位、专题书单与策略参数"},
+    {"code": "recommendation.manage", "name": "管理推荐运营台", "description": "管理推荐草稿、发布版本与推荐预览"},
     {"code": "analytics.view", "name": "查看分析", "description": "查看借阅趋势与运营分析"},
     {"code": "alerts.manage", "name": "处理告警", "description": "确认和解决系统告警"},
     {"code": "system.audit.view", "name": "查看审计", "description": "查看管理后台审计日志"},
@@ -136,9 +145,16 @@ def _ensure_default_permissions(session: Session) -> None:
         permission.code: permission
         for permission in session.scalars(select(AdminPermission).order_by(AdminPermission.id.asc())).all()
     }
-    created = False
+    updated = False
     for payload in DEFAULT_ADMIN_PERMISSIONS:
-        if payload["code"] in existing:
+        permission = existing.get(payload["code"])
+        if permission is not None:
+            if permission.name != payload["name"]:
+                permission.name = payload["name"]
+                updated = True
+            if permission.description != payload["description"]:
+                permission.description = payload["description"]
+                updated = True
             continue
         session.add(
             AdminPermission(
@@ -147,8 +163,8 @@ def _ensure_default_permissions(session: Session) -> None:
                 description=payload["description"],
             )
         )
-        created = True
-    if created:
+        updated = True
+    if updated:
         session.flush()
 
 
@@ -250,21 +266,62 @@ def _stock_summary(session: Session, book_id: int) -> dict:
     }
 
 
+def _copies_for_book(session: Session, book_id: int) -> list[dict]:
+    rows = session.execute(
+        select(BookCopy, Cabinet, CabinetSlot)
+        .join(Cabinet, Cabinet.id == BookCopy.cabinet_id, isouter=True)
+        .join(CabinetSlot, CabinetSlot.current_copy_id == BookCopy.id, isouter=True)
+        .where(BookCopy.book_id == book_id)
+        .order_by(Cabinet.id.asc(), CabinetSlot.slot_code.asc(), BookCopy.id.asc())
+    ).all()
+    return [
+        {
+            "id": copy.id,
+            "cabinet_id": copy.cabinet_id,
+            "cabinet_name": None if cabinet is None else cabinet.name,
+            "cabinet_location": None if cabinet is None else cabinet.location,
+            "slot_code": None if slot is None else slot.slot_code,
+            "inventory_status": copy.inventory_status,
+            "available_for_borrow": copy.inventory_status == "stored",
+            "created_at": _iso(copy.created_at),
+            "updated_at": _iso(copy.updated_at),
+        }
+        for copy, cabinet, slot in rows
+    ]
+
+
+def _effective_book_shelf_status(raw_shelf_status: str | None, *, total_copies: int) -> str:
+    normalized_shelf_status = (raw_shelf_status or "").strip()
+    return normalized_shelf_status or ("on_shelf" if total_copies > 0 else "draft")
+
+
+def _book_total_copies_expr():
+    return (
+        select(func.coalesce(func.sum(BookStock.total_copies), 0))
+        .where(BookStock.book_id == Book.id)
+        .scalar_subquery()
+    )
+
+
 def serialize_book_admin(session: Session, book: Book) -> dict:
     payload = build_book_payload(session, book)
     category = session.get(BookCategory, book.category_id) if book.category_id is not None else None
+    stock_summary = _stock_summary(session, book.id)
+    copies = _copies_for_book(session, book.id)
+    effective_shelf_status = _effective_book_shelf_status(book.shelf_status, total_copies=stock_summary["total_copies"])
     payload.update(
         {
             "category_id": book.category_id,
             "isbn": book.isbn,
             "barcode": book.barcode,
             "cover_url": book.cover_url,
-            "shelf_status": book.shelf_status,
+            "shelf_status": effective_shelf_status,
             "created_at": _iso(book.created_at),
             "updated_at": _iso(book.updated_at),
             "category_detail": _serialize_category(category) if category is not None else None,
             "tags": _tags_for_book(session, book.id),
-            "stock_summary": _stock_summary(session, book.id),
+            "stock_summary": stock_summary,
+            "copies": copies,
         }
     )
     return payload
@@ -331,7 +388,25 @@ def list_admin_books(
             )
         )
     if shelf_status:
-        stmt = stmt.where(Book.shelf_status == shelf_status)
+        normalized_shelf_status = shelf_status.strip()
+        blank_shelf_status_clause = func.nullif(func.trim(func.coalesce(Book.shelf_status, "")), "").is_(None)
+        total_copies_expr = _book_total_copies_expr()
+        if normalized_shelf_status == "on_shelf":
+            stmt = stmt.where(
+                or_(
+                    Book.shelf_status == normalized_shelf_status,
+                    blank_shelf_status_clause & (total_copies_expr > 0),
+                )
+            )
+        elif normalized_shelf_status == "draft":
+            stmt = stmt.where(
+                or_(
+                    Book.shelf_status == normalized_shelf_status,
+                    blank_shelf_status_clause & (total_copies_expr <= 0),
+                )
+            )
+        else:
+            stmt = stmt.where(Book.shelf_status == normalized_shelf_status)
     if category_id is not None:
         stmt = stmt.where(Book.category_id == category_id)
     stmt = stmt.order_by(Book.updated_at.desc(), Book.id.desc())
@@ -1029,10 +1104,13 @@ def list_inventory_alerts(
     page: int,
     page_size: int,
     status: str | None = None,
+    source_id: str | None = None,
 ) -> dict:
     stmt = select(AlertRecord).where(AlertRecord.source_type.in_(["inventory", "cabinet"]))
     if status:
         stmt = stmt.where(AlertRecord.status == status)
+    if source_id:
+        stmt = stmt.where(AlertRecord.source_id == source_id)
     stmt = stmt.order_by(AlertRecord.created_at.desc(), AlertRecord.id.desc())
     rows, meta = _paginate(stmt, session=session, page=page, page_size=page_size)
     return {**meta, "items": [_serialize_alert(row) for row in rows]}
@@ -1224,180 +1302,721 @@ def update_admin_reader(session: Session, *, reader_id: int, admin_id: int, payl
     return after_state
 
 
-def _serialize_recommendation_placement(placement: RecommendationPlacement) -> dict:
+def _recommendation_error(code: str, message: str) -> dict:
     return {
-        "id": placement.id,
-        "code": placement.code,
-        "name": placement.name,
-        "status": placement.status,
-        "placement_type": placement.placement_type,
-        "config_json": placement.config_json or {},
-        "created_at": _iso(placement.created_at),
-        "updated_at": _iso(placement.updated_at),
+        "code": code,
+        "message": message,
     }
 
 
-def list_recommendation_placements(session: Session, *, page: int, page_size: int) -> dict:
-    stmt = select(RecommendationPlacement).order_by(RecommendationPlacement.code.asc(), RecommendationPlacement.id.asc())
-    rows, meta = _paginate(stmt, session=session, page=page, page_size=page_size)
-    return {**meta, "items": [_serialize_recommendation_placement(row) for row in rows]}
+RECOMMENDATION_STUDIO_SLOT_COUNT = 3
+RECOMMENDATION_STUDIO_DEFAULT_PLACEMENTS = (
+    {"code": "today_recommendations", "name": "今日推荐", "placement_type": "home_feed", "rank": 1},
+    {"code": "exam_zone", "name": "考试专区", "placement_type": "home_feed", "rank": 2},
+    {"code": "hot_lists", "name": "热门榜单", "placement_type": "home_feed", "rank": 3},
+    {"code": "system_booklists", "name": "系统书单", "placement_type": "home_feed", "rank": 4},
+)
+RECOMMENDATION_STUDIO_DEFAULT_WEIGHTS = {
+    "content": 0.45,
+    "behavior": 0.4,
+    "freshness": 0.15,
+}
+RECOMMENDATION_STUDIO_STRATEGY_SETTING_KEY = "recommendation.weights"
 
 
-def create_recommendation_placement(session: Session, *, admin_id: int, payload: dict) -> dict:
-    code = (payload.get("code") or "").strip()
-    name = (payload.get("name") or "").strip()
-    if not code or not name:
-        raise ApiError(400, "placement_invalid", "Placement code and name are required")
-    existing = session.scalar(select(RecommendationPlacement).where(RecommendationPlacement.code == code))
-    if existing is not None:
-        raise ApiError(409, "placement_exists", "Recommendation placement already exists")
-    placement = RecommendationPlacement(
-        code=code,
-        name=name,
-        status=payload.get("status") or "active",
-        placement_type=payload.get("placement_type") or "homepage",
-        config_json=payload.get("config_json") or {},
-    )
-    session.add(placement)
-    session.flush()
-    after_state = _serialize_recommendation_placement(placement)
-    _audit(
-        session,
-        admin_id=admin_id,
-        target_type="recommendation_placement",
-        target_id=placement.id,
-        action="create_recommendation_placement",
-        after_state=after_state,
-    )
-    session.commit()
-    return after_state
+def _studio_slot_count() -> int:
+    return RECOMMENDATION_STUDIO_SLOT_COUNT
 
 
-def _serialize_topic_booklist(session: Session, topic: TopicBooklist) -> dict:
-    rows = session.execute(
-        select(TopicBooklistItem, Book.title)
-        .join(Book, TopicBooklistItem.book_id == Book.id, isouter=True)
-        .where(TopicBooklistItem.topic_booklist_id == topic.id)
-        .order_by(TopicBooklistItem.rank_position.asc(), TopicBooklistItem.id.asc())
-    ).all()
+def _copy_hot_lists() -> list[dict]:
+    return copy_default_hot_lists()
+
+
+def _copy_explanation_card() -> dict:
+    return copy_default_explanation_card()
+
+
+def _copy_recommendation_studio_default_placements() -> list[dict]:
+    return [dict(item, status="active") for item in RECOMMENDATION_STUDIO_DEFAULT_PLACEMENTS]
+
+
+def _copy_recommendation_studio_default_weights() -> dict[str, float]:
+    return dict(RECOMMENDATION_STUDIO_DEFAULT_WEIGHTS)
+
+
+def _normalize_strategy_weight_value(value: Any, *, fallback: float) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        parsed = fallback
+    return round(max(parsed, 0.0), 4)
+
+
+def _normalize_studio_strategy_weights(payload: dict | None) -> dict[str, float]:
+    raw = payload or {}
+    normalized = {
+        key: _normalize_strategy_weight_value(raw.get(key), fallback=default)
+        for key, default in RECOMMENDATION_STUDIO_DEFAULT_WEIGHTS.items()
+    }
+    if sum(normalized.values()) <= 0:
+        return _copy_recommendation_studio_default_weights()
+    return normalized
+
+
+def _serialize_studio_placement(row: RecommendationPlacement) -> dict:
+    config = dict(row.config_json or {})
     return {
-        "id": topic.id,
-        "slug": topic.slug,
+        "code": row.code,
+        "name": row.name,
+        "status": row.status or "active",
+        "placement_type": row.placement_type or "home_feed",
+        "rank": int(config.get("rank") or 0),
+    }
+
+
+def _list_recommendation_studio_placement_rows(session: Session) -> list[RecommendationPlacement]:
+    expected_codes = [item["code"] for item in RECOMMENDATION_STUDIO_DEFAULT_PLACEMENTS]
+    rows = session.scalars(
+        select(RecommendationPlacement).where(RecommendationPlacement.code.in_(expected_codes))
+    ).all()
+    row_map = {row.code: row for row in rows}
+
+    for default in RECOMMENDATION_STUDIO_DEFAULT_PLACEMENTS:
+        row = row_map.get(default["code"])
+        if row is None:
+            row = RecommendationPlacement(
+                code=default["code"],
+                name=default["name"],
+                status="active",
+                placement_type=default["placement_type"],
+                config_json={"rank": default["rank"]},
+            )
+            session.add(row)
+            session.flush()
+            row_map[default["code"]] = row
+            continue
+
+        changed = False
+        if not row.name:
+            row.name = default["name"]
+            changed = True
+        if not row.placement_type:
+            row.placement_type = default["placement_type"]
+            changed = True
+        config = dict(row.config_json or {})
+        if int(config.get("rank") or 0) <= 0:
+            config["rank"] = default["rank"]
+            row.config_json = config
+            changed = True
+        if not row.status:
+            row.status = "active"
+            changed = True
+        if changed:
+            session.flush()
+
+    ordered_rows = [row_map[item["code"]] for item in RECOMMENDATION_STUDIO_DEFAULT_PLACEMENTS]
+    ordered_rows.sort(key=lambda row: (int((row.config_json or {}).get("rank") or 0), row.id))
+    return ordered_rows
+
+
+def _list_recommendation_studio_placements(session: Session) -> list[dict]:
+    return [_serialize_studio_placement(row) for row in _list_recommendation_studio_placement_rows(session)]
+
+
+def _get_recommendation_strategy_weights(session: Session) -> dict[str, float]:
+    setting = session.scalar(
+        select(SystemSetting).where(SystemSetting.setting_key == RECOMMENDATION_STUDIO_STRATEGY_SETTING_KEY)
+    )
+    return _normalize_studio_strategy_weights(setting.value_json if setting is not None else None)
+
+
+def _set_recommendation_strategy_weights(session: Session, *, admin_id: int, weights: dict[str, float]) -> None:
+    setting = session.scalar(
+        select(SystemSetting).where(SystemSetting.setting_key == RECOMMENDATION_STUDIO_STRATEGY_SETTING_KEY)
+    )
+    if setting is None:
+        setting = SystemSetting(
+            setting_key=RECOMMENDATION_STUDIO_STRATEGY_SETTING_KEY,
+            created_by=admin_id,
+        )
+        session.add(setting)
+        session.flush()
+    setting.value_type = "json"
+    setting.value_json = dict(weights)
+    setting.description = "推荐运营台策略权重"
+    setting.updated_by = admin_id
+    session.flush()
+
+
+def _list_popular_books_for_studio(session: Session, *, limit: int) -> list[Book]:
+    rows = session.execute(
+        select(Book, func.count(BorrowOrder.id).label("borrow_count"))
+        .join(BorrowOrder, BorrowOrder.book_id == Book.id, isouter=True)
+        .group_by(Book.id)
+        .order_by(func.count(BorrowOrder.id).desc(), Book.id.asc())
+        .limit(limit)
+    ).all()
+    return [row[0] for row in rows]
+
+
+def _list_unique_books_for_studio(session: Session, *, limit: int) -> list[Book]:
+    books = _list_popular_books_for_studio(session, limit=limit * 2)
+    seen = {book.id for book in books}
+    if len(books) < limit:
+        extras = session.scalars(select(Book).order_by(Book.id.asc())).all()
+        for book in extras:
+            if book.id in seen:
+                continue
+            books.append(book)
+            seen.add(book.id)
+            if len(books) >= limit:
+                break
+    return books[:limit]
+
+
+def _book_default_explanation(book: Book, *, tone: str) -> str:
+    if tone == "exam":
+        return f"适合作为{book.title}相关主题的考试冲刺阅读。"
+    return f"适合作为《{book.title}》方向的本周重点推荐。"
+
+
+def _candidate_signal_score(signals: dict[str, float], weights: dict[str, float]) -> float:
+    total_weight = sum(max(float(value), 0.0) for value in weights.values())
+    if total_weight <= 0:
+        return 0.0
+    blended = sum(signals[key] * max(float(weights[key]), 0.0) for key in RECOMMENDATION_STUDIO_DEFAULT_WEIGHTS)
+    return round(blended / total_weight, 4)
+
+
+def _build_studio_candidate_signals(
+    session: Session,
+    book: Book,
+    *,
+    borrow_count: int,
+    max_borrow_count: int,
+) -> tuple[dict, dict[str, float]]:
+    payload = build_book_payload(session, book)
+    content_factors = [
+        1.0 if book.category else 0.0,
+        1.0 if book.keywords else 0.0,
+        1.0 if book.summary else 0.0,
+        min(float(payload["available_copies"]), 3.0) / 3.0,
+        1.0 if payload["delivery_available"] else (0.4 if payload["available_copies"] > 0 else 0.0),
+    ]
+    content_score = round(sum(content_factors) / len(content_factors), 4)
+    behavior_score = round((borrow_count / max_borrow_count) if max_borrow_count > 0 else 0.0, 4)
+    timestamp = _normalize_datetime(book.updated_at or book.created_at)
+    if timestamp is None:
+        freshness_score = 0.5
+    else:
+        current_time = _normalize_datetime(utc_now()) or utc_now().replace(tzinfo=None)
+        age_days = max((current_time - timestamp).days, 0)
+        freshness_score = round(max(0.05, 1.0 - (min(age_days, 180) / 180.0)), 4)
+    signals = {
+        "content": content_score,
+        "behavior": behavior_score,
+        "freshness": freshness_score,
+    }
+    return payload, signals
+
+
+def _tone_bonus(book: Book, *, tone: str) -> float:
+    text = " ".join(
+        [
+            str(book.title or ""),
+            str(book.category or ""),
+            str(book.keywords or ""),
+            str(book.summary or ""),
+        ]
+    ).lower()
+    if tone == "exam" and any(token in text for token in ("exam", "考试", "复习", "冲刺")):
+        return 0.08
+    if tone == "today" and any(token in text for token in ("system", "推荐", "智能")):
+        return 0.04
+    return 0.0
+
+
+def _serialize_studio_candidate_book(
+    session: Session,
+    book: Book,
+    *,
+    tone: str,
+    weights: dict[str, float],
+    borrow_count: int,
+    max_borrow_count: int,
+) -> dict:
+    payload, signals = _build_studio_candidate_signals(
+        session,
+        book,
+        borrow_count=borrow_count,
+        max_borrow_count=max_borrow_count,
+    )
+    blended = min(1.0, _candidate_signal_score(signals, weights) + _tone_bonus(book, tone=tone))
+    return {
+        "book_id": book.id,
+        "title": book.title,
+        "author": book.author,
+        "category": book.category,
+        "available_copies": payload["available_copies"],
+        "deliverable": payload["delivery_available"],
+        "eta_minutes": payload["eta_minutes"],
+        "default_explanation": _book_default_explanation(book, tone=tone),
+        "signals": {
+            **signals,
+            "blended": round(blended, 4),
+        },
+    }
+
+
+def _serialize_studio_candidate_booklist(topic: TopicBooklist, *, item_count: int) -> dict:
+    return {
+        "booklist_id": topic.id,
         "title": topic.title,
         "description": topic.description,
-        "status": topic.status,
-        "audience_segment": topic.audience_segment,
-        "item_count": len(rows),
-        "books": [
-            {
-                "book_id": item.book_id,
-                "title": book_title,
-                "rank_position": item.rank_position,
-                "note": item.note,
-            }
-            for item, book_title in rows
-        ],
-        "created_at": _iso(topic.created_at),
-        "updated_at": _iso(topic.updated_at),
+        "book_count": item_count,
     }
 
 
-def list_topic_booklists(session: Session, *, page: int, page_size: int) -> dict:
-    stmt = select(TopicBooklist).order_by(TopicBooklist.updated_at.desc(), TopicBooklist.id.desc())
-    rows, meta = _paginate(stmt, session=session, page=page, page_size=page_size)
-    return {**meta, "items": [_serialize_topic_booklist(session, row) for row in rows]}
+def _list_studio_booklist_candidates(session: Session, *, limit: int) -> list[dict]:
+    topics = session.scalars(
+        select(TopicBooklist)
+        .where(TopicBooklist.status == "active")
+        .order_by(TopicBooklist.updated_at.desc(), TopicBooklist.id.desc())
+        .limit(limit)
+    ).all()
+    if not topics:
+        return []
 
-
-def create_topic_booklist(session: Session, *, admin_id: int, payload: dict) -> dict:
-    slug = (payload.get("slug") or "").strip()
-    title = (payload.get("title") or "").strip()
-    if not slug or not title:
-        raise ApiError(400, "topic_booklist_invalid", "Topic slug and title are required")
-    existing = session.scalar(select(TopicBooklist).where(TopicBooklist.slug == slug))
-    if existing is not None:
-        raise ApiError(409, "topic_booklist_exists", "Topic booklist already exists")
-    book_ids = [int(book_id) for book_id in (payload.get("book_ids") or [])]
-    if book_ids:
-        found_ids = set(session.scalars(select(Book.id).where(Book.id.in_(book_ids))).all())
-        if found_ids != set(book_ids):
-            raise ApiError(404, "topic_booklist_book_not_found", "One or more books were not found")
-    topic = TopicBooklist(
-        slug=slug,
-        title=title,
-        description=payload.get("description"),
-        status=payload.get("status") or "draft",
-        audience_segment=payload.get("audience_segment"),
+    counts = dict(
+        session.execute(
+            select(TopicBooklistItem.topic_booklist_id, func.count())
+            .where(TopicBooklistItem.topic_booklist_id.in_([topic.id for topic in topics]))
+            .group_by(TopicBooklistItem.topic_booklist_id)
+        ).all()
     )
-    session.add(topic)
-    session.flush()
-    for index, book_id in enumerate(book_ids, start=1):
-        session.add(TopicBooklistItem(topic_booklist_id=topic.id, book_id=book_id, rank_position=index))
-    session.flush()
-    after_state = _serialize_topic_booklist(session, topic)
+    return [_serialize_studio_candidate_booklist(topic, item_count=int(counts.get(topic.id, 0))) for topic in topics]
+
+
+def _build_recommendation_studio_candidates(session: Session, *, strategy_weights: dict[str, float]) -> dict:
+    books = _list_unique_books_for_studio(session, limit=_studio_slot_count() * 3 + 4)
+    borrow_counts = dict(
+        session.execute(
+            select(BorrowOrder.book_id, func.count())
+            .where(BorrowOrder.book_id.in_([book.id for book in books]))
+            .group_by(BorrowOrder.book_id)
+        ).all()
+    )
+    max_borrow_count = max((int(value) for value in borrow_counts.values()), default=0)
+
+    def rank_books(tone: str) -> list[dict]:
+        ranked = [
+            _serialize_studio_candidate_book(
+                session,
+                book,
+                tone=tone,
+                weights=strategy_weights,
+                borrow_count=int(borrow_counts.get(book.id, 0)),
+                max_borrow_count=max_borrow_count,
+            )
+            for book in books
+        ]
+        ranked.sort(key=lambda item: (-float(item["signals"]["blended"]), item["book_id"]))
+        return ranked
+
+    today_books = rank_books("today")[: max(_studio_slot_count(), 4)]
+    exam_books = rank_books("exam")[: max(_studio_slot_count(), 3)]
+
+    return {
+        "today_recommendations": today_books,
+        "exam_zone": exam_books,
+        "system_booklists": _list_studio_booklist_candidates(session, limit=_studio_slot_count() + 2),
+    }
+
+
+def _build_recommendation_studio_default_draft(session: Session) -> dict:
+    strategy_weights = _get_recommendation_strategy_weights(session)
+    candidates = _build_recommendation_studio_candidates(session, strategy_weights=strategy_weights)
+    today_candidates = candidates["today_recommendations"][: _studio_slot_count()]
+    exam_candidates = candidates["exam_zone"][: _studio_slot_count()]
+    booklist_candidates = candidates["system_booklists"][: _studio_slot_count()]
+    return {
+        "today_recommendations": [
+            {
+                "book_id": item["book_id"],
+                "custom_explanation": item["default_explanation"],
+                "source": "candidate_pool",
+                "rank": index,
+            }
+            for index, item in enumerate(today_candidates, start=1)
+        ],
+        "exam_zone": [
+            {
+                "book_id": item["book_id"],
+                "custom_explanation": item["default_explanation"],
+                "source": "candidate_pool",
+                "rank": index,
+            }
+            for index, item in enumerate(exam_candidates, start=1)
+        ],
+        "hot_lists": _copy_hot_lists(),
+        "system_booklists": [
+            {
+                "booklist_id": item["booklist_id"],
+                "rank": index,
+            }
+            for index, item in enumerate(booklist_candidates, start=1)
+        ],
+        "explanation_card": _copy_explanation_card(),
+        "placements": _list_recommendation_studio_placements(session),
+        "strategy_weights": strategy_weights,
+    }
+
+
+def _normalize_studio_hot_lists(payload: list[dict] | None) -> list[dict]:
+    items = payload or []
+    if len(items) != _studio_slot_count():
+        raise ApiError(400, "recommendation_studio_invalid", "Hot list slots must be filled")
+    normalized: list[dict] = []
+    for index, item in enumerate(items, start=1):
+        title = str(item.get("title") or "").strip()
+        description = str(item.get("description") or "").strip()
+        if not title or not description:
+            raise ApiError(400, "recommendation_studio_invalid", "Hot list title and description are required")
+        normalized.append(
+            {
+                "id": str(item.get("id") or f"hot-list-{index}"),
+                "title": title,
+                "description": description,
+            }
+        )
+    return normalized
+
+
+def _normalize_studio_book_slots(
+    session: Session,
+    payload: list[dict] | None,
+    *,
+    field_name: str,
+) -> list[dict]:
+    items = payload or []
+    if len(items) != _studio_slot_count():
+        raise ApiError(400, "recommendation_studio_invalid", f"{field_name} slots must be filled")
+    normalized: list[dict] = []
+    book_ids: list[int] = []
+    for index, item in enumerate(items, start=1):
+        raw_book_id = item.get("book_id")
+        try:
+            book_id = int(raw_book_id)
+        except (TypeError, ValueError) as exc:
+            raise ApiError(400, "recommendation_studio_invalid", f"{field_name} requires a valid book id") from exc
+        custom_explanation = str(item.get("custom_explanation") or "").strip()
+        if not custom_explanation:
+            raise ApiError(400, "recommendation_studio_invalid", f"{field_name} requires recommendation copy")
+        normalized.append(
+            {
+                "book_id": book_id,
+                "custom_explanation": custom_explanation,
+                "source": str(item.get("source") or "manual_review"),
+                "rank": index,
+            }
+        )
+        book_ids.append(book_id)
+
+    existing_ids = set(session.scalars(select(Book.id).where(Book.id.in_(book_ids))).all())
+    if existing_ids != set(book_ids):
+        raise ApiError(400, "recommendation_studio_invalid", f"{field_name} contains a missing book")
+    return normalized
+
+
+def _normalize_studio_booklists(session: Session, payload: list[dict] | None) -> list[dict]:
+    items = payload or []
+    if len(items) != _studio_slot_count():
+        raise ApiError(400, "recommendation_studio_invalid", "System booklist slots must be filled")
+    normalized: list[dict] = []
+    booklist_ids: list[int] = []
+    for index, item in enumerate(items, start=1):
+        raw_booklist_id = item.get("booklist_id")
+        try:
+            booklist_id = int(raw_booklist_id)
+        except (TypeError, ValueError) as exc:
+            raise ApiError(400, "recommendation_studio_invalid", "System booklists require a valid booklist id") from exc
+        normalized.append({"booklist_id": booklist_id, "rank": index})
+        booklist_ids.append(booklist_id)
+
+    existing_ids = set(session.scalars(select(TopicBooklist.id).where(TopicBooklist.id.in_(booklist_ids))).all())
+    if existing_ids != set(booklist_ids):
+        raise ApiError(400, "recommendation_studio_invalid", "System booklists contain a missing topic")
+    return normalized
+
+
+def _normalize_studio_explanation_card(payload: dict | None) -> dict:
+    card = payload or {}
+    title = str(card.get("title") or "").strip()
+    body = str(card.get("body") or "").strip()
+    if not title or not body:
+        raise ApiError(400, "recommendation_studio_invalid", "Explanation card title and body are required")
+    return {"title": title, "body": body}
+
+
+def _normalize_studio_placements(session: Session, payload: list[dict] | None) -> list[dict]:
+    existing_rows = _list_recommendation_studio_placement_rows(session)
+    existing_map = {row.code: row for row in existing_rows}
+    raw_items = payload or [_serialize_studio_placement(row) for row in existing_rows]
+    normalized: list[dict] = []
+    seen_codes: set[str] = set()
+
+    for item in raw_items:
+        code = str(item.get("code") or "").strip()
+        if not code or code in seen_codes:
+            raise ApiError(400, "recommendation_studio_invalid", "Placements require unique codes")
+        row = existing_map.get(code)
+        if row is None:
+            raise ApiError(400, "recommendation_studio_invalid", f"Unknown placement code: {code}")
+        status = str(item.get("status") or "active").strip().lower()
+        if status not in {"active", "paused"}:
+            raise ApiError(400, "recommendation_studio_invalid", f"Unsupported placement status: {status}")
+        try:
+            rank = int(item.get("rank") or 0)
+        except (TypeError, ValueError) as exc:
+            raise ApiError(400, "recommendation_studio_invalid", f"Placement {code} requires a valid rank") from exc
+        if rank <= 0:
+            raise ApiError(400, "recommendation_studio_invalid", f"Placement {code} requires a positive rank")
+        normalized.append(
+            {
+                "code": code,
+                "name": str(item.get("name") or row.name or code),
+                "status": status,
+                "placement_type": str(item.get("placement_type") or row.placement_type or "home_feed"),
+                "rank": rank,
+            }
+        )
+        seen_codes.add(code)
+
+    missing = [default["code"] for default in RECOMMENDATION_STUDIO_DEFAULT_PLACEMENTS if default["code"] not in seen_codes]
+    if missing:
+        raise ApiError(400, "recommendation_studio_invalid", "Placements must cover all recommendation modules")
+
+    normalized.sort(key=lambda item: (item["rank"], item["code"]))
+    return [{**item, "rank": index} for index, item in enumerate(normalized, start=1)]
+
+
+def _placement_status_map(draft: dict) -> dict[str, str]:
+    placements = draft.get("placements") or []
+    return {
+        item["code"]: str(item.get("status") or "active")
+        for item in placements
+        if str(item.get("code") or "").strip()
+    }
+
+
+def _normalize_recommendation_studio_draft(session: Session, payload: dict | None) -> dict:
+    raw = payload or {}
+    today = _normalize_studio_book_slots(session, raw.get("today_recommendations"), field_name="today_recommendations")
+    exam = _normalize_studio_book_slots(session, raw.get("exam_zone"), field_name="exam_zone")
+    overlap = {item["book_id"] for item in today} & {item["book_id"] for item in exam}
+    if overlap:
+        raise ApiError(400, "recommendation_studio_invalid", "Today recommendations and exam zone cannot share the same book")
+    return {
+        "today_recommendations": today,
+        "exam_zone": exam,
+        "hot_lists": _normalize_studio_hot_lists(raw.get("hot_lists")),
+        "system_booklists": _normalize_studio_booklists(session, raw.get("system_booklists")),
+        "explanation_card": _normalize_studio_explanation_card(raw.get("explanation_card")),
+        "placements": _normalize_studio_placements(session, raw.get("placements")),
+        "strategy_weights": _normalize_studio_strategy_weights(raw.get("strategy_weights")),
+    }
+
+
+def _serialize_recommendation_studio_publication(
+    session: Session,
+    publication: RecommendationStudioPublication,
+) -> dict:
+    username = None
+    if publication.published_by is not None:
+        admin = session.get(AdminAccount, publication.published_by)
+        username = admin.username if admin is not None else None
+    return {
+        "id": publication.id,
+        "version": publication.version,
+        "status": publication.status,
+        "published_by_username": username,
+        "published_at": _iso(publication.published_at),
+        "updated_at": _iso(publication.updated_at),
+        "payload": publication.payload_json or None,
+    }
+
+
+def _book_payload_map(session: Session, book_ids: list[int]) -> dict[int, dict]:
+    if not book_ids:
+        return {}
+    books = session.scalars(select(Book).where(Book.id.in_(book_ids))).all()
+    payloads = build_book_payloads(session, books)
+    return {payload["id"]: payload for payload in payloads}
+
+
+def build_recommendation_studio_preview_feed(session: Session, draft: dict) -> dict:
+    placement_status = _placement_status_map(draft)
+    today_slots = draft.get("today_recommendations") or []
+    exam_slots = draft.get("exam_zone") or []
+    book_ids = [int(item["book_id"]) for item in [*today_slots, *exam_slots]]
+    payload_map = _book_payload_map(session, book_ids)
+
+    system_booklist_ids = [int(item["booklist_id"]) for item in draft.get("system_booklists") or []]
+    booklists = session.scalars(select(TopicBooklist).where(TopicBooklist.id.in_(system_booklist_ids))).all()
+    booklist_map = {booklist.id: booklist for booklist in booklists}
+
+    def feed_items(slots: list[dict]) -> list[dict]:
+        items: list[dict] = []
+        for slot in slots:
+            payload = payload_map.get(int(slot["book_id"]))
+            if payload is None:
+                continue
+            items.append(
+                serialize_recommendation_feed_book(
+                    payload,
+                    explanation=str(slot.get("custom_explanation") or "").strip() or None,
+                )
+            )
+        return items
+
+    today_items = feed_items(today_slots) if placement_status.get("today_recommendations", "active") == "active" else []
+    exam_items = feed_items(exam_slots) if placement_status.get("exam_zone", "active") == "active" else []
+    return build_recommendation_feed_payload(
+        today_recommendations=today_items,
+        exam_zone=exam_items,
+        explanation_card=draft.get("explanation_card") or _copy_explanation_card(),
+        quick_actions=build_system_quick_actions(
+            len(today_items),
+            delivery_meta="系统自动生成，不在运营台内编辑",
+        ),
+        hot_lists=(draft.get("hot_lists") or _copy_hot_lists()) if placement_status.get("hot_lists", "active") == "active" else [],
+        system_booklists=[
+            serialize_recommendation_feed_card(
+                card_id=str(booklist.id),
+                title=str(booklist.title),
+                description=str(booklist.description or "系统精选主题阅读清单。"),
+            )
+            for item in draft.get("system_booklists") or []
+            for booklist in [booklist_map.get(int(item["booklist_id"]))]
+            if booklist is not None
+        ]
+        if placement_status.get("system_booklists", "active") == "active"
+        else [],
+    )
+
+
+def _latest_recommendation_studio_publication(
+    session: Session,
+    *,
+    status: str,
+) -> RecommendationStudioPublication | None:
+    return session.scalar(
+        select(RecommendationStudioPublication)
+        .where(RecommendationStudioPublication.status == status)
+        .order_by(RecommendationStudioPublication.version.desc(), RecommendationStudioPublication.updated_at.desc(), RecommendationStudioPublication.id.desc())
+    )
+
+
+def _get_recommendation_studio_draft_payload(session: Session) -> dict:
+    draft = _latest_recommendation_studio_publication(session, status="draft")
+    if draft is not None and draft.payload_json:
+        return _normalize_recommendation_studio_draft(session, draft.payload_json)
+    return _build_recommendation_studio_default_draft(session)
+
+
+def get_recommendation_studio_live_feed(session: Session) -> dict | None:
+    publication = _latest_recommendation_studio_publication(session, status="published")
+    if publication is None or not publication.payload_json:
+        return None
+    return build_recommendation_studio_preview_feed(session, publication.payload_json)
+
+
+def get_recommendation_studio(session: Session) -> dict:
+    draft_payload = _get_recommendation_studio_draft_payload(session)
+    live_publication = _latest_recommendation_studio_publication(session, status="published")
+    return {
+        "live_publication": _serialize_recommendation_studio_publication(session, live_publication) if live_publication else None,
+        "draft": draft_payload,
+        "candidates": _build_recommendation_studio_candidates(
+            session,
+            strategy_weights=draft_payload.get("strategy_weights") or _copy_recommendation_studio_default_weights(),
+        ),
+        "preview_feed": build_recommendation_studio_preview_feed(session, draft_payload),
+    }
+
+
+def save_recommendation_studio_draft(session: Session, *, admin_id: int, payload: dict) -> dict:
+    normalized = _normalize_recommendation_studio_draft(session, payload)
+    draft = _latest_recommendation_studio_publication(session, status="draft")
+    before_state = draft.payload_json if draft is not None else None
+    if draft is None:
+        draft = RecommendationStudioPublication(status="draft", version=None, payload_json=normalized)
+        session.add(draft)
+        session.flush()
+    else:
+        draft.payload_json = normalized
     _audit(
         session,
         admin_id=admin_id,
-        target_type="topic_booklist",
-        target_id=topic.id,
-        action="create_topic_booklist",
-        after_state=after_state,
+        target_type="recommendation_studio",
+        target_id=draft.id,
+        action="save_recommendation_studio_draft",
+        before_state=before_state,
+        after_state=normalized,
     )
     session.commit()
-    return after_state
-
-
-def recommendation_insights(session: Session) -> dict:
-    total_recommendations = session.scalar(select(func.count()).select_from(RecommendationLog)) or 0
-    view_count = (
-        session.scalar(
-            select(func.count())
-            .select_from(ReadingEvent)
-            .where(ReadingEvent.event_type.in_(["recommendation_viewed", "recommendation_click"]))
-        )
-        or 0
-    )
-    conversion_count = (
-        session.scalar(
-            select(func.count())
-            .select_from(ReadingEvent)
-            .where(ReadingEvent.event_type.in_(["borrow_order_created", "borrow_order_completed"]))
-        )
-        or 0
-    )
-    click_through_rate = round((view_count / total_recommendations) * 100, 2) if total_recommendations else 0.0
-    conversion_rate = round((conversion_count / max(view_count, 1)) * 100, 2) if view_count else 0.0
-    hot_tag_rows = session.execute(
-        select(BookTag.id, BookTag.name, func.count(RecommendationLog.id))
-        .join(BookTagLink, BookTagLink.tag_id == BookTag.id)
-        .join(RecommendationLog, RecommendationLog.book_id == BookTagLink.book_id)
-        .group_by(BookTag.id, BookTag.name)
-        .order_by(func.count(RecommendationLog.id).desc(), BookTag.id.asc())
-        .limit(5)
-    ).all()
-    top_query_rows = session.execute(
-        select(SearchLog.query_text, func.count())
-        .group_by(SearchLog.query_text)
-        .order_by(func.count().desc(), SearchLog.query_text.asc())
-        .limit(5)
-    ).all()
-    strategy_setting = session.scalar(select(SystemSetting).where(SystemSetting.setting_key == "recommendation.weights"))
+    session.refresh(draft)
     return {
-        "summary": {
-            "total_recommendations": int(total_recommendations),
-            "view_count": int(view_count),
-            "conversion_count": int(conversion_count),
-            "click_through_rate": click_through_rate,
-            "conversion_rate": conversion_rate,
-            "placement_count": int(session.scalar(select(func.count()).select_from(RecommendationPlacement)) or 0),
-            "topic_count": int(session.scalar(select(func.count()).select_from(TopicBooklist)) or 0),
-        },
-        "hot_tags": [
-            {"tag_id": int(tag_id), "tag_name": tag_name, "recommendation_count": int(count)}
-            for tag_id, tag_name, count in hot_tag_rows
-        ],
-        "top_queries": [
-            {"query_text": query_text, "count": int(count)}
-            for query_text, count in top_query_rows
-        ],
-        "strategy_weights": (strategy_setting.value_json or {}) if strategy_setting is not None else {"content": 0.5, "behavior": 0.3, "freshness": 0.2},
+        "draft": normalized,
+        "preview_feed": build_recommendation_studio_preview_feed(session, normalized),
+    }
+
+
+def publish_recommendation_studio(session: Session, *, admin_id: int) -> dict:
+    draft_payload = _get_recommendation_studio_draft_payload(session)
+    normalized = _normalize_recommendation_studio_draft(session, draft_payload)
+    existing_rows = {row.code: row for row in _list_recommendation_studio_placement_rows(session)}
+    for placement in normalized["placements"]:
+        row = existing_rows[placement["code"]]
+        row.name = placement["name"]
+        row.status = placement["status"]
+        row.placement_type = placement["placement_type"]
+        row.config_json = {"rank": placement["rank"]}
+    _set_recommendation_strategy_weights(session, admin_id=admin_id, weights=normalized["strategy_weights"])
+    latest = _latest_recommendation_studio_publication(session, status="published")
+    next_version = int((latest.version if latest is not None and latest.version is not None else 0) + 1)
+    publication = RecommendationStudioPublication(
+        version=next_version,
+        status="published",
+        payload_json=normalized,
+        published_by=admin_id,
+        published_at=utc_now(),
+    )
+    session.add(publication)
+    session.flush()
+    _audit(
+        session,
+        admin_id=admin_id,
+        target_type="recommendation_studio_publication",
+        target_id=publication.id,
+        action="publish_recommendation_studio",
+        after_state=normalized,
+    )
+    session.commit()
+    session.refresh(publication)
+    return {
+        "publication": _serialize_recommendation_studio_publication(session, publication),
+        "preview_feed": build_recommendation_studio_preview_feed(session, normalized),
+    }
+
+
+def list_recommendation_studio_publications(session: Session, *, limit: int = 10) -> dict:
+    rows = session.scalars(
+        select(RecommendationStudioPublication)
+        .where(RecommendationStudioPublication.status == "published")
+        .order_by(RecommendationStudioPublication.version.desc(), RecommendationStudioPublication.id.desc())
+        .limit(limit)
+    ).all()
+    return {
+        "items": [_serialize_recommendation_studio_publication(session, row) for row in rows],
     }

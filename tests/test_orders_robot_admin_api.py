@@ -534,6 +534,120 @@ def test_admin_can_filter_return_requests_by_status_and_reader(client):
     assert empty_filtered_response.json()["items"] == []
 
 
+def test_admin_can_filter_orders_by_status_priority_and_intervention(client):
+    clear_broker_history()
+    state = seed_state()
+
+    session = get_session_factory()()
+    try:
+        high_priority_order = BorrowOrder(
+            reader_id=state["profile"].id,
+            book_id=state["book"].id,
+            order_mode="robot_delivery",
+            status="delivering",
+            priority="high",
+            intervention_status="manual_review",
+        )
+        urgent_order = BorrowOrder(
+            reader_id=state["profile"].id,
+            book_id=state["book"].id,
+            order_mode="cabinet_pickup",
+            status="completed",
+            priority="urgent",
+            intervention_status=None,
+        )
+        session.add_all([high_priority_order, urgent_order])
+        session.commit()
+        high_priority_order_id = high_priority_order.id
+    finally:
+        session.close()
+
+    response = client.get(
+        "/api/v1/admin/orders",
+        headers=admin_headers(state["admin"].id),
+        params={"status": "delivering", "priority": "high", "intervention_status": "manual_review"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [item["borrow_order"]["id"] for item in payload["items"]] == [high_priority_order_id]
+    assert [item["borrow_order"]["priority"] for item in payload["items"]] == ["high"]
+    assert [item["borrow_order"]["intervention_status"] for item in payload["items"]] == ["manual_review"]
+
+
+def test_admin_can_search_orders_by_order_id_book_title_and_reader_name(client):
+    clear_broker_history()
+    state = seed_state()
+
+    session = get_session_factory()()
+    try:
+        second_reader = ReaderAccount(
+            username="reader-two",
+            password_hash=hash_password("reader-two-password"),
+        )
+        session.add(second_reader)
+        session.flush()
+        second_profile = ReaderProfile(
+            account_id=second_reader.id,
+            display_name="Mallory",
+            affiliation_type="student",
+            college="Mathematics",
+            major="Statistics",
+            grade_year="2027",
+        )
+        second_book = Book(
+            title="Distributed Catalog Design",
+            author="Robin",
+            category="Systems",
+            keywords="catalog,distributed,ops",
+            summary="A systems title used to validate admin search.",
+        )
+        session.add_all([second_profile, second_book])
+        session.flush()
+
+        matched_order = BorrowOrder(
+            reader_id=state["profile"].id,
+            book_id=state["book"].id,
+            order_mode="robot_delivery",
+            status="delivering",
+        )
+        distractor_order = BorrowOrder(
+            reader_id=second_profile.id,
+            book_id=second_book.id,
+            order_mode="cabinet_pickup",
+            status="created",
+        )
+        session.add_all([matched_order, distractor_order])
+        session.commit()
+        matched_order_id = matched_order.id
+    finally:
+        session.close()
+
+    title_response = client.get(
+        "/api/v1/admin/orders",
+        headers=admin_headers(state["admin"].id),
+        params={"query": "Socratic"},
+    )
+    assert title_response.status_code == 200
+    assert [item["borrow_order"]["id"] for item in title_response.json()["items"]] == [matched_order_id]
+
+    reader_response = client.get(
+        "/api/v1/admin/orders",
+        headers=admin_headers(state["admin"].id),
+        params={"query": "Alice"},
+    )
+    assert reader_response.status_code == 200
+    assert [item["borrow_order"]["id"] for item in reader_response.json()["items"]] == [matched_order_id]
+
+    id_response = client.get(
+        "/api/v1/admin/orders",
+        headers=admin_headers(state["admin"].id),
+        params={"query": str(matched_order_id)},
+    )
+    assert id_response.status_code == 200
+    assert [item["borrow_order"]["id"] for item in id_response.json()["items"]] == [matched_order_id]
+
+
 def test_admin_can_get_return_request_detail_before_and_after_completion(client):
     clear_broker_history()
     state = seed_state()

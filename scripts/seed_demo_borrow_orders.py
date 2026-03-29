@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from app.catalog.models import Book
 from app.core.config import get_settings
 from app.core.database import get_session_factory, init_engine
+from app.db.base import import_model_modules
 from app.orders.models import BorrowOrder
 from app.readers.models import ReaderAccount, ReaderProfile
 
@@ -279,6 +280,7 @@ def main() -> None:
         raise ValueError("--books-per-reader must be at least 3")
 
     settings = get_settings()
+    import_model_modules()
     init_engine(settings)
     session_factory = get_session_factory()
 

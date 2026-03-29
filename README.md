@@ -39,8 +39,6 @@
   - 混合推荐
   - 个性化推荐
   - dashboard
-  - demo readers / demo session
-  - 可视化演示页 `/demo/recommendation`
 - `conversation`
   - 创建会话
   - 列出当前读者的 sessions
@@ -158,7 +156,23 @@ postgresql+psycopg://library:library@localhost:55432/service
 
 - 没有配置 `LIBRARY_LLM_API_KEY` 时，聊天与语音会退化到本地空实现或禁用状态。
 - 没有配置 embedding API 时，推荐模块默认使用本地 deterministic hash embedding。
+- `LIBRARY_LLM_*` 和 `LIBRARY_EMBEDDING_*` 是两套独立配置，LLM 可以接 DeepSeek 之类的 OpenAI 兼容接口，而 embedding 继续保留本地 hash 降级。
 - `artifacts/recommendation_mf_model.json` 不存在时，推荐接口会自动回退到原有排序逻辑。
+
+DeepSeek 接入示例：
+
+```env
+LIBRARY_LLM_PROVIDER=openai-compatible
+LIBRARY_LLM_BASE_URL=https://api.deepseek.com
+LIBRARY_LLM_API_KEY=sk-...
+LIBRARY_LLM_MODEL=deepseek-chat
+
+# embedding 可继续使用本地 hash；如果后续切到兼容接口，再单独配置下面这组
+# LIBRARY_EMBEDDING_PROVIDER=openai-compatible
+# LIBRARY_EMBEDDING_BASE_URL=https://your-compatible-embedding-endpoint
+# LIBRARY_EMBEDDING_API_KEY=sk-...
+# LIBRARY_EMBEDDING_MODEL=text-embedding-3-small
+```
 
 ## 快速开始
 
@@ -230,11 +244,10 @@ Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8000/api/v1/health"
 
 - Swagger UI: `http://127.0.0.1:8000/docs`
 - OpenAPI JSON: `http://127.0.0.1:8000/openapi.json`
-- Recommendation demo: `http://127.0.0.1:8000/demo/recommendation`
 
 ## 推荐的初始化顺序
 
-如果你想一次把推荐演示链路跑起来，建议按下面顺序执行：
+如果你想一次把推荐能力初始化完整，建议按下面顺序执行：
 
 1. `uv sync`
 2. `docker compose -f docker-compose.pgvector.yml up -d`
@@ -245,7 +258,7 @@ Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8000/api/v1/health"
 7. 运行 `scripts/generate_book_embeddings.py`
 8. 如需 ML 重排，再运行 `scripts/seed_recommendation_ml_borrow_orders.py`
 9. 运行 `scripts/train_recommendation_mf.py`
-10. 启动服务并打开 `/demo/recommendation`
+10. 启动服务并通过 `/docs` 或推荐接口联调
 
 ## 数据与脚本说明
 
@@ -280,7 +293,8 @@ uv run python scripts/import_chinese_books.py
 
 - 该脚本当前使用 `scripts/import_chinese_books.py` 内部写死的 `EXCEL_PATH`。
 - 运行前需要把 `EXCEL_PATH` 改成你本机的中文图书 Excel 文件路径。
-- 预期 Excel 列包括：`书名`、`作者`、`出版社`、`关键词`、`摘要`、`中国图书分类号`、`出版年月`。
+- 预期 Excel 列包括：`书名`、`作者`、`出版社`、`关键词`、`摘要`、`分类`、`出版年月`。
+- 脚本会自动识别表头里带“分类”的那一列，兼容旧导入表。
 
 #### 3. 从 OpenLibrary 原始 dump 抽样
 
@@ -309,7 +323,7 @@ uv run python scripts/generate_book_embeddings.py
 说明：
 
 - 默认使用本地 deterministic hash embedding。
-- 如果切换到真实 embedding 服务，需要配置 `LIBRARY_EMBEDDING_PROVIDER`、`LIBRARY_EMBEDDING_API_KEY` 等环境变量。
+- 如果切换到真实 embedding 服务，需要单独配置 `LIBRARY_EMBEDDING_PROVIDER`、`LIBRARY_EMBEDDING_API_KEY` 等环境变量，不会自动复用 LLM 配置。
 
 #### 5. 重建 demo 借阅数据
 
@@ -388,24 +402,6 @@ $login = Invoke-RestMethod `
 $adminToken = $login.access_token
 ```
 
-### 2. demo reader token
-
-```powershell
-$base = "http://127.0.0.1:8000"
-
-$readers = Invoke-RestMethod `
-  -Method Get `
-  -Uri "$base/api/v1/recommendation/demo/readers"
-
-$demo = Invoke-RestMethod `
-  -Method Post `
-  -Uri "$base/api/v1/recommendation/demo/session" `
-  -ContentType "application/json; charset=utf-8" `
-  -Body (@{ profile_id = $readers.items[0].profile_id } | ConvertTo-Json)
-
-$readerToken = $demo.access_token
-```
-
 ## 常用接口
 
 ### 系统
@@ -471,8 +467,6 @@ $readerToken = $demo.access_token
 - `GET /api/v1/recommendation/books/{book_id}/hybrid`
 - `GET /api/v1/recommendation/me/personalized`
 - `GET /api/v1/recommendation/me/dashboard`
-- `GET /api/v1/recommendation/demo/readers`
-- `POST /api/v1/recommendation/demo/session`
 
 ### Conversation
 
@@ -510,10 +504,9 @@ $readerToken = $demo.access_token
 
 ### 1. 推荐系统
 
-- 先准备 demo reader token
+- 先准备真实 reader token
 - 调 `POST /api/v1/recommendation/search`
 - 调 `GET /api/v1/recommendation/me/dashboard`
-- 打开 `/demo/recommendation`
 
 ### 2. 机器人借阅
 

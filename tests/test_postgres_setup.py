@@ -150,6 +150,7 @@ def test_extended_admin_columns_exist():
     assert "cover_url" in Book.__table__.c
     assert "shelf_status" in Book.__table__.c
     assert "category_id" in Book.__table__.c
+    assert "classification_code" not in Book.__table__.c
     assert "restriction_status" in ReaderProfile.__table__.c
     assert "restriction_until" in ReaderProfile.__table__.c
     assert "risk_flags" in ReaderProfile.__table__.c

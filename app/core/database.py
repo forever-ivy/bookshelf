@@ -11,6 +11,12 @@ from app.core.config import Settings, get_settings
 from app.db.base import Base, import_model_modules
 
 DEFAULT_CABINET_NAME = "主书柜"
+LEGACY_INDEX_DROPS: dict[str, set[str]] = {
+    "books": {"ix_books_classification_code"},
+}
+LEGACY_COLUMN_DROPS: dict[str, set[str]] = {
+    "books": {"classification_code"},
+}
 
 _engine: Engine | None = None
 _session_factory: sessionmaker[Session] | None = None
@@ -90,6 +96,23 @@ def _ensure_metadata_columns_exist() -> None:
                 continue
 
             existing_columns = {column["name"] for column in connection_inspector.get_columns(table.name)}
+            existing_indexes = {index["name"] for index in connection_inspector.get_indexes(table.name)}
+            table_name = preparer.quote(table.name)
+
+            for index_name in LEGACY_INDEX_DROPS.get(table.name, set()):
+                if index_name not in existing_indexes:
+                    continue
+                connection.exec_driver_sql(f"DROP INDEX IF EXISTS {preparer.quote(index_name)}")
+                existing_indexes.remove(index_name)
+
+            for column_name in LEGACY_COLUMN_DROPS.get(table.name, set()):
+                if column_name not in existing_columns:
+                    continue
+                connection.exec_driver_sql(
+                    f"ALTER TABLE {table_name} DROP COLUMN {preparer.quote(column_name)}"
+                )
+                existing_columns.remove(column_name)
+
             for column in table.columns:
                 if column.name in existing_columns:
                     continue
@@ -99,10 +122,8 @@ def _ensure_metadata_columns_exist() -> None:
                     continue
 
                 compiled = str(CreateColumn(column).compile(dialect=engine.dialect)).strip().rstrip(",")
-                table_name = preparer.quote(table.name)
                 connection.exec_driver_sql(f"ALTER TABLE {table_name} ADD COLUMN {compiled}")
 
-            existing_indexes = {index["name"] for index in connection_inspector.get_indexes(table.name)}
             for index in table.indexes:
                 if not index.name or index.name in existing_indexes:
                     continue
@@ -120,6 +141,15 @@ def init_schema() -> None:
     Base.metadata.create_all(bind=engine)
     _ensure_metadata_columns_exist()
     _seed_default_cabinet()
+    from app.catalog.taxonomy import backfill_book_taxonomy, books_need_taxonomy_backfill
+
+    session = get_session_factory()()
+    try:
+        if books_need_taxonomy_backfill(session):
+            backfill_book_taxonomy(session)
+            session.commit()
+    finally:
+        session.close()
 
 
 def rebuild_schema() -> None:

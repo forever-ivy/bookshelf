@@ -24,7 +24,7 @@ from app.readers.models import ReaderAccount, ReaderProfile
 BOOKS_DIR = Path(__file__).resolve().parents[1] / "data"
 ML_DEMO_USERNAME_PREFIX = "demo_ml_reader_"
 DEFAULT_RANDOM_SEED = 20260326
-CN_REQUIRED_COLUMNS = {"书名", "作者", "关键词", "摘要", "中国图书分类号"}
+CN_REQUIRED_COLUMNS = {"书名", "作者", "关键词", "摘要"}
 DOUBAN_REQUIRED_COLUMNS = {"书名", "作者", "豆瓣成员常用的标签", "评分", "标签"}
 BORROWABLE_SIGNAL_STATUSES = {"completed", "returned"}
 STOPWORD_TOKENS = {
@@ -171,6 +171,16 @@ def parse_category_root(value) -> str:
     return text[:6] if text else ""
 
 
+def find_category_column(columns) -> str | None:
+    normalized = [str(column).strip() for column in columns]
+    if "分类" in normalized:
+        return "分类"
+    candidates = [column for column in normalized if "分类" in column]
+    if candidates:
+        return sorted(candidates, key=len)[0]
+    return None
+
+
 def split_terms(value) -> list[str]:
     if value is None:
         return []
@@ -201,7 +211,7 @@ def find_excel_sources(books_dir: Path) -> tuple[Path, Path]:
             columns = set(pd.read_excel(path, nrows=0).columns)
         except Exception:
             continue
-        if CN_REQUIRED_COLUMNS.issubset(columns):
+        if CN_REQUIRED_COLUMNS.issubset(columns) and find_category_column(columns) is not None:
             chinese_path = path
         if DOUBAN_REQUIRED_COLUMNS.issubset(columns):
             douban_path = path
@@ -461,9 +471,14 @@ def load_category_pools(
     subtopics_per_pool: int,
     weight_by_book: dict[int, float],
 ) -> list[CategoryPool]:
+    header = pd.read_excel(chinese_path, nrows=0)
+    category_column = find_category_column(header.columns)
+    if category_column is None:
+        raise ValueError("Chinese book Excel is missing a category column")
+
     df = pd.read_excel(
         chinese_path,
-        usecols=["书名", "作者", "关键词", "中国图书分类号"],
+        usecols=["书名", "作者", "关键词", category_column],
     )
 
     root_to_books: dict[str, list[int]] = defaultdict(list)
@@ -475,7 +490,7 @@ def load_category_pools(
         if book is None:
             continue
 
-        root = parse_category_root(row["中国图书分类号"] or book.category)
+        root = parse_category_root(row[category_column] or book.category)
         if not root:
             continue
 

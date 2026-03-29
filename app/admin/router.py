@@ -1,16 +1,22 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.admin.schemas import (
+    AdminRecommendationStudioDraft,
+    AdminRecommendationStudioDraftSaveResponse,
+    AdminRecommendationStudioPublicationListResponse,
+    AdminRecommendationStudioPublishResponse,
+    AdminRecommendationStudioResponse,
+)
 from app.admin.service import (
     apply_inventory_correction,
     acknowledge_alert,
     create_admin_book,
     create_book_category,
     create_book_tag,
-    create_recommendation_placement,
-    create_topic_booklist,
     dashboard_heatmap,
     dashboard_overview,
     get_admin_book,
@@ -25,14 +31,15 @@ from app.admin.service import (
     list_book_tags,
     list_inventory_alerts,
     list_inventory_records,
-    list_recommendation_placements,
+    list_recommendation_studio_publications,
     list_system_admins,
     list_system_permissions,
     list_system_roles,
     list_system_settings,
-    list_topic_booklists,
-    recommendation_insights,
+    get_recommendation_studio,
+    publish_recommendation_studio,
     resolve_alert,
+    save_recommendation_studio_draft,
     set_admin_book_status,
     upsert_system_role,
     update_admin_book,
@@ -41,15 +48,19 @@ from app.admin.service import (
 )
 from app.core.auth_context import require_admin_permission
 from app.core.database import get_db
+from app.core.errors import ApiError
 from app.core.events import broker
+from app.core.config import get_settings
 from app.core.security import AuthIdentity
 from app.core.sse import sse_response
+from app.llm.provider import NullLLMProvider, build_llm_provider
 from app.orders.service import (
     correct_order_bundle,
     get_order_bundle,
     get_return_request_detail,
     intervene_order_bundle,
     list_order_bundles,
+    list_order_bundles_page,
     list_recent_robot_events,
     list_return_requests,
     list_robot_tasks,
@@ -63,8 +74,60 @@ from app.orders.service import (
     serialize_order,
     serialize_return_request,
 )
+from app.recommendation.embeddings import build_embedding_provider
+from app.recommendation.service import RecommendationService
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
+
+
+class AdminRecommendationDebugSearchRequest(BaseModel):
+    query: str
+    reader_id: int | None = None
+    limit: int = 5
+
+
+def _resolve_llm_provider():
+    try:
+        return build_llm_provider()
+    except RuntimeError as exc:
+        raise ApiError(503, "llm_provider_misconfigured", str(exc)) from exc
+
+
+def _resolve_embedding_provider():
+    try:
+        return build_embedding_provider()
+    except RuntimeError as exc:
+        raise ApiError(503, "embedding_provider_misconfigured", str(exc)) from exc
+
+
+def _build_recommendation_runtime(*, provider_note: str | None = None) -> dict:
+    settings = get_settings()
+    return {
+        "llm_provider": settings.llm_provider,
+        "llm_model": settings.llm_model,
+        "embedding_provider": settings.embedding_provider,
+        "embedding_model": settings.embedding_model,
+        "recommendation_ml_enabled": settings.recommendation_ml_enabled,
+        "provider_note": provider_note,
+    }
+
+
+def _require_admin_reader(session: Session, reader_id: int) -> None:
+    get_admin_reader(session, reader_id)
+
+
+def _first_provider_note(payload: dict, *, fallback: str | None = None) -> str | None:
+    results = payload.get("results")
+    if isinstance(results, list) and results:
+        note = results[0].get("provider_note")
+        if isinstance(note, str) and note:
+            return note
+    personalized = payload.get("personalized")
+    if isinstance(personalized, list) and personalized:
+        note = personalized[0].get("provider_note")
+        if isinstance(note, str) and note:
+            return note
+    return fallback
 
 
 @router.get("/dashboard/overview")
@@ -135,10 +198,17 @@ def list_inventory_alerts_endpoint(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     status_filter: str | None = Query(default=None, alias="status"),
+    source_id: str | None = Query(default=None),
     _identity: AuthIdentity = Depends(require_admin_permission("inventory.manage")),
     session: Session = Depends(get_db),
 ):
-    return list_inventory_alerts(session, page=page, page_size=page_size, status=status_filter)
+    return list_inventory_alerts(
+        session,
+        page=page,
+        page_size=page_size,
+        status=status_filter,
+        source_id=source_id,
+    )
 
 
 @router.post("/inventory/corrections")
@@ -304,51 +374,127 @@ def update_admin_reader_endpoint(
     return {"reader": update_admin_reader(session, reader_id=reader_id, admin_id=identity.account_id, payload=payload)}
 
 
-@router.get("/recommendation/placements")
-def list_recommendation_placements_endpoint(
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+@router.get("/recommendation/studio", response_model=AdminRecommendationStudioResponse)
+def recommendation_studio_endpoint(
     _identity: AuthIdentity = Depends(require_admin_permission("recommendation.manage")),
     session: Session = Depends(get_db),
 ):
-    return list_recommendation_placements(session, page=page, page_size=page_size)
+    return get_recommendation_studio(session)
 
 
-@router.post("/recommendation/placements", status_code=status.HTTP_201_CREATED)
-def create_recommendation_placement_endpoint(
-    payload: dict,
+@router.put("/recommendation/studio/draft", response_model=AdminRecommendationStudioDraftSaveResponse)
+def save_recommendation_studio_draft_endpoint(
+    payload: AdminRecommendationStudioDraft,
     identity: AuthIdentity = Depends(require_admin_permission("recommendation.manage")),
     session: Session = Depends(get_db),
 ):
-    return {"placement": create_recommendation_placement(session, admin_id=identity.account_id, payload=payload)}
+    return save_recommendation_studio_draft(session, admin_id=identity.account_id, payload=payload.model_dump())
 
 
-@router.get("/recommendation/topic-booklists")
-def list_topic_booklists_endpoint(
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
-    _identity: AuthIdentity = Depends(require_admin_permission("recommendation.manage")),
-    session: Session = Depends(get_db),
-):
-    return list_topic_booklists(session, page=page, page_size=page_size)
-
-
-@router.post("/recommendation/topic-booklists", status_code=status.HTTP_201_CREATED)
-def create_topic_booklists_endpoint(
-    payload: dict,
+@router.post("/recommendation/studio/publish", response_model=AdminRecommendationStudioPublishResponse)
+def publish_recommendation_studio_endpoint(
     identity: AuthIdentity = Depends(require_admin_permission("recommendation.manage")),
     session: Session = Depends(get_db),
 ):
-    return {"topic_booklist": create_topic_booklist(session, admin_id=identity.account_id, payload=payload)}
+    return publish_recommendation_studio(session, admin_id=identity.account_id)
 
 
-@router.get("/recommendation/insights")
-def recommendation_insights_endpoint(
+@router.get("/recommendation/studio/publications", response_model=AdminRecommendationStudioPublicationListResponse)
+def list_recommendation_studio_publications_endpoint(
+    limit: int = Query(default=10, ge=1, le=50),
     _identity: AuthIdentity = Depends(require_admin_permission("recommendation.manage")),
     session: Session = Depends(get_db),
 ):
-    return recommendation_insights(session)
+    return list_recommendation_studio_publications(session, limit=limit)
 
+
+@router.post("/recommendation/debug/search")
+def recommendation_debug_search_endpoint(
+    payload: AdminRecommendationDebugSearchRequest,
+    _identity: AuthIdentity = Depends(require_admin_permission("recommendation.manage")),
+    session: Session = Depends(get_db),
+):
+    if payload.reader_id is not None:
+        _require_admin_reader(session, payload.reader_id)
+    provider = _resolve_llm_provider()
+    service = RecommendationService(
+        session,
+        provider=provider,
+        embedding_provider=_resolve_embedding_provider(),
+    )
+    result = service.search(reader_id=payload.reader_id, query=payload.query, limit=payload.limit)
+    return {
+        **result,
+        "runtime": _build_recommendation_runtime(
+            provider_note=_first_provider_note(
+                result,
+                fallback="fallback" if isinstance(provider, NullLLMProvider) else "provider",
+            )
+        ),
+    }
+
+
+@router.get("/recommendation/debug/readers/{reader_id}/dashboard")
+def recommendation_debug_dashboard_endpoint(
+    reader_id: int,
+    limit: int = Query(default=5, ge=1, le=20),
+    history_limit: int = Query(default=3, ge=1, le=10),
+    _identity: AuthIdentity = Depends(require_admin_permission("recommendation.manage")),
+    session: Session = Depends(get_db),
+):
+    _require_admin_reader(session, reader_id)
+    service = RecommendationService(session)
+    try:
+        result = service.recommendation_dashboard(
+            reader_id=reader_id,
+            limit=limit,
+            history_limit=history_limit,
+        )
+    except RuntimeError as exc:
+        raise ApiError(409, "reader_borrow_history_missing", str(exc)) from exc
+    return {
+        **result,
+        "runtime": _build_recommendation_runtime(
+            provider_note=_first_provider_note(result, fallback="personalized")
+        ),
+    }
+
+
+@router.get("/recommendation/debug/readers/{reader_id}/books/{book_id}")
+def recommendation_debug_book_module_endpoint(
+    reader_id: int,
+    book_id: int,
+    mode: str = Query(default="hybrid"),
+    limit: int = Query(default=5, ge=1, le=20),
+    _identity: AuthIdentity = Depends(require_admin_permission("recommendation.manage")),
+    session: Session = Depends(get_db),
+):
+    _require_admin_reader(session, reader_id)
+    service = RecommendationService(session)
+    try:
+        if mode == "similar":
+            result = service.similar_books(reader_id=reader_id, book_id=book_id, limit=limit)
+        elif mode == "collaborative":
+            result = service.collaborative_books(reader_id=reader_id, book_id=book_id, limit=limit)
+        elif mode == "hybrid":
+            result = service.hybrid_books(reader_id=reader_id, book_id=book_id, limit=limit)
+        else:
+            raise ApiError(400, "recommendation_mode_invalid", f"Unsupported recommendation mode: {mode}")
+    except LookupError as exc:
+        raise ApiError(404, "book_not_found", str(exc)) from exc
+    except RuntimeError as exc:
+        error_code = {
+            "similar": "book_embedding_missing",
+            "collaborative": "book_borrow_history_missing",
+            "hybrid": "book_recommendation_signals_missing",
+        }[mode]
+        raise ApiError(409, error_code, str(exc)) from exc
+    return {
+        **result,
+        "runtime": _build_recommendation_runtime(
+            provider_note=_first_provider_note(result, fallback=mode)
+        ),
+    }
 
 @router.get("/audit-logs")
 def list_audit_logs_endpoint(
@@ -480,10 +626,28 @@ def list_system_admins_endpoint(
 
 @router.get("/orders")
 def list_orders_endpoint(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    query: str | None = None,
+    status_filter: str | None = Query(default=None, alias="status"),
+    priority: str | None = None,
+    intervention_status: str | None = None,
     _identity: AuthIdentity = Depends(require_admin_permission("orders.manage")),
     session: Session = Depends(get_db),
 ):
-    return {"items": [serialize_order(bundle) for bundle in list_order_bundles(session)]}
+    payload = list_order_bundles_page(
+        session,
+        page=page,
+        page_size=page_size,
+        query=query,
+        status=status_filter,
+        priority=priority,
+        intervention_status=intervention_status,
+    )
+    return {
+        **payload,
+        "items": [serialize_order(bundle) for bundle in payload["items"]],
+    }
 
 
 @router.get("/return-requests")

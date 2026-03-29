@@ -68,6 +68,19 @@ class TopicBooklistItem(Base):
     created_at: Mapped[datetime | None] = mapped_column(default=utc_now, nullable=True)
 
 
+class RecommendationStudioPublication(Base):
+    __tablename__ = "recommendation_studio_publications"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    version: Mapped[int | None] = mapped_column(index=True, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="draft", index=True)
+    payload_json: Mapped[dict | None] = mapped_column(JSON_VARIANT, nullable=True)
+    published_by: Mapped[int | None] = mapped_column(ForeignKey("admin_accounts.id"), nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(default=utc_now, nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(default=utc_now, onupdate=utc_now, nullable=True)
+
+
 class AdminRole(Base):
     __tablename__ = "admin_roles"
 

@@ -42,10 +42,19 @@ def truncate_text(value, max_len):
     return value[:max_len]
 
 
+def find_category_column(columns):
+    normalized = [str(column).strip() for column in columns]
+    if "分类" in normalized:
+        return "分类"
+    candidates = [column for column in normalized if "分类" in column]
+    if candidates:
+        return sorted(candidates, key=len)[0]
+    return None
+
+
 def normalize_category(value):
     """
-    中国图书分类号示例: R-092
-    可以先直接存原值，后续再做更细分类映射。
+    兼容旧表里的分类编码或分类名称，统一写入 books.category。
     """
     value = clean_text(value)
     if not value:
@@ -75,20 +84,23 @@ def normalize_keywords(value):
 
 def load_excel(path: Path) -> pd.DataFrame:
     df = pd.read_excel(path, engine="openpyxl")
+    category_column = find_category_column(df.columns)
 
     # 只保留需要的列
-    expected_cols = ["书名", "作者", "出版社", "关键词", "摘要", "中国图书分类号", "出版年月"]
+    expected_cols = ["书名", "作者", "出版社", "关键词", "摘要", "出版年月"]
     missing = [c for c in expected_cols if c not in df.columns]
     if missing:
         raise ValueError(f"Excel 缺少这些列: {missing}")
+    if category_column is None:
+        raise ValueError("Excel 缺少分类列，请确认表头中包含“分类”字样。")
 
-    df = df[expected_cols].copy()
+    df = df[expected_cols + [category_column]].copy()
 
     # 映射到 books 表结构
     mapped = pd.DataFrame()
     mapped["title"] = df["书名"].map(clean_text)
     mapped["author"] = df["作者"].map(clean_text)
-    mapped["category"] = df["中国图书分类号"].map(normalize_category)
+    mapped["category"] = df[category_column].map(normalize_category)
     mapped["keywords"] = df["关键词"].map(normalize_keywords)
     mapped["summary"] = df["摘要"].map(clean_text)
 
@@ -134,13 +146,14 @@ def insert_books(conn, df: pd.DataFrame):
             row["category"],
             row["keywords"],
             row["summary"],
+            "draft",
             now,
             now,
         ))
 
     insert_sql = """
-    INSERT INTO books (title, author, category, keywords, summary, created_at, updated_at)
-    VALUES (%s, %s, %s, %s, %s, %s, %s)
+    INSERT INTO books (title, author, category, keywords, summary, shelf_status, created_at, updated_at)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
     ON CONFLICT (title, COALESCE(author, '')) DO NOTHING
     """
 

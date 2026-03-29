@@ -5,23 +5,29 @@ from sqlalchemy import event
 
 def seed_catalog_data(app):
     from app.core.database import get_session_factory
-    from app.catalog.models import Book
+    from app.catalog.models import Book, BookCategory
     from app.inventory.models import BookCopy, BookStock, Cabinet, CabinetSlot, InventoryEvent
 
     session_factory = get_session_factory()
     session = session_factory()
     try:
+        fiction_category = BookCategory(code="fiction", name="科幻文学", description="科幻题材图书")
+        science_category = BookCategory(code="science", name="物理学", description="自然科学图书")
+        session.add_all([fiction_category, science_category])
+        session.flush()
         dune = Book(
             title="Dune",
             author="Frank Herbert",
-            category="Science Fiction",
+            category_id=fiction_category.id,
+            category=fiction_category.name,
             keywords="desert,politics,spice",
             summary="A desert planet epic.",
         )
         principia = Book(
             title="Principia",
             author="Isaac Newton",
-            category="Science",
+            category_id=science_category.id,
+            category=science_category.name,
             keywords="physics,math,gravity",
             summary="Foundations of mechanics.",
         )
@@ -76,6 +82,18 @@ def test_books_endpoint_searches_title_author_category_and_keywords(client, app)
     assert response.status_code == 200
     items = response.json()["items"]
     assert [item["id"] for item in items] == [ids["principia_id"]]
+
+
+def test_books_endpoint_exposes_official_category_without_classification_code(client, app):
+    ids = seed_catalog_data(app)
+
+    response = client.get("/api/v1/catalog/books", params={"query": "物理学"})
+
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert [item["id"] for item in items] == [ids["principia_id"]]
+    assert items[0]["category"] == "物理学"
+    assert "classification_code" not in items[0]
 
 
 def test_book_detail_uses_inventory_projection_without_exposing_cabinet_semantics(client, app):

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import timezone, timedelta
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.analytics.models import ReadingEvent
@@ -473,6 +473,60 @@ def serialize_order(bundle: OrderBundle, *, session: Session | None = None) -> d
 def list_order_bundles(session: Session) -> list[OrderBundle]:
     borrow_orders = session.query(BorrowOrder).order_by(BorrowOrder.created_at.desc(), BorrowOrder.id.desc()).all()
     return [get_order_bundle(session, borrow_order.id) for borrow_order in borrow_orders]
+
+
+def list_order_bundles_page(
+    session: Session,
+    *,
+    page: int,
+    page_size: int,
+    query: str | None = None,
+    status: str | None = None,
+    priority: str | None = None,
+    intervention_status: str | None = None,
+) -> dict:
+    normalized_page = max(page, 1)
+    normalized_page_size = max(1, min(page_size, 100))
+    stmt = select(BorrowOrder.id)
+    normalized_query = (query or "").strip()
+    normalized_status = (status or "").strip()
+    normalized_priority = (priority or "").strip()
+    normalized_intervention_status = (intervention_status or "").strip()
+    if normalized_query:
+        search_pattern = f"%{normalized_query}%"
+        stmt = (
+            stmt.join(Book, BorrowOrder.book_id == Book.id)
+            .join(ReaderProfile, BorrowOrder.reader_id == ReaderProfile.id)
+            .outerjoin(DeliveryOrder, DeliveryOrder.borrow_order_id == BorrowOrder.id)
+            .where(
+                or_(
+                    cast(BorrowOrder.id, String).ilike(search_pattern),
+                    Book.title.ilike(search_pattern),
+                    Book.author.ilike(search_pattern),
+                    ReaderProfile.display_name.ilike(search_pattern),
+                    ReaderProfile.college.ilike(search_pattern),
+                    ReaderProfile.major.ilike(search_pattern),
+                    DeliveryOrder.delivery_target.ilike(search_pattern),
+                )
+            )
+        )
+    if normalized_status:
+        stmt = stmt.where(BorrowOrder.status == normalized_status)
+    if normalized_priority:
+        stmt = stmt.where(BorrowOrder.priority == normalized_priority)
+    if normalized_intervention_status:
+        stmt = stmt.where(BorrowOrder.intervention_status == normalized_intervention_status)
+    stmt = stmt.order_by(BorrowOrder.created_at.desc(), BorrowOrder.id.desc())
+    total = session.scalar(select(func.count()).select_from(stmt.order_by(None).subquery())) or 0
+    borrow_order_ids = session.execute(
+        stmt.offset((normalized_page - 1) * normalized_page_size).limit(normalized_page_size)
+    ).scalars().all()
+    return {
+        "items": [get_order_bundle(session, borrow_order_id) for borrow_order_id in borrow_order_ids],
+        "total": int(total),
+        "page": normalized_page,
+        "page_size": normalized_page_size,
+    }
 
 
 def list_reader_order_bundles(

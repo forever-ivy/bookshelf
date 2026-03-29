@@ -19,7 +19,6 @@ from app.core.config import get_settings
 from app.core.database import init_engine, init_schema
 from app.core.errors import register_exception_handlers
 from app.core.module_catalog import MODULE_TAGS
-from app.recommendation.demo_page import build_recommendation_demo_html
 
 
 def build_home_page_html(*, app_name: str, version: str) -> str:
@@ -187,7 +186,7 @@ def build_home_page_html(*, app_name: str, version: str) -> str:
     <section class="hero">
       <div class="eyebrow">SMART BOOKSHELF / BACKEND</div>
       <h1>{app_name}</h1>
-      <p>服务已经正常启动。你刚才看到的 404 只是因为根路径原来没有页面，现在这里给你一个可直接打开的入口页，方便进入接口文档、健康检查和推荐演示。</p>
+      <p>服务已经正常启动。你可以直接从这里进入接口文档和健康检查，继续联调管理后台与读者端能力。</p>
     </section>
 
     <section class="grid">
@@ -195,12 +194,6 @@ def build_home_page_html(*, app_name: str, version: str) -> str:
         <h2>接口文档</h2>
         <p>适合先确认服务是否可用，也方便直接试接口。</p>
         <a class="cta" href="/docs">打开 /docs</a>
-      </article>
-
-      <article class="card">
-        <h2>推荐演示页</h2>
-        <p>如果你已经准备了演示读者和推荐数据，可以直接打开可视化页面。</p>
-        <a class="cta secondary" href="/demo/recommendation">打开 Demo</a>
       </article>
 
       <article class="card">
@@ -212,7 +205,7 @@ def build_home_page_html(*, app_name: str, version: str) -> str:
 
     <section class="meta">
       <div>当前版本：<code>{version}</code></div>
-      <div>如果你是直接在浏览器输入地址，优先访问 <code>http://127.0.0.1:8000/docs</code> 或 <code>http://127.0.0.1:8000/demo/recommendation</code>。</div>
+      <div>如果你是直接在浏览器输入地址，优先访问 <code>http://127.0.0.1:8000/docs</code> 或 <code>http://127.0.0.1:8000/api/v1/health</code>。</div>
     </section>
   </div>
 </body>
@@ -255,10 +248,6 @@ def create_app() -> FastAPI:
     @app.get("/favicon.ico", include_in_schema=False)
     def favicon() -> Response:
         return Response(status_code=204)
-
-    @app.get("/demo/recommendation", include_in_schema=False, response_class=HTMLResponse)
-    def recommendation_demo_page() -> str:
-        return build_recommendation_demo_html()
 
     return app
 

@@ -96,6 +96,23 @@ def test_seeded_admin_can_log_in_and_fetch_orders(client):
     orders_response = client.get(
         "/api/v1/admin/orders",
         headers={"Authorization": f"Bearer {token}"},
+        params={"page": 2, "page_size": 10},
     )
     assert orders_response.status_code == 200
-    assert len(orders_response.json()["items"]) == 36
+    payload = orders_response.json()
+    assert payload["total"] == 36
+    assert payload["page"] == 2
+    assert payload["page_size"] == 10
+    assert len(payload["items"]) == 10
+
+    filtered_response = client.get(
+        "/api/v1/admin/orders",
+        headers={"Authorization": f"Bearer {token}"},
+        params={"status": payload["items"][0]["borrow_order"]["status"], "page": 1, "page_size": 100},
+    )
+    assert filtered_response.status_code == 200
+    filtered_payload = filtered_response.json()
+    assert filtered_payload["page"] == 1
+    assert filtered_payload["page_size"] == 100
+    assert filtered_payload["total"] >= len(filtered_payload["items"]) >= 1
+    assert all(item["borrow_order"]["status"] == payload["items"][0]["borrow_order"]["status"] for item in filtered_payload["items"])

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from app.core.config import get_settings
-from app.llm.provider import OpenAICompatibleLLMProvider, build_llm_provider
+from app.llm.provider import NullLLMProvider, OpenAICompatibleLLMProvider, build_llm_provider
 
 
 class FakeMessage:
@@ -43,7 +43,8 @@ class FakeClient:
         self.chat = FakeChat()
 
 
-def test_default_settings_prefer_cloud_sdk_provider(monkeypatch):
+def test_default_settings_prefer_local_fallback_provider(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("LIBRARY_LLM_PROVIDER", raising=False)
     monkeypatch.delenv("LIBRARY_LLM_API_KEY", raising=False)
     monkeypatch.delenv("LIBRARY_LLM_BASE_URL", raising=False)
@@ -51,9 +52,8 @@ def test_default_settings_prefer_cloud_sdk_provider(monkeypatch):
     get_settings.cache_clear()
 
     settings = get_settings()
-    assert settings.llm_provider == "openai-compatible"
-    with pytest.raises(RuntimeError):
-        build_llm_provider()
+    assert settings.llm_provider == "null"
+    assert isinstance(build_llm_provider(), NullLLMProvider)
 
 
 def test_build_llm_provider_uses_openai_compatible_sdk(monkeypatch):
@@ -76,6 +76,34 @@ def test_build_llm_provider_uses_openai_compatible_sdk(monkeypatch):
     assert isinstance(provider, OpenAICompatibleLLMProvider)
     assert provider.client.api_key == "test-key"
     assert provider.client.base_url == "https://example.com/v1"
+
+
+def test_settings_can_load_llm_config_from_env_file(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env.local").write_text(
+        "\n".join(
+            [
+                "LIBRARY_LLM_PROVIDER=openai-compatible",
+                "LIBRARY_LLM_API_KEY=file-key",
+                "LIBRARY_LLM_BASE_URL=https://api.deepseek.com",
+                "LIBRARY_LLM_MODEL=deepseek-chat",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("LIBRARY_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("LIBRARY_LLM_API_KEY", raising=False)
+    monkeypatch.delenv("LIBRARY_LLM_BASE_URL", raising=False)
+    monkeypatch.delenv("LIBRARY_LLM_MODEL", raising=False)
+    monkeypatch.delenv("LIBRARY_IGNORE_ENV_FILE", raising=False)
+    get_settings.cache_clear()
+
+    settings = get_settings()
+
+    assert settings.llm_provider == "openai-compatible"
+    assert settings.llm_api_key == "file-key"
+    assert settings.llm_base_url == "https://api.deepseek.com"
+    assert settings.llm_model == "deepseek-chat"
 
 
 def test_openai_compatible_provider_uses_sdk_client_for_ocr_and_explanation():

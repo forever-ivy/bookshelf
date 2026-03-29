@@ -11,4 +11,8 @@ __pycache__/
 *.db
 *.db.bak-*
 tmp_*.db
+.env
+.env.*
+!.env.example
+!.env.*.example
 .wake.lock
