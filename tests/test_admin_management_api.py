@@ -719,6 +719,44 @@ def test_admin_books_list_includes_copy_location_details(client):
     assert copies[0]["available_for_borrow"] is False
 
 
+def test_admin_books_search_prioritizes_title_matches_over_summary_only_matches(client):
+    state = seed_management_state()
+    session = get_session_factory()()
+    try:
+        ai_category = session.query(BookCategory).filter_by(code="ai").one()
+        title_match = Book(
+            title="机器学习导论",
+            author="陈言",
+            category_id=ai_category.id,
+            category=ai_category.name,
+            summary="面向初学者的机器学习教材。",
+            shelf_status="on_shelf",
+        )
+        summary_match = Book(
+            title="复杂交通跟踪研究",
+            author="作者吴刚",
+            category_id=ai_category.id,
+            category=ai_category.name,
+            summary="应用机器学习算法解决复杂场景中的目标跟踪问题。",
+            shelf_status="on_shelf",
+        )
+        session.add_all([title_match, summary_match])
+        session.commit()
+    finally:
+        session.close()
+
+    response = client.get(
+        "/api/v1/admin/books",
+        headers=admin_headers(state["admin_id"]),
+        params={"page": 1, "page_size": 20, "query": "机器学习"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    titles = [item["title"] for item in payload["items"]]
+    assert titles.index("机器学习导论") < titles.index("复杂交通跟踪研究")
+
+
 def test_backfill_book_taxonomy_maps_legacy_category_codes_into_official_taxonomy(app):
     session = get_session_factory()()
     try:

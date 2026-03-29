@@ -5,7 +5,7 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.admin.models import (
@@ -387,6 +387,9 @@ def list_admin_books(
                 func.lower(func.coalesce(Book.barcode, "")).like(pattern),
             )
         )
+        stmt = stmt.order_by(_admin_book_search_rank_expr(clean_query).desc(), Book.updated_at.desc(), Book.id.desc())
+    else:
+        stmt = stmt.order_by(Book.updated_at.desc(), Book.id.desc())
     if shelf_status:
         normalized_shelf_status = shelf_status.strip()
         blank_shelf_status_clause = func.nullif(func.trim(func.coalesce(Book.shelf_status, "")), "").is_(None)
@@ -409,9 +412,32 @@ def list_admin_books(
             stmt = stmt.where(Book.shelf_status == normalized_shelf_status)
     if category_id is not None:
         stmt = stmt.where(Book.category_id == category_id)
-    stmt = stmt.order_by(Book.updated_at.desc(), Book.id.desc())
     books, meta = _paginate(stmt, session=session, page=page, page_size=page_size)
     return {**meta, "items": [serialize_book_admin(session, book) for book in books]}
+
+
+def _admin_book_search_rank_expr(clean_query: str):
+    title = func.lower(func.coalesce(Book.title, ""))
+    author = func.lower(func.coalesce(Book.author, ""))
+    category = func.lower(func.coalesce(Book.category, ""))
+    keywords = func.lower(func.coalesce(Book.keywords, ""))
+    summary = func.lower(func.coalesce(Book.summary, ""))
+    isbn = func.lower(func.coalesce(Book.isbn, ""))
+    barcode = func.lower(func.coalesce(Book.barcode, ""))
+    contains_pattern = f"%{clean_query}%"
+    prefix_pattern = f"{clean_query}%"
+
+    return (
+        case((title == clean_query, 120), else_=0)
+        + case((title.like(prefix_pattern), 80), else_=0)
+        + case((title.like(contains_pattern), 50), else_=0)
+        + case((keywords.like(contains_pattern), 30), else_=0)
+        + case((category.like(contains_pattern), 20), else_=0)
+        + case((author.like(contains_pattern), 18), else_=0)
+        + case((isbn.like(contains_pattern), 12), else_=0)
+        + case((barcode.like(contains_pattern), 12), else_=0)
+        + case((summary.like(contains_pattern), 6), else_=0)
+    )
 
 
 def get_admin_book(session: Session, book_id: int) -> dict:
