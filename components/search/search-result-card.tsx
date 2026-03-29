@@ -1,16 +1,25 @@
 import React from 'react';
+import type { Href } from 'expo-router';
 import { Text, View } from 'react-native';
 
+import { AppIcon } from '@/components/base/app-icon';
 import { PillButton } from '@/components/base/pill-button';
 import { useAppTheme } from '@/hooks/use-app-theme';
 
 type SearchResultCardProps = {
+  href?: Href;
+  actionLabel?: string;
   availability: string;
   author: string;
   coverTone: 'apricot' | 'blue' | 'coral' | 'lavender' | 'mint';
   eta: string;
   location: string;
+  listPosition?: 'first' | 'last' | 'middle' | 'single';
+  onPress?: () => void;
+  reason?: string | null;
+  summary?: string | null;
   title: string;
+  variant?: 'card' | 'list';
 };
 
 function coverColor(tone: SearchResultCardProps['coverTone']) {
@@ -29,12 +38,19 @@ function coverColor(tone: SearchResultCardProps['coverTone']) {
 }
 
 export function SearchResultCard({
+  actionLabel = '查看详情并借阅',
   availability,
   author,
   coverTone,
   eta,
+  href,
+  listPosition = 'single',
   location,
+  onPress,
+  reason,
+  summary,
   title,
+  variant = 'card',
 }: SearchResultCardProps) {
   const { theme } = useAppTheme();
   const availabilityPalette =
@@ -43,6 +59,144 @@ export function SearchResultCard({
       : availability.includes('自取')
         ? { backgroundColor: theme.colors.primarySoft, color: theme.colors.primaryStrong }
         : { backgroundColor: theme.colors.warningSoft, color: theme.colors.warning };
+
+  if (variant === 'list') {
+    const radiusStyle =
+      listPosition === 'single'
+        ? {
+            borderRadius: theme.radii.xl,
+          }
+        : listPosition === 'first'
+          ? {
+              borderTopLeftRadius: theme.radii.xl,
+              borderTopRightRadius: theme.radii.xl,
+            }
+          : listPosition === 'last'
+            ? {
+                borderBottomLeftRadius: theme.radii.xl,
+                borderBottomRightRadius: theme.radii.xl,
+              }
+            : null;
+
+    return (
+      <View
+        style={[
+          {
+            backgroundColor: theme.colors.surface,
+            borderTopColor: listPosition === 'first' || listPosition === 'single' ? 'transparent' : theme.colors.borderSoft,
+            borderTopWidth: listPosition === 'first' || listPosition === 'single' ? 0 : 1,
+            paddingHorizontal: theme.spacing.lg,
+            paddingVertical: theme.spacing.md,
+          },
+          radiusStyle,
+        ]}
+        testID="search-result-cell">
+        <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
+          <View
+            style={{
+              backgroundColor: coverColor(coverTone),
+              borderRadius: theme.radii.md,
+              height: 58,
+              justifyContent: 'space-between',
+              padding: 8,
+              width: 44,
+            }}>
+            <View
+              style={{
+                backgroundColor: 'rgba(255,255,255,0.68)',
+                borderRadius: theme.radii.sm,
+                height: 6,
+                width: '72%',
+              }}
+            />
+            <View
+              style={{
+                backgroundColor: 'rgba(255,255,255,0.82)',
+                borderRadius: theme.radii.sm,
+                height: 16,
+                width: 16,
+              }}
+            />
+          </View>
+          <View style={{ flex: 1, gap: 6 }}>
+            <View
+              style={{
+                alignItems: 'center',
+                flexDirection: 'row',
+                gap: theme.spacing.sm,
+              }}>
+              <View
+                style={{
+                  alignSelf: 'flex-start',
+                  backgroundColor: availabilityPalette.backgroundColor,
+                  borderRadius: theme.radii.md,
+                  paddingHorizontal: 8,
+                  paddingVertical: 4,
+                }}>
+                <Text
+                  style={{
+                    color: availabilityPalette.color,
+                    ...theme.typography.medium,
+                    fontSize: 11,
+                  }}>
+                  {availability}
+                </Text>
+              </View>
+              <Text
+                numberOfLines={1}
+                style={{
+                  color: theme.colors.textSoft,
+                  ...theme.typography.medium,
+                  fontSize: 12,
+                  flex: 1,
+                }}>
+                {eta}
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: theme.colors.text,
+                    ...theme.typography.semiBold,
+                    fontSize: 16,
+                    lineHeight: 20,
+                  }}>
+                  {title}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: theme.colors.textMuted,
+                    ...theme.typography.body,
+                    fontSize: 13,
+                  }}>
+                  {author}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: theme.colors.textSoft,
+                    ...theme.typography.body,
+                    fontSize: 12,
+                  }}>
+                  {reason ? `推荐解释 · ${reason}` : location}
+                </Text>
+              </View>
+              <View
+                style={{
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                <AppIcon color={theme.colors.textSoft} name="chevronRight" size={16} strokeWidth={1.7} />
+              </View>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View
@@ -166,7 +320,39 @@ export function SearchResultCard({
         </View>
       </View>
 
-      <PillButton label="查看详情并借阅" variant="accent" />
+      {reason ? (
+        <View
+          style={{
+            backgroundColor: theme.colors.primarySoft,
+            borderRadius: theme.radii.md,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+          }}>
+          <Text
+            style={{
+              color: theme.colors.primaryStrong,
+              ...theme.typography.medium,
+              fontSize: 12,
+              lineHeight: 18,
+            }}>
+            推荐解释 · {reason}
+          </Text>
+        </View>
+      ) : null}
+
+      {summary ? (
+        <Text
+          style={{
+            color: theme.colors.textMuted,
+            ...theme.typography.body,
+            fontSize: 13,
+            lineHeight: 19,
+          }}>
+          {summary}
+        </Text>
+      ) : null}
+
+      <PillButton href={href} label={actionLabel} onPress={onPress} variant="accent" />
     </View>
   );
 }

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Text, View } from 'react-native';
+import type { Href } from 'expo-router';
 
 import { PillButton } from '@/components/base/pill-button';
 import { DueStateChip } from '@/components/borrowing/due-state-chip';
@@ -10,8 +11,10 @@ type BorrowingCardProps = {
   author: string;
   coverTone: 'apricot' | 'blue' | 'coral' | 'lavender' | 'mint';
   dueDate: string;
+  href?: Href;
   note: string;
-  status: 'active' | 'dueSoon' | 'overdue' | 'renewable';
+  onPress?: () => void;
+  status: 'active' | 'completed' | 'dueSoon' | 'overdue' | 'renewable';
   title: string;
 };
 
@@ -35,7 +38,9 @@ export function BorrowingCard({
   author,
   coverTone,
   dueDate,
+  href,
   note,
+  onPress,
   status,
   title,
 }: BorrowingCardProps) {
@@ -116,7 +121,12 @@ export function BorrowingCard({
           }}>
           到期时间 · {dueDate}
         </Text>
-        <PillButton label={actionLabel} variant={status === 'active' ? 'soft' : 'accent'} />
+        <PillButton
+          href={href}
+          label={actionLabel}
+          onPress={onPress}
+          variant={status === 'active' ? 'soft' : 'accent'}
+        />
       </View>
     </View>
   );

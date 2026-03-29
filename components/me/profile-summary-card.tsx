@@ -3,10 +3,40 @@ import { Text, View } from 'react-native';
 
 import { PillButton } from '@/components/base/pill-button';
 import { meSummary } from '@/lib/app/mock-data';
+import type { StudentProfile } from '@/lib/api/types';
 import { useAppTheme } from '@/hooks/use-app-theme';
 
-export function ProfileSummaryCard({ onProfilePress }: { onProfilePress?: () => void }) {
+export function ProfileSummaryCard({
+  onProfilePress,
+  profile,
+}: {
+  onProfilePress?: () => void;
+  profile?: StudentProfile | null;
+}) {
   const { theme } = useAppTheme();
+  const activeProfile = profile ?? {
+    accountId: 1,
+    affiliationType: meSummary.role,
+    college: meSummary.campus,
+    gradeYear: null,
+    id: 1,
+    interestTags: [...meSummary.interests],
+    major: null,
+    onboarding: {
+      completed: true,
+      needsInterestSelection: false,
+      needsProfileBinding: false,
+    },
+    readingProfileSummary: meSummary.aiUsage,
+    displayName: meSummary.name,
+  };
+  const displayRole =
+    activeProfile.affiliationType === 'student'
+      ? '学生用户'
+      : activeProfile.affiliationType ?? meSummary.role;
+  const campusLabel = [activeProfile.college, activeProfile.major, activeProfile.gradeYear]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <View
@@ -37,7 +67,7 @@ export function ProfileSummaryCard({ onProfilePress }: { onProfilePress?: () => 
                 ...theme.typography.bold,
                 fontSize: 22,
               }}>
-              陈
+              {(activeProfile.displayName || '读').trim().charAt(0)}
             </Text>
           </View>
           <View style={{ flex: 1, gap: 4, justifyContent: 'center' }}>
@@ -47,7 +77,7 @@ export function ProfileSummaryCard({ onProfilePress }: { onProfilePress?: () => 
                 ...theme.typography.heading,
                 fontSize: 24,
               }}>
-              {meSummary.name}
+              {activeProfile.displayName}
             </Text>
             <Text
               style={{
@@ -55,7 +85,7 @@ export function ProfileSummaryCard({ onProfilePress }: { onProfilePress?: () => 
                 ...theme.typography.body,
                 fontSize: 14,
               }}>
-              {meSummary.role}
+              {displayRole}
             </Text>
             <Text
               style={{
@@ -63,12 +93,12 @@ export function ProfileSummaryCard({ onProfilePress }: { onProfilePress?: () => 
                 ...theme.typography.body,
                 fontSize: 13,
               }}>
-              {meSummary.campus}
+              {campusLabel || meSummary.campus}
             </Text>
           </View>
         </View>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm }}>
-          {meSummary.interests.map((tag, index) => (
+          {(activeProfile.interestTags.length ? activeProfile.interestTags : meSummary.interests).map((tag, index) => (
             <View
               key={tag}
               style={{
@@ -94,7 +124,7 @@ export function ProfileSummaryCard({ onProfilePress }: { onProfilePress?: () => 
           ))}
         </View>
         <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
-          {[meSummary.streak, meSummary.aiUsage].map((item, index) => (
+          {[meSummary.streak, activeProfile.readingProfileSummary || meSummary.aiUsage].map((item, index) => (
             <View
               key={item}
               style={{

@@ -6,7 +6,15 @@ import { useAppTheme } from '@/hooks/use-app-theme';
 import { appArtwork } from '@/lib/app/artwork';
 import { profilePortrait } from '@/lib/app/mock-data';
 
-export function ReadingProfileHero() {
+export function ReadingProfileHero({
+  headline = profilePortrait.headline,
+  keywords = profilePortrait.keywords,
+  schedule = '晚间 19:00 - 22:00 最稳定',
+}: {
+  headline?: string;
+  keywords?: readonly string[];
+  schedule?: string;
+}) {
   const { theme } = useAppTheme();
 
   return (
@@ -27,7 +35,7 @@ export function ReadingProfileHero() {
               letterSpacing: -0.6,
               lineHeight: 36,
             }}>
-            {profilePortrait.headline}
+            {headline}
           </Text>
         </View>
         <EditorialIllustration
@@ -60,7 +68,7 @@ export function ReadingProfileHero() {
                 fontSize: 14,
                 lineHeight: 20,
               }}>
-              {profilePortrait.keywords.slice(0, 2).join(' · ')}
+              {keywords.slice(0, 2).join(' · ')}
             </Text>
           </View>
           <View style={{ flex: 1, gap: 4 }}>
@@ -79,7 +87,7 @@ export function ReadingProfileHero() {
                 fontSize: 14,
                 lineHeight: 20,
               }}>
-              晚间 19:00 - 22:00 最稳定
+              {schedule}
             </Text>
           </View>
         </View>

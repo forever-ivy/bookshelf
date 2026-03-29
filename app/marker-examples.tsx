@@ -1,9 +1,7 @@
-import { useRouter } from 'expo-router';
 import React from 'react';
 import { Text, View } from 'react-native';
 
 import { MarkerHighlightText, type MarkerHighlightTone } from '@/components/base/marker-highlight-text';
-import { PillButton } from '@/components/base/pill-button';
 import { SectionTitle } from '@/components/base/section-title';
 import { PageShell } from '@/components/navigation/page-shell';
 import { useAppTheme } from '@/hooks/use-app-theme';
@@ -94,35 +92,14 @@ const underlineExamples: readonly {
 
 export default function MarkerExamplesRoute() {
   const { theme } = useAppTheme();
-  const router = useRouter();
 
   return (
-    <PageShell insetBottom={96} mode="workspace">
-      <View style={{ gap: theme.spacing.lg }}>
-        <PillButton icon="chevronRight" label="返回" onPress={() => router.back()} variant="soft" />
-        <View style={{ gap: theme.spacing.sm }}>
-          <Text
-            style={{
-              color: theme.colors.text,
-              ...theme.typography.heading,
-              fontSize: 30,
-              letterSpacing: -0.7,
-            }}>
-            文字高亮示例
-          </Text>
-          <Text
-            style={{
-              color: theme.colors.textMuted,
-              ...theme.typography.body,
-              fontSize: 14,
-              lineHeight: 22,
-            }}>
-            这里集中放当前项目里可直接复用的 marker 文本样式，方便你快速比较
-            `highlight`、`underline`、不同色调和自定义颜色。
-          </Text>
-        </View>
-      </View>
-
+    <PageShell
+      headerDescription="这里集中放当前项目里可直接复用的 marker 文本样式，方便你快速比较 `highlight`、`underline`、不同色调和自定义颜色。"
+      headerTitle="文字高亮示例"
+      insetBottom={96}
+      mode="workspace"
+      showBackButton>
       <View style={{ gap: theme.spacing.lg }}>
         <SectionTitle title="块状高亮" />
         <View style={{ gap: theme.spacing.md }}>

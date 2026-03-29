@@ -14,5 +14,4 @@ export const appArtwork = {
   recommendationHero: require('../../assets/illustrations/recommendation-hero.png'),
   returnSuccess: require('../../assets/illustrations/return-success.png'),
   robotDelivery: require('../../assets/illustrations/robot-delivery.png'),
-  seatPickup: require('../../assets/illustrations/seat-pickup.png'),
 } as const;

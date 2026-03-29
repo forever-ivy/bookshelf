@@ -34,54 +34,52 @@ export function MenuList({
         borderWidth: 1,
         overflow: 'hidden',
       }}>
-      {items.map((item, index) => (
-        (() => {
-          const palette = iconPalettes[index % iconPalettes.length];
+      {items.map((item, index) => {
+        const palette = iconPalettes[index % iconPalettes.length];
 
-          return (
-        <Pressable
-          key={item.title}
-          accessibilityRole="button"
-          onPress={() => onPressItem?.(item.title)}
-          style={({ pressed }) => ({
-            backgroundColor: pressed ? theme.colors.backgroundStrong : 'transparent',
-            borderTopColor: index === 0 ? 'transparent' : theme.colors.borderSoft,
-            borderTopWidth: index === 0 ? 0 : 1,
-          })}>
-          <View
-            style={{
-              alignItems: 'center',
-              flexDirection: 'row',
-              gap: theme.spacing.lg,
-              padding: theme.spacing.lg,
-            }}>
+        return (
+          <Pressable
+            key={item.title}
+            accessibilityRole="button"
+            onPress={() => onPressItem?.(item.title)}
+            style={({ pressed }) => ({
+              backgroundColor: pressed ? theme.colors.backgroundStrong : 'transparent',
+              borderTopColor: index === 0 ? 'transparent' : theme.colors.borderSoft,
+              borderTopWidth: index === 0 ? 0 : 1,
+            })}>
             <View
               style={{
                 alignItems: 'center',
-                backgroundColor: palette.backgroundColor,
-                borderRadius: theme.radii.sm,
-                height: 34,
-                justifyContent: 'center',
-                width: 34,
+                flexDirection: 'row',
+                gap: theme.spacing.lg,
+                padding: theme.spacing.lg,
               }}>
-              <AppIcon color={palette.color} name={item.icon} size={16} strokeWidth={1.7} />
-            </View>
-            <View style={{ flex: 1, gap: 3 }}>
-              <Text
+              <View
                 style={{
-                  color: theme.colors.text,
-                  ...theme.typography.semiBold,
-                  fontSize: 15,
+                  alignItems: 'center',
+                  backgroundColor: palette.backgroundColor,
+                  borderRadius: theme.radii.sm,
+                  height: 34,
+                  justifyContent: 'center',
+                  width: 34,
                 }}>
-                {item.title}
-              </Text>
+                <AppIcon color={palette.color} name={item.icon} size={16} strokeWidth={1.7} />
+              </View>
+              <View style={{ flex: 1, gap: 3 }}>
+                <Text
+                  style={{
+                    color: theme.colors.text,
+                    ...theme.typography.semiBold,
+                    fontSize: 15,
+                  }}>
+                  {item.title}
+                </Text>
+              </View>
+              <AppIcon color={theme.colors.textSoft} name="chevronRight" size={16} strokeWidth={1.7} />
             </View>
-            <AppIcon color={theme.colors.textSoft} name="chevronRight" size={16} strokeWidth={1.7} />
-          </View>
-        </Pressable>
-          );
-        })()
-      ))}
+          </Pressable>
+        );
+      })}
     </View>
   );
 }

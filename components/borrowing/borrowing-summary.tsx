@@ -1,10 +1,23 @@
 import React from 'react';
 import { Text, View } from 'react-native';
 
-import { borrowingSummary } from '@/lib/app/mock-data';
 import { useAppTheme } from '@/hooks/use-app-theme';
 
-export function BorrowingSummary() {
+type BorrowingSummaryProps = {
+  dueSoonCount?: number;
+  focus?: string;
+  headline?: string;
+  renewableCount?: number;
+  totalCount?: number;
+};
+
+export function BorrowingSummary({
+  dueSoonCount = 2,
+  focus = '时间简史 · 今天 21:00',
+  headline = '借阅任务面板',
+  renewableCount = 3,
+  totalCount = 6,
+}: BorrowingSummaryProps) {
   const { theme } = useAppTheme();
   const statPalettes = [
     { backgroundColor: theme.colors.primarySoft, color: theme.colors.primaryStrong },
@@ -24,32 +37,32 @@ export function BorrowingSummary() {
       }}>
       <View style={{ gap: 6 }}>
         <Text
-            style={{
-              color: theme.colors.text,
-              ...theme.typography.heading,
-              fontSize: 28,
-            }}>
-          {borrowingSummary.headline}
+          style={{
+            color: theme.colors.text,
+            ...theme.typography.heading,
+            fontSize: 28,
+          }}>
+          {headline}
         </Text>
       </View>
       <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
         {[
-          { label: '当前借阅', value: `${borrowingSummary.totalCount} 本` },
-          { label: '即将到期', value: `${borrowingSummary.dueSoonCount} 本` },
-          { label: '可续借', value: `${borrowingSummary.renewableCount} 本` },
+          { label: '当前借阅', value: `${totalCount} 本` },
+          { label: '即将到期', value: `${dueSoonCount} 本` },
+          { label: '可续借', value: `${renewableCount} 本` },
         ].map((item, index) => {
           const palette = statPalettes[index % statPalettes.length];
 
           return (
-          <View
-            key={item.label}
-            style={{
-              backgroundColor: palette.backgroundColor,
-              borderRadius: theme.radii.md,
-              flex: 1,
-              gap: 6,
-              padding: theme.spacing.md,
-            }}>
+            <View
+              key={item.label}
+              style={{
+                backgroundColor: palette.backgroundColor,
+                borderRadius: theme.radii.md,
+                flex: 1,
+                gap: 6,
+                padding: theme.spacing.md,
+              }}>
               <Text
                 style={{
                   color: palette.color,
@@ -59,12 +72,12 @@ export function BorrowingSummary() {
                 }}>
                 {item.value}
               </Text>
-            <Text
-              style={{
-                color: theme.colors.textMuted,
-                ...theme.typography.body,
-                fontSize: 12,
-              }}>
+              <Text
+                style={{
+                  color: theme.colors.textMuted,
+                  ...theme.typography.body,
+                  fontSize: 12,
+                }}>
                 {item.label}
               </Text>
             </View>
@@ -97,7 +110,7 @@ export function BorrowingSummary() {
             fontSize: 14,
             lineHeight: 20,
           }}>
-          {borrowingSummary.focus}
+          {focus}
         </Text>
       </View>
     </View>

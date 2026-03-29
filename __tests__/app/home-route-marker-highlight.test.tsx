@@ -50,6 +50,45 @@ jest.mock('expo-router', () => {
   };
 });
 
+jest.mock('@/hooks/use-app-session', () => ({
+  useAppSession: () => ({
+    bootstrapStatus: 'ready',
+    clearSession: jest.fn(),
+    identity: {
+      accountId: 1,
+      profileId: 1,
+      role: 'reader',
+    },
+    isAuthenticated: true,
+    onboarding: {
+      completed: true,
+      needsInterestSelection: false,
+      needsProfileBinding: false,
+    },
+    profile: null,
+    setBootstrapStatus: jest.fn(),
+    setSession: jest.fn(),
+    token: 'reader-token',
+  }),
+}));
+
+jest.mock('@/hooks/use-library-app-data', () => ({
+  useActiveOrdersQuery: () => ({
+    data: [
+      {
+        statusLabel: '进行中',
+      },
+    ],
+  }),
+  useHomeFeedQuery: () => ({
+    data: {
+      quickActions: [],
+      systemBooklists: [],
+      todayRecommendations: [],
+    },
+  }),
+}));
+
 import HomeRoute from '@/app/(tabs)/index';
 import { appTheme } from '@/constants/app-theme';
 

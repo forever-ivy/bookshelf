@@ -43,6 +43,12 @@ jest.mock('expo-blur', () => {
   };
 });
 
+jest.mock('expo-secure-store', () => ({
+  deleteItemAsync: jest.fn(async () => undefined),
+  getItemAsync: jest.fn(async () => null),
+  setItemAsync: jest.fn(async () => undefined),
+}));
+
 jest.mock('expo-glass-effect', () => {
   const React = require('react');
   const { View } = require('react-native');

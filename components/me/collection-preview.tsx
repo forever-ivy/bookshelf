@@ -21,43 +21,43 @@ export function CollectionPreview({
         const palette = palettes[index % palettes.length];
 
         return (
-        <View
-          key={item.title}
-          style={{
-            backgroundColor: palette.backgroundColor,
-            borderColor: theme.colors.borderStrong,
-            borderRadius: theme.radii.lg,
-            borderWidth: 1,
-            flex: 1,
-            gap: 8,
-            padding: theme.spacing.lg,
-          }}>
-          <Text
+          <View
+            key={item.title}
             style={{
-              color: theme.colors.textSoft,
-              ...theme.typography.medium,
-              fontSize: 12,
+              backgroundColor: palette.backgroundColor,
+              borderColor: theme.colors.borderStrong,
+              borderRadius: theme.radii.lg,
+              borderWidth: 1,
+              flex: 1,
+              gap: 8,
+              padding: theme.spacing.lg,
             }}>
-            {item.title}
-          </Text>
-          <Text
-            style={{
-              color: palette.color,
-              ...theme.typography.bold,
-              fontSize: 24,
-            }}>
-            {item.count}
-          </Text>
-          <Text
-            style={{
-              color: theme.colors.textMuted,
-              ...theme.typography.body,
-              fontSize: 13,
-              lineHeight: 18,
-            }}>
-            {item.detail}
-          </Text>
-        </View>
+            <Text
+              style={{
+                color: theme.colors.textSoft,
+                ...theme.typography.medium,
+                fontSize: 12,
+              }}>
+              {item.title}
+            </Text>
+            <Text
+              style={{
+                color: palette.color,
+                ...theme.typography.bold,
+                fontSize: 24,
+              }}>
+              {item.count}
+            </Text>
+            <Text
+              style={{
+                color: theme.colors.textMuted,
+                ...theme.typography.body,
+                fontSize: 13,
+                lineHeight: 18,
+              }}>
+              {item.detail}
+            </Text>
+          </View>
         );
       })}
     </View>

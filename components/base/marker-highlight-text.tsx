@@ -214,8 +214,8 @@ export function MarkerHighlightText({
             key={`${brush.lineIndex}-${brush.layer}`}
             color={resolvedHighlightColor}
             opacity={brush.opacity}
-            strokeLinecap="round"
-            strokeLinejoin="round"
+            strokeCap="round"
+            strokeJoin="round"
             strokeWidth={brush.strokeWidth}
             style="stroke"
             path={brush.d}

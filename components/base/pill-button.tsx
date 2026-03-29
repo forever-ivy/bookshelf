@@ -1,3 +1,4 @@
+import { Link, type Href } from 'expo-router';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
@@ -6,12 +7,14 @@ import { useAppTheme } from '@/hooks/use-app-theme';
 
 type PillButtonProps = {
   icon?: AppIconName;
+  href?: Href;
   label: string;
   onPress?: () => void;
   variant?: 'accent' | 'glass' | 'soft';
 };
 
 export function PillButton({
+  href,
   icon,
   label,
   onPress,
@@ -52,7 +55,7 @@ export function PillButton({
     </View>
   );
 
-  return (
+  const button = (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
@@ -70,5 +73,15 @@ export function PillButton({
         {content}
       </View>
     </Pressable>
+  );
+
+  if (!href) {
+    return button;
+  }
+
+  return (
+    <Link asChild href={href}>
+      {button}
+    </Link>
   );
 }

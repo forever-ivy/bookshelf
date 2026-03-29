@@ -1,0 +1,34 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - img "Library Background" [ref=e39]
+    - generic [ref=e7]:
+      - generic [ref=e8]:
+        - generic [ref=e9]:
+          - heading "馆藏编目与知识校准" [level=2] [ref=e40]
+          - paragraph [ref=e11]: 统一元数据、分类体系与知识图谱标签，让每一次检索都指向更准确的内容秩序。
+        - generic [ref=e12]:
+          - button "Go to slide 1" [ref=e13]
+          - button "Go to slide 2" [ref=e14]
+          - button "Go to slide 3" [ref=e15]
+          - button "Go to slide 4" [ref=e16]
+          - button "Go to slide 5" [ref=e17]
+          - button "Go to slide 6" [ref=e18]
+      - generic [ref=e20]:
+        - generic [ref=e21]:
+          - img "Zhi Xu Logo" [ref=e22]
+          - heading "知序" [level=1] [ref=e23]
+          - paragraph [ref=e24]: 整合馆藏实体、数字资产与自动化运力，构建前瞻性知识运营大脑。
+        - generic [ref=e25]:
+          - generic [ref=e26]:
+            - generic [ref=e28]: 运营凭证
+            - textbox "运营凭证" [ref=e29]:
+              - /placeholder: 输入运营凭证
+              - text: admin
+          - generic [ref=e30]:
+            - generic [ref=e32]: 验证密钥
+            - textbox "验证密钥" [ref=e33]: admin123
+          - button "验证并进入" [ref=e34]:
+            - generic [ref=e35]: 验证并进入
+            - img [ref=e36]
+        - paragraph [ref=e38]: 登录即代表您同意本中台的治理规则与审计约束
+  - region "Notifications alt+T"

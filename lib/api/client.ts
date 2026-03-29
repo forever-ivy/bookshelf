@@ -1,0 +1,123 @@
+import { readStoredSessionToken } from '@/stores';
+
+export class LibraryApiError extends Error {
+  code: string;
+  status: number | null;
+
+  constructor(message: string, options: { code: string; status?: number | null }) {
+    super(message);
+    this.name = 'LibraryApiError';
+    this.code = options.code;
+    this.status = options.status ?? null;
+  }
+}
+
+export function getLibraryServiceBaseUrl() {
+  return process.env.EXPO_PUBLIC_LIBRARY_SERVICE_URL?.replace(/\/$/, '') ?? '';
+}
+
+export function hasLibraryService() {
+  return getLibraryServiceBaseUrl().length > 0;
+}
+
+async function readToken(explicitToken?: string | null) {
+  if (explicitToken !== undefined) {
+    return explicitToken;
+  }
+
+  return readStoredSessionToken();
+}
+
+export function isLibraryApiError(error: unknown): error is LibraryApiError {
+  return error instanceof LibraryApiError;
+}
+
+export function isLibraryAuthError(error: unknown) {
+  return isLibraryApiError(error) && (error.status === 401 || error.status === 403);
+}
+
+export function getLibraryErrorMessage(error: unknown, fallback = '借阅服务暂时不可用，请稍后重试。') {
+  if (!isLibraryApiError(error)) {
+    return fallback;
+  }
+
+  if (error.code === 'service_not_configured') {
+    return '还没有配置真实后端地址，当前无法进入联调模式。';
+  }
+
+  if (error.status === 401 || error.status === 403) {
+    return '登录状态已失效，请重新登录。';
+  }
+
+  if (error.status === 404) {
+    return '请求的资源不存在，可能是前后端接口还没有完全对齐。';
+  }
+
+  if (error.code === 'network_error') {
+    return '无法连接智慧借阅服务，请确认服务已经启动并且地址可访问。';
+  }
+
+  return fallback;
+}
+
+export async function libraryFetchJson<T>(
+  path: string,
+  options: RequestInit & { token?: string | null } = {}
+): Promise<T> {
+  const baseUrl = getLibraryServiceBaseUrl();
+  if (!baseUrl) {
+    throw new LibraryApiError('library_service_not_configured', {
+      code: 'service_not_configured',
+    });
+  }
+
+  const token = await readToken(options.token);
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}${path}`, {
+      ...options,
+      headers: {
+        Accept: 'application/json',
+        ...(options.body ? { 'Content-Type': 'application/json' } : null),
+        ...(options.headers ?? {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+  } catch {
+    throw new LibraryApiError('library_network_error', {
+      code: 'network_error',
+    });
+  }
+
+  if (!response.ok) {
+    throw new LibraryApiError(`http_${response.status}`, {
+      code: `http_${response.status}`,
+      status: response.status,
+    });
+  }
+
+  return response.json() as Promise<T>;
+}
+
+export async function libraryRequest<T>(
+  path: string,
+  options: RequestInit & {
+    token?: string | null;
+    fallback: () => T | Promise<T>;
+    fallbackOnError?: boolean;
+  }
+): Promise<T> {
+  if (!hasLibraryService()) {
+    return options.fallback();
+  }
+
+  try {
+    return await libraryFetchJson<T>(path, options);
+  } catch (error) {
+    if (options.fallbackOnError) {
+      return options.fallback();
+    }
+
+    throw error;
+  }
+}
