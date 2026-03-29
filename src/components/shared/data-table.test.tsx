@@ -46,9 +46,9 @@ describe('DataTable', () => {
       />,
     )
 
-    expect(screen.getByRole('navigation', { name: '分页导航' })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: '翻页' })).toBeInTheDocument()
     expect(
-      screen.getByText((_, node) => node?.textContent?.replace(/\s+/g, '') === '第1/12页，共120条'),
+      screen.getByText((_, node) => node?.textContent?.replace(/\s+/g, '') === '第1页，共12页，合计120条'),
     ).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '1' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('link', { name: '1' })).not.toHaveAttribute('aria-disabled', 'true')
@@ -72,7 +72,7 @@ describe('DataTable', () => {
   it('hides pagination navigation when pagination metadata is omitted', () => {
     render(<DataTable columns={columns} data={rows} />)
 
-    expect(screen.queryByRole('navigation', { name: '分页导航' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: '翻页' })).not.toBeInTheDocument()
   })
 
   it('marks next navigation as disabled on the final page', () => {

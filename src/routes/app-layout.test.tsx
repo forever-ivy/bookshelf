@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 import { STORAGE_KEYS } from '@/constants/constant'
 import { SessionProvider } from '@/providers/session-provider'
@@ -36,31 +36,35 @@ function renderLayout(account?: Record<string, unknown>) {
 }
 
 describe('AppLayout sidebar', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
   it('collapses the desktop sidebar and persists the preference', async () => {
     const user = userEvent.setup()
     renderLayout()
 
     expect(screen.getByText('首页')).toBeVisible()
 
-    await user.click(screen.getByRole('button', { name: '收起侧边栏' }))
+    await user.click(screen.getByRole('button', { name: '收起菜单' }))
 
     await waitFor(() => {
       expect(screen.queryByText('首页')).not.toBeInTheDocument()
     })
     expect(window.localStorage.getItem(STORAGE_KEYS.SIDEBAR_COLLAPSED)).toBe('true')
-    expect(screen.getByRole('button', { name: '展开侧边栏' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '展开菜单' })).toBeVisible()
   })
 
   it('shows the logo again after collapsing the sidebar a second time', async () => {
     const user = userEvent.setup()
     renderLayout()
 
-    await user.click(screen.getByRole('button', { name: '收起侧边栏' }))
+    await user.click(screen.getByRole('button', { name: '收起菜单' }))
 
-    const collapsedToggle = screen.getByRole('button', { name: '展开侧边栏' })
+    const collapsedToggle = screen.getByRole('button', { name: '展开菜单' })
     fireEvent.mouseEnter(collapsedToggle)
     await user.click(collapsedToggle)
-    await user.click(screen.getByRole('button', { name: '收起侧边栏' }))
+    await user.click(screen.getByRole('button', { name: '收起菜单' }))
 
     expect(screen.getByAltText('知序')).toBeVisible()
   })
@@ -69,9 +73,9 @@ describe('AppLayout sidebar', () => {
     const user = userEvent.setup()
     renderLayout()
 
-    await user.click(screen.getByRole('button', { name: '收起侧边栏' }))
+    await user.click(screen.getByRole('button', { name: '收起菜单' }))
 
-    const collapsedToggle = screen.getByRole('button', { name: '展开侧边栏' })
+    const collapsedToggle = screen.getByRole('button', { name: '展开菜单' })
     const collapsedLogo = screen.getByTestId('collapsed-sidebar-logo')
     const expandHint = screen.getByTestId('collapsed-sidebar-open-icon')
 
@@ -92,7 +96,7 @@ describe('AppLayout sidebar', () => {
   it('shows the upgraded admin navigation entries', () => {
     renderLayout()
 
-    expect(screen.getByPlaceholderText('搜索图书、订单或读者')).toBeVisible()
+    expect(screen.getByPlaceholderText('搜索图书、订单、读者与告警')).toBeVisible()
     expect(screen.getByText('图书馆管理后台')).toBeVisible()
     expect(screen.getByText('图书')).toBeVisible()
     expect(screen.getByText('异常')).toBeVisible()
@@ -160,7 +164,7 @@ describe('AppLayout sidebar', () => {
       configurable: true,
     })
 
-    await user.click(screen.getByRole('link', { name: '图书管理' }))
+    await user.click(screen.getByRole('link', { name: '图书' }))
 
     await waitFor(() => {
       expect(main.scrollTop).toBe(0)

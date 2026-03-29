@@ -33,10 +33,16 @@ type DataTableProps<TData> = {
   data: TData[]
   emptyTitle?: string
   emptyDescription?: string
+  tableClassName?: string
   pagination?: DataTablePagination
   getRowId?: (row: TData, index: number) => string
   expandedRowIds?: string[]
   renderExpandedRow?: (row: TData) => ReactNode
+}
+
+type DataTableColumnMeta = {
+  headClassName?: string
+  cellClassName?: string
 }
 
 type PaginationDisplayItem = number | 'ellipsis-start' | 'ellipsis-end'
@@ -148,6 +154,7 @@ export function DataTable<TData>({
   data,
   emptyTitle = '没有找到内容',
   emptyDescription = '换个条件再试试。',
+  tableClassName,
   pagination,
   getRowId,
   expandedRowIds,
@@ -167,17 +174,21 @@ export function DataTable<TData>({
 
   return (
     <div className="overflow-hidden rounded-[1.75rem] border border-[var(--line-subtle)] bg-[var(--surface-panel-strong)]">
-      <Table>
+      <Table className={tableClassName}>
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id}>
-              {headerGroup.headers.map((header) => (
-                <TableHead key={header.id}>
+              {headerGroup.headers.map((header) => {
+                const columnMeta = header.column.columnDef.meta as DataTableColumnMeta | undefined
+
+                return (
+                <TableHead key={header.id} className={columnMeta?.headClassName}>
                   {header.isPlaceholder
                     ? null
                     : flexRender(header.column.columnDef.header, header.getContext())}
                 </TableHead>
-              ))}
+                )
+              })}
             </TableRow>
           ))}
         </TableHeader>
@@ -188,11 +199,15 @@ export function DataTable<TData>({
             return (
               <Fragment key={row.id}>
                 <TableRow key={row.id}>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
+                  {row.getVisibleCells().map((cell) => {
+                    const columnMeta = cell.column.columnDef.meta as DataTableColumnMeta | undefined
+
+                    return (
+                    <TableCell key={cell.id} className={columnMeta?.cellClassName}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
-                  ))}
+                    )
+                  })}
                 </TableRow>
                 {isExpanded && renderExpandedRow ? (
                   <TableRow key={`${row.id}-expanded`} data-state="expanded">

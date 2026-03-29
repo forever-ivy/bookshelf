@@ -8,6 +8,7 @@ import { StatusBadge } from '@/components/shared/status-badge'
 import { WorkspacePanel } from '@/components/shared/workspace-panel'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { STORAGE_KEYS } from '@/constants/constant'
 import { ackAdminAlert, getAdminAlerts, getAdminAuditLogs, resolveAdminAlert } from '@/lib/api/management'
@@ -114,41 +115,47 @@ export function AlertsPage() {
               description="按严重程度、来源和处理状态查看当前异常。"
               action={
                 <div className="flex flex-col gap-3 xl:w-[28rem] xl:flex-row">
-                  <select
-                    aria-label="警告状态筛选"
-                    className="h-10 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-sm text-[var(--foreground)]"
+                  <Select
                     value={alertStatus}
-                    onChange={(event) =>
+                    onValueChange={(value) =>
                       setSearchParams(
                         patchSearchParams(searchParams, {
-                          status: event.target.value === 'open' ? undefined : event.target.value,
+                          status: value === 'open' ? undefined : value,
                         }),
                         { replace: true },
                       )
                     }
                   >
-                    <option value="open">待处理</option>
-                    <option value="acknowledged">已确认</option>
-                    <option value="resolved">已解决</option>
-                  </select>
-                  <select
-                    aria-label="警告级别筛选"
-                    className="h-10 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-sm text-[var(--foreground)]"
+                    <SelectTrigger aria-label="警告状态筛选" className="xl:flex-1">
+                      <SelectValue placeholder="待处理" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="open">待处理</SelectItem>
+                      <SelectItem value="acknowledged">已确认</SelectItem>
+                      <SelectItem value="resolved">已解决</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
                     value={alertSeverity ?? 'all'}
-                    onChange={(event) =>
+                    onValueChange={(value) =>
                       setSearchParams(
                         patchSearchParams(searchParams, {
-                          severity: event.target.value === 'all' ? undefined : event.target.value,
+                          severity: value === 'all' ? undefined : value,
                         }),
                         { replace: true },
                       )
                     }
                   >
-                    <option value="all">全部级别</option>
-                    <option value="critical">严重</option>
-                    <option value="warning">警告</option>
-                    <option value="info">提示</option>
-                  </select>
+                    <SelectTrigger aria-label="警告级别筛选" className="xl:flex-1">
+                      <SelectValue placeholder="全部级别" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">全部级别</SelectItem>
+                      <SelectItem value="critical">严重</SelectItem>
+                      <SelectItem value="warning">警告</SelectItem>
+                      <SelectItem value="info">提示</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               }
             >

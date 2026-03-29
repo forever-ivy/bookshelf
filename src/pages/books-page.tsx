@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createColumnHelper, type ColumnDef } from '@tanstack/react-table'
 import { ChevronLeft, ChevronRight, FolderTree, Plus } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { DataTable } from '@/components/shared/data-table'
 import { EmptyState } from '@/components/shared/empty-state'
@@ -23,9 +23,12 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { getAdminPageHero } from '@/lib/page-hero'
 import {
   createAdminBook,
@@ -167,6 +170,9 @@ export function BooksPage() {
   const [search, setSearch] = useState(() => readSearchParam(searchParams, 'q'))
   const [categorySearch, setCategorySearch] = useState(() => readSearchParam(searchParams, 'category_q'))
   const [tagSearch, setTagSearch] = useState(() => readSearchParam(searchParams, 'tag_q'))
+  const isBookSearchComposingRef = useRef(false)
+  const isCategorySearchComposingRef = useRef(false)
+  const isTagSearchComposingRef = useRef(false)
   const [bookPage, setBookPage] = useState(1)
   const [categoriesPage, setCategoriesPage] = useState(1)
   const [tagsPage, setTagsPage] = useState(1)
@@ -180,8 +186,13 @@ export function BooksPage() {
   const [bookEditForm, setBookEditForm] = useState(EMPTY_BOOK_EDIT_FORM)
   const [categoryForm, setCategoryForm] = useState(EMPTY_CATEGORY_FORM)
   const [tagForm, setTagForm] = useState(EMPTY_TAG_FORM)
+  const [booksTotalBaseline, setBooksTotalBaseline] = useState<number | null>(null)
   const categoriesPageSize =
-    hasLoadedCategoriesTable || activeTab === 'categories' || Boolean(categorySearchQuery) || Boolean(categoryStatusFilter)
+    activeTab === 'books' ||
+    hasLoadedCategoriesTable ||
+    activeTab === 'categories' ||
+    Boolean(categorySearchQuery) ||
+    Boolean(categoryStatusFilter)
       ? TAXONOMY_PAGE_SIZE
       : TAXONOMY_PEEK_PAGE_SIZE
   const tagsPageSize =
@@ -235,6 +246,45 @@ export function BooksPage() {
   const hasCategories = categories.length > 0
   const hasTags = tags.length > 0
 
+  const commitBookSearch = useCallback(
+    (nextValue: string) => {
+      setBookPage(1)
+      setSearchParams(
+        patchSearchParams(searchParams, {
+          q: nextValue.trim() || undefined,
+        }),
+        { replace: true },
+      )
+    },
+    [searchParams, setSearchParams],
+  )
+
+  const commitCategorySearch = useCallback(
+    (nextValue: string) => {
+      setCategoriesPage(1)
+      setSearchParams(
+        patchSearchParams(searchParams, {
+          category_q: nextValue.trim() || undefined,
+        }),
+        { replace: true },
+      )
+    },
+    [searchParams, setSearchParams],
+  )
+
+  const commitTagSearch = useCallback(
+    (nextValue: string) => {
+      setTagsPage(1)
+      setSearchParams(
+        patchSearchParams(searchParams, {
+          tag_q: nextValue.trim() || undefined,
+        }),
+        { replace: true },
+      )
+    },
+    [searchParams, setSearchParams],
+  )
+
   useEffect(() => {
     if (books[0] && !books.some((book) => book.id === selectedBookId)) {
       setSelectedBookId(books[0].id)
@@ -243,24 +293,35 @@ export function BooksPage() {
 
   useEffect(() => {
     const nextSearch = readSearchParam(searchParams, 'q')
-    if (nextSearch !== search) {
+    if (!isBookSearchComposingRef.current && nextSearch !== search) {
       setSearch(nextSearch)
     }
   }, [search, searchParams])
 
   useEffect(() => {
     const nextCategorySearch = readSearchParam(searchParams, 'category_q')
-    if (nextCategorySearch !== categorySearch) {
+    if (!isCategorySearchComposingRef.current && nextCategorySearch !== categorySearch) {
       setCategorySearch(nextCategorySearch)
     }
   }, [categorySearch, searchParams])
 
   useEffect(() => {
     const nextTagSearch = readSearchParam(searchParams, 'tag_q')
-    if (nextTagSearch !== tagSearch) {
+    if (!isTagSearchComposingRef.current && nextTagSearch !== tagSearch) {
       setTagSearch(nextTagSearch)
     }
   }, [searchParams, tagSearch])
+
+  useEffect(() => {
+    if (
+      booksQuery.data?.total !== undefined &&
+      !searchQuery &&
+      !shelfStatusFilter &&
+      !categoryIdFilter
+    ) {
+      setBooksTotalBaseline(booksQuery.data.total)
+    }
+  }, [booksQuery.data?.total, categoryIdFilter, searchQuery, shelfStatusFilter])
 
   useEffect(() => {
     if (activeTab === 'categories') {
@@ -379,20 +440,6 @@ export function BooksPage() {
     },
   })
 
-  const toggleCreateTag = (tagId: string) => {
-    setBookCreateForm((current) => ({
-      ...current,
-      tagIds: current.tagIds.includes(tagId) ? current.tagIds.filter((item) => item !== tagId) : [...current.tagIds, tagId],
-    }))
-  }
-
-  const toggleEditTag = (tagId: string) => {
-    setBookEditForm((current) => ({
-      ...current,
-      tagIds: current.tagIds.includes(tagId) ? current.tagIds.filter((item) => item !== tagId) : [...current.tagIds, tagId],
-    }))
-  }
-
   const handleBooksTabChange = (value: string) => {
     const nextTab = value as BooksWorkspaceTab
     setSearchParams(
@@ -434,30 +481,50 @@ export function BooksPage() {
   const bookColumns: Array<ColumnDef<AdminBook, any>> = [
     bookColumnHelper.accessor('title', {
       header: '书名',
+      meta: {
+        headClassName: 'w-[18rem] min-w-[14rem]',
+        cellClassName: 'w-[18rem] min-w-[14rem]',
+      },
       cell: (info) => (
-        <div className="space-y-1">
-          <p className="font-semibold text-[var(--foreground)]">{info.getValue()}</p>
-          <p className="text-xs text-[var(--muted-foreground)]">{info.row.original.author ?? '暂未填写作者'}</p>
+        <div className="min-w-0 max-w-[18rem] space-y-1">
+          <p className="truncate font-semibold text-[var(--foreground)]">{info.getValue()}</p>
+          <p className="truncate text-xs text-[var(--muted-foreground)]">{info.row.original.author ?? '暂未填写作者'}</p>
         </div>
       ),
     }),
     bookColumnHelper.accessor('category', {
       header: '分类',
-      cell: (info) => info.getValue() ?? '—',
+      meta: {
+        headClassName: 'w-[12rem]',
+        cellClassName: 'w-[12rem]',
+      },
+      cell: (info) => <span className="block max-w-[12rem] truncate">{info.getValue() ?? '—'}</span>,
     }),
     bookColumnHelper.accessor('isbn', {
       header: 'ISBN',
-      cell: (info) => info.getValue() ?? '—',
+      meta: {
+        headClassName: 'w-[9rem]',
+        cellClassName: 'w-[9rem]',
+      },
+      cell: (info) => <span className="block max-w-[9rem] truncate">{info.getValue() ?? '—'}</span>,
     }),
     bookColumnHelper.accessor('shelf_status', {
       header: '上架状态',
+      meta: {
+        headClassName: 'w-[7rem]',
+        cellClassName: 'w-[7rem]',
+      },
       cell: (info) => <StatusBadge status={info.getValue()} />,
     }),
     bookColumnHelper.display({
       id: 'tags',
       header: '标签',
+      meta: {
+        headClassName: 'w-[11rem]',
+        cellClassName: 'w-[11rem]',
+      },
       cell: (info) => (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex max-w-[11rem] flex-wrap gap-2">
           {(info.row.original.tags ?? []).slice(0, 3).map((tag) => (
             <Badge key={tag.id} variant="secondary">
               {tag.name}
@@ -468,9 +535,13 @@ export function BooksPage() {
     }),
     bookColumnHelper.display({
       id: 'actions',
-      header: () => <div className="flex w-full justify-center">操作</div>,
+      header: '操作',
+      meta: {
+        headClassName: 'w-[11rem] min-w-[11rem] text-right',
+        cellClassName: 'w-[11rem] min-w-[11rem]',
+      },
       cell: (info) => (
-        <div className="flex w-full flex-wrap justify-end gap-4 pr-2">
+        <div className="flex min-w-[11rem] items-center justify-end gap-2">
           <Button
             type="button"
             size="sm"
@@ -641,58 +712,68 @@ export function BooksPage() {
         onChange={(event) => {
           const nextValue = event.target.value
           setSearch(nextValue)
-          setBookPage(1)
-          setSearchParams(
-            patchSearchParams(searchParams, {
-              q: nextValue.trim() || undefined,
-            }),
-            { replace: true },
-          )
+          if (!isBookSearchComposingRef.current) {
+            commitBookSearch(nextValue)
+          }
+        }}
+        onCompositionStart={() => {
+          isBookSearchComposingRef.current = true
+        }}
+        onCompositionEnd={(event) => {
+          isBookSearchComposingRef.current = false
+          const nextValue = event.currentTarget.value
+          setSearch(nextValue)
+          commitBookSearch(nextValue)
         }}
       />
-      <select
-        aria-label="上架状态筛选"
-        className="h-11 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-sm text-[var(--foreground)]"
+      <Select
         value={shelfStatusFilter ?? 'all'}
-        onChange={(event) => {
+        onValueChange={(value) => {
           setBookPage(1)
           setSearchParams(
             patchSearchParams(searchParams, {
-              shelf_status: event.target.value === 'all' ? undefined : event.target.value,
+              shelf_status: value === 'all' ? undefined : value,
             }),
             { replace: true },
           )
         }}
       >
-        <option value="all">全部状态</option>
-        {BOOK_SHELF_STATUS_OPTIONS.map((value) => (
-          <option key={value} value={value}>
-            {formatStatusLabel(value)}
-          </option>
-        ))}
-      </select>
-      <select
-        aria-label="分类筛选"
-        className="h-11 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-sm text-[var(--foreground)]"
+        <SelectTrigger aria-label="上架状态筛选" className="md:w-[10rem]">
+          <SelectValue placeholder="全部状态" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">全部状态</SelectItem>
+          {BOOK_SHELF_STATUS_OPTIONS.map((value) => (
+            <SelectItem key={value} value={value}>
+              {formatStatusLabel(value)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select
         value={categoryIdFilter ? String(categoryIdFilter) : 'all'}
-        onFocus={ensureFullCategoryList}
-        onChange={(event) => {
+        onValueChange={(value) => {
           setBookPage(1)
           setSearchParams(
             patchSearchParams(searchParams, {
-              category_id: event.target.value === 'all' ? undefined : Number(event.target.value),
+              category_id: value === 'all' ? undefined : Number(value),
             }),
             { replace: true },
           )
         }}
       >
-        <option value="all">全部分类</option>
-        {categories.map((category) => (
-          <option key={category.id} value={String(category.id)}>
-            {category.name}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger aria-label="分类筛选" className="md:w-[11rem]" onClick={ensureFullCategoryList}>
+          <SelectValue placeholder="全部分类" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">全部分类</SelectItem>
+          {categories.map((category) => (
+            <SelectItem key={category.id} value={String(category.id)}>
+              {category.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       <div className="flex flex-wrap gap-2">
         <Dialog
           open={isCreateDialogOpen}
@@ -726,45 +807,52 @@ export function BooksPage() {
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="new-book-category">分类</Label>
-                  <select
-                    id="new-book-category"
-                    className="h-11 w-full rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-base sm:text-sm"
+                  <Label id="new-book-category-label">分类</Label>
+                  <Select
                     value={bookCreateForm.categoryId}
-                    onChange={(event) => setBookCreateForm((current) => ({ ...current, categoryId: event.target.value }))}
+                    onValueChange={(value) =>
+                      setBookCreateForm((current) => ({
+                        ...current,
+                        categoryId: value === 'unclassified' ? '' : value,
+                      }))
+                    }
                   >
-                    <option value="">未分类</option>
-                    {categories.map((category) => (
-                      <option key={category.id} value={String(category.id)}>
-                        {category.name}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger aria-labelledby="new-book-category-label">
+                      <SelectValue placeholder="未分类" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unclassified">未分类</SelectItem>
+                      {categories.map((category) => (
+                        <SelectItem key={category.id} value={String(category.id)}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   {!hasCategories ? <p className="text-xs text-[var(--muted-foreground)]">还没有分类，可以先去创建。</p> : null}
                 </div>
                 <div className="space-y-2">
-                  <Label>标签</Label>
+                  <Label id="new-book-tags-label">标签</Label>
                   <div className="rounded-[1.1rem] border border-[var(--line-subtle)] bg-[var(--surface-panel-strong)] p-3">
                     {hasTags ? (
-                      <div className="flex flex-wrap gap-2">
+                      <ToggleGroup
+                        type="multiple"
+                        aria-labelledby="new-book-tags-label"
+                        value={bookCreateForm.tagIds}
+                        onValueChange={(value) => setBookCreateForm((current) => ({ ...current, tagIds: value }))}
+                      >
                         {tags.map((tag) => {
-                          const selected = bookCreateForm.tagIds.includes(String(tag.id))
                           return (
-                            <button
+                            <ToggleGroupItem
                               key={tag.id}
-                              type="button"
-                              onClick={() => toggleCreateTag(String(tag.id))}
-                              className={
-                                selected
-                                  ? 'rounded-full border border-[var(--primary)] bg-[rgba(33,73,140,0.1)] px-3 py-1.5 text-sm font-medium text-[var(--primary)]'
-                                  : 'rounded-full border border-[var(--line-subtle)] bg-white px-3 py-1.5 text-sm text-[var(--foreground)]'
-                              }
+                              value={String(tag.id)}
+                              aria-label={tag.name}
                             >
                               {tag.name}
-                            </button>
+                            </ToggleGroupItem>
                           )
                         })}
-                      </div>
+                      </ToggleGroup>
                     ) : (
                       <p className="text-xs text-[var(--muted-foreground)]">还没有标签，可以先去创建。</p>
                     )}
@@ -833,29 +921,31 @@ export function BooksPage() {
                       <h4 className="font-semibold text-[var(--foreground)]">现有分类</h4>
                       <p className="text-sm text-[var(--muted-foreground)]">分类用于定义图书的主归属，一本书通常只选一个分类。</p>
                     </div>
-                    <div
+                    <ScrollArea
                       data-testid="taxonomy-categories-list"
-                      className="min-h-0 max-h-[min(52vh,32rem)] space-y-3 overflow-y-auto pr-2"
+                      className="min-h-0 max-h-[min(52vh,32rem)] pr-2"
                     >
                       {categoriesQuery.isLoading ? (
                         <p className="text-sm text-[var(--muted-foreground)]">正在载入</p>
                       ) : categories.length ? (
-                        categories.map((category) => (
-                          <div
-                            key={category.id}
-                            className="flex items-start justify-between gap-4 rounded-[1.1rem] border border-[var(--line-subtle)] bg-white/78 px-4 py-3"
-                          >
-                            <div className="space-y-1">
-                              <p className="font-medium text-[var(--foreground)]">{category.name}</p>
-                              <p className="text-xs text-[var(--muted-foreground)]">编号 {category.id}</p>
+                        <div className="space-y-3">
+                          {categories.map((category) => (
+                            <div
+                              key={category.id}
+                              className="flex items-start justify-between gap-4 rounded-[1.1rem] border border-[var(--line-subtle)] bg-white/78 px-4 py-3"
+                            >
+                              <div className="space-y-1">
+                                <p className="font-medium text-[var(--foreground)]">{category.name}</p>
+                                <p className="text-xs text-[var(--muted-foreground)]">编号 {category.id}</p>
+                              </div>
+                              <StatusBadge status={category.status ?? 'active'} />
                             </div>
-                            <StatusBadge status={category.status ?? 'active'} />
-                          </div>
-                        ))
+                          ))}
+                        </div>
                       ) : (
                         <p className="text-sm text-[var(--muted-foreground)]">还没有分类，先在右侧新建一个。</p>
                       )}
-                    </div>
+                    </ScrollArea>
                   </section>
 
                   <section className="space-y-4 self-start rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.52)] p-4">
@@ -896,29 +986,31 @@ export function BooksPage() {
                       <h4 className="font-semibold text-[var(--foreground)]">现有标签</h4>
                       <p className="text-sm text-[var(--muted-foreground)]">标签用于补充特征，一本书可以同时拥有多个标签。</p>
                     </div>
-                    <div
+                    <ScrollArea
                       data-testid="taxonomy-tags-list"
-                      className="min-h-0 max-h-[min(52vh,32rem)] space-y-3 overflow-y-auto pr-2"
+                      className="min-h-0 max-h-[min(52vh,32rem)] pr-2"
                     >
                       {tagsQuery.isLoading ? (
                         <p className="text-sm text-[var(--muted-foreground)]">正在载入</p>
                       ) : tags.length ? (
-                        tags.map((tag) => (
-                          <div
-                            key={tag.id}
-                            className="space-y-1 rounded-[1.1rem] border border-[var(--line-subtle)] bg-white/78 px-4 py-3"
-                          >
-                            <div className="flex items-center justify-between gap-4">
-                              <p className="font-medium text-[var(--foreground)]">{tag.name}</p>
-                              <p className="text-xs text-[var(--muted-foreground)]">编号 {tag.id}</p>
+                        <div className="space-y-3">
+                          {tags.map((tag) => (
+                            <div
+                              key={tag.id}
+                              className="space-y-1 rounded-[1.1rem] border border-[var(--line-subtle)] bg-white/78 px-4 py-3"
+                            >
+                              <div className="flex items-center justify-between gap-4">
+                                <p className="font-medium text-[var(--foreground)]">{tag.name}</p>
+                                <p className="text-xs text-[var(--muted-foreground)]">编号 {tag.id}</p>
+                              </div>
+                              {tag.description ? <p className="text-sm text-[var(--muted-foreground)]">{tag.description}</p> : null}
                             </div>
-                            {tag.description ? <p className="text-sm text-[var(--muted-foreground)]">{tag.description}</p> : null}
-                          </div>
-                        ))
+                          ))}
+                        </div>
                       ) : (
                         <p className="text-sm text-[var(--muted-foreground)]">还没有标签，先在右侧新建一个。</p>
                       )}
-                    </div>
+                    </ScrollArea>
                   </section>
 
                   <section className="space-y-4 self-start rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.52)] p-4">
@@ -962,33 +1054,41 @@ export function BooksPage() {
         onChange={(event) => {
           const nextValue = event.target.value
           setCategorySearch(nextValue)
-          setCategoriesPage(1)
-          setSearchParams(
-            patchSearchParams(searchParams, {
-              category_q: nextValue.trim() || undefined,
-            }),
-            { replace: true },
-          )
+          if (!isCategorySearchComposingRef.current) {
+            commitCategorySearch(nextValue)
+          }
+        }}
+        onCompositionStart={() => {
+          isCategorySearchComposingRef.current = true
+        }}
+        onCompositionEnd={(event) => {
+          isCategorySearchComposingRef.current = false
+          const nextValue = event.currentTarget.value
+          setCategorySearch(nextValue)
+          commitCategorySearch(nextValue)
         }}
       />
-      <select
-        aria-label="分类状态筛选"
-        className="h-11 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-sm text-[var(--foreground)]"
+      <Select
         value={categoryStatusFilter ?? 'all'}
-        onChange={(event) => {
+        onValueChange={(value) => {
           setCategoriesPage(1)
           setSearchParams(
             patchSearchParams(searchParams, {
-              category_status: event.target.value === 'all' ? undefined : event.target.value,
+              category_status: value === 'all' ? undefined : value,
             }),
             { replace: true },
           )
         }}
       >
-        <option value="all">全部状态</option>
-        <option value="active">启用</option>
-        <option value="inactive">停用</option>
-      </select>
+        <SelectTrigger aria-label="分类状态筛选" className="md:w-[10rem]">
+          <SelectValue placeholder="全部状态" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">全部状态</SelectItem>
+          <SelectItem value="active">启用</SelectItem>
+          <SelectItem value="inactive">停用</SelectItem>
+        </SelectContent>
+      </Select>
     </div>
   )
 
@@ -1001,13 +1101,18 @@ export function BooksPage() {
         onChange={(event) => {
           const nextValue = event.target.value
           setTagSearch(nextValue)
-          setTagsPage(1)
-          setSearchParams(
-            patchSearchParams(searchParams, {
-              tag_q: nextValue.trim() || undefined,
-            }),
-            { replace: true },
-          )
+          if (!isTagSearchComposingRef.current) {
+            commitTagSearch(nextValue)
+          }
+        }}
+        onCompositionStart={() => {
+          isTagSearchComposingRef.current = true
+        }}
+        onCompositionEnd={(event) => {
+          isTagSearchComposingRef.current = false
+          const nextValue = event.currentTarget.value
+          setTagSearch(nextValue)
+          commitTagSearch(nextValue)
         }}
       />
     </div>
@@ -1063,7 +1168,7 @@ export function BooksPage() {
             items={[
               {
                 label: '图书总数',
-                value: booksQuery.data?.total ?? books.length,
+                value: booksTotalBaseline ?? booksQuery.data?.total ?? books.length,
               },
               {
                 label: '分类数量',
@@ -1121,6 +1226,7 @@ export function BooksPage() {
                     data={books}
                     emptyTitle="没有找到内容"
                     emptyDescription="换个条件再试试。"
+                    tableClassName="table-fixed"
                     pagination={{
                       page: booksQuery.data?.page ?? bookPage,
                       pageSize: booksQuery.data?.page_size ?? BOOKS_PAGE_SIZE,
@@ -1194,7 +1300,8 @@ export function BooksPage() {
             </div>
           ) : (
             <>
-              <div className="space-y-5 overflow-y-auto pr-1">
+              <ScrollArea className="max-h-[calc(100vh-18rem)] pr-1">
+                <div className="space-y-5">
                 <div className="rounded-[1.35rem] border border-[var(--line-subtle)] bg-[var(--surface-panel-strong)] p-4">
                   <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">当前图书</p>
                   <p className="mt-2 text-lg font-semibold text-[var(--foreground)]">{selectedBook.title}</p>
@@ -1243,44 +1350,51 @@ export function BooksPage() {
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="edit-book-category">分类</Label>
-                      <select
-                        id="edit-book-category"
-                        className="h-11 w-full rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-base sm:text-sm"
+                      <Label id="edit-book-category-label">分类</Label>
+                      <Select
                         value={bookEditForm.categoryId}
-                        onChange={(event) => setBookEditForm((current) => ({ ...current, categoryId: event.target.value }))}
+                        onValueChange={(value) =>
+                          setBookEditForm((current) => ({
+                            ...current,
+                            categoryId: value === 'unclassified' ? '' : value,
+                          }))
+                        }
                       >
-                        <option value="">未分类</option>
-                        {categories.map((category) => (
-                          <option key={category.id} value={String(category.id)}>
-                            {category.name}
-                          </option>
-                        ))}
-                      </select>
+                        <SelectTrigger aria-labelledby="edit-book-category-label">
+                          <SelectValue placeholder="未分类" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="unclassified">未分类</SelectItem>
+                          {categories.map((category) => (
+                            <SelectItem key={category.id} value={String(category.id)}>
+                              {category.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label>标签</Label>
+                      <Label id="edit-book-tags-label">标签</Label>
                       <div className="rounded-[1.1rem] border border-[var(--line-subtle)] bg-[var(--surface-panel-strong)] p-3">
                         {hasTags ? (
-                          <div className="flex flex-wrap gap-2">
+                          <ToggleGroup
+                            type="multiple"
+                            aria-labelledby="edit-book-tags-label"
+                            value={bookEditForm.tagIds}
+                            onValueChange={(value) => setBookEditForm((current) => ({ ...current, tagIds: value }))}
+                          >
                             {tags.map((tag) => {
-                              const selected = bookEditForm.tagIds.includes(String(tag.id))
                               return (
-                                <button
+                                <ToggleGroupItem
                                   key={tag.id}
-                                  type="button"
-                                  onClick={() => toggleEditTag(String(tag.id))}
-                                  className={
-                                    selected
-                                      ? 'rounded-full border border-[var(--primary)] bg-[rgba(33,73,140,0.1)] px-3 py-1.5 text-sm font-medium text-[var(--primary)]'
-                                      : 'rounded-full border border-[var(--line-subtle)] bg-white px-3 py-1.5 text-sm text-[var(--foreground)]'
-                                  }
+                                  value={String(tag.id)}
+                                  aria-label={tag.name}
                                 >
                                   {tag.name}
-                                </button>
+                                </ToggleGroupItem>
                               )
                             })}
-                          </div>
+                          </ToggleGroup>
                         ) : (
                           <p className="text-xs text-[var(--muted-foreground)]">还没有标签，可以先去创建。</p>
                         )}
@@ -1303,28 +1417,32 @@ export function BooksPage() {
                   </div>
                   <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
                     <div className="space-y-2 md:max-w-sm">
-                      <Label htmlFor="book-status-switch">上架状态</Label>
-                      <select
-                        id="book-status-switch"
-                        className="h-11 w-full rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-base sm:text-sm"
+                      <Label id="book-status-switch-label">上架状态</Label>
+                      <Select
                         value={bookEditForm.shelfStatus}
-                        onChange={(event) =>
+                        onValueChange={(value) =>
                           setBookEditForm((current) => ({
                             ...current,
-                            shelfStatus: event.target.value,
+                            shelfStatus: value,
                           }))
                         }
                       >
-                        {BOOK_SHELF_STATUS_OPTIONS.map((value) => (
-                          <option key={value} value={value}>
-                            {formatStatusLabel(value)}
-                          </option>
-                        ))}
-                      </select>
+                        <SelectTrigger aria-labelledby="book-status-switch-label">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {BOOK_SHELF_STATUS_OPTIONS.map((value) => (
+                            <SelectItem key={value} value={value}>
+                              {formatStatusLabel(value)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 </div>
-              </div>
+                </div>
+              </ScrollArea>
               <SheetFooter>
                 <Button
                   type="button"

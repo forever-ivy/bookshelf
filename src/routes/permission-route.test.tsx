@@ -49,8 +49,9 @@ describe('PermissionRoute', () => {
     })
 
     expect(screen.queryByText('system-content')).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '访问受限', level: 1 })).toBeInTheDocument()
-    expect(screen.getByText('当前账号缺少 `system.settings.manage`，请联系超级管理员开通对应权限。')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '暂时不能查看', level: 1 })).toBeInTheDocument()
+    expect(screen.getByText('没有查看权限')).toBeInTheDocument()
+    expect(screen.getByText('当前账号还不能使用“系统设置”，请联系管理员处理。')).toBeInTheDocument()
   })
 
   it('keeps backward compatibility for legacy admins without permission snapshots', () => {

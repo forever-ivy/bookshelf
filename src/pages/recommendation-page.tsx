@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button'
 import { Iphone } from '@/components/ui/iphone'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   Sheet,
   SheetClose,
@@ -33,6 +34,7 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import {
   getAdminBooks,
   getAdminRecommendationStudio,
@@ -1074,28 +1076,38 @@ export function RecommendationPage() {
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="placement-today">今日推荐显示</Label>
-                      <select
-                        id="placement-today"
-                        className="h-10 w-full rounded-xl border border-[var(--line-subtle)] bg-white px-3 text-sm"
+                      <Label id="placement-today-label">今日推荐显示</Label>
+                      <Select
                         value={activeDraft.placements.find((item) => item.code === 'today_recommendations')?.status ?? 'active'}
-                        onChange={(event) => updatePlacementStatus('today_recommendations', event.target.value as 'active' | 'paused')}
+                        onValueChange={(value) => updatePlacementStatus('today_recommendations', value as 'active' | 'paused')}
                       >
-                        <option value="active">显示</option>
-                        <option value="paused">暂停</option>
-                      </select>
+                        <SelectTrigger aria-labelledby="placement-today-label">
+                          <SelectValue placeholder="显示" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectItem value="active">显示</SelectItem>
+                            <SelectItem value="paused">暂停</SelectItem>
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="placement-exam">考试专区显示</Label>
-                      <select
-                        id="placement-exam"
-                        className="h-10 w-full rounded-xl border border-[var(--line-subtle)] bg-white px-3 text-sm"
+                      <Label id="placement-exam-label">考试专区显示</Label>
+                      <Select
                         value={activeDraft.placements.find((item) => item.code === 'exam_zone')?.status ?? 'active'}
-                        onChange={(event) => updatePlacementStatus('exam_zone', event.target.value as 'active' | 'paused')}
+                        onValueChange={(value) => updatePlacementStatus('exam_zone', value as 'active' | 'paused')}
                       >
-                        <option value="active">显示</option>
-                        <option value="paused">暂停</option>
-                      </select>
+                        <SelectTrigger aria-labelledby="placement-exam-label">
+                          <SelectValue placeholder="显示" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectItem value="active">显示</SelectItem>
+                            <SelectItem value="paused">暂停</SelectItem>
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 </div>
@@ -1105,19 +1117,26 @@ export function RecommendationPage() {
                     <h3 className="text-sm font-semibold text-[var(--foreground)]">推荐方式</h3>
                     <p className="text-xs text-[var(--muted-foreground)]">快速切换推荐侧重点。</p>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <ToggleGroup
+                    type="single"
+                    value={selectedStyle}
+                    aria-label="推荐方式"
+                    onValueChange={(value) => {
+                      if (!value) {
+                        return
+                      }
+                      const preset = STYLE_PRESETS.find((item) => item.label === value)
+                      if (preset) {
+                        applyStylePreset(preset)
+                      }
+                    }}
+                  >
                     {STYLE_PRESETS.map((preset) => (
-                      <Button
-                        key={preset.label}
-                        type="button"
-                        size="sm"
-                        variant={selectedStyle === preset.label ? 'default' : 'secondary'}
-                        onClick={() => applyStylePreset(preset)}
-                      >
+                      <ToggleGroupItem key={preset.label} value={preset.label}>
                         {preset.label}
-                      </Button>
+                      </ToggleGroupItem>
                     ))}
-                  </div>
+                  </ToggleGroup>
                 </div>
               </div>
             </div>

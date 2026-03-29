@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import {
   completeAdminReturnRequest,
@@ -400,67 +401,94 @@ export function OrderDetailPage() {
           </DialogHeader>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="borrow-status">借阅状态</Label>
-              <select
-                id="borrow-status"
-                className="h-11 w-full rounded-xl border border-[rgba(193,198,214,0.32)] bg-white px-4 text-base md:text-sm"
+              <Label id="borrow-status-label">借阅状态</Label>
+              <Select
                 value={draftStatuses.borrowStatus ?? bundle.borrow_order.status}
-                onChange={(event) => setDraftStatuses((current) => ({ ...current, borrowStatus: event.target.value }))}
+                onValueChange={(value) => setDraftStatuses((current) => ({ ...current, borrowStatus: value }))}
               >
-                {borrowStatusOptions.map((value) => (
-                  <option key={value} value={value}>
-                    {formatStatusLabel(value)}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger aria-labelledby="borrow-status-label">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {borrowStatusOptions.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {formatStatusLabel(value)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="delivery-status">配送状态</Label>
-              <select
-                id="delivery-status"
-                className="h-11 w-full rounded-xl border border-[rgba(193,198,214,0.32)] bg-white px-4 text-base md:text-sm"
-                value={draftStatuses.deliveryStatus ?? bundle.delivery_order?.status ?? ''}
-                onChange={(event) => setDraftStatuses((current) => ({ ...current, deliveryStatus: event.target.value }))}
+              <Label id="delivery-status-label">配送状态</Label>
+              <Select
+                value={draftStatuses.deliveryStatus ?? bundle.delivery_order?.status ?? 'unchanged'}
+                onValueChange={(value) =>
+                  setDraftStatuses((current) => ({
+                    ...current,
+                    deliveryStatus: value === 'unchanged' ? undefined : value,
+                  }))
+                }
               >
-                <option value="">保持不变</option>
-                {deliveryStatusOptions.map((value) => (
-                  <option key={value} value={value}>
-                    {formatStatusLabel(value)}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger aria-labelledby="delivery-status-label">
+                  <SelectValue placeholder="保持不变" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unchanged">保持不变</SelectItem>
+                  {deliveryStatusOptions.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {formatStatusLabel(value)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="task-status">任务状态</Label>
-              <select
-                id="task-status"
-                className="h-11 w-full rounded-xl border border-[rgba(193,198,214,0.32)] bg-white px-4 text-base md:text-sm"
-                value={draftStatuses.taskStatus ?? bundle.robot_task?.status ?? ''}
-                onChange={(event) => setDraftStatuses((current) => ({ ...current, taskStatus: event.target.value }))}
+              <Label id="task-status-label">任务状态</Label>
+              <Select
+                value={draftStatuses.taskStatus ?? bundle.robot_task?.status ?? 'unchanged'}
+                onValueChange={(value) =>
+                  setDraftStatuses((current) => ({
+                    ...current,
+                    taskStatus: value === 'unchanged' ? undefined : value,
+                  }))
+                }
               >
-                <option value="">保持不变</option>
-                {taskStatusOptions.map((value) => (
-                  <option key={value} value={value}>
-                    {formatStatusLabel(value)}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger aria-labelledby="task-status-label">
+                  <SelectValue placeholder="保持不变" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unchanged">保持不变</SelectItem>
+                  {taskStatusOptions.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {formatStatusLabel(value)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="robot-status">机器人状态</Label>
-              <select
-                id="robot-status"
-                className="h-11 w-full rounded-xl border border-[rgba(193,198,214,0.32)] bg-white px-4 text-base md:text-sm"
-                value={draftStatuses.robotStatus ?? bundle.robot_unit?.status ?? ''}
-                onChange={(event) => setDraftStatuses((current) => ({ ...current, robotStatus: event.target.value }))}
+              <Label id="robot-status-label">机器人状态</Label>
+              <Select
+                value={draftStatuses.robotStatus ?? bundle.robot_unit?.status ?? 'unchanged'}
+                onValueChange={(value) =>
+                  setDraftStatuses((current) => ({
+                    ...current,
+                    robotStatus: value === 'unchanged' ? undefined : value,
+                  }))
+                }
               >
-                <option value="">保持不变</option>
-                {robotStatusOptions.map((value) => (
-                  <option key={value} value={value}>
-                    {formatStatusLabel(value)}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger aria-labelledby="robot-status-label">
+                  <SelectValue placeholder="保持不变" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unchanged">保持不变</SelectItem>
+                  {robotStatusOptions.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {formatStatusLabel(value)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>
@@ -478,19 +506,22 @@ export function OrderDetailPage() {
             <DialogDescription>修改这个订单的处理优先级。</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <Label htmlFor="order-priority">优先级</Label>
-            <select
-              id="order-priority"
-              className="h-11 w-full rounded-xl border border-[rgba(193,198,214,0.32)] bg-white px-4 text-base md:text-sm"
+            <Label id="order-priority-label">优先级</Label>
+            <Select
               value={priorityDraft}
-              onChange={(event) => setPriorityDraft(event.target.value)}
+              onValueChange={setPriorityDraft}
             >
-              {priorityOptions.map((value) => (
-                <option key={value} value={value}>
-                  {formatPriorityLabel(value)}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger aria-labelledby="order-priority-label">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {priorityOptions.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {formatPriorityLabel(value)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <DialogFooter>
             <Button className="w-full sm:w-auto" disabled={priorityMutation.isPending} onClick={() => priorityMutation.mutate()}>
@@ -508,19 +539,22 @@ export function OrderDetailPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="intervention-status">处理情况</Label>
-              <select
-                id="intervention-status"
-                className="h-11 w-full rounded-xl border border-[rgba(193,198,214,0.32)] bg-white px-4 text-base md:text-sm"
+              <Label id="intervention-status-label">处理情况</Label>
+              <Select
                 value={interventionDraft}
-                onChange={(event) => setInterventionDraft(event.target.value)}
+                onValueChange={setInterventionDraft}
               >
-                {['manual_review', 'escalated', 'resolved'].map((value) => (
-                  <option key={value} value={value}>
-                    {formatInterventionStatusLabel(value)}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger aria-labelledby="intervention-status-label">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {['manual_review', 'escalated', 'resolved'].map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {formatInterventionStatusLabel(value)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="failure-reason">处理说明</Label>
@@ -575,19 +609,22 @@ export function OrderDetailPage() {
             <>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="return-request">还书申请</Label>
-                  <select
-                    id="return-request"
-                    className="h-11 w-full rounded-xl border border-[rgba(193,198,214,0.32)] bg-white px-4 text-base md:text-sm"
+                  <Label id="return-request-label">还书申请</Label>
+                  <Select
                     value={String(activeReturnRequest.id)}
-                    onChange={(event) => setSelectedReturnRequestId(Number(event.target.value))}
+                    onValueChange={(value) => setSelectedReturnRequestId(Number(value))}
                   >
-                    {returnRequests.map((returnRequest) => (
-                      <option key={returnRequest.id} value={returnRequest.id}>
-                        #{returnRequest.id} · {formatStatusLabel(returnRequest.status)}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger aria-labelledby="return-request-label">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {returnRequests.map((returnRequest) => (
+                        <SelectItem key={returnRequest.id} value={String(returnRequest.id)}>
+                          #{returnRequest.id} · {formatStatusLabel(returnRequest.status)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>当前状态</Label>

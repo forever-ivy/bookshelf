@@ -103,7 +103,7 @@ describe('ProtectedRoute', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('验证身份中')).toBeInTheDocument()
+    expect(screen.getByText('正在核对登录信息')).toBeInTheDocument()
     expect(screen.queryByText('dashboard page')).not.toBeInTheDocument()
     expect(screen.queryByText('login page')).not.toBeInTheDocument()
   })

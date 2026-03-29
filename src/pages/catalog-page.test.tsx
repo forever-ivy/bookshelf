@@ -53,9 +53,9 @@ describe('catalog page', () => {
     expect(catalogApi.getBooks).toHaveBeenCalledWith(undefined)
     expect(await screen.findByRole('columnheader', { name: '书名' })).toBeInTheDocument()
     expect(await screen.findByText('智能系统设计')).toBeInTheDocument()
-    expect(screen.queryByRole('navigation', { name: '分页导航' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: '翻页' })).not.toBeInTheDocument()
 
-    fireEvent.change(screen.getByPlaceholderText('按书名、作者、ISBN 搜索...'), {
+    fireEvent.change(screen.getByPlaceholderText('按书名、作者或 ISBN 搜索'), {
       target: { value: 'AI' },
     })
 

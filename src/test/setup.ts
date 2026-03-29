@@ -76,6 +76,29 @@ if (typeof window !== 'undefined' && typeof window.HTMLElement !== 'undefined' &
   })
 }
 
+if (typeof window !== 'undefined' && typeof window.HTMLElement !== 'undefined') {
+  if (!window.HTMLElement.prototype.hasPointerCapture) {
+    Object.defineProperty(window.HTMLElement.prototype, 'hasPointerCapture', {
+      configurable: true,
+      value: () => false,
+    })
+  }
+
+  if (!window.HTMLElement.prototype.setPointerCapture) {
+    Object.defineProperty(window.HTMLElement.prototype, 'setPointerCapture', {
+      configurable: true,
+      value: () => {},
+    })
+  }
+
+  if (!window.HTMLElement.prototype.releasePointerCapture) {
+    Object.defineProperty(window.HTMLElement.prototype, 'releasePointerCapture', {
+      configurable: true,
+      value: () => {},
+    })
+  }
+}
+
 afterEach(() => {
   cleanup()
   localStorage.clear()

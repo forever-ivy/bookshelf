@@ -29,8 +29,8 @@ describe('ocr page', () => {
       </TestProviders>,
     )
 
-    expect(screen.getByText('图像入柜')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '识别工作区' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '识别结果台' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '入库识别' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '识别区' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '识别结果' })).toBeInTheDocument()
   })
 })

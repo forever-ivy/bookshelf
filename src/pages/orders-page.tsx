@@ -25,7 +25,9 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { getAdminOrder, getAdminOrders, interveneAdminOrder, prioritizeAdminOrder, retryAdminOrder } from '@/lib/api/admin'
 import {
   formatInterventionStatusLabel,
@@ -234,68 +236,80 @@ export function OrdersPage() {
             <Input readOnly value={`订单总数：${filteredTotal}`} className="sm:w-56" />
             <Input readOnly value={`高优先级：${urgentCount}`} className="sm:w-40" />
             <Input readOnly value={`人工跟进：${interventionCount}`} className="sm:w-40" />
-            <select
-              className="h-11 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-sm text-[var(--foreground)]"
+            <Select
               value={statusFilter}
-              onChange={(event) => {
+              onValueChange={(value) => {
                 updateFilters({
-                  status: event.target.value === 'all' ? undefined : event.target.value,
+                  status: value === 'all' ? undefined : value,
                 })
               }}
             >
-              <option value="all">全部</option>
-              <option value="created">{formatStatusLabel('created')}</option>
-              <option value="awaiting_pick">{formatStatusLabel('awaiting_pick')}</option>
-              <option value="picked_from_cabinet">{formatStatusLabel('picked_from_cabinet')}</option>
-              <option value="delivering">{formatStatusLabel('delivering')}</option>
-              <option value="delivered">{formatStatusLabel('delivered')}</option>
-              <option value="completed">{formatStatusLabel('completed')}</option>
-            </select>
+              <SelectTrigger aria-label="订单状态筛选" className="sm:w-[10rem]">
+                <SelectValue placeholder="全部" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部</SelectItem>
+                <SelectItem value="created">{formatStatusLabel('created')}</SelectItem>
+                <SelectItem value="awaiting_pick">{formatStatusLabel('awaiting_pick')}</SelectItem>
+                <SelectItem value="picked_from_cabinet">{formatStatusLabel('picked_from_cabinet')}</SelectItem>
+                <SelectItem value="delivering">{formatStatusLabel('delivering')}</SelectItem>
+                <SelectItem value="delivered">{formatStatusLabel('delivered')}</SelectItem>
+                <SelectItem value="completed">{formatStatusLabel('completed')}</SelectItem>
+              </SelectContent>
+            </Select>
             <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-2 py-2">
               <span className="px-2 text-xs font-medium text-[var(--muted-foreground)]">优先级</span>
-              {[
-                ['all', '全部'],
-                ['normal', formatPriorityLabel('normal')],
-                ['high', formatPriorityLabel('high')],
-                ['urgent', formatPriorityLabel('urgent')],
-              ].map(([value, label]) => (
-                <Button
-                  key={value}
-                  type="button"
-                  size="sm"
-                  variant={priorityFilter === value ? 'default' : 'secondary'}
-                  onClick={() =>
-                    updateFilters({
-                      priority: value === 'all' ? undefined : value,
-                    })
+              <ToggleGroup
+                type="single"
+                value={priorityFilter}
+                aria-label="优先级筛选"
+                onValueChange={(value) => {
+                  if (!value) {
+                    return
                   }
-                >
-                  {label}
-                </Button>
-              ))}
+                  updateFilters({
+                    priority: value === 'all' ? undefined : value,
+                  })
+                }}
+              >
+                {[
+                  ['all', '全部'],
+                  ['normal', formatPriorityLabel('normal')],
+                  ['high', formatPriorityLabel('high')],
+                  ['urgent', formatPriorityLabel('urgent')],
+                ].map(([value, label]) => (
+                  <ToggleGroupItem key={value} value={value}>
+                    {label}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
             </div>
             <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-2 py-2">
               <span className="px-2 text-xs font-medium text-[var(--muted-foreground)]">人工跟进</span>
-              {[
-                ['all', '全部'],
-                ['manual_review', formatInterventionStatusLabel('manual_review')],
-                ['escalated', formatInterventionStatusLabel('escalated')],
-                ['resolved', formatInterventionStatusLabel('resolved')],
-              ].map(([value, label]) => (
-                <Button
-                  key={value}
-                  type="button"
-                  size="sm"
-                  variant={interventionFilter === value ? 'default' : 'secondary'}
-                  onClick={() =>
-                    updateFilters({
-                      intervention_status: value === 'all' ? undefined : value,
-                    })
+              <ToggleGroup
+                type="single"
+                value={interventionFilter}
+                aria-label="人工跟进筛选"
+                onValueChange={(value) => {
+                  if (!value) {
+                    return
                   }
-                >
-                  {label}
-                </Button>
-              ))}
+                  updateFilters({
+                    intervention_status: value === 'all' ? undefined : value,
+                  })
+                }}
+              >
+                {[
+                  ['all', '全部'],
+                  ['manual_review', formatInterventionStatusLabel('manual_review')],
+                  ['escalated', formatInterventionStatusLabel('escalated')],
+                  ['resolved', formatInterventionStatusLabel('resolved')],
+                ].map(([value, label]) => (
+                  <ToggleGroupItem key={value} value={value}>
+                    {label}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
             </div>
           </div>
         }
@@ -430,19 +444,22 @@ export function OrdersPage() {
             <DialogDescription>修改这个订单的处理优先级。</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <Label htmlFor="quick-order-priority">优先级</Label>
-            <select
-              id="quick-order-priority"
-              className="h-11 w-full rounded-xl border border-[rgba(193,198,214,0.32)] bg-white px-4 text-base sm:text-sm"
+            <Label id="quick-order-priority-label">优先级</Label>
+            <Select
               value={priorityDraft}
-              onChange={(event) => setPriorityDraft(event.target.value)}
+              onValueChange={setPriorityDraft}
             >
-              {['urgent', 'high', 'normal', 'low'].map((value) => (
-                <option key={value} value={value}>
-                  {formatPriorityLabel(value)}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger aria-labelledby="quick-order-priority-label">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {['urgent', 'high', 'normal', 'low'].map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {formatPriorityLabel(value)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <DialogFooter>
             <Button variant="default" className={filledPrimaryActionButtonClassName} onClick={returnToDetailDialog}>
@@ -466,19 +483,22 @@ export function OrdersPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="quick-intervention-status">处理情况</Label>
-              <select
-                id="quick-intervention-status"
-                className="h-11 w-full rounded-xl border border-[rgba(193,198,214,0.32)] bg-white px-4 text-base sm:text-sm"
+              <Label id="quick-intervention-status-label">处理情况</Label>
+              <Select
                 value={interventionDraft}
-                onChange={(event) => setInterventionDraft(event.target.value)}
+                onValueChange={setInterventionDraft}
               >
-                {['manual_review', 'escalated', 'resolved'].map((value) => (
-                  <option key={value} value={value}>
-                    {formatInterventionStatusLabel(value)}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger aria-labelledby="quick-intervention-status-label">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {['manual_review', 'escalated', 'resolved'].map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {formatInterventionStatusLabel(value)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="quick-failure-reason">处理说明</Label>

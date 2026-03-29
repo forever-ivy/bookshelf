@@ -13,6 +13,7 @@ import { WorkspacePanel } from '@/components/shared/workspace-panel'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAdminEventsStream } from '@/hooks/use-admin-events-stream'
 import { getAdminEvents, getAdminRobots, getAdminTasks, reassignAdminTask } from '@/lib/api/admin'
 import { formatStatusLabel } from '@/lib/display-labels'
@@ -145,22 +146,25 @@ export function RobotsPage() {
             title="机器人列表"
             description="查看每台机器人的状态、电量、最后上报时间和当前任务。"
             action={
-              <select
-                aria-label="机器人状态筛选"
-                className="h-10 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-sm text-[var(--foreground)]"
+              <Select
                 value={robotStatusFilter ?? 'all'}
-                onChange={(event) =>
+                onValueChange={(value) =>
                   updateRobotFilters({
-                    robot_status: event.target.value === 'all' ? undefined : event.target.value,
+                    robot_status: value === 'all' ? undefined : value,
                   })
                 }
               >
-                <option value="all">全部状态</option>
-                <option value="assigned">已分配</option>
-                <option value="idle">空闲</option>
-                <option value="carrying">配送中</option>
-                <option value="offline">离线</option>
-              </select>
+                <SelectTrigger aria-label="机器人状态筛选" className="w-[10rem]">
+                  <SelectValue placeholder="全部状态" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部状态</SelectItem>
+                  <SelectItem value="assigned">已分配</SelectItem>
+                  <SelectItem value="idle">空闲</SelectItem>
+                  <SelectItem value="carrying">配送中</SelectItem>
+                  <SelectItem value="offline">离线</SelectItem>
+                </SelectContent>
+              </Select>
             }
           >
             <div className="grid gap-4 md:grid-cols-2">
@@ -197,21 +201,24 @@ export function RobotsPage() {
             title="任务列表"
             description="把任务状态、重试次数和异常说明放在一起看。"
             action={
-              <select
-                aria-label="任务状态筛选"
-                className="h-10 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-sm text-[var(--foreground)]"
+              <Select
                 value={taskStatusFilter ?? 'all'}
-                onChange={(event) =>
+                onValueChange={(value) =>
                   updateRobotFilters({
-                    task_status: event.target.value === 'all' ? undefined : event.target.value,
+                    task_status: value === 'all' ? undefined : value,
                   })
                 }
               >
-                <option value="all">全部任务</option>
-                <option value="assigned">已分配</option>
-                <option value="carrying">配送中</option>
-                <option value="completed">已完成</option>
-              </select>
+                <SelectTrigger aria-label="任务状态筛选" className="w-[10rem]">
+                  <SelectValue placeholder="全部任务" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部任务</SelectItem>
+                  <SelectItem value="assigned">已分配</SelectItem>
+                  <SelectItem value="carrying">配送中</SelectItem>
+                  <SelectItem value="completed">已完成</SelectItem>
+                </SelectContent>
+              </Select>
             }
           >
             <DataTable columns={columns} data={visibleTasks} emptyTitle="没有找到内容" emptyDescription="换个条件再试试。" />
@@ -225,36 +232,42 @@ export function RobotsPage() {
               ) : (
                 <>
                   <div className="space-y-2">
-                    <Label htmlFor="reassign-task">任务</Label>
-                    <select
-                      id="reassign-task"
-                      className="h-11 w-full rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-sm"
+                    <Label id="reassign-task-label">任务</Label>
+                    <Select
                       value={selectedTaskId}
-                      onChange={(event) => setSelectedTaskId(event.target.value)}
+                      onValueChange={setSelectedTaskId}
                     >
-                      <option value="">请选择任务</option>
-                      {activeTasks.map((task) => (
-                        <option key={task.id} value={task.id}>
-                          任务 #{task.id} · 当前机器人 #{task.robot_id} · {formatStatusLabel(task.status)}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger aria-labelledby="reassign-task-label">
+                        <SelectValue placeholder="请选择任务" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unselected-task">请选择任务</SelectItem>
+                        {activeTasks.map((task) => (
+                          <SelectItem key={task.id} value={String(task.id)}>
+                            任务 #{task.id} · 当前机器人 #{task.robot_id} · {formatStatusLabel(task.status)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="reassign-robot">改派给哪台机器人</Label>
-                    <select
-                      id="reassign-robot"
-                      className="h-11 w-full rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-sm"
+                    <Label id="reassign-robot-label">目标机器人</Label>
+                    <Select
                       value={selectedRobotId}
-                      onChange={(event) => setSelectedRobotId(event.target.value)}
+                      onValueChange={setSelectedRobotId}
                     >
-                      <option value="">请选择机器人</option>
-                      {visibleRobots.map((robot) => (
-                        <option key={robot.id} value={robot.id}>
-                          {robot.code} · {formatStatusLabel(robot.status)} · 电量 {robot.battery_level ?? '—'}%
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger aria-labelledby="reassign-robot-label">
+                        <SelectValue placeholder="请选择机器人" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unselected-robot">请选择机器人</SelectItem>
+                        {visibleRobots.map((robot) => (
+                          <SelectItem key={robot.id} value={String(robot.id)}>
+                            {robot.code} · {formatStatusLabel(robot.status)} · 电量 {robot.battery_level ?? '—'}%
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="reassign-reason">改派原因</Label>
@@ -280,21 +293,24 @@ export function RobotsPage() {
             title="事件记录"
             description="这里会合并历史记录和刚收到的新消息。"
             action={
-              <select
-                aria-label="事件类型筛选"
-                className="h-10 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-sm text-[var(--foreground)]"
+              <Select
                 value={eventTypeFilter ?? 'all'}
-                onChange={(event) =>
+                onValueChange={(value) =>
                   updateRobotFilters({
-                    event_type: event.target.value === 'all' ? undefined : event.target.value,
+                    event_type: value === 'all' ? undefined : value,
                   })
                 }
               >
-                <option value="all">全部事件</option>
-                <option value="order_created">创建订单</option>
-                <option value="task_reassigned">任务重分配</option>
-                <option value="robot_offline">机器人离线</option>
-              </select>
+                <SelectTrigger aria-label="事件类型筛选" className="w-[10rem]">
+                  <SelectValue placeholder="全部事件" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部事件</SelectItem>
+                  <SelectItem value="order_created">创建订单</SelectItem>
+                  <SelectItem value="task_reassigned">任务重分配</SelectItem>
+                  <SelectItem value="robot_offline">机器人离线</SelectItem>
+                </SelectContent>
+              </Select>
             }
           >
             <div className="space-y-3">

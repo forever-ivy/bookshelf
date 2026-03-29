@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { getAdminPageHero } from '@/lib/page-hero'
 import {
@@ -518,21 +519,24 @@ export function InventoryPage() {
 
           <TabsContent value="slots" className="mt-0">
             <div className="mb-4 flex flex-wrap gap-3">
-              <select
-                aria-label="位置状态筛选"
-                className="h-10 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-sm text-[var(--foreground)]"
+              <Select
                 value={slotStatusFilter ?? 'all'}
-                onChange={(event) =>
+                onValueChange={(value) =>
                   updateBoardFilters({
-                    slot_status: event.target.value === 'all' ? undefined : event.target.value,
+                    slot_status: value === 'all' ? undefined : value,
                   })
                 }
               >
-                <option value="all">全部位置</option>
-                <option value="occupied">已占用</option>
-                <option value="empty">空位</option>
-                <option value="locked">锁定</option>
-              </select>
+                <SelectTrigger aria-label="位置状态筛选" className="w-[10rem]">
+                  <SelectValue placeholder="全部位置" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部位置</SelectItem>
+                  <SelectItem value="occupied">已占用</SelectItem>
+                  <SelectItem value="empty">空位</SelectItem>
+                  <SelectItem value="locked">锁定</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             {slotsQuery.isLoading ? (
               <LoadingState label="正在载入" />
@@ -554,22 +558,25 @@ export function InventoryPage() {
 
           <TabsContent value="records" className="mt-0">
             <div className="mb-4 flex flex-wrap gap-3">
-              <select
-                aria-label="记录类型筛选"
-                className="h-10 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-sm text-[var(--foreground)]"
+              <Select
                 value={recordEventTypeFilter ?? 'all'}
-                onChange={(event) =>
+                onValueChange={(value) =>
                   updateBoardFilters({
-                    event_type: event.target.value === 'all' ? undefined : event.target.value,
+                    event_type: value === 'all' ? undefined : value,
                   })
                 }
               >
-                <option value="all">全部记录</option>
-                <option value="book_stored">入柜记录</option>
-                <option value="book_removed">出柜记录</option>
-                <option value="manual_correction">手动修正记录</option>
-                <option value="inventory_adjustment">库存调整记录</option>
-              </select>
+                <SelectTrigger aria-label="记录类型筛选" className="w-[11rem]">
+                  <SelectValue placeholder="全部记录" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部记录</SelectItem>
+                  <SelectItem value="book_stored">入柜记录</SelectItem>
+                  <SelectItem value="book_removed">出柜记录</SelectItem>
+                  <SelectItem value="manual_correction">手动修正记录</SelectItem>
+                  <SelectItem value="inventory_adjustment">库存调整记录</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             {recordsQuery.isLoading ? (
               <LoadingState label="正在载入" />
@@ -591,20 +598,23 @@ export function InventoryPage() {
 
           <TabsContent value="alerts" className="mt-0">
             <div className="mb-4 flex flex-wrap gap-3">
-              <select
-                aria-label="库存警告状态筛选"
-                className="h-10 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-sm text-[var(--foreground)]"
+              <Select
                 value={alertStatusFilter}
-                onChange={(event) =>
+                onValueChange={(value) =>
                   updateBoardFilters({
-                    alert_status: event.target.value === 'open' ? undefined : event.target.value,
+                    alert_status: value === 'open' ? undefined : value,
                   })
                 }
               >
-                <option value="open">待处理异常</option>
-                <option value="acknowledged">已确认异常</option>
-                <option value="resolved">已处理异常</option>
-              </select>
+                <SelectTrigger aria-label="库存警告状态筛选" className="w-[11rem]">
+                  <SelectValue placeholder="待处理异常" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="open">待处理异常</SelectItem>
+                  <SelectItem value="acknowledged">已确认异常</SelectItem>
+                  <SelectItem value="resolved">已处理异常</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             {alertsQuery.isLoading ? (
               <LoadingState label="正在载入" />

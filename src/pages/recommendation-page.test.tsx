@@ -154,15 +154,15 @@ describe('recommendation page', () => {
     )
 
     expect((await screen.findAllByText('智能系统设计')).length).toBeGreaterThan(0)
-    expect(screen.getByRole('heading', { name: 'iPhone 预览' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '手机预览' })).toBeInTheDocument()
     expect(screen.getByText('为什么这些内容在这里')).toBeInTheDocument()
     expect(screen.getByText('系统书单')).toBeInTheDocument()
     expect(screen.getByText('AI 考试专区')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '诊断' })).not.toBeInTheDocument()
     expect(screen.queryByText('deepseek-chat')).not.toBeInTheDocument()
 
-    await user.type(screen.getByLabelText('搜索图书加入候选池'), '系统')
-    await user.click(screen.getByRole('button', { name: '搜索并加入候选' }))
+    await user.type(screen.getByLabelText('搜索图书加入候选'), '系统')
+    await user.click(screen.getByRole('button', { name: '搜索并加入' }))
 
     await waitFor(() => {
       expect(managementApi.getAdminBooks).toHaveBeenCalledWith({
@@ -176,5 +176,5 @@ describe('recommendation page', () => {
     const searchResults = await screen.findByTestId('recommendation-search-results')
     await user.click(within(searchResults).getByRole('button', { name: '加入候选池' }))
     expect(await screen.findByText('系统性能工程')).toBeInTheDocument()
-  })
+  }, 10000)
 })

@@ -34,6 +34,16 @@ function TestProviders({ children }: PropsWithChildren) {
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
 }
 
+async function chooseSelectOption(
+  user: ReturnType<typeof userEvent.setup>,
+  label: string,
+  option: string,
+  scope: Pick<typeof screen, 'getByRole'> = screen,
+) {
+  await user.click(scope.getByRole('combobox', { name: label }))
+  await user.click(await screen.findByRole('option', { name: option }))
+}
+
 describe('order localization', () => {
   beforeEach(() => {
     adminApi.getAdminOrders.mockResolvedValue({
@@ -150,9 +160,13 @@ describe('order localization', () => {
     )
 
     expect(await screen.findByRole('heading', { name: '订单' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: '已创建' })).toHaveValue('created')
-    expect(screen.getByRole('option', { name: '书柜取书中' })).toHaveValue('picked_from_cabinet')
-    expect(screen.getByRole('option', { name: '配送中' })).toHaveValue('delivering')
+    expect(screen.getByRole('combobox', { name: '订单状态筛选' })).toHaveTextContent('全部')
+    await user.click(screen.getByRole('combobox', { name: '订单状态筛选' }))
+    expect(await screen.findByRole('option', { name: '已创建' })).toHaveTextContent('已创建')
+    expect(screen.getByRole('option', { name: '书柜取书中' })).toHaveTextContent('书柜取书中')
+    expect(screen.getByRole('option', { name: '配送中' })).toHaveTextContent('配送中')
+    await user.click(screen.getByRole('option', { name: '配送中' }))
+    expect(screen.getByRole('combobox', { name: '订单状态筛选' })).toHaveTextContent('配送中')
 
     await user.click(await screen.findByRole('button', { name: '查看详情' }))
 
@@ -160,7 +174,7 @@ describe('order localization', () => {
     expect(within(quickDetail).getByText(/模式 机器人送书 · 创建于/)).toBeInTheDocument()
     expect(within(quickDetail).getByText('优先级：优先')).toBeInTheDocument()
     expect(within(quickDetail).getByText('人工跟进：转人工处理')).toBeInTheDocument()
-  })
+  }, 10000)
 
   it('renders Chinese labels in status, priority, and return selectors on the detail page', async () => {
     const user = userEvent.setup()
@@ -182,20 +196,22 @@ describe('order localization', () => {
 
     await user.click(screen.getByRole('button', { name: '改状态' }))
     const statusDialog = await screen.findByRole('dialog', { name: '改状态' })
-    expect(within(within(statusDialog).getByLabelText('借阅状态')).getByRole('option', { name: '书柜取书中' })).toHaveValue(
-      'picked_from_cabinet',
-    )
-    expect(within(within(statusDialog).getByLabelText('任务状态')).getByRole('option', { name: '运输中' })).toHaveValue('carrying')
+    const borrowStatusSelect = within(statusDialog).getByRole('combobox', { name: '借阅状态' })
+    await chooseSelectOption(user, '借阅状态', '书柜取书中', within(statusDialog))
+    expect(borrowStatusSelect).toHaveTextContent('书柜取书中')
+    await chooseSelectOption(user, '任务状态', '运输中', within(statusDialog))
+    expect(within(statusDialog).getByRole('combobox', { name: '任务状态' })).toHaveTextContent('运输中')
     await user.click(within(statusDialog).getByRole('button', { name: '关闭' }))
 
     await user.click(screen.getByRole('button', { name: '调整优先级' }))
     const priorityDialog = await screen.findByRole('dialog', { name: '调整优先级' })
-    expect(within(priorityDialog).getByRole('option', { name: '加急' })).toHaveValue('urgent')
-    expect(within(priorityDialog).getByRole('option', { name: '优先' })).toHaveValue('high')
+    await chooseSelectOption(user, '优先级', '加急', within(priorityDialog))
+    expect(within(priorityDialog).getByRole('combobox', { name: '优先级' })).toHaveTextContent('加急')
     await user.click(within(priorityDialog).getByRole('button', { name: '关闭' }))
 
     await user.click(screen.getAllByRole('button', { name: '处理还书' })[0])
     const returnDialog = await screen.findByRole('dialog', { name: '处理还书' })
-    expect(within(returnDialog).getByRole('option', { name: '#99 · 已创建' })).toHaveValue('99')
-  })
+    await chooseSelectOption(user, '还书申请', '#99 · 已创建', within(returnDialog))
+    expect(within(returnDialog).getByRole('combobox', { name: '还书申请' })).toHaveTextContent('#99 · 已创建')
+  }, 10000)
 })

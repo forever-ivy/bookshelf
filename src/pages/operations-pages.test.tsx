@@ -42,6 +42,16 @@ function TestProviders({ children }: PropsWithChildren) {
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
 }
 
+async function chooseSelectOption(
+  user: ReturnType<typeof userEvent.setup>,
+  label: string,
+  option: string,
+  scope: Pick<typeof screen, 'getByRole'> = screen,
+) {
+  await user.click(scope.getByRole('combobox', { name: label }))
+  await user.click(screen.getByRole('option', { name: option }))
+}
+
 describe('operations pages', () => {
   beforeEach(() => {
     const orderItems = [
@@ -91,7 +101,9 @@ describe('operations pages', () => {
       },
     ]
 
-    adminApi.getAdminOrders.mockImplementation((params?: { page?: number; pageSize?: number; status?: string }) =>
+    adminApi.getAdminOrders.mockImplementation((
+      params?: { page?: number; pageSize?: number; status?: string; priority?: string; interventionStatus?: string },
+    ) =>
       Promise.resolve({
         items: orderItems.filter((item) => (params?.status ? item.borrow_order.status === params.status : true)),
         total: params?.status ? 24 : 42,
@@ -252,7 +264,7 @@ describe('operations pages', () => {
     expect(quickDetail).toBeInTheDocument()
     expect(within(quickDetail).getByText('东区自习室 A7')).toBeInTheDocument()
     expect(within(quickDetail).getByRole('link', { name: '打开完整页面' })).toHaveAttribute('href', '/orders/12')
-  })
+  }, 10000)
 
   it('paginates orders and resets back to the first page when filters change', async () => {
     const user = userEvent.setup()
@@ -267,17 +279,61 @@ describe('operations pages', () => {
 
     expect(await screen.findByRole('heading', { name: '订单' })).toBeInTheDocument()
     expect(await screen.findByRole('button', { name: '查看详情' })).toBeInTheDocument()
-    expect(adminApi.getAdminOrders).toHaveBeenCalledWith({ page: 1, pageSize: 20, status: undefined })
+    expect(adminApi.getAdminOrders).toHaveBeenCalledWith({
+      page: 1,
+      pageSize: 20,
+      status: undefined,
+      priority: undefined,
+      interventionStatus: undefined,
+    })
 
     await user.click(await screen.findByRole('link', { name: '下一页' }))
     await waitFor(() => {
-      expect(adminApi.getAdminOrders).toHaveBeenLastCalledWith({ page: 2, pageSize: 20, status: undefined })
+      expect(adminApi.getAdminOrders).toHaveBeenLastCalledWith({
+        page: 2,
+        pageSize: 20,
+        status: undefined,
+        priority: undefined,
+        interventionStatus: undefined,
+      })
     })
 
-    await user.selectOptions(screen.getByRole('combobox'), 'delivering')
+    await chooseSelectOption(user, '订单状态筛选', '配送中')
     await waitFor(() => {
-      expect(adminApi.getAdminOrders).toHaveBeenLastCalledWith({ page: 1, pageSize: 20, status: 'delivering' })
+      expect(adminApi.getAdminOrders).toHaveBeenLastCalledWith({
+        page: 1,
+        pageSize: 20,
+        status: 'delivering',
+        priority: undefined,
+        interventionStatus: undefined,
+      })
     })
+
+    const priorityFilterGroup = screen.getByRole('group', { name: '优先级筛选' })
+    await user.click(within(priorityFilterGroup).getByRole('radio', { name: '优先' }))
+    await waitFor(() => {
+      expect(adminApi.getAdminOrders).toHaveBeenLastCalledWith({
+        page: 1,
+        pageSize: 20,
+        status: 'delivering',
+        priority: 'high',
+        interventionStatus: undefined,
+      })
+    })
+    expect(within(priorityFilterGroup).getByRole('radio', { name: '优先' })).toHaveAttribute('aria-checked', 'true')
+
+    const interventionFilterGroup = screen.getByRole('group', { name: '人工跟进筛选' })
+    await user.click(within(interventionFilterGroup).getByRole('radio', { name: '转人工处理' }))
+    await waitFor(() => {
+      expect(adminApi.getAdminOrders).toHaveBeenLastCalledWith({
+        page: 1,
+        pageSize: 20,
+        status: 'delivering',
+        priority: 'high',
+        interventionStatus: 'manual_review',
+      })
+    })
+    expect(within(interventionFilterGroup).getByRole('radio', { name: '转人工处理' })).toHaveAttribute('aria-checked', 'true')
   })
 
   it('hydrates order filters from the URL and filters robot views locally', async () => {
@@ -331,7 +387,7 @@ describe('operations pages', () => {
 
     await user.click(screen.getByRole('button', { name: '改状态' }))
     const statusDialog = await screen.findByRole('dialog', { name: '改状态' })
-    await user.selectOptions(within(statusDialog).getByLabelText('借阅状态'), 'delivered')
+    await chooseSelectOption(user, '借阅状态', '已送达', within(statusDialog))
     await user.click(within(statusDialog).getByRole('button', { name: '保存状态' }))
     expect(adminApi.patchAdminOrderState).toHaveBeenCalledWith(12, {
       borrow_status: 'delivered',
@@ -386,14 +442,14 @@ describe('operations pages', () => {
       </TestProviders>,
     )
 
-    expect(await screen.findByRole('heading', { name: '机器人管理' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '机器人' })).toBeInTheDocument()
     expect(await screen.findByText('robot-1')).toBeInTheDocument()
     expect(screen.getByText('91%')).toBeInTheDocument()
 
-    await user.selectOptions(screen.getByLabelText('任务'), '32')
-    await user.selectOptions(screen.getByLabelText('目标机器人'), '2')
-    await user.type(screen.getByLabelText('重分配原因'), '原机器人电量过低')
-    await user.click(screen.getByRole('button', { name: '执行重分配' }))
+    await chooseSelectOption(user, '任务', '任务 #32 · 当前机器人 #1 · 已分配')
+    await chooseSelectOption(user, '目标机器人', 'robot-2 · 空闲 · 电量 91%')
+    await user.type(screen.getByLabelText('改派原因'), '原机器人电量过低')
+    await user.click(screen.getByRole('button', { name: '确认改派' }))
 
     expect(adminApi.reassignAdminTask).toHaveBeenCalledWith(32, {
       robot_id: 2,

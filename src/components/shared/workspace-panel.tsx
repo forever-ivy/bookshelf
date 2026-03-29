@@ -1,5 +1,7 @@
 import type { PropsWithChildren, ReactNode } from 'react'
 
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 
 export function WorkspacePanel({
@@ -17,21 +19,22 @@ export function WorkspacePanel({
   tone?: 'default' | 'muted'
 }>) {
   return (
-    <section
+    <Card
       className={cn(
-        'rounded-[1.75rem] border border-[var(--line-subtle)] px-6 py-6',
+        'px-0 py-0',
         tone === 'default' ? 'bg-[var(--surface-panel)]' : 'bg-[rgba(255,255,255,0.42)]',
         className,
       )}
     >
-      <div className="flex flex-col gap-3 border-b border-[var(--line-subtle)] pb-4 xl:flex-row xl:items-end xl:justify-between">
+      <CardHeader className="gap-3 px-6 py-6 pb-4 xl:flex-row xl:items-end xl:justify-between">
         <div className="min-w-0 flex-1 space-y-1 xl:min-w-[16rem]">
-          <h3 className="text-[1.15rem] font-semibold tracking-[-0.03em] text-[var(--foreground)]">{title}</h3>
+          <CardTitle>{title}</CardTitle>
           {description ? <p className="text-sm leading-6 text-[var(--muted-foreground)]">{description}</p> : null}
         </div>
         {action ? <div className="w-full xl:w-auto xl:max-w-full xl:shrink-0">{action}</div> : null}
-      </div>
-      <div className="pt-5">{children}</div>
-    </section>
+      </CardHeader>
+      <Separator />
+      <CardContent className="px-6 py-5">{children}</CardContent>
+    </Card>
   )
 }

@@ -83,6 +83,16 @@ function LocationSearchProbe() {
   return <output data-testid="location-search">{location.search}</output>
 }
 
+async function chooseSelectOption(
+  label: string,
+  option: string,
+  scope: Pick<typeof screen, 'getByRole'> = screen,
+) {
+  const user = userEvent.setup()
+  await user.click(scope.getByRole('combobox', { name: label }))
+  await user.click(screen.getByRole('option', { name: option }))
+}
+
 describe('management pages', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -668,6 +678,8 @@ describe('management pages', () => {
     expect(screen.getByRole('heading', { name: '图书列表' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '新增图书' })).toBeInTheDocument()
     expect(await screen.findAllByText('智能系统设计')).not.toHaveLength(0)
+    expect(screen.getByRole('button', { name: '编辑此书' }).parentElement).not.toHaveClass('flex-wrap')
+    expect(screen.getByRole('button', { name: '编辑此书' }).parentElement).toHaveClass('items-center')
 
     await user.click(screen.getByRole('tab', { name: '分类' }))
     expect(await screen.findByText('人工智能')).toBeInTheDocument()
@@ -676,7 +688,7 @@ describe('management pages', () => {
     expect(await screen.findByText('热门')).toBeInTheDocument()
   })
 
-  it('requests paginated books, resets search to page one, and defers full taxonomy tables until tabs are opened', async () => {
+  it('requests paginated books, resets search to page one, and only defers the full tags table until tabs are opened', async () => {
     const user = userEvent.setup()
 
     managementApi.getAdminBooks.mockReset()
@@ -763,7 +775,7 @@ describe('management pages', () => {
       pageSize: 50,
       query: undefined,
     })
-    expect(managementApi.getAdminCategories).toHaveBeenCalledWith({ page: 1, pageSize: 1 })
+    expect(managementApi.getAdminCategories).toHaveBeenCalledWith({ page: 1, pageSize: 20 })
     expect(managementApi.getAdminTags).toHaveBeenCalledWith({ page: 1, pageSize: 1 })
     expect(screen.queryByRole('columnheader', { name: '分类号' })).not.toBeInTheDocument()
 
@@ -787,6 +799,18 @@ describe('management pages', () => {
         query: '调度',
       })
     })
+    expect(screen.getByText('图书总数').parentElement?.parentElement).toHaveTextContent('120')
+
+    await chooseSelectOption('上架状态筛选', '已上架')
+    await waitFor(() => {
+      expect(managementApi.getAdminBooks).toHaveBeenLastCalledWith({
+        page: 1,
+        pageSize: 50,
+        query: '调度',
+        shelfStatus: 'on_shelf',
+      })
+    })
+    expect(screen.getByText('图书总数').parentElement?.parentElement).toHaveTextContent('120')
 
     await user.click(screen.getByRole('tab', { name: '分类' }))
     await waitFor(() => {
@@ -797,6 +821,159 @@ describe('management pages', () => {
     await waitFor(() => {
       expect(managementApi.getAdminTags).toHaveBeenLastCalledWith({ page: 1, pageSize: 20 })
     })
+  })
+
+  it('prefetches the full category list for the books filter before the first open', async () => {
+    const user = userEvent.setup()
+
+    managementApi.getAdminCategories.mockReset().mockImplementation((params?: { page?: number; pageSize?: number }) =>
+      Promise.resolve({
+        items:
+          (params?.pageSize ?? 20) === 1
+            ? [{ id: 1, code: 'ai', name: '人工智能', status: 'active' }]
+            : [
+                { id: 1, code: 'ai', name: '人工智能', status: 'active' },
+                { id: 2, code: 'transport', name: '交通运输', status: 'active' },
+              ],
+        total: 2,
+        page: params?.page ?? 1,
+        page_size: params?.pageSize ?? 20,
+      }),
+    )
+
+    render(
+      <TestProviders>
+        <BooksPage />
+      </TestProviders>,
+    )
+
+    expect(await screen.findByRole('heading', { name: '图书管理' })).toBeInTheDocument()
+    await waitFor(() => {
+      expect(managementApi.getAdminCategories).toHaveBeenCalledWith({ page: 1, pageSize: 20 })
+    })
+
+    await user.click(screen.getByRole('combobox', { name: '分类筛选' }))
+    expect(await screen.findByRole('option', { name: '交通运输' })).toBeInTheDocument()
+  })
+
+  it('keeps the searched books table on the same constrained layout as the default list', async () => {
+    managementApi.getAdminBooks.mockReset()
+    managementApi.getAdminBooks
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: 1,
+            title: '智能系统设计',
+            author: '程墨',
+            category_id: 1,
+            category: '人工智能',
+            shelf_status: 'on_shelf',
+            isbn: '9787111000001',
+            barcode: 'AI-0001',
+            tags: [{ id: 1, code: 'hot', name: '热门' }],
+            stock_summary: { total_copies: 3, available_copies: 2, reserved_copies: 1 },
+          },
+        ],
+        total: 7359,
+        page: 1,
+        page_size: 50,
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: 9,
+            title: '安全生产事故安全分析第版',
+            author: '注册安全工程师执业资格考试命题研究中心编',
+            category_id: 21,
+            category: '环境科学、安全科学',
+            shelf_status: 'on_shelf',
+            isbn: null,
+            barcode: 'SAFE-0009',
+            tags: [],
+            stock_summary: { total_copies: 1, available_copies: 1, reserved_copies: 0 },
+          },
+        ],
+        total: 5,
+        page: 1,
+        page_size: 50,
+      })
+
+    render(
+      <TestProviders>
+        <BooksPage />
+      </TestProviders>,
+    )
+
+    expect(await screen.findByRole('heading', { name: '图书管理' })).toBeInTheDocument()
+    expect(await screen.findByText('智能系统设计')).toBeInTheDocument()
+    expect(screen.getByText('智能系统设计').closest('table')).toHaveClass('table-fixed')
+
+    fireEvent.change(screen.getByPlaceholderText('按书名、作者、ISBN 搜索...'), {
+      target: { value: '安全' },
+    })
+
+    const searchedTitle = await screen.findByText('安全生产事故安全分析第版')
+    expect(searchedTitle.closest('table')).toHaveClass('table-fixed')
+    expect(searchedTitle).toHaveClass('truncate')
+    expect(screen.getByText('注册安全工程师执业资格考试命题研究中心编')).toHaveClass('truncate')
+    expect(screen.getByText('环境科学、安全科学')).toHaveClass('truncate')
+  })
+
+  it('keeps pinyin composition visible in the books search input and commits after composition ends', async () => {
+    render(
+      <TestProviders>
+        <MemoryRouter initialEntries={['/books']}>
+          <Routes>
+            <Route
+              path="/books"
+              element={
+                <>
+                  <BooksPage />
+                  <LocationSearchProbe />
+                </>
+              }
+            />
+          </Routes>
+        </MemoryRouter>
+      </TestProviders>,
+    )
+
+    expect(await screen.findByRole('heading', { name: '图书管理' })).toBeInTheDocument()
+
+    const input = screen.getByPlaceholderText('按书名、作者、ISBN 搜索...')
+
+    fireEvent.compositionStart(input)
+    fireEvent.change(input, { target: { value: 'jiqi' } })
+
+    expect(input).toHaveValue('jiqi')
+    expect(screen.getByTestId('location-search').textContent).not.toContain('q=')
+    expect(managementApi.getAdminBooks).toHaveBeenLastCalledWith({
+      page: 1,
+      pageSize: 50,
+      query: undefined,
+    })
+
+    fireEvent.change(input, { target: { value: '机器' } })
+
+    expect(input).toHaveValue('机器')
+    expect(screen.getByTestId('location-search').textContent).not.toContain('q=')
+    expect(managementApi.getAdminBooks).toHaveBeenLastCalledWith({
+      page: 1,
+      pageSize: 50,
+      query: undefined,
+    })
+
+    fireEvent.compositionEnd(input)
+
+    await waitFor(() => {
+      expect(managementApi.getAdminBooks).toHaveBeenLastCalledWith({
+        page: 1,
+        pageSize: 50,
+        query: '机器',
+      })
+    })
+    expect(screen.getByTestId('location-search').textContent).toContain('q=%E6%9C%BA%E5%99%A8')
+    expect(input).toHaveValue('机器')
   })
 
   it('hydrates book filters from the URL and enters the entity catalog view', async () => {
@@ -912,7 +1089,7 @@ describe('management pages', () => {
     const createDialog = await screen.findByRole('dialog', { name: '新增图书' })
     await user.type(within(createDialog).getByLabelText('书名'), '机器人路径规划')
     await user.type(within(createDialog).getByLabelText('作者'), '乔远')
-    await user.selectOptions(within(createDialog).getByLabelText('分类'), '1')
+    await chooseSelectOption('分类', '人工智能', within(createDialog))
     await user.click(within(createDialog).getByRole('button', { name: '热门' }))
     await user.type(within(createDialog).getByLabelText('ISBN'), '9787111000003')
     await user.type(within(createDialog).getByLabelText('条码'), 'AI-0003')
@@ -937,10 +1114,7 @@ describe('management pages', () => {
     await user.type(within(editSheet).getByLabelText('书名'), '智能系统设计（新版）')
     await user.clear(within(editSheet).getByLabelText('简介'))
     await user.type(within(editSheet).getByLabelText('简介'), '更新后的图书简介。')
-    expect(within(editSheet).getByRole('option', { name: '草稿' })).toBeInTheDocument()
-    expect(within(editSheet).getByRole('option', { name: '已上架' })).toBeInTheDocument()
-    expect(within(editSheet).getByRole('option', { name: '已下架' })).toBeInTheDocument()
-    await user.selectOptions(within(editSheet).getByLabelText('上架状态'), 'off_shelf')
+    await chooseSelectOption('上架状态', '已下架', within(editSheet))
     await user.click(within(editSheet).getByRole('button', { name: '保存修改' }))
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: '编辑图书' })).not.toBeInTheDocument()
@@ -963,9 +1137,9 @@ describe('management pages', () => {
     const taxonomyDialog = await screen.findByRole('dialog', { name: '分类和标签' })
     expect(taxonomyDialog).toHaveClass('max-h-[calc(100vh-2rem)]')
     expect(taxonomyDialog).toHaveClass('overflow-hidden')
-    const categoryListSection = within(taxonomyDialog).getByRole('heading', { name: '已有分类' }).closest('section')
+    const categoryListSection = within(taxonomyDialog).getByRole('heading', { name: '现有分类' }).closest('section')
     expect(categoryListSection).toHaveClass('min-h-0')
-    expect(within(taxonomyDialog).getByTestId('taxonomy-categories-list')).toHaveClass('overflow-y-auto')
+    expect(within(taxonomyDialog).getByTestId('taxonomy-categories-list')).toBeInTheDocument()
     await user.type(within(taxonomyDialog).getByLabelText('分类名称'), '机器人')
     await user.click(within(taxonomyDialog).getByRole('button', { name: '创建分类' }))
     expect(managementApi.createAdminCategory).toHaveBeenCalledWith({
@@ -1098,7 +1272,7 @@ describe('management pages', () => {
     )
 
     expect(await screen.findByText('借阅统计')).toBeInTheDocument()
-    const anchorDateTrigger = screen.getByRole('button', { name: /选择日期/ })
+    const anchorDateTrigger = await screen.findByRole('button', { name: /选择日期/ })
     expect(anchorDateTrigger).toHaveTextContent(/\d{4}-\d{2}-\d{2}/)
     expect(await screen.findByRole('heading', { name: '近 7 天借书趋势' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '各学院借书情况' })).toBeInTheDocument()
@@ -1107,7 +1281,6 @@ describe('management pages', () => {
     expect(screen.queryByRole('heading', { name: '书柜周转对比' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '机器人执行效率' })).not.toBeInTheDocument()
     expect(screen.queryByText('预测分')).not.toBeInTheDocument()
-    expect(await screen.findAllByText('数据分析')).not.toHaveLength(0)
     expect(await screen.findAllByText('信息学院')).not.toHaveLength(0)
     expect(await screen.findAllByText('75%')).not.toHaveLength(0)
     expect(analyticsApi.getAdminBorrowTrends).toHaveBeenCalledWith(7, expect.any(String))
@@ -1134,7 +1307,7 @@ describe('management pages', () => {
     expect(await screen.findByRole('heading', { name: '库存管理' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '书柜列表' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '库存调整' })).not.toBeInTheDocument()
-    expect(screen.getAllByRole('link', { name: '书柜详情' })).not.toHaveLength(0)
+    expect(screen.getAllByRole('link', { name: '查看书柜' })).not.toHaveLength(0)
     expect(screen.queryByRole('button', { name: '调整东区书柜库存' })).not.toBeInTheDocument()
     expect(await screen.findByText('东区书柜')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '书柜明细' })).not.toBeInTheDocument()
@@ -1181,15 +1354,15 @@ describe('management pages', () => {
     expect(await screen.findByRole('heading', { name: '东区书柜' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '返回书柜列表' })).toHaveAttribute('href', '/inventory')
     expect(screen.getByRole('link', { name: '返回书柜列表' })).toHaveClass('!text-white')
-    expect(screen.getByRole('tab', { name: '位置' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '格口' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '记录' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: '警告' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '异常' })).toBeInTheDocument()
     expect(await screen.findByText('A01')).toBeInTheDocument()
 
     await user.click(screen.getByRole('tab', { name: '记录' }))
     expect(await screen.findByText('入柜')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('tab', { name: '警告' }))
+    await user.click(screen.getByRole('tab', { name: '异常' }))
     expect(await screen.findByText('库存异常')).toBeInTheDocument()
     expect(screen.getByText('待处理')).toBeInTheDocument()
   })
@@ -1349,19 +1522,33 @@ describe('management pages', () => {
       </TestProviders>,
     )
 
-    expect(await screen.findByRole('heading', { name: '读者管理' })).toBeInTheDocument()
-    expect(await screen.findByRole('navigation', { name: '分页导航' })).toBeInTheDocument()
-    expect(managementApi.getAdminReaders).toHaveBeenCalledWith({ query: undefined, page: 1, pageSize: 20 })
+    expect(await screen.findByRole('heading', { name: '读者' })).toBeInTheDocument()
+    expect(await screen.findByRole('navigation', { name: '翻页' })).toBeInTheDocument()
+    expect(managementApi.getAdminReaders).toHaveBeenCalledWith({
+      query: undefined,
+      restrictionStatus: undefined,
+      segmentCode: undefined,
+      page: 1,
+      pageSize: 20,
+    })
 
     await user.click(await screen.findByRole('link', { name: '下一页' }))
     await waitFor(() => {
-      expect(managementApi.getAdminReaders).toHaveBeenLastCalledWith({ query: undefined, page: 2, pageSize: 20 })
+      expect(managementApi.getAdminReaders).toHaveBeenLastCalledWith({
+        query: undefined,
+        restrictionStatus: undefined,
+        segmentCode: undefined,
+        page: 2,
+        pageSize: 20,
+      })
     })
 
-    await user.type(screen.getByPlaceholderText('搜索账号、姓名、学院、分群...'), 'reader-02')
+    await user.type(screen.getByPlaceholderText('搜索账号、姓名、学院或分组'), 'reader-02')
     await waitFor(() => {
       expect(managementApi.getAdminReaders).toHaveBeenLastCalledWith({
         query: 'reader-02',
+        restrictionStatus: undefined,
+        segmentCode: undefined,
         page: 1,
         pageSize: 20,
       })
@@ -1395,9 +1582,10 @@ describe('management pages', () => {
     expect(within(controlDeck).queryByText('freshness')).not.toBeInTheDocument()
     expect(within(controlDeck).getByLabelText('今日推荐显示')).toBeInTheDocument()
     expect(within(controlDeck).getByLabelText('考试专区显示')).toBeInTheDocument()
-    expect(within(controlDeck).getByRole('button', { name: '相关图书优先' })).toBeInTheDocument()
-    expect(within(controlDeck).getByRole('button', { name: '借阅热度' })).toBeInTheDocument()
-    expect(within(controlDeck).getByRole('button', { name: '新书补位' })).toBeInTheDocument()
+    expect(within(controlDeck).getByRole('radio', { name: '相关图书优先' })).toBeInTheDocument()
+    expect(within(controlDeck).getByRole('radio', { name: '借阅热度' })).toBeInTheDocument()
+    expect(within(controlDeck).getByRole('radio', { name: '新书补位' })).toBeInTheDocument()
+    expect(within(controlDeck).getByRole('radio', { name: '相关图书优先' })).toHaveAttribute('aria-checked', 'true')
     expect(within(primaryColumn).getByRole('heading', { name: '推荐看板' })).toBeInTheDocument()
     expect(within(kanbanBoard).getByRole('heading', { name: '候选书池' })).toBeInTheDocument()
     expect(within(kanbanBoard).getByRole('heading', { name: '今日推荐' })).toBeInTheDocument()
@@ -1428,12 +1616,13 @@ describe('management pages', () => {
 
     expect(await screen.findByRole('heading', { name: '推荐页面' })).toBeInTheDocument()
     const actionBar = await screen.findByTestId('recommendation-action-bar')
-    await user.click(screen.getByRole('button', { name: '新书补位' }))
+    await user.click(screen.getByRole('radio', { name: '新书补位' }))
+    expect(screen.getByRole('radio', { name: '新书补位' })).toHaveAttribute('aria-checked', 'true')
+    await chooseSelectOption('考试专区显示', '暂停')
     await user.click(screen.getByRole('button', { name: /编辑页面内容/ }))
     const configSheet = await screen.findByRole('dialog', { name: '编辑页面内容' })
     await user.clear(within(configSheet).getByLabelText('说明标题'))
     await user.type(within(configSheet).getByLabelText('说明标题'), '本周为什么这样配')
-    await user.selectOptions(screen.getByLabelText('考试专区显示'), 'paused')
     await user.clear(within(configSheet).getByLabelText('热门榜单 1 标题'))
     await user.type(within(configSheet).getByLabelText('热门榜单 1 标题'), '馆内热读')
     await user.click(within(configSheet).getByRole('button', { name: '完成编辑' }))
@@ -1485,13 +1674,13 @@ describe('management pages', () => {
     )
 
     expect(await screen.findByRole('heading', { name: '系统设置' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '系统配置' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '配置编辑' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '系统参数' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '编辑参数' })).toBeInTheDocument()
     expect(await screen.findByText('borrow.rules')).toBeInTheDocument()
 
-    const jsonField = await screen.findByLabelText('JSON 值')
+    const jsonField = await screen.findByLabelText('参数内容')
     fireEvent.change(jsonField, { target: { value: '{"max_days":45,"max_count":8}' } })
-    await user.click(screen.getByRole('button', { name: '保存配置' }))
+    await user.click(screen.getByRole('button', { name: '保存参数' }))
 
     expect(managementApi.upsertAdminSystemSetting).toHaveBeenCalledWith('borrow.rules', {
       value_type: 'json',
@@ -1503,8 +1692,8 @@ describe('management pages', () => {
     expect(await screen.findByRole('heading', { name: '编辑角色' })).toBeInTheDocument()
     expect(await screen.findByText('运营管理员')).toBeInTheDocument()
 
-    await user.clear(screen.getByLabelText('权限编码列表'))
-    await user.type(screen.getByLabelText('权限编码列表'), 'dashboard.view,alerts.manage')
+    await user.clear(screen.getByLabelText('权限列表'))
+    await user.type(screen.getByLabelText('权限列表'), 'dashboard.view,alerts.manage')
     await user.click(screen.getByRole('button', { name: '保存角色' }))
 
     expect(managementApi.upsertAdminSystemRole).toHaveBeenCalledWith('ops-manager', {

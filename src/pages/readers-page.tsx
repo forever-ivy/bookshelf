@@ -13,6 +13,7 @@ import { WorkspacePanel } from '@/components/shared/workspace-panel'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { getAdminReaders, updateAdminReader } from '@/lib/api/management'
@@ -227,25 +228,28 @@ export function ReadersPage() {
                 )
               }}
             />
-            <select
-              aria-label="限制状态筛选"
-              className="h-11 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-sm text-[var(--foreground)]"
+            <Select
               value={restrictionStatusFilter ?? 'all'}
-              onChange={(event) => {
+              onValueChange={(value) => {
                 setPage(1)
                 setSearchParams(
                   patchSearchParams(searchParams, {
-                    restriction_status: event.target.value === 'all' ? undefined : event.target.value,
+                    restriction_status: value === 'all' ? undefined : value,
                   }),
                   { replace: true },
                 )
               }}
             >
-              <option value="all">全部限制</option>
-              <option value="none">无限制</option>
-              <option value="limited">受限</option>
-              <option value="blacklist">禁止借阅</option>
-            </select>
+              <SelectTrigger aria-label="限制状态筛选" className="md:w-[10rem]">
+                <SelectValue placeholder="全部限制" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部限制</SelectItem>
+                <SelectItem value="none">无限制</SelectItem>
+                <SelectItem value="limited">受限</SelectItem>
+                <SelectItem value="blacklist">禁止借阅</SelectItem>
+              </SelectContent>
+            </Select>
             <Input
               className="w-full md:w-56"
               placeholder="输入分组名称"
