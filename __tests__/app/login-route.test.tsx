@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import React from 'react';
 import { ScrollView } from 'react-native';
 
 import LoginRoute from '@/app/login';
+import { LibraryApiError } from '@/lib/api/client';
 
 const mockRouter = {
   back: jest.fn(),
@@ -21,6 +22,8 @@ const mockSessionState = {
       },
   token: null as null | string,
 };
+const mockSetSession = jest.fn();
+const mockMutateAsync = jest.fn();
 
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaProvider: ({ children }: { children: React.ReactNode }) => children,
@@ -49,7 +52,7 @@ jest.mock('@/hooks/use-app-session', () => ({
   useAppSession: () => ({
     bootstrapStatus: mockSessionState.bootstrapStatus,
     onboarding: mockSessionState.onboarding,
-    setSession: jest.fn(),
+    setSession: mockSetSession,
     token: mockSessionState.token,
   }),
 }));
@@ -57,7 +60,7 @@ jest.mock('@/hooks/use-app-session', () => ({
 jest.mock('@/hooks/use-library-app-data', () => ({
   useLoginMutation: () => ({
     isPending: false,
-    mutateAsync: jest.fn(),
+    mutateAsync: mockMutateAsync,
   }),
 }));
 
@@ -86,5 +89,28 @@ describe('LoginRoute', () => {
     expect(screen.queryByText('登录与身份绑定')).toBeNull();
     expect(screen.queryByText('先用学号或手机号进入，再补全学院、专业、年级和兴趣标签。')).toBeNull();
     expect(scrollView.props.scrollEnabled).toBe(false);
+  });
+
+  it('shows an inline auth error instead of throwing when login is rejected', async () => {
+    mockMutateAsync.mockRejectedValueOnce(
+      new LibraryApiError('http_401', {
+        code: 'http_401',
+        status: 401,
+      })
+    );
+
+    render(<LoginRoute />);
+
+    fireEvent.changeText(screen.getByPlaceholderText('请输入用户名'), 'reader.ai');
+    fireEvent.changeText(screen.getByPlaceholderText('请输入密码'), 'wrong-password');
+    fireEvent.press(screen.getByText('继续登录'));
+
+    await waitFor(() => {
+      expect(screen.getByText('登录没有完成')).toBeTruthy();
+    });
+
+    expect(screen.getByText('登录状态已失效，请重新登录。')).toBeTruthy();
+    expect(mockSetSession).not.toHaveBeenCalled();
+    expect(mockRouter.replace).not.toHaveBeenCalled();
   });
 });

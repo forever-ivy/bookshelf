@@ -3,10 +3,12 @@ import React from 'react';
 import { Text, TextInput, View } from 'react-native';
 
 import { PillButton } from '@/components/base/pill-button';
+import { StateMessageCard } from '@/components/base/state-message-card';
 import { PageShell } from '@/components/navigation/page-shell';
 import { useAppSession } from '@/hooks/use-app-session';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { useUpdateProfileMutation } from '@/hooks/use-library-app-data';
+import { getLibraryErrorMessage } from '@/lib/api/client';
 
 export default function OnboardingProfileRoute() {
   const { bootstrapStatus, onboarding, profile, token } = useAppSession();
@@ -17,6 +19,7 @@ export default function OnboardingProfileRoute() {
   const [major, setMajor] = React.useState(profile?.major ?? '人工智能');
   const [gradeYear, setGradeYear] = React.useState(profile?.gradeYear ?? '2023');
   const [displayName, setDisplayName] = React.useState(profile?.displayName ?? '陈知行');
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
 
   if (bootstrapStatus !== 'ready') {
     return null;
@@ -31,16 +34,22 @@ export default function OnboardingProfileRoute() {
   }
 
   const handleContinue = async () => {
-    const nextSession = await updateProfileMutation.mutateAsync({
-      college,
-      displayName,
-      gradeYear,
-      major,
-      readingProfileSummary:
-        profile?.readingProfileSummary ?? '偏好先看章节框架，再进入细节和例题。',
-    });
+    setSubmitError(null);
 
-    router.replace(nextSession.onboarding.needsInterestSelection ? '/onboarding/interests' : '/');
+    try {
+      const nextSession = await updateProfileMutation.mutateAsync({
+        college,
+        displayName,
+        gradeYear,
+        major,
+        readingProfileSummary:
+          profile?.readingProfileSummary ?? '偏好先看章节框架，再进入细节和例题。',
+      });
+
+      router.replace(nextSession.onboarding.needsInterestSelection ? '/onboarding/interests' : '/');
+    } catch (error) {
+      setSubmitError(getLibraryErrorMessage(error, '资料保存失败，请确认登录状态和 readers 接口状态。'));
+    }
   };
 
   return (
@@ -58,6 +67,10 @@ export default function OnboardingProfileRoute() {
           gap: theme.spacing.lg,
           padding: theme.spacing.xl,
         }}>
+        {submitError ? (
+          <StateMessageCard description={submitError} title="资料没有保存" tone="danger" />
+        ) : null}
+
         {[
           ['姓名', displayName, setDisplayName],
           ['学院', college, setCollege],
@@ -69,7 +82,10 @@ export default function OnboardingProfileRoute() {
               {label as string}
             </Text>
             <TextInput
-              onChangeText={setter as (value: string) => void}
+              onChangeText={(value) => {
+                setSubmitError(null);
+                (setter as (nextValue: string) => void)(value);
+              }}
               placeholder={label as string}
               placeholderTextColor={theme.colors.textSoft}
               value={value as string}

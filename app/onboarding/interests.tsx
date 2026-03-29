@@ -3,11 +3,13 @@ import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { PillButton } from '@/components/base/pill-button';
+import { StateMessageCard } from '@/components/base/state-message-card';
 import { PageShell } from '@/components/navigation/page-shell';
 import { useAppSession } from '@/hooks/use-app-session';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { useUpdateProfileMutation } from '@/hooks/use-library-app-data';
 import { interestTags } from '@/lib/app/mock-data';
+import { getLibraryErrorMessage } from '@/lib/api/client';
 
 export default function OnboardingInterestsRoute() {
   const { bootstrapStatus, onboarding, profile, token } = useAppSession();
@@ -15,6 +17,7 @@ export default function OnboardingInterestsRoute() {
   const router = useRouter();
   const updateProfileMutation = useUpdateProfileMutation();
   const [selectedTags, setSelectedTags] = React.useState<string[]>(profile?.interestTags ?? []);
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
 
   if (bootstrapStatus !== 'ready') {
     return null;
@@ -33,18 +36,25 @@ export default function OnboardingInterestsRoute() {
   }
 
   const toggleTag = (tag: string) => {
+    setSubmitError(null);
     setSelectedTags((current) =>
       current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag]
     );
   };
 
   const handleContinue = async () => {
-    await updateProfileMutation.mutateAsync({
-      interestTags: selectedTags.length ? selectedTags : [...interestTags.slice(0, 3)],
-      readingProfileSummary: profile?.readingProfileSummary ?? '偏好先看章节框架，再进入细节和例题。',
-    });
+    setSubmitError(null);
 
-    router.replace('/');
+    try {
+      await updateProfileMutation.mutateAsync({
+        interestTags: selectedTags.length ? selectedTags : [...interestTags.slice(0, 3)],
+        readingProfileSummary: profile?.readingProfileSummary ?? '偏好先看章节框架，再进入细节和例题。',
+      });
+
+      router.replace('/');
+    } catch (error) {
+      setSubmitError(getLibraryErrorMessage(error, '兴趣标签保存失败，请确认登录状态和 readers 接口状态。'));
+    }
   };
 
   return (
@@ -91,6 +101,10 @@ export default function OnboardingInterestsRoute() {
           gap: theme.spacing.md,
           padding: theme.spacing.xl,
         }}>
+        {submitError ? (
+          <StateMessageCard description={submitError} title="设置没有完成" tone="danger" />
+        ) : null}
+
         <Text
           style={{
             color: theme.colors.text,

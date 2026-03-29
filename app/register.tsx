@@ -2,10 +2,12 @@ import { Redirect, useRouter } from 'expo-router';
 import React from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
+import { StateMessageCard } from '@/components/base/state-message-card';
 import { PageShell } from '@/components/navigation/page-shell';
 import { useAppSession } from '@/hooks/use-app-session';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { useRegisterMutation } from '@/hooks/use-library-app-data';
+import { getLibraryErrorMessage } from '@/lib/api/client';
 
 export default function RegisterRoute() {
   const { bootstrapStatus, onboarding, setSession, token } = useAppSession();
@@ -14,6 +16,7 @@ export default function RegisterRoute() {
   const registerMutation = useRegisterMutation();
   const [displayName, setDisplayName] = React.useState('');
   const [password, setPassword] = React.useState('');
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
   const [username, setUsername] = React.useState('');
 
   if (bootstrapStatus !== 'ready') {
@@ -30,26 +33,32 @@ export default function RegisterRoute() {
   }
 
   const handleSubmit = async () => {
-    const session = await registerMutation.mutateAsync({
-      displayName,
-      password,
-      username,
-    });
+    setSubmitError(null);
 
-    await setSession({
-      identity: session.identity,
-      onboarding: session.onboarding,
-      profile: session.profile,
-      token: session.accessToken,
-    });
+    try {
+      const session = await registerMutation.mutateAsync({
+        displayName,
+        password,
+        username,
+      });
 
-    router.replace(
-      session.onboarding.needsProfileBinding
-        ? '/onboarding/profile'
-        : session.onboarding.needsInterestSelection
-          ? '/onboarding/interests'
-          : '/'
-    );
+      await setSession({
+        identity: session.identity,
+        onboarding: session.onboarding,
+        profile: session.profile,
+        token: session.accessToken,
+      });
+
+      router.replace(
+        session.onboarding.needsProfileBinding
+          ? '/onboarding/profile'
+          : session.onboarding.needsInterestSelection
+            ? '/onboarding/interests'
+            : '/'
+      );
+    } catch (error) {
+      setSubmitError(getLibraryErrorMessage(error, '注册失败，请检查账号信息和后端服务状态。'));
+    }
   };
 
   return (
@@ -62,7 +71,11 @@ export default function RegisterRoute() {
           borderWidth: 1,
           gap: theme.spacing.lg,
           padding: theme.spacing.xl,
-        }}>
+          }}>
+        {submitError ? (
+          <StateMessageCard description={submitError} title="注册没有完成" tone="danger" />
+        ) : null}
+
         <Text
           style={{
             color: theme.colors.textMuted,
@@ -75,7 +88,10 @@ export default function RegisterRoute() {
 
         <TextInput
           autoCapitalize="none"
-          onChangeText={setUsername}
+          onChangeText={(value) => {
+            setSubmitError(null);
+            setUsername(value);
+          }}
           placeholder="请输入用户名"
           placeholderTextColor="rgba(31, 30, 27, 0.42)"
           style={{
@@ -93,7 +109,10 @@ export default function RegisterRoute() {
 
         <TextInput
           autoCapitalize="words"
-          onChangeText={setDisplayName}
+          onChangeText={(value) => {
+            setSubmitError(null);
+            setDisplayName(value);
+          }}
           placeholder="请输入显示名称"
           placeholderTextColor="rgba(31, 30, 27, 0.42)"
           style={{
@@ -111,7 +130,10 @@ export default function RegisterRoute() {
 
         <TextInput
           autoCapitalize="none"
-          onChangeText={setPassword}
+          onChangeText={(value) => {
+            setSubmitError(null);
+            setPassword(value);
+          }}
           placeholder="请输入密码"
           placeholderTextColor="rgba(31, 30, 27, 0.42)"
           secureTextEntry

@@ -3,10 +3,12 @@ import { Image } from 'expo-image';
 import React from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
+import { StateMessageCard } from '@/components/base/state-message-card';
 import { PageShell } from '@/components/navigation/page-shell';
 import { useAppSession } from '@/hooks/use-app-session';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { useLoginMutation } from '@/hooks/use-library-app-data';
+import { getLibraryErrorMessage } from '@/lib/api/client';
 
 const loginHeroArtwork = require('../assets/illustrations/notion-style/login-cutout.png');
 
@@ -16,6 +18,7 @@ export default function LoginRoute() {
   const router = useRouter();
   const loginMutation = useLoginMutation();
   const [password, setPassword] = React.useState('');
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
   const [username, setUsername] = React.useState('');
 
   if (bootstrapStatus !== 'ready') {
@@ -52,25 +55,31 @@ export default function LoginRoute() {
   }
 
   const handleSubmit = async () => {
-    const session = await loginMutation.mutateAsync({
-      password,
-      username,
-    });
+    setSubmitError(null);
 
-    await setSession({
-      identity: session.identity,
-      onboarding: session.onboarding,
-      profile: session.profile,
-      token: session.accessToken,
-    });
+    try {
+      const session = await loginMutation.mutateAsync({
+        password,
+        username,
+      });
 
-    router.replace(
-      session.onboarding.needsProfileBinding
-        ? '/onboarding/profile'
-        : session.onboarding.needsInterestSelection
-          ? '/onboarding/interests'
-          : '/'
-    );
+      await setSession({
+        identity: session.identity,
+        onboarding: session.onboarding,
+        profile: session.profile,
+        token: session.accessToken,
+      });
+
+      router.replace(
+        session.onboarding.needsProfileBinding
+          ? '/onboarding/profile'
+          : session.onboarding.needsInterestSelection
+            ? '/onboarding/interests'
+            : '/'
+      );
+    } catch (error) {
+      setSubmitError(getLibraryErrorMessage(error, '登录失败，请检查用户名、密码和后端服务状态。'));
+    }
   };
 
   return (
@@ -198,11 +207,18 @@ export default function LoginRoute() {
               paddingBottom: theme.spacing.xl,
               width: '100%',
             }}>
+            {submitError ? (
+              <StateMessageCard description={submitError} title="登录没有完成" tone="danger" />
+            ) : null}
+
             <TextInput
               autoCapitalize="none"
               placeholder="请输入用户名"
               placeholderTextColor="rgba(31, 30, 27, 0.42)"
-              onChangeText={setUsername}
+              onChangeText={(value) => {
+                setSubmitError(null);
+                setUsername(value);
+              }}
               value={username}
               style={{
                 backgroundColor: 'rgba(255, 255, 255, 0.48)',
@@ -218,7 +234,10 @@ export default function LoginRoute() {
 
             <TextInput
               autoCapitalize="none"
-              onChangeText={setPassword}
+              onChangeText={(value) => {
+                setSubmitError(null);
+                setPassword(value);
+              }}
               placeholder="请输入密码"
               placeholderTextColor="rgba(31, 30, 27, 0.42)"
               secureTextEntry
