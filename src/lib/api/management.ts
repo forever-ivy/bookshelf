@@ -13,14 +13,68 @@ import type {
   AdminInventoryRecord,
   AdminPermission,
   AdminReader,
-  AdminRecommendationInsights,
-  AdminRecommendationPlacement,
+  AdminRecommendationDebugDashboardResult,
+  AdminRecommendationDebugModuleResult,
+  AdminRecommendationDebugSearchResult,
+  AdminRecommendationStudio,
+  AdminRecommendationStudioDraft,
+  AdminRecommendationStudioDraftSaveResult,
+  AdminRecommendationStudioPublicationList,
+  AdminRecommendationStudioPreviewFeed,
+  AdminRecommendationStudioPublishResult,
+  AdminRecommendationStudioQuickAction,
   AdminRole,
   AdminSystemAdmin,
   AdminSystemSetting,
-  AdminTopicBooklist,
   PaginatedResponse,
 } from '@/types/domain'
+
+type RecommendationStudioQuickActionInput = Omit<AdminRecommendationStudioQuickAction, 'source'> & {
+  source?: AdminRecommendationStudioQuickAction['source']
+}
+
+function normalizeRecommendationStudioQuickAction(
+  item: RecommendationStudioQuickActionInput,
+): AdminRecommendationStudioQuickAction {
+  return {
+    ...item,
+    source: 'system_generated',
+  }
+}
+
+function normalizeRecommendationStudioPreviewFeed(
+  previewFeed: AdminRecommendationStudioPreviewFeed,
+): AdminRecommendationStudioPreviewFeed {
+  return {
+    ...previewFeed,
+    quick_actions: (previewFeed.quick_actions ?? []).map(normalizeRecommendationStudioQuickAction),
+  }
+}
+
+function normalizeRecommendationStudio(studio: AdminRecommendationStudio): AdminRecommendationStudio {
+  return {
+    ...studio,
+    preview_feed: normalizeRecommendationStudioPreviewFeed(studio.preview_feed),
+  }
+}
+
+function normalizeRecommendationStudioDraftSaveResult(
+  result: AdminRecommendationStudioDraftSaveResult,
+): AdminRecommendationStudioDraftSaveResult {
+  return {
+    ...result,
+    preview_feed: normalizeRecommendationStudioPreviewFeed(result.preview_feed),
+  }
+}
+
+function normalizeRecommendationStudioPublishResult(
+  result: AdminRecommendationStudioPublishResult,
+): AdminRecommendationStudioPublishResult {
+  return {
+    ...result,
+    preview_feed: normalizeRecommendationStudioPreviewFeed(result.preview_feed),
+  }
+}
 
 export async function getAdminDashboardOverview() {
   const response = await http.get<AdminDashboardOverview>('/api/v1/admin/dashboard/overview')
@@ -32,8 +86,47 @@ export async function getAdminDashboardHeatmap() {
   return response.data
 }
 
-export async function getAdminBooks(query?: string) {
-  const response = await http.get<PaginatedResponse<AdminBook>>('/api/v1/admin/books', query ? { query } : undefined)
+type AdminBooksQuery = {
+  query?: string
+  page?: number
+  pageSize?: number
+  categoryId?: number
+  shelfStatus?: string
+}
+
+type AdminPaginationQuery = {
+  page?: number
+  pageSize?: number
+}
+
+type AdminCabinetSlotsQuery = AdminPaginationQuery & {
+  status?: string
+}
+
+type AdminInventoryRecordsQuery = AdminPaginationQuery & {
+  cabinetId?: string
+  eventType?: string
+}
+
+type AdminInventoryAlertsQuery = AdminPaginationQuery & {
+  status?: string
+  sourceId?: string
+}
+
+type AdminReadersQuery = AdminPaginationQuery & {
+  query?: string
+  restrictionStatus?: string
+  segmentCode?: string
+}
+
+export async function getAdminBooks(params: AdminBooksQuery = {}) {
+  const response = await http.get<PaginatedResponse<AdminBook>>('/api/v1/admin/books', {
+    query: params.query,
+    page: params.page ?? 1,
+    page_size: params.pageSize ?? 50,
+    shelf_status: params.shelfStatus,
+    category_id: params.categoryId,
+  })
   return response.data
 }
 
@@ -75,8 +168,13 @@ export async function setAdminBookStatus(bookId: number, shelfStatus: string) {
   return response.data.book
 }
 
-export async function getAdminCategories() {
-  const response = await http.get<PaginatedResponse<AdminBookCategory>>('/api/v1/admin/categories')
+export async function getAdminCategories(params: AdminPaginationQuery & { query?: string; status?: string } = {}) {
+  const response = await http.get<PaginatedResponse<AdminBookCategory>>('/api/v1/admin/categories', {
+    query: params.query,
+    status: params.status,
+    page: params.page ?? 1,
+    page_size: params.pageSize ?? 20,
+  })
   return response.data
 }
 
@@ -90,8 +188,12 @@ export async function createAdminCategory(payload: {
   return response.data.category
 }
 
-export async function getAdminTags() {
-  const response = await http.get<PaginatedResponse<AdminBookTag>>('/api/v1/admin/tags')
+export async function getAdminTags(params: AdminPaginationQuery & { query?: string } = {}) {
+  const response = await http.get<PaginatedResponse<AdminBookTag>>('/api/v1/admin/tags', {
+    query: params.query,
+    page: params.page ?? 1,
+    page_size: params.pageSize ?? 20,
+  })
   return response.data
 }
 
@@ -104,8 +206,11 @@ export async function createAdminTag(payload: {
   return response.data.tag
 }
 
-export async function getAdminAlerts(status?: string) {
-  const response = await http.get<PaginatedResponse<AdminAlert>>('/api/v1/admin/alerts', status ? { status } : undefined)
+export async function getAdminAlerts(params?: { status?: string; severity?: string }) {
+  const response = await http.get<PaginatedResponse<AdminAlert>>(
+    '/api/v1/admin/alerts',
+    params?.status || params?.severity ? { status: params?.status, severity: params?.severity } : undefined,
+  )
   return response.data
 }
 
@@ -178,26 +283,40 @@ export async function getAdminCabinets(status?: string) {
   return response.data
 }
 
-export async function getAdminCabinetSlots(cabinetId: string, status?: string) {
+export async function getAdminCabinetSlots(cabinetId: string, params: AdminCabinetSlotsQuery = {}) {
   const response = await http.get<PaginatedResponse<AdminCabinetSlot>>(
     `/api/v1/admin/cabinets/${cabinetId}/slots`,
-    status ? { status } : undefined,
+    {
+      page: params.page ?? 1,
+      page_size: params.pageSize ?? 20,
+      status: params.status,
+    },
   )
   return response.data
 }
 
-export async function getAdminInventoryRecords(cabinetId?: string) {
+export async function getAdminInventoryRecords(params: AdminInventoryRecordsQuery = {}) {
   const response = await http.get<PaginatedResponse<AdminInventoryRecord>>(
     '/api/v1/admin/inventory/records',
-    cabinetId ? { cabinet_id: cabinetId } : undefined,
+    {
+      cabinet_id: params.cabinetId,
+      event_type: params.eventType,
+      page: params.page ?? 1,
+      page_size: params.pageSize ?? 20,
+    },
   )
   return response.data
 }
 
-export async function getAdminInventoryAlerts(status?: string) {
+export async function getAdminInventoryAlerts(params: AdminInventoryAlertsQuery = {}) {
   const response = await http.get<PaginatedResponse<AdminAlert>>(
     '/api/v1/admin/inventory/alerts',
-    status ? { status } : undefined,
+    {
+      status: params.status,
+      source_id: params.sourceId,
+      page: params.page ?? 1,
+      page_size: params.pageSize ?? 20,
+    },
   )
   return response.data
 }
@@ -215,8 +334,14 @@ export async function applyAdminInventoryCorrection(payload: {
   return response.data.correction
 }
 
-export async function getAdminReaders(query?: string) {
-  const response = await http.get<PaginatedResponse<AdminReader>>('/api/v1/admin/readers', query ? { query } : undefined)
+export async function getAdminReaders(params: AdminReadersQuery = {}) {
+  const response = await http.get<PaginatedResponse<AdminReader>>('/api/v1/admin/readers', {
+    query: params.query,
+    restriction_status: params.restrictionStatus,
+    segment_code: params.segmentCode,
+    page: params.page ?? 1,
+    page_size: params.pageSize ?? 20,
+  })
   return response.data
 }
 
@@ -230,40 +355,78 @@ export async function updateAdminReader(readerId: number, payload: Partial<Admin
   return response.data.reader
 }
 
-export async function getAdminRecommendationPlacements() {
-  const response = await http.get<PaginatedResponse<AdminRecommendationPlacement>>('/api/v1/admin/recommendation/placements')
+export async function getAdminRecommendationStudio() {
+  const response = await http.get<AdminRecommendationStudio>('/api/v1/admin/recommendation/studio')
+  return normalizeRecommendationStudio(response.data)
+}
+
+export async function saveAdminRecommendationStudioDraft(payload: AdminRecommendationStudioDraft) {
+  const response = await http.put<AdminRecommendationStudioDraftSaveResult>(
+    '/api/v1/admin/recommendation/studio/draft',
+    payload,
+  )
+  return normalizeRecommendationStudioDraftSaveResult(response.data)
+}
+
+export async function publishAdminRecommendationStudio() {
+  const response = await http.post<AdminRecommendationStudioPublishResult>('/api/v1/admin/recommendation/studio/publish')
+  return normalizeRecommendationStudioPublishResult(response.data)
+}
+
+export async function getAdminRecommendationStudioPublications() {
+  const response = await http.get<AdminRecommendationStudioPublicationList>(
+    '/api/v1/admin/recommendation/studio/publications',
+  )
   return response.data
 }
 
-export async function createAdminRecommendationPlacement(payload: {
-  code: string
-  name: string
-  status?: string
-  placement_type?: string
-  config_json?: Record<string, unknown>
+export async function searchAdminRecommendationDebug(payload: {
+  readerId?: number
+  query: string
+  limit?: number
 }) {
-  const response = await http.post<{ placement: AdminRecommendationPlacement }>('/api/v1/admin/recommendation/placements', payload)
-  return response.data.placement
-}
-
-export async function getAdminTopicBooklists() {
-  const response = await http.get<PaginatedResponse<AdminTopicBooklist>>('/api/v1/admin/recommendation/topic-booklists')
+  const response = await http.post<AdminRecommendationDebugSearchResult>(
+    '/api/v1/admin/recommendation/debug/search',
+    {
+      reader_id: payload.readerId,
+      query: payload.query,
+      limit: payload.limit ?? 5,
+    },
+  )
   return response.data
 }
 
-export async function createAdminTopicBooklist(payload: {
-  slug: string
-  title: string
-  description?: string
-  status?: string
-  audience_segment?: string
-  book_ids?: number[]
-}) {
-  const response = await http.post<{ topic_booklist: AdminTopicBooklist }>('/api/v1/admin/recommendation/topic-booklists', payload)
-  return response.data.topic_booklist
+export async function getAdminRecommendationDebugDashboard(
+  readerId: number,
+  params?: {
+    limit?: number
+    historyLimit?: number
+  },
+) {
+  const response = await http.get<AdminRecommendationDebugDashboardResult>(
+    `/api/v1/admin/recommendation/debug/readers/${readerId}/dashboard`,
+    {
+      limit: params?.limit ?? 5,
+      history_limit: params?.historyLimit ?? 3,
+    },
+  )
+  return response.data
 }
 
-export async function getAdminRecommendationInsights() {
-  const response = await http.get<AdminRecommendationInsights>('/api/v1/admin/recommendation/insights')
+export async function getAdminRecommendationDebugBookModule(
+  readerId: number,
+  bookId: number,
+  params?: {
+    mode?: 'similar' | 'collaborative' | 'hybrid'
+    limit?: number
+  },
+) {
+  const response = await http.get<AdminRecommendationDebugModuleResult>(
+    `/api/v1/admin/recommendation/debug/readers/${readerId}/books/${bookId}`,
+    {
+      mode: params?.mode ?? 'hybrid',
+      limit: params?.limit ?? 5,
+    },
+  )
   return response.data
 }

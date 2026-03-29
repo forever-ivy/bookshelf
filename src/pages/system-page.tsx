@@ -163,14 +163,14 @@ export function SystemPage() {
   return (
     <PageShell
       {...pageHero}
-      eyebrow="系统设置"
+      eyebrow="系统"
       title="系统设置"
-      description="管理配置、角色和权限。"
-      statusLine="配置和权限"
+      description="管理系统参数、角色和权限。"
+      statusLine="系统设置"
     >
       <MetricStrip
         items={[
-          { label: '配置数', value: settings.length, hint: '系统配置条目' },
+          { label: '参数数', value: settings.length, hint: '系统参数条目' },
           { label: '角色数', value: roles.length, hint: '当前可分配的角色' },
           { label: '权限数', value: permissions.length, hint: '已注册的权限' },
           { label: '管理员数', value: admins.length, hint: '可分配角色的管理员' },
@@ -180,18 +180,18 @@ export function SystemPage() {
 
       <Tabs defaultValue={defaultTab} className="space-y-5">
         <TabsList>
-          {canManageSettings ? <TabsTrigger value="settings">配置</TabsTrigger> : null}
+          {canManageSettings ? <TabsTrigger value="settings">系统参数</TabsTrigger> : null}
           {canManageRoles ? <TabsTrigger value="roles">角色</TabsTrigger> : null}
         </TabsList>
 
         {canManageSettings ? (
           <TabsContent value="settings">
             <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-              <WorkspacePanel title="系统配置" description="查看和修改系统配置。">
+              <WorkspacePanel title="系统参数" description="查看和修改系统参数。">
                 {settingsQuery.isLoading ? (
-                  <LoadingState label="加载中" />
+                  <LoadingState label="正在载入" />
                 ) : settings.length === 0 ? (
-                  <EmptyState title="暂无数据" description="当前条件下没有可用数据。" />
+                  <EmptyState title="没有找到内容" description="换个条件再试试。" />
                 ) : (
                   <div className="space-y-4">
                     {settings.map((setting) => (
@@ -228,39 +228,39 @@ export function SystemPage() {
                 )}
               </WorkspacePanel>
 
-          <InspectorPanel title="配置编辑" description="可以更新现有配置，也可以新增配置。">
+          <InspectorPanel title="编辑参数" description="可以修改现有参数，也可以新增参数。">
                 <div className="space-y-4">
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="setting-key">配置 Key</Label>
+                      <Label htmlFor="setting-key">参数名称</Label>
                       <Input
                         id="setting-key"
                         value={settingEditor.settingKey}
                         onChange={(event) => setSettingEditor((current) => ({ ...current, settingKey: event.target.value }))}
-                        placeholder="borrow.rules"
+                        placeholder="例如：借阅规则"
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="value-type">值类型</Label>
+                      <Label htmlFor="value-type">内容类型</Label>
                       <Input
                         id="value-type"
                         value={settingEditor.valueType}
                         onChange={(event) => setSettingEditor((current) => ({ ...current, valueType: event.target.value }))}
-                        placeholder="json"
+                        placeholder="例如：JSON"
                       />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="setting-description">配置描述</Label>
+                    <Label htmlFor="setting-description">参数说明</Label>
                     <Input
                       id="setting-description"
                       value={settingEditor.description}
                       onChange={(event) => setSettingEditor((current) => ({ ...current, description: event.target.value }))}
-                      placeholder="例如：借阅规则、配送范围、推荐算法参数"
+                      placeholder="例如：借阅规则、送书范围、推荐设置"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="setting-json">JSON 值</Label>
+                    <Label htmlFor="setting-json">参数内容</Label>
                     <Textarea
                       id="setting-json"
                       value={settingEditor.valueJsonText}
@@ -274,7 +274,7 @@ export function SystemPage() {
                     disabled={saveSettingMutation.isPending || !settingEditor.settingKey.trim()}
                     onClick={() => saveSettingMutation.mutate()}
                   >
-                    {saveSettingMutation.isPending ? '保存中…' : '保存配置'}
+                    {saveSettingMutation.isPending ? '保存中…' : '保存参数'}
                   </Button>
                 </div>
               </InspectorPanel>
@@ -288,7 +288,7 @@ export function SystemPage() {
               <div className="space-y-6">
                 <WorkspacePanel title="角色列表" description="查看角色和对应权限。">
                   {rolesQuery.isLoading ? (
-                    <LoadingState label="加载中" />
+                    <LoadingState label="正在载入" />
                   ) : roles.length === 0 ? (
                     <EmptyState title="暂无角色" description="先在右侧创建角色。" />
                   ) : (
@@ -330,9 +330,9 @@ export function SystemPage() {
                   )}
                 </WorkspacePanel>
 
-                <WorkspacePanel title="权限列表" description="查看系统里已经注册的权限。">
+                <WorkspacePanel title="权限列表" description="查看系统里已经设置好的权限。">
                   {permissionsQuery.isLoading ? (
-                    <LoadingState label="加载中" />
+                    <LoadingState label="正在载入" />
                   ) : (
                     <div className="space-y-3">
                       {permissions.map((permission) => (
@@ -352,9 +352,9 @@ export function SystemPage() {
               </div>
 
               <div className="space-y-6">
-                <WorkspacePanel title="管理员列表" description="查看当前管理员和已有角色。">
+                <WorkspacePanel title="管理员列表" description="查看当前管理员和他们已有的角色。">
                   {adminsQuery.isLoading ? (
-                    <LoadingState label="加载中" />
+                    <LoadingState label="正在载入" />
                   ) : (
                     <div className="space-y-3">
                       {admins.map((admin) => (
@@ -372,16 +372,16 @@ export function SystemPage() {
                   )}
                 </WorkspacePanel>
 
-          <InspectorPanel title="编辑角色" description="通过角色编码、权限列表和管理员 ID 调整角色。">
+          <InspectorPanel title="编辑角色" description="在这里填写角色名称、权限和管理员。">
                   <div className="space-y-4">
                     <div className="grid gap-4 md:grid-cols-2">
                       <div className="space-y-2">
-                        <Label htmlFor="role-code">角色编码</Label>
+                        <Label htmlFor="role-code">角色标识</Label>
                         <Input
                           id="role-code"
                           value={roleEditor.roleCode}
                           onChange={(event) => setRoleEditor((current) => ({ ...current, roleCode: event.target.value }))}
-                          placeholder="ops-manager"
+                          placeholder="例如：borrow-manager"
                         />
                       </div>
                       <div className="space-y-2">
@@ -395,7 +395,7 @@ export function SystemPage() {
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="role-description">角色描述</Label>
+                      <Label htmlFor="role-description">角色说明</Label>
                       <Input
                         id="role-description"
                         value={roleEditor.description}
@@ -404,21 +404,21 @@ export function SystemPage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="role-permissions">权限编码列表</Label>
+                      <Label htmlFor="role-permissions">权限列表</Label>
                       <Textarea
                         id="role-permissions"
                         value={roleEditor.permissionCodes}
                         onChange={(event) => setRoleEditor((current) => ({ ...current, permissionCodes: event.target.value }))}
-                        placeholder="dashboard.view,alerts.manage,system.audit.view"
+                        placeholder="每行或用逗号分开填写权限"
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="role-admins">管理员 ID 列表</Label>
+                      <Label htmlFor="role-admins">管理员编号</Label>
                       <Input
                         id="role-admins"
                         value={roleEditor.adminIds}
                         onChange={(event) => setRoleEditor((current) => ({ ...current, adminIds: event.target.value }))}
-                        placeholder="1,2"
+                        placeholder="例如：1,2"
                       />
                     </div>
                     <Button

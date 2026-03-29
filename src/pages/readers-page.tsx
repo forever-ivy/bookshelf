@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createColumnHelper, type ColumnDef } from '@tanstack/react-table'
 import { Link } from 'react-router-dom'
-import { useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { DataTable } from '@/components/shared/data-table'
 import { EmptyState } from '@/components/shared/empty-state'
@@ -16,12 +16,15 @@ import { Label } from '@/components/ui/label'
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { getAdminReaders, updateAdminReader } from '@/lib/api/management'
+import { formatRiskFlagList } from '@/lib/display-labels'
 import { getAdminPageHero } from '@/lib/page-hero'
+import { patchSearchParams, readOptionalSearchParam, readSearchParam, useOptionalSearchParams } from '@/lib/search-params'
 import type { AdminReader } from '@/types/domain'
 import { formatDateTime } from '@/utils'
 
 const columnHelper = createColumnHelper<AdminReader>()
 const pageHero = getAdminPageHero('readers')
+const READERS_PAGE_SIZE = 20
 
 const EMPTY_READER_EDITOR = {
   restrictionStatus: '',
@@ -32,18 +35,31 @@ const EMPTY_READER_EDITOR = {
 
 export function ReadersPage() {
   const queryClient = useQueryClient()
-  const [search, setSearch] = useState('')
+  const [searchParams, setSearchParams] = useOptionalSearchParams()
+  const searchQuery = readOptionalSearchParam(searchParams, 'q')
+  const restrictionStatusFilter = readOptionalSearchParam(searchParams, 'restriction_status')
+  const segmentCodeFilter = readOptionalSearchParam(searchParams, 'segment_code')
+  const [search, setSearch] = useState(() => readSearchParam(searchParams, 'q'))
+  const [segmentSearch, setSegmentSearch] = useState(() => readSearchParam(searchParams, 'segment_code'))
+  const [page, setPage] = useState(1)
   const [selectedReaderId, setSelectedReaderId] = useState<number | null>(null)
   const [isEditorOpen, setIsEditorOpen] = useState(false)
   const [editor, setEditor] = useState(EMPTY_READER_EDITOR)
-  const deferredSearch = useDeferredValue(search)
 
   const readersQuery = useQuery({
-    queryKey: ['admin', 'readers', deferredSearch],
-    queryFn: () => getAdminReaders(deferredSearch.trim() || undefined),
+    queryKey: ['admin', 'readers', searchQuery, restrictionStatusFilter, segmentCodeFilter, page],
+    queryFn: () =>
+      getAdminReaders({
+        query: searchQuery,
+        restrictionStatus: restrictionStatusFilter,
+        segmentCode: segmentCodeFilter,
+        page,
+        pageSize: READERS_PAGE_SIZE,
+      }),
   })
 
   const readers = readersQuery.data?.items ?? []
+  const totalReaders = readersQuery.data?.total ?? 0
   const selectedReader = readers.find((reader) => reader.id === selectedReaderId) ?? readers[0] ?? null
 
   useEffect(() => {
@@ -51,6 +67,20 @@ export function ReadersPage() {
       setSelectedReaderId(readers[0].id)
     }
   }, [readers, selectedReaderId])
+
+  useEffect(() => {
+    const nextSearch = readSearchParam(searchParams, 'q')
+    if (nextSearch !== search) {
+      setSearch(nextSearch)
+    }
+  }, [search, searchParams])
+
+  useEffect(() => {
+    const nextSegmentSearch = readSearchParam(searchParams, 'segment_code')
+    if (nextSegmentSearch !== segmentSearch) {
+      setSegmentSearch(nextSegmentSearch)
+    }
+  }, [searchParams, segmentSearch])
 
   useEffect(() => {
     if (!selectedReader) {
@@ -119,12 +149,12 @@ export function ReadersPage() {
       cell: (info) => <StatusBadge status={info.getValue() ?? 'none'} />,
     }),
     columnHelper.accessor('segment_code', {
-      header: '用户分群',
-      cell: (info) => info.getValue() ?? '未分群',
+      header: '分组',
+      cell: (info) => info.getValue() ?? '未分组',
     }),
     columnHelper.accessor('risk_flags', {
-      header: '风险标签',
-      cell: (info) => info.getValue().join(' / ') || '—',
+      header: '注意标记',
+      cell: (info) => formatRiskFlagList(info.getValue()),
     }),
     columnHelper.accessor('last_active_at', {
       header: '最近活跃',
@@ -132,7 +162,7 @@ export function ReadersPage() {
     }),
     columnHelper.display({
       id: 'profile',
-      header: '画像编辑',
+      header: '编辑',
       cell: (info) => (
         <Button
           type="button"
@@ -143,7 +173,7 @@ export function ReadersPage() {
             setIsEditorOpen(true)
           }}
         >
-          编辑画像
+          编辑资料
         </Button>
       ),
     }),
@@ -161,41 +191,94 @@ export function ReadersPage() {
   return (
     <PageShell
       {...pageHero}
-      eyebrow="读者管理"
-      title="读者管理"
-      description="查看读者信息、限制状态和风险标签。"
-      statusLine="读者索引"
+      eyebrow="读者"
+      title="读者"
+      description="查看读者信息、借阅限制和注意标记。"
+      statusLine="读者列表"
     >
       <MetricStrip
         items={[
-          { label: '读者数量', value: readers.length, hint: '当前筛选结果中的读者' },
-          { label: '限制中', value: restrictedCount, hint: '存在限制状态的读者' },
-          { label: '有风险标记', value: highRiskCount, hint: '已经挂上风险标签的读者' },
-          { label: '进行中订单', value: totalActiveOrders, hint: '当前正在处理的借阅数' },
+          { label: '读者数量', value: totalReaders, hint: '符合当前条件的读者总数' },
+          { label: '受限制', value: restrictedCount, hint: '当前这一页里有限制的读者' },
+          { label: '有注意标记', value: highRiskCount, hint: '当前这一页里带标记的读者' },
+          { label: '处理中订单', value: totalActiveOrders, hint: '当前这一页里还在处理的订单' },
         ]}
         className="xl:grid-cols-4"
       />
 
       <WorkspacePanel
-        title="读者索引"
-        description="按账号、学院、分群和限制状态筛选读者，画像编辑从右侧抽屉进入。"
+        title="读者列表"
+        description="按账号、学院、分组和限制状态筛选读者，右侧可以直接改资料。"
         action={
-          <Input
-            className="w-full md:w-80"
-            placeholder="搜索账号、姓名、学院、分群..."
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
+          <div className="flex w-full flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:justify-end">
+            <Input
+              className="w-full md:w-80"
+              placeholder="搜索账号、姓名、学院或分组"
+              value={search}
+              onChange={(event) => {
+                const nextValue = event.target.value
+                setSearch(nextValue)
+                setPage(1)
+                setSearchParams(
+                  patchSearchParams(searchParams, {
+                    q: nextValue.trim() || undefined,
+                  }),
+                  { replace: true },
+                )
+              }}
+            />
+            <select
+              aria-label="限制状态筛选"
+              className="h-11 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-sm text-[var(--foreground)]"
+              value={restrictionStatusFilter ?? 'all'}
+              onChange={(event) => {
+                setPage(1)
+                setSearchParams(
+                  patchSearchParams(searchParams, {
+                    restriction_status: event.target.value === 'all' ? undefined : event.target.value,
+                  }),
+                  { replace: true },
+                )
+              }}
+            >
+              <option value="all">全部限制</option>
+              <option value="none">无限制</option>
+              <option value="limited">受限</option>
+              <option value="blacklist">禁止借阅</option>
+            </select>
+            <Input
+              className="w-full md:w-56"
+              placeholder="输入分组名称"
+              value={segmentSearch}
+              onChange={(event) => {
+                const nextValue = event.target.value
+                setSegmentSearch(nextValue)
+                setPage(1)
+                setSearchParams(
+                  patchSearchParams(searchParams, {
+                    segment_code: nextValue.trim() || undefined,
+                  }),
+                  { replace: true },
+                )
+              }}
+            />
+          </div>
         }
       >
         {readersQuery.isLoading ? (
-          <LoadingState label="加载中" />
+          <LoadingState label="正在载入" />
         ) : (
           <DataTable
             columns={columns}
             data={readers}
-            emptyTitle="暂无数据"
-            emptyDescription="当前条件下没有可用数据。"
+            emptyTitle="没有找到内容"
+            emptyDescription="换个条件再试试。"
+            pagination={{
+              page: readersQuery.data?.page ?? page,
+              pageSize: readersQuery.data?.page_size ?? READERS_PAGE_SIZE,
+              total: totalReaders,
+              onPageChange: setPage,
+            }}
           />
         )}
       </WorkspacePanel>
@@ -203,15 +286,15 @@ export function ReadersPage() {
       <Sheet open={isEditorOpen} onOpenChange={setIsEditorOpen}>
         <SheetContent>
           <SheetHeader>
-            <SheetTitle>画像编辑</SheetTitle>
-            <SheetDescription>围绕当前读者调整限制、分群和风险标签，并核对最近活跃与偏好信息。</SheetDescription>
+            <SheetTitle>编辑读者资料</SheetTitle>
+            <SheetDescription>在这里修改限制状态、分组和注意标记，也能顺手看看最近使用情况。</SheetDescription>
           </SheetHeader>
 
           {!selectedReader ? (
             readersQuery.isLoading ? (
-              <LoadingState label="加载中" />
+              <LoadingState label="正在载入" />
             ) : (
-              <EmptyState title="暂无数据" description="当前条件下没有可用读者可供编辑。" />
+              <EmptyState title="没有找到内容" description="当前没有可编辑的读者。" />
             )
           ) : (
             <>
@@ -229,8 +312,8 @@ export function ReadersPage() {
                     </div>
                   </div>
                   <div className="mt-4 grid gap-3 text-sm text-[var(--muted-foreground)] sm:grid-cols-2">
-                    <p>{selectedReader.college ?? '学院待补充'}</p>
-                    <p>{selectedReader.major ?? '专业待补充'}</p>
+                    <p>{selectedReader.college ?? '暂未填写学院'}</p>
+                    <p>{selectedReader.major ?? '暂未填写专业'}</p>
                   </div>
                 </div>
 
@@ -254,7 +337,7 @@ export function ReadersPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="reader-segment-code">用户分群</Label>
+                  <Label htmlFor="reader-segment-code">分组</Label>
                   <Input
                     id="reader-segment-code"
                     value={editor.segmentCode}
@@ -263,7 +346,7 @@ export function ReadersPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="reader-risk-flags">风险标签</Label>
+                  <Label htmlFor="reader-risk-flags">注意标记</Label>
                   <Textarea
                     id="reader-risk-flags"
                     value={editor.riskFlags}
@@ -285,7 +368,7 @@ export function ReadersPage() {
                 </div>
 
                 <div className="rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.62)] px-4 py-4">
-                  <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">偏好信息</p>
+                  <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">借阅偏好</p>
                   <pre className="mt-3 whitespace-pre-wrap break-all text-sm leading-6 text-[var(--foreground)]">
                     {JSON.stringify(selectedReader.preference_profile_json ?? {}, null, 2)}
                   </pre>
@@ -299,7 +382,7 @@ export function ReadersPage() {
                   disabled={updateReaderMutation.isPending}
                   onClick={() => updateReaderMutation.mutate()}
                 >
-                  {updateReaderMutation.isPending ? '保存中…' : '保存画像设置'}
+                  {updateReaderMutation.isPending ? '保存中…' : '保存读者资料'}
                 </Button>
               </SheetFooter>
             </>

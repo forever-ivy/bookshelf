@@ -59,19 +59,19 @@ export function CatalogPage() {
       {...pageHero}
       eyebrow="图书目录"
       title="图书目录"
-      description="查看图书列表和库存情况。"
-      actions={<Input className="w-full md:w-80" placeholder="按书名、作者、ISBN 搜索..." value={search} onChange={(e) => setSearch(e.target.value)} />}
+      description="查看图书列表和库存数量。"
+      actions={<Input className="w-full md:w-80" placeholder="按书名、作者或 ISBN 搜索" value={search} onChange={(e) => setSearch(e.target.value)} />}
     >
       <div className="grid gap-6 xl:grid-cols-[1.5fr_0.8fr]">
         {booksQuery.isLoading ? (
-          <LoadingState label="数据装载中" />
+          <LoadingState label="正在载入数据" />
         ) : (
-          <DataTable columns={columns} data={books} emptyTitle="暂无记录" emptyDescription="当前检视条件下无可用数据。" />
+          <DataTable columns={columns} data={books} emptyTitle="没有找到记录" emptyDescription="换个条件再试试。" />
         )}
 
         <Card>
           <CardHeader>
-            <CardTitle>目录概览</CardTitle>
+            <CardTitle>列表统计</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-2xl bg-[var(--surface-container-low)] p-4">

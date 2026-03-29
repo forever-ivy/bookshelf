@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { createColumnHelper, type ColumnDef } from '@tanstack/react-table'
 import { Link, useParams } from 'react-router-dom'
 
+import { filledPrimaryActionButtonClassName } from '@/components/shared/action-button-styles'
 import { DataTable } from '@/components/shared/data-table'
 import { EmptyState } from '@/components/shared/empty-state'
 import { InspectorPanel } from '@/components/shared/inspector-panel'
@@ -12,6 +13,7 @@ import { StatusBadge } from '@/components/shared/status-badge'
 import { WorkspacePanel } from '@/components/shared/workspace-panel'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { formatOrderModeLabel, formatRiskFlagList } from '@/lib/display-labels'
 import { getAdminReader } from '@/lib/api/management'
 import { getAdminPageHero } from '@/lib/page-hero'
 import { getReaderConversations, getReaderOrders, getReaderOverview, getReaderRecommendations } from '@/lib/api/readers'
@@ -54,11 +56,11 @@ export function ReaderDetailPage() {
   })
 
   if (detailQuery.isLoading || overviewQuery.isLoading) {
-    return <LoadingState label="加载中" />
+    return <LoadingState label="正在载入" />
   }
 
   if (!detailQuery.data || !overviewQuery.data) {
-    return <EmptyState title="暂无数据" description="当前条件下没有可用数据。" />
+    return <EmptyState title="没有找到内容" description="换个条件再试试。" />
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -75,6 +77,7 @@ export function ReaderDetailPage() {
     orderColumnHelper.accessor((row) => row.borrow_order.order_mode, {
       id: 'mode',
       header: '模式',
+      cell: (info) => formatOrderModeLabel(info.getValue()),
     }),
     orderColumnHelper.accessor((row) => row.borrow_order.created_at, {
       id: 'created_at',
@@ -105,6 +108,14 @@ export function ReaderDetailPage() {
     recommendationColumnHelper.accessor('book_title', { header: '推荐书目' }),
     recommendationColumnHelper.accessor('query_text', { header: '查询词' }),
     recommendationColumnHelper.accessor('score', { header: '分数' }),
+    recommendationColumnHelper.accessor('provider_note', {
+      header: '来源',
+      cell: (info) => info.getValue() ?? '—',
+    }),
+    recommendationColumnHelper.accessor('explanation', {
+      header: '推荐理由',
+      cell: (info) => info.getValue() ?? '—',
+    }),
     recommendationColumnHelper.accessor('created_at', {
       header: '推荐时间',
       cell: (info) => formatDateTime(info.getValue()),
@@ -118,51 +129,55 @@ export function ReaderDetailPage() {
       {...pageHero}
       eyebrow="读者"
       title={detailQuery.data.display_name}
-      description={`${detailQuery.data.college ?? '未填写学院'} · ${detailQuery.data.major ?? '未填写专业'}`}
+      description={`${detailQuery.data.college ?? '暂未填写学院'} · ${detailQuery.data.major ?? '暂未填写专业'}`}
       statusLine="读者信息"
     >
       <div className="flex flex-wrap gap-3">
-        <Button asChild variant="secondary">
-          <Link to="/readers">返回读者索引</Link>
+        <Button
+          asChild
+          variant="default"
+          className={filledPrimaryActionButtonClassName}
+        >
+          <Link to="/readers">返回读者列表</Link>
         </Button>
       </div>
 
       <MetricStrip
         items={[
-          { label: '进行中订单', value: overview.stats.active_orders_count, hint: '当前还在处理的借阅数量' },
+          { label: '处理中订单', value: overview.stats.active_orders_count, hint: '现在还在处理的借阅数量' },
           { label: '借阅记录', value: overview.stats.borrow_history_count, hint: '累计借阅记录数' },
-          { label: '推荐记录', value: overview.stats.recommendation_count, hint: '推荐日志和点击记录' },
-          { label: '会话数', value: overview.stats.conversation_count, hint: '搜索和咨询会话数' },
+          { label: '推荐记录', value: overview.stats.recommendation_count, hint: '推荐和点击记录' },
+          { label: '咨询记录', value: overview.stats.conversation_count, hint: '搜索和咨询次数' },
         ]}
         className="xl:grid-cols-4"
       />
 
       <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <div className="space-y-6">
-          <WorkspacePanel title="记录" description="把借阅订单、会话和推荐记录放在一起。">
+          <WorkspacePanel title="记录" description="把借阅、咨询和推荐记录放在一起看。">
             <Tabs defaultValue="orders">
               <TabsList>
                 <TabsTrigger value="orders">借阅订单</TabsTrigger>
-                <TabsTrigger value="conversations">会话记录</TabsTrigger>
+                <TabsTrigger value="conversations">咨询记录</TabsTrigger>
                 <TabsTrigger value="recommendations">推荐记录</TabsTrigger>
               </TabsList>
               <TabsContent value="orders">
-                <DataTable columns={orderColumns} data={ordersQuery.data ?? []} emptyTitle="暂无记录" emptyDescription="当前检视条件下无可用数据。" />
+                <DataTable columns={orderColumns} data={ordersQuery.data ?? []} emptyTitle="没有找到记录" emptyDescription="换个条件再试试。" />
               </TabsContent>
               <TabsContent value="conversations">
                 <DataTable
                   columns={conversationColumns}
                   data={conversationsQuery.data ?? []}
-                  emptyTitle="暂无记录"
-                  emptyDescription="当前检视条件下无可用数据。"
+                  emptyTitle="没有找到记录"
+                  emptyDescription="换个条件再试试。"
                 />
               </TabsContent>
               <TabsContent value="recommendations">
                 <DataTable
                   columns={recommendationColumns}
                   data={recommendationsQuery.data ?? []}
-                  emptyTitle="暂无记录"
-                  emptyDescription="当前检视条件下无可用数据。"
+                  emptyTitle="没有找到记录"
+                  emptyDescription="换个条件再试试。"
                 />
               </TabsContent>
             </Tabs>
@@ -170,7 +185,7 @@ export function ReaderDetailPage() {
         </div>
 
         <div className="space-y-6">
-          <InspectorPanel title="读者信息" description="查看账号、最近查询、限制状态和风险标签。">
+          <InspectorPanel title="读者信息" description="查看账号、最近查询、限制状态和注意标记。">
             <div className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-2xl bg-[var(--surface-container-low)] px-4 py-4">
@@ -187,7 +202,7 @@ export function ReaderDetailPage() {
                 </div>
                 <div className="rounded-2xl bg-[var(--surface-container-low)] px-4 py-4">
                   <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">最近查询</p>
-                  <p className="mt-2 text-sm text-[var(--foreground)]">{overview.recent_queries.join(' / ') || '暂无记录'}</p>
+                  <p className="mt-2 text-sm text-[var(--foreground)]">{overview.recent_queries.join(' / ') || '没有找到记录'}</p>
                 </div>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -198,22 +213,22 @@ export function ReaderDetailPage() {
                   </div>
                 </div>
                 <div className="rounded-2xl bg-[var(--surface-container-low)] px-4 py-4">
-                  <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">用户分群</p>
-                  <p className="mt-2 font-semibold text-[var(--foreground)]">{detailQuery.data.segment_code ?? '未分群'}</p>
+                  <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">分组</p>
+                  <p className="mt-2 font-semibold text-[var(--foreground)]">{detailQuery.data.segment_code ?? '未分组'}</p>
                 </div>
               </div>
             </div>
           </InspectorPanel>
 
-          <WorkspacePanel title="偏好与标签" description="查看偏好、风险和最近搜索。">
+          <WorkspacePanel title="偏好和标记" description="查看借阅偏好、注意标记和最近搜索。">
             <div className="space-y-4">
               <div className="rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.38)] px-4 py-4">
-                <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">风险标签</p>
-                  <p className="mt-2 text-sm text-[var(--foreground)]">{detailQuery.data.risk_flags.join(' / ') || '暂无记录'}</p>
+                <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">注意标记</p>
+                  <p className="mt-2 text-sm text-[var(--foreground)]">{detailQuery.data.risk_flags.length ? formatRiskFlagList(detailQuery.data.risk_flags) : '没有找到记录'}</p>
               </div>
               <div className="rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.38)] px-4 py-4">
                 <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">最近查询</p>
-                <p className="mt-2 text-sm text-[var(--foreground)]">{overview.recent_queries.join(' / ') || '暂无记录'}</p>
+                <p className="mt-2 text-sm text-[var(--foreground)]">{overview.recent_queries.join(' / ') || '没有找到记录'}</p>
               </div>
             </div>
           </WorkspacePanel>

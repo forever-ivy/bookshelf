@@ -1,8 +1,9 @@
 import axios from 'axios'
 
-import { API_BASE_URL, ERROR_MESSAGES, STORAGE_KEYS } from '@/constants/constant'
+import { API_BASE_URL, ERROR_MESSAGES } from '@/constants/constant'
+import { clearStoredSession, getSessionSnapshot, setStoredSession } from '@/lib/session-store'
 import type { ApiError, ApiResponse, RequestConfig, Transport, TransportResponse } from '@/types/api'
-import { storageUtils } from '@/utils'
+import type { AuthPayload } from '@/types/domain'
 
 type RequestInterceptor = (config: RequestConfig) => RequestConfig | Promise<RequestConfig>
 type ResponseInterceptor = <T>(
@@ -10,6 +11,9 @@ type ResponseInterceptor = <T>(
   rawResponse: TransportResponse<T>,
 ) => ApiResponse<T> | Promise<ApiResponse<T>>
 type ErrorInterceptor = (error: ApiError) => ApiError | Promise<ApiError>
+type InternalRequestConfig = RequestConfig & {
+  _retryAttempted?: boolean
+}
 
 type ClientHooks = {
   toastError?: (message: string) => void
@@ -82,7 +86,7 @@ export class HttpClient {
 
   private setupDefaultInterceptors() {
     this.addRequestInterceptor((config) => {
-      const token = storageUtils.get<string>(STORAGE_KEYS.TOKEN)
+      const token = getSessionSnapshot().token
       if (token) {
         config.headers = {
           ...(config.headers ?? {}),
@@ -96,9 +100,7 @@ export class HttpClient {
 
     this.addErrorInterceptor((error) => {
       if (error.status === 401) {
-        storageUtils.remove(STORAGE_KEYS.TOKEN)
-        storageUtils.remove(STORAGE_KEYS.REFRESH_TOKEN)
-        storageUtils.remove(STORAGE_KEYS.ACCOUNT)
+        clearStoredSession()
         this.toastError(ERROR_MESSAGES.UNAUTHORIZED)
         this.redirectToLogin()
         return error
@@ -150,7 +152,30 @@ export class HttpClient {
     return current
   }
 
-  private async request<T = unknown>(config: RequestConfig): Promise<ApiResponse<T>> {
+  private async tryRefreshSession(): Promise<boolean> {
+    const snapshot = getSessionSnapshot()
+    if (!snapshot.refreshToken) {
+      return false
+    }
+
+    try {
+      const response = await this.transport.request<AuthPayload>({
+        url: '/api/v1/auth/refresh',
+        method: 'POST',
+        baseURL: this.baseURL,
+        timeout: this.timeout,
+        data: {
+          refresh_token: snapshot.refreshToken,
+        },
+      })
+      setStoredSession(response.data)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  private async request<T = unknown>(config: InternalRequestConfig): Promise<ApiResponse<T>> {
     try {
       const finalConfig = await this.applyRequestInterceptors({
         ...config,
@@ -160,7 +185,18 @@ export class HttpClient {
       const response = await this.transport.request<T>(finalConfig)
       return this.applyResponseInterceptors(response)
     } catch (error) {
-      const normalized = await this.applyErrorInterceptors(this.toApiError(error))
+      const normalizedError = this.toApiError(error)
+      if (normalizedError.status === 401 && !config._retryAttempted) {
+        const refreshed = await this.tryRefreshSession()
+        if (refreshed) {
+          return this.request<T>({
+            ...config,
+            _retryAttempted: true,
+          })
+        }
+      }
+
+      const normalized = await this.applyErrorInterceptors(normalizedError)
       throw normalized
     }
   }

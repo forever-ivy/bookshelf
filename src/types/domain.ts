@@ -84,6 +84,17 @@ export type AdminBook = Book & {
     available_copies: number
     reserved_copies: number
   }
+  copies?: Array<{
+    id: number
+    cabinet_id: string
+    cabinet_name?: string | null
+    cabinet_location?: string | null
+    slot_code?: string | null
+    inventory_status: string
+    available_for_borrow: boolean
+    created_at?: string | null
+    updated_at?: string | null
+  }>
 }
 
 export type AdminDashboardOverview = {
@@ -544,53 +555,189 @@ export type OcrIngestResult = {
   }
 }
 
-export type AdminRecommendationPlacement = {
-  id: number
-  code: string
-  name: string
-  status: string
-  placement_type: string
-  config_json?: Record<string, unknown>
-  created_at?: string | null
-  updated_at?: string | null
+export type AdminRecommendationStudioCandidateBook = {
+  book_id: number
+  title: string
+  author?: string | null
+  category?: string | null
+  available_copies: number
+  deliverable: boolean
+  eta_minutes?: number | null
+  default_explanation: string
+  signals?: {
+    content: number
+    behavior: number
+    freshness: number
+    blended: number
+  }
 }
 
-export type AdminTopicBooklist = {
-  id: number
-  slug: string
+export type AdminRecommendationStudioCandidateBooklist = {
+  booklist_id: number
   title: string
   description?: string | null
-  status: string
-  audience_segment?: string | null
-  item_count: number
-  books: Array<{
-    book_id: number
-    title?: string | null
-    rank_position: number
-    note?: string | null
-  }>
-  created_at?: string | null
-  updated_at?: string | null
+  book_count?: number
 }
 
-export type AdminRecommendationInsights = {
-  summary: {
-    total_recommendations: number
-    view_count: number
-    conversion_count: number
-    click_through_rate: number
-    conversion_rate: number
-    placement_count: number
-    topic_count: number
+export type AdminRecommendationStudioBookSlot = {
+  book_id: number
+  custom_explanation: string
+  source: string
+  rank: number
+}
+
+export type AdminRecommendationStudioHotList = {
+  id: string
+  title: string
+  description: string
+}
+
+export type AdminRecommendationStudioBooklistSlot = {
+  booklist_id: number
+  rank: number
+}
+
+export type AdminRecommendationStudioExplanationCard = {
+  title: string
+  body: string
+}
+
+export type AdminRecommendationStudioPlacement = {
+  code: 'today_recommendations' | 'exam_zone' | 'hot_lists' | 'system_booklists'
+  name: string
+  status: 'active' | 'paused'
+  placement_type: string
+  rank: number
+}
+
+export type AdminRecommendationStudioStrategyWeights = {
+  content: number
+  behavior: number
+  freshness: number
+}
+
+export type AdminRecommendationStudioDraft = {
+  today_recommendations: AdminRecommendationStudioBookSlot[]
+  exam_zone: AdminRecommendationStudioBookSlot[]
+  hot_lists: AdminRecommendationStudioHotList[]
+  system_booklists: AdminRecommendationStudioBooklistSlot[]
+  explanation_card: AdminRecommendationStudioExplanationCard
+  placements: AdminRecommendationStudioPlacement[]
+  strategy_weights: AdminRecommendationStudioStrategyWeights
+}
+
+export type AdminRecommendationStudioPreviewBook = {
+  book_id: number
+  title: string
+  author?: string | null
+  explanation: string
+  available_copies: number
+  deliverable: boolean
+  eta_minutes?: string | number | null
+}
+
+export type AdminRecommendationStudioQuickAction = {
+  code: string
+  title: string
+  description: string
+  meta?: string | null
+  source: 'system_generated'
+}
+
+export type AdminRecommendationStudioPreviewBooklist = {
+  id: string
+  title: string
+  description?: string | null
+}
+
+export type AdminRecommendationStudioPreviewFeed = {
+  today_recommendations: AdminRecommendationStudioPreviewBook[]
+  exam_zone: AdminRecommendationStudioPreviewBook[]
+  quick_actions: AdminRecommendationStudioQuickAction[]
+  hot_lists: AdminRecommendationStudioHotList[]
+  system_booklists: AdminRecommendationStudioPreviewBooklist[]
+  explanation_card: AdminRecommendationStudioExplanationCard
+}
+
+export type AdminRecommendationStudioPublication = {
+  id: number
+  version: number
+  status?: string
+  published_by_username?: string | null
+  published_at?: string | null
+  updated_at?: string | null
+  payload?: AdminRecommendationStudioDraft
+}
+
+export type AdminRecommendationStudio = {
+  live_publication: AdminRecommendationStudioPublication | null
+  draft: AdminRecommendationStudioDraft
+  candidates: {
+    today_recommendations: AdminRecommendationStudioCandidateBook[]
+    exam_zone: AdminRecommendationStudioCandidateBook[]
+    system_booklists: AdminRecommendationStudioCandidateBooklist[]
   }
-  hot_tags: Array<{
-    tag_id: number
-    tag_name: string
-    recommendation_count: number
-  }>
-  top_queries: Array<{
-    query_text: string
-    count: number
-  }>
-  strategy_weights: Record<string, unknown>
+  preview_feed: AdminRecommendationStudioPreviewFeed
+}
+
+export type AdminRecommendationStudioDraftSaveResult = {
+  draft: AdminRecommendationStudioDraft
+  preview_feed: AdminRecommendationStudioPreviewFeed
+}
+
+export type AdminRecommendationStudioPublishResult = {
+  publication: AdminRecommendationStudioPublication
+  preview_feed: AdminRecommendationStudioPreviewFeed
+}
+
+export type AdminRecommendationStudioPublicationList = {
+  items: AdminRecommendationStudioPublication[]
+}
+
+export type AdminRecommendationRuntimeMeta = {
+  llm_provider: string
+  llm_model: string
+  embedding_provider: string
+  embedding_model: string
+  recommendation_ml_enabled: boolean
+  provider_note?: string | null
+}
+
+export type AdminRecommendationDebugResultItem = {
+  book_id: number
+  title: string
+  author?: string | null
+  category?: string | null
+  score?: number
+  explanation?: string | null
+  provider_note?: string | null
+  evidence?: Record<string, unknown> | null
+  available_copies?: number
+  deliverable?: boolean
+  eta_minutes?: number | null
+}
+
+export type AdminRecommendationDebugSearchResult = {
+  query: string
+  context: Record<string, unknown>
+  ranking: Record<string, unknown>
+  results: AdminRecommendationDebugResultItem[]
+  runtime: AdminRecommendationRuntimeMeta
+}
+
+export type AdminRecommendationDebugDashboardResult = {
+  reader_id: number
+  history_books?: Array<Record<string, unknown>>
+  focus_book?: Record<string, unknown> | null
+  personalized: AdminRecommendationDebugResultItem[]
+  modules: Record<string, unknown>
+  suggested_queries: string[]
+  runtime: AdminRecommendationRuntimeMeta
+}
+
+export type AdminRecommendationDebugModuleResult = {
+  source_book?: Record<string, unknown> | null
+  ranking: Record<string, unknown>
+  results: AdminRecommendationDebugResultItem[]
+  runtime: AdminRecommendationRuntimeMeta
 }

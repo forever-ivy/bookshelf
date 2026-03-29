@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import type { PropsWithChildren } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -82,12 +83,16 @@ describe('reader detail page', () => {
         book_title: '智能系统设计',
         query_text: 'AI 系统',
         score: 0.93,
+        provider_note: 'hybrid',
+        explanation: '结合课程相关度和借阅热度给出的推荐。',
         created_at: '2026-03-22T09:05:00Z',
       },
     ])
   })
 
   it('renders the reader detail workspace with a path back to readers index', async () => {
+    const user = userEvent.setup()
+
     render(
       <TestProviders>
         <MemoryRouter initialEntries={['/readers/1']}>
@@ -101,9 +106,15 @@ describe('reader detail page', () => {
     expect(await screen.findByText('林栀')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '记录' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '读者信息' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '偏好与标签' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '返回读者索引' })).toHaveAttribute('href', '/readers')
+    expect(screen.getByRole('heading', { name: '偏好和标记' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '返回读者列表' })).toHaveAttribute('href', '/readers')
+    expect(screen.getByRole('link', { name: '返回读者列表' })).toHaveClass('!text-white')
     expect(await screen.findAllByText(/AI 系统/)).not.toHaveLength(0)
-    expect(screen.getByText('overdue / manual_review')).toBeInTheDocument()
+    expect(screen.getByText('逾期 / 人工处理')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: '推荐记录' }))
+
+    expect(await screen.findByText(/hybrid/)).toBeInTheDocument()
+    expect(screen.getByText('结合课程相关度和借阅热度给出的推荐。')).toBeInTheDocument()
   })
 })

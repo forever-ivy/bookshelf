@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+@custom-variant dark (&:is(.dark *));
+
 :root {
   --background: #f3f1eb;
   --foreground: #181814;
@@ -31,6 +33,14 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  --sidebar: rgba(252, 249, 243, 0.9);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgba(33, 73, 140, 0.05);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--line-subtle);
+  --sidebar-ring: var(--ring);
 }
 
 * {
@@ -69,4 +79,40 @@ a {
 
 ::selection {
   background: rgba(33, 73, 140, 0.14);
+}
+
+.dark {
+  --sidebar: rgba(26, 27, 30, 0.94);
+  --sidebar-foreground: #f8f5ef;
+  --sidebar-primary: #8aa8df;
+  --sidebar-primary-foreground: #10151f;
+  --sidebar-accent: rgba(138, 168, 223, 0.14);
+  --sidebar-accent-foreground: #f8f5ef;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: #8aa8df;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-border: var(--line-subtle);
+  --color-input: var(--line-subtle);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--secondary-container);
+  --color-secondary-foreground: var(--foreground);
+  --color-accent: var(--surface-container-high);
+  --color-accent-foreground: var(--foreground);
+  --color-muted: var(--surface-container);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-destructive: var(--error);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
 }

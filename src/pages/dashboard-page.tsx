@@ -8,14 +8,14 @@ import { PageShell } from '@/components/shared/page-shell'
 import { SectionIntro } from '@/components/shared/section-intro'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { WorkspacePanel } from '@/components/shared/workspace-panel'
-import { getAdminDashboardHeatmap, getAdminDashboardOverview } from '@/lib/api/management'
+import { getAdminCabinets, getAdminDashboardHeatmap, getAdminDashboardOverview } from '@/lib/api/management'
 import { getAdminPageHero } from '@/lib/page-hero'
 
 const pageHero = getAdminPageHero('dashboard')
 const dashboardHeroCopy = {
   eyebrow: '',
-  title: '总览',
-  description: '查看今日借阅、配送进度和服务状态。',
+  title: '首页',
+  description: '查看今天的借书情况、送书进度和书柜状态。',
   heroLayout: 'stacked' as const,
 }
 
@@ -28,20 +28,25 @@ export function DashboardPage() {
     queryKey: ['admin', 'dashboard', 'heatmap'],
     queryFn: getAdminDashboardHeatmap,
   })
+  const cabinetsQuery = useQuery({
+    queryKey: ['admin', 'dashboard', 'cabinets'],
+    queryFn: () => getAdminCabinets(),
+  })
 
-  if (overviewQuery.isLoading || heatmapQuery.isLoading) {
+  if (overviewQuery.isLoading || heatmapQuery.isLoading || cabinetsQuery.isLoading) {
     return (
       <PageShell
         {...pageHero}
         {...dashboardHeroCopy}
       >
-        <LoadingState label="加载中" />
+        <LoadingState label="正在载入" />
       </PageShell>
     )
   }
 
   const overview = overviewQuery.data
   const heatmap = heatmapQuery.data?.items ?? []
+  const cabinets = cabinetsQuery.data?.items ?? []
 
   if (!overview) {
     return (
@@ -49,7 +54,7 @@ export function DashboardPage() {
         {...pageHero}
         {...dashboardHeroCopy}
       >
-        <EmptyState title="暂无数据" description="当前条件下没有可用数据。" />
+        <EmptyState title="没有找到内容" description="换个条件再试试。" />
       </PageShell>
     )
   }
@@ -64,25 +69,25 @@ export function DashboardPage() {
           {
             label: '今日借阅',
             value: overview.today_borrow_count,
-            hint: '当天新增的借阅单',
+            hint: '今天新提交的借书单',
             icon: <Activity className="size-5" />,
           },
           {
-            label: '进行中配送',
+            label: '送书中',
             value: overview.active_delivery_task_count,
-            hint: '当前仍在处理的配送单',
+            hint: '现在还在处理的送书单',
             icon: <PackageCheck className="size-5" />,
           },
           {
             label: '在线机器人',
             value: `${overview.robots.online}/${overview.robots.total}`,
-            hint: '在线数量 / 总数量',
+            hint: '前面是在线，后面是总数',
             icon: <Bot className="size-5" />,
           },
           {
-            label: '待处理警告',
+            label: '书柜总数',
             value: overview.cabinets.total,
-            hint: `${overview.alerts.open ?? 0} 条待处理记录`,
+            hint: `还有 ${overview.alerts.open ?? 0} 条异常待处理`,
             icon: <ChartColumnIncreasing className="size-5" />,
           },
         ]}
@@ -91,11 +96,11 @@ export function DashboardPage() {
 
       <div className="grid gap-6 xl:grid-cols-[1.25fr_0.95fr]">
         <WorkspacePanel
-          title="热门图书"
-          description="按借阅次数统计当前最受关注的图书。"
+          title="借得最多的图书"
+          description="按借阅次数查看最近最常被借走的图书。"
         >
           {overview.top_books.length === 0 ? (
-            <EmptyState title="暂无数据" description="数据还不够，稍后会自动展示热门图书。" />
+            <EmptyState title="没有找到内容" description="现在还没有足够数据，稍后会自动显示。" />
           ) : (
             <div className="space-y-3">
               {overview.top_books.map((book, index) => (
@@ -108,11 +113,11 @@ export function DashboardPage() {
                   </span>
                   <div className="space-y-1">
                     <p className="font-semibold text-[var(--foreground)]">{book.title}</p>
-                    <p className="text-sm text-[var(--muted-foreground)]">{book.author ?? '作者待补充'}</p>
+                    <p className="text-sm text-[var(--muted-foreground)]">{book.author ?? '暂未填写作者'}</p>
                   </div>
                   <div className="text-left md:text-right">
                     <p className="text-2xl font-semibold tracking-[-0.05em] text-[var(--foreground)]">{book.borrow_count}</p>
-                    <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">借阅次数</p>
+                    <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">借出次数</p>
                   </div>
                 </div>
               ))}
@@ -121,12 +126,12 @@ export function DashboardPage() {
         </WorkspacePanel>
 
         <WorkspacePanel
-          title="区域热度映射"
-          description="按区域汇总借阅需求"
+          title="借书最集中的区域"
+          description="看看哪些区域最近借书更多。"
           tone="muted"
         >
           {heatmap.length === 0 ? (
-            <EmptyState title="暂无数据" description="数据还不够，稍后会自动展示区域热度。" />
+            <EmptyState title="没有找到内容" description="现在还没有足够数据，稍后会自动显示。" />
           ) : (
             <div className="space-y-3">
               {heatmap.map((item) => (
@@ -136,12 +141,12 @@ export function DashboardPage() {
                       <MapPinned className="mt-0.5 size-4 text-[var(--primary)]" />
                       <div>
                         <p className="font-semibold text-[var(--foreground)]">{item.area}</p>
-                        <p className="mt-1 text-sm leading-6 text-[var(--muted-foreground)]">{item.locations.join(' / ') || '未标注位置'}</p>
+                        <p className="mt-1 text-sm leading-6 text-[var(--muted-foreground)]">{item.locations.join(' / ') || '还没填写位置'}</p>
                       </div>
                     </div>
                     <div className="text-right">
                       <p className="text-2xl font-semibold tracking-[-0.05em] text-[var(--foreground)]">{item.demand_count}</p>
-                      <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">热度</p>
+                      <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">借书次数</p>
                     </div>
                   </div>
                 </div>
@@ -152,13 +157,13 @@ export function DashboardPage() {
       </div>
 
       <SectionIntro
-        eyebrow="状态"
-        title="服务状态"
-        description="查看配送进度、书柜状态和告警概览"
+        eyebrow="运行情况"
+        title="当前情况"
+        description="看送书、机器人和书柜现在是什么状态。"
       />
 
       <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-        <WorkspacePanel title="配送与设备状态" description="快速了解当前是否有需要留意的异常">
+        <WorkspacePanel title="送书和机器人" description="先看机器人是否在线，以及现在还有多少异常没处理。">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.3)] px-5 py-5">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">在线机器人</p>
@@ -168,7 +173,7 @@ export function DashboardPage() {
               </div>
             </div>
             <div className="rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.3)] px-5 py-5">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">待处理警告</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">待处理异常</p>
               <p className="mt-3 text-[2.6rem] font-semibold tracking-[-0.07em] text-[var(--foreground)]">{overview.alerts.open}</p>
               <div className="mt-4">
                 <StatusBadge status={overview.alerts.open > 0 ? 'error' : 'active'} />
@@ -177,18 +182,38 @@ export function DashboardPage() {
           </div>
         </WorkspacePanel>
 
-        <WorkspacePanel title="书柜状态" description="按状态拆分书柜数量，方便查看设备压力">
-          <div className="grid gap-3 md:grid-cols-2">
-            {Object.entries(overview.cabinets.status_breakdown).map(([status, count]) => (
-              <div key={status} className="flex items-center justify-between rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.3)] px-4 py-4">
-                <div className="flex items-center gap-3">
-                  <Flame className="size-4 text-[var(--primary)]" />
-                  <StatusBadge status={status} />
+        <WorkspacePanel title="书柜情况" description="逐个看看书柜现在能不能用、占了多少格口，还有多少异常。">
+          {cabinets.length === 0 ? (
+            <EmptyState title="没有找到内容" description="换个条件再试试。" />
+          ) : (
+            <div className="space-y-3">
+              {cabinets.map((cabinet) => (
+                <div
+                  key={cabinet.id}
+                  className="rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.3)] px-5 py-4"
+                >
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex items-start gap-3">
+                      <Flame className="mt-1 size-4 text-[var(--primary)]" />
+                      <div>
+                        <p className="font-semibold text-[var(--foreground)]">{cabinet.name}</p>
+                        <p className="mt-1 text-sm leading-6 text-[var(--muted-foreground)]">
+                          {cabinet.location ?? '还没填写位置'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3 lg:justify-end">
+                      <StatusBadge status={cabinet.status} />
+                      <span className="rounded-full border border-[var(--line-subtle)] bg-[var(--surface-panel)] px-3 py-1.5 text-sm font-medium text-[var(--foreground)]">
+                        已占用 {cabinet.occupied_slots}/{cabinet.slot_total}
+                      </span>
+                      <span className="text-sm text-[var(--muted-foreground)]">异常 {cabinet.open_alert_count}</span>
+                    </div>
+                  </div>
                 </div>
-                <span className="text-xl font-semibold tracking-[-0.05em] text-[var(--foreground)]">{count}</span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </WorkspacePanel>
       </div>
     </PageShell>

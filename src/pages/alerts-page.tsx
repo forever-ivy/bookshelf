@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
 
 import { EmptyState } from '@/components/shared/empty-state'
 import { LoadingState } from '@/components/shared/loading-state'
@@ -14,6 +13,7 @@ import { STORAGE_KEYS } from '@/constants/constant'
 import { ackAdminAlert, getAdminAlerts, getAdminAuditLogs, resolveAdminAlert } from '@/lib/api/management'
 import { getAdminPageHero } from '@/lib/page-hero'
 import { hasAdminPermission } from '@/lib/permissions'
+import { patchSearchParams, readOptionalSearchParam, useOptionalSearchParams } from '@/lib/search-params'
 import type { AuthAccount } from '@/types/domain'
 import { storageUtils } from '@/utils'
 import { formatDateTime } from '@/utils'
@@ -22,17 +22,26 @@ const pageHero = getAdminPageHero('alerts')
 
 export function AlertsPage() {
   const queryClient = useQueryClient()
-  const [auditAction, setAuditAction] = useState('')
-  const [auditTargetType, setAuditTargetType] = useState('')
+  const [searchParams, setSearchParams] = useOptionalSearchParams()
   const account = storageUtils.get<AuthAccount>(STORAGE_KEYS.ACCOUNT)
   const canManageAlerts = hasAdminPermission(account, 'alerts.manage')
   const canViewAudit = hasAdminPermission(account, 'system.audit.view')
   const defaultTab = canManageAlerts ? 'alerts' : 'audit'
+  const requestedTab = readOptionalSearchParam(searchParams, 'tab')
+  const activeTab = requestedTab === 'audit' && canViewAudit ? 'audit' : defaultTab
+  const alertStatus = readOptionalSearchParam(searchParams, 'status') ?? 'open'
+  const alertSeverity = readOptionalSearchParam(searchParams, 'severity')
+  const auditAction = readOptionalSearchParam(searchParams, 'action') ?? ''
+  const auditTargetType = readOptionalSearchParam(searchParams, 'target_type') ?? ''
 
   const alertsQuery = useQuery({
     enabled: canManageAlerts,
-    queryKey: ['admin', 'alerts'],
-    queryFn: () => getAdminAlerts('open'),
+    queryKey: ['admin', 'alerts', alertStatus, alertSeverity],
+    queryFn: () =>
+      getAdminAlerts({
+        status: alertStatus,
+        severity: alertSeverity,
+      }),
   })
   const auditLogsQuery = useQuery({
     enabled: canViewAudit,
@@ -67,33 +76,86 @@ export function AlertsPage() {
   return (
     <PageShell
       {...pageHero}
-      eyebrow="警告管理"
-      title="警告管理"
-      description="查看警告和审计记录。"
-      statusLine="警告和审计"
+      eyebrow="异常"
+      title="异常"
+      description="查看异常和操作记录。"
+      statusLine="异常与记录"
     >
       <MetricStrip
         items={[
-          { label: '待处理', value: alerts.length, hint: '当前处于 open 状态的警告' },
-          { label: '高优先级', value: criticalAlertCount, hint: 'severity 为 critical 的警告' },
-          { label: '审计记录', value: auditLogs.length, hint: '符合当前筛选条件的变更记录' },
+          { label: '待处理', value: alerts.length, hint: '现在还没处理的异常' },
+          { label: '严重异常', value: criticalAlertCount, hint: '影响较大的异常' },
+          { label: '操作记录', value: auditLogs.length, hint: '符合当前条件的记录数量' },
         ]}
         className="lg:grid-cols-3"
       />
 
-      <Tabs defaultValue={defaultTab} className="space-y-5">
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) =>
+          setSearchParams(
+            patchSearchParams(searchParams, {
+              tab: value === defaultTab ? undefined : value,
+            }),
+            { replace: true },
+          )
+        }
+        className="space-y-5"
+      >
         <TabsList>
-          {canManageAlerts ? <TabsTrigger value="alerts">警告</TabsTrigger> : null}
-          {canViewAudit ? <TabsTrigger value="audit">审计</TabsTrigger> : null}
+          {canManageAlerts ? <TabsTrigger value="alerts">异常</TabsTrigger> : null}
+          {canViewAudit ? <TabsTrigger value="audit">操作记录</TabsTrigger> : null}
         </TabsList>
 
         {canManageAlerts ? (
           <TabsContent value="alerts">
-            <WorkspacePanel title="警告列表" description="按级别、来源和处理动作查看当前警告。">
+            <WorkspacePanel
+              title="异常列表"
+              description="按严重程度、来源和处理状态查看当前异常。"
+              action={
+                <div className="flex flex-col gap-3 xl:w-[28rem] xl:flex-row">
+                  <select
+                    aria-label="警告状态筛选"
+                    className="h-10 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-sm text-[var(--foreground)]"
+                    value={alertStatus}
+                    onChange={(event) =>
+                      setSearchParams(
+                        patchSearchParams(searchParams, {
+                          status: event.target.value === 'open' ? undefined : event.target.value,
+                        }),
+                        { replace: true },
+                      )
+                    }
+                  >
+                    <option value="open">待处理</option>
+                    <option value="acknowledged">已确认</option>
+                    <option value="resolved">已解决</option>
+                  </select>
+                  <select
+                    aria-label="警告级别筛选"
+                    className="h-10 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-sm text-[var(--foreground)]"
+                    value={alertSeverity ?? 'all'}
+                    onChange={(event) =>
+                      setSearchParams(
+                        patchSearchParams(searchParams, {
+                          severity: event.target.value === 'all' ? undefined : event.target.value,
+                        }),
+                        { replace: true },
+                      )
+                    }
+                  >
+                    <option value="all">全部级别</option>
+                    <option value="critical">严重</option>
+                    <option value="warning">警告</option>
+                    <option value="info">提示</option>
+                  </select>
+                </div>
+              }
+            >
               {alertsQuery.isLoading ? (
-                <LoadingState label="加载中" />
+                <LoadingState label="正在载入" />
               ) : alerts.length === 0 ? (
-                <EmptyState title="暂无数据" description="当前条件下没有可用数据。" />
+                <EmptyState title="没有找到内容" description="换个条件再试试。" />
               ) : (
                 <div className="space-y-4">
                   {alerts.map((alert) => (
@@ -140,31 +202,45 @@ export function AlertsPage() {
         {canViewAudit ? (
           <TabsContent value="audit">
             <WorkspacePanel
-              title="审计记录"
-              description="按时间顺序查看人工修改、配置变更和权限操作。"
+              title="操作记录"
+              description="按时间顺序查看人工修改、配置改动和权限操作。"
               action={(
                 <div className="flex flex-col gap-3 xl:w-[36rem] xl:flex-row">
                   <div className="min-w-0 flex-1 space-y-2">
                     <label className="text-xs font-medium uppercase tracking-[0.12em] text-[var(--muted-foreground)]" htmlFor="audit-action">
-                      action
+                      操作名称
                     </label>
                     <Input
                       id="audit-action"
                       value={auditAction}
-                      onChange={(event) => setAuditAction(event.target.value)}
-                      placeholder="例如 upsert_admin_role"
+                      onChange={(event) =>
+                        setSearchParams(
+                          patchSearchParams(searchParams, {
+                            action: event.target.value || undefined,
+                          }),
+                          { replace: true },
+                        )
+                      }
+                      placeholder="例如：更新角色"
                       className="h-10 rounded-xl"
                     />
                   </div>
                   <div className="min-w-0 flex-1 space-y-2">
                     <label className="text-xs font-medium uppercase tracking-[0.12em] text-[var(--muted-foreground)]" htmlFor="audit-target-type">
-                      target_type
+                      操作对象
                     </label>
                     <Input
                       id="audit-target-type"
                       value={auditTargetType}
-                      onChange={(event) => setAuditTargetType(event.target.value)}
-                      placeholder="例如 system_role"
+                      onChange={(event) =>
+                        setSearchParams(
+                          patchSearchParams(searchParams, {
+                            target_type: event.target.value || undefined,
+                          }),
+                          { replace: true },
+                        )
+                      }
+                      placeholder="例如：角色"
                       className="h-10 rounded-xl"
                     />
                   </div>
@@ -172,19 +248,19 @@ export function AlertsPage() {
               )}
             >
               {auditLogsQuery.isLoading ? (
-                <LoadingState label="加载中" />
+                <LoadingState label="正在载入" />
               ) : auditLogs.length === 0 ? (
-                <EmptyState title="暂无数据" description="当前条件下没有可用数据。" />
+                <EmptyState title="没有找到内容" description="换个条件再试试。" />
               ) : (
                 <div className="space-y-4">
                   {auditLogs.map((log) => (
                     <div key={log.id} className="rounded-[1.45rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.4)] px-5 py-5">
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                         <div className="space-y-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <StatusBadge status={log.action} />
+                      <div className="flex flex-wrap items-center gap-2">
+                            <StatusBadge status="permission" label="操作" />
                             <span className="text-sm font-medium text-[var(--foreground)]">
-                              {log.target_type} #{log.target_id}
+                              对象 #{log.target_id}
                             </span>
                           </div>
                           <p className="text-sm leading-6 text-[var(--foreground)]">{log.note ?? '无备注'}</p>

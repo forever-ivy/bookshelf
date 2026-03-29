@@ -38,12 +38,12 @@ export function EventsPage() {
   return (
     <PageShell
       {...pageHero}
-      eyebrow="事件记录"
-      title="事件记录"
-      description="查看最近的系统事件。"
+      eyebrow="记录"
+      title="最新记录"
+      description="查看机器人最近上报的记录。"
     >
       {visibleEvents.length === 0 ? (
-        <EmptyState title="暂无数据" description="当前条件下没有可用数据。" />
+        <EmptyState title="没有找到内容" description="换个条件再试试。" />
       ) : (
         <div className="grid gap-4">
           {visibleEvents.map((event) => (
@@ -56,7 +56,7 @@ export function EventsPage() {
                       机器人 #{event.robot_id} · 任务 #{event.task_id ?? '—'}
                     </p>
                     <p className="text-sm text-[var(--muted-foreground)]">
-                      {event.metadata?.borrow_order_id ? `订单 #${String(event.metadata.borrow_order_id)}` : '暂无关联信息'}
+                      {event.metadata?.borrow_order_id ? `关联订单 #${String(event.metadata.borrow_order_id)}` : '没有关联订单'}
                     </p>
                   </div>
                 </div>

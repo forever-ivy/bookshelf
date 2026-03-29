@@ -18,9 +18,6 @@ const OrderDetailPage = lazy(async () => import('@/pages/order-detail-page').the
 const OrdersPage = lazy(async () => import('@/pages/orders-page').then((module) => ({ default: module.OrdersPage })))
 const ReaderDetailPage = lazy(async () => import('@/pages/reader-detail-page').then((module) => ({ default: module.ReaderDetailPage })))
 const ReadersPage = lazy(async () => import('@/pages/readers-page').then((module) => ({ default: module.ReadersPage })))
-const RecommendationPage = lazy(
-  async () => import('@/pages/recommendation-page').then((module) => ({ default: module.RecommendationPage })),
-)
 const RobotsPage = lazy(async () => import('@/pages/robots-page').then((module) => ({ default: module.RobotsPage })))
 const SystemPage = lazy(async () => import('@/pages/system-page').then((module) => ({ default: module.SystemPage })))
 
@@ -62,7 +59,7 @@ export default function App() {
             <Route path="/events" element={<Navigate to="/alerts" replace />} />
             <Route path="/readers" element={withPermission('readers.manage', <ReadersPage />)} />
             <Route path="/readers/:readerId" element={withPermission('readers.manage', <ReaderDetailPage />)} />
-            <Route path="/recommendation" element={withPermission('recommendation.manage', <RecommendationPage />)} />
+            <Route path="/recommendation" element={<Navigate to="/dashboard" replace />} />
             <Route path="/system" element={withPermission(['system.settings.manage', 'system.roles.manage'], <SystemPage />)} />
             <Route path="/legacy/catalog" element={withPermission('books.manage', <CatalogPage />)} />
             <Route path="/legacy/events" element={withPermission('alerts.manage', <EventsPage />)} />

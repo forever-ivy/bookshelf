@@ -14,8 +14,8 @@ import { loginAsAdmin } from '@/lib/api/auth'
 import { useSession } from '@/providers/session-provider'
 
 const loginSchema = z.object({
-  username: z.string().min(1, '请输入运营凭证'),
-  password: z.string().min(1, '请输入验证密钥'),
+  username: z.string().min(1, '请输入账号'),
+  password: z.string().min(1, '请输入密码'),
 })
 
 type LoginFormValues = z.infer<typeof loginSchema>
@@ -31,28 +31,28 @@ const BACKGROUNDS = [
 
 const HERO_MESSAGES = [
   {
-    title: '知识流转与治理中台',
-    description: '整合馆藏实体、数字资产与自动化运力，构建前瞻性知识运营大脑。',
+    title: '借还办理',
+    description: '查看借书、还书和处理进度，减少日常来回确认。',
   },
   {
-    title: '馆藏编目与知识校准',
-    description: '统一元数据、分类体系与知识图谱标签，让每一次检索都指向更准确的内容秩序。',
+    title: '图书整理',
+    description: '维护书目信息、分类和标签，方便馆员查找与更新。',
   },
   {
-    title: '库存作业与格口落位',
-    description: '追踪书柜、仓位与流转日志，把盘点、订正和复核收束在同一条作业链路。',
+    title: '书柜库存',
+    description: '查看每个书柜的存放情况，随时知道书在哪里。',
   },
   {
-    title: '履约链路与运力调度',
-    description: '串联提取、配送、归还与重分配，维持履约节奏与人工介入的稳定平衡。',
+    title: '订单处理',
+    description: '跟进每一笔借阅订单，及时处理异常和积压。',
   },
   {
-    title: '风险监控与系统治理',
-    description: '聚合告警、审计与权限边界，确保中台在可控、可追溯的秩序中运行。',
+    title: '异常提醒',
+    description: '出现问题时尽快发现，尽快处理，减少对读者的影响。',
   },
   {
-    title: '策展推荐与运营洞察',
-    description: '将推荐位、专题版面和趋势洞察并排展开，让内容分发与运营判断彼此呼应。',
+    title: '借阅统计',
+    description: '用借阅和库存数据看清当天情况，安排后续工作更方便。',
   },
 ]
 
@@ -186,10 +186,10 @@ export function LoginPage() {
                 className="mx-auto mb-5 size-14 shadow-[0_18px_40px_-24px_rgba(0,91,191,0.9)]" 
               />
               <h1 className="text-3xl font-bold tracking-tight text-[var(--foreground)]">
-                知序 
+                图书馆管理后台
               </h1>
               <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-                整合馆藏实体、数字资产与自动化运力，构建前瞻性知识运营大脑。
+                管理图书、读者、订单和库存。
               </p>
             </motion.div>
 
@@ -201,11 +201,11 @@ export function LoginPage() {
             >
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="username" className="text-sm font-semibold text-[var(--foreground)]">运营凭证</Label>
+                  <Label htmlFor="username" className="text-sm font-semibold text-[var(--foreground)]">账号</Label>
                 </div>
                 <Input 
                   id="username" 
-                  placeholder="输入运营凭证" 
+                  placeholder="请输入账号" 
                   className="h-12 border-white/40 bg-white/50 text-base shadow-sm backdrop-blur-sm transition-all placeholder:text-[var(--muted-foreground)]/60 focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-[var(--primary)]/30"
                   {...form.register('username')} 
                 />
@@ -216,12 +216,12 @@ export function LoginPage() {
 
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="password" className="text-sm font-semibold text-[var(--foreground)]">验证密钥</Label>
+                  <Label htmlFor="password" className="text-sm font-semibold text-[var(--foreground)]">密码</Label>
                 </div>
                 <Input 
                   id="password" 
                   type="password" 
-                  placeholder="验证密钥" 
+                  placeholder="请输入密码" 
                   className="h-12 border-white/40 bg-white/50 text-base shadow-sm backdrop-blur-sm transition-all placeholder:text-[var(--muted-foreground)]/60 focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-[var(--primary)]/30"
                   {...form.register('password')} 
                 />
@@ -235,13 +235,13 @@ export function LoginPage() {
                 type="submit" 
                 disabled={loginMutation.isPending}
               >
-                <span>{loginMutation.isPending ? '验证中…' : '验证并进入'}</span>
+                <span>{loginMutation.isPending ? '登录中…' : '登录'}</span>
                 <ArrowRight className="ml-2 size-5" />
               </Button>
             </motion.form>
             
             <motion.p variants={itemVariants} className="mt-8 text-center text-xs text-[var(--muted-foreground)]/80">
-              登录即代表您同意本中台的治理规则与审计约束
+              请使用馆员账号登录
             </motion.p>
           </motion.div>
         </div>

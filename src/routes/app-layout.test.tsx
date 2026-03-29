@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, waitForElementToBeRemoved } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
@@ -26,7 +26,6 @@ function renderLayout(account?: Record<string, unknown>) {
             <Route path="/dashboard" element={<div>dashboard-content</div>} />
             <Route path="/books" element={<div>books-content</div>} />
             <Route path="/alerts" element={<div>alerts-content</div>} />
-            <Route path="/recommendation" element={<div>recommendation-content</div>} />
             <Route path="/analytics" element={<div>analytics-content</div>} />
             <Route path="/system" element={<div>system-content</div>} />
           </Route>
@@ -41,11 +40,13 @@ describe('AppLayout sidebar', () => {
     const user = userEvent.setup()
     renderLayout()
 
-    expect(screen.getByText('首页总览')).toBeVisible()
+    expect(screen.getByText('首页')).toBeVisible()
 
     await user.click(screen.getByRole('button', { name: '收起侧边栏' }))
 
-    await waitForElementToBeRemoved(() => screen.queryByText('首页总览'))
+    await waitFor(() => {
+      expect(screen.queryByText('首页')).not.toBeInTheDocument()
+    })
     expect(window.localStorage.getItem(STORAGE_KEYS.SIDEBAR_COLLAPSED)).toBe('true')
     expect(screen.getByRole('button', { name: '展开侧边栏' })).toBeVisible()
   })
@@ -91,56 +92,61 @@ describe('AppLayout sidebar', () => {
   it('shows the upgraded admin navigation entries', () => {
     renderLayout()
 
-    expect(screen.getByPlaceholderText('搜索图书、订单、读者与告警')).toBeVisible()
-    expect(screen.getByText('馆藏运营控制台')).toBeVisible()
-    expect(screen.getByText('图书管理')).toBeVisible()
-    expect(screen.getByText('告警中心')).toBeVisible()
-    expect(screen.getByText('推荐运营')).toBeVisible()
-    expect(screen.getByText('数据分析')).toBeVisible()
-    expect(screen.getByText('系统配置')).toBeVisible()
+    expect(screen.getByPlaceholderText('搜索图书、订单或读者')).toBeVisible()
+    expect(screen.getByText('图书馆管理后台')).toBeVisible()
+    expect(screen.getByText('图书')).toBeVisible()
+    expect(screen.getByText('异常')).toBeVisible()
+    expect(screen.queryByText('推荐运营台')).not.toBeInTheDocument()
+    expect(screen.getByText('统计')).toBeVisible()
+    expect(screen.queryByText('系统配置')).not.toBeInTheDocument()
   })
 
-  it('briefly overlaps the previous and next page during navigation for a smoother handoff', async () => {
+  it('renders the desktop navigation with shadcn sidebar primitives', () => {
+    const { container } = renderLayout()
+
+    const sidebar = container.querySelector('[data-sidebar="sidebar"]')
+    const menuButtons = container.querySelectorAll('[data-sidebar="menu-button"]')
+
+    expect(sidebar).toBeTruthy()
+    expect(menuButtons.length).toBeGreaterThan(0)
+  })
+
+  it('waits for the previous route scene to exit before showing the next page', async () => {
     const user = userEvent.setup()
     renderLayout()
 
-    await user.click(screen.getByRole('link', { name: '图书管理' }))
+    await user.click(screen.getByRole('link', { name: '图书' }))
 
-    expect(screen.getByText('dashboard-content')).toBeInTheDocument()
-    expect(screen.getByText('books-content')).toBeInTheDocument()
-
-    await waitForElementToBeRemoved(() => screen.queryByText('dashboard-content'))
+    expect(await screen.findByText('books-content')).toBeInTheDocument()
+    expect(screen.queryByText('dashboard-content')).not.toBeInTheDocument()
   })
 
-  it('stacks the outgoing route scene absolutely so page transitions do not reflow and jitter', async () => {
+  it('keeps a single active route scene mounted after navigation settles', async () => {
     const user = userEvent.setup()
     renderLayout()
 
-    await user.click(screen.getByRole('link', { name: '图书管理' }))
+    await user.click(screen.getByRole('link', { name: '图书' }))
 
     const sceneStage = screen.getByTestId('route-scene-stage')
+    await screen.findByText('books-content')
     const scenes = screen.getAllByTestId('route-scene')
-    const exitingScene = scenes.find((scene) => scene.getAttribute('data-route-scene-state') === 'exiting')
-    const activeScene = scenes.find((scene) => scene.getAttribute('data-route-scene-state') === 'active')
+    const activeScene = scenes[0]
 
     expect(sceneStage).toBeVisible()
-    expect(scenes).toHaveLength(2)
-    expect(activeScene).toBeTruthy()
-    expect(exitingScene).toBeTruthy()
-    expect(exitingScene).toHaveClass('absolute')
-    expect(exitingScene).toHaveClass('inset-0')
-
-    await waitForElementToBeRemoved(() => screen.queryByText('dashboard-content'))
+    expect(scenes).toHaveLength(1)
+    expect(activeScene).toHaveAttribute('data-route-scene-state', 'active')
+    expect(activeScene).toHaveClass('relative')
+    expect(activeScene).not.toHaveClass('absolute')
   })
 
-  it('shows a motion veil during route handoff so the transition feels intentional', async () => {
+  it('does not render a transition veil while routes hand off in wait mode', async () => {
     const user = userEvent.setup()
     renderLayout()
 
-    await user.click(screen.getByRole('link', { name: '图书管理' }))
+    await user.click(screen.getByRole('link', { name: '图书' }))
 
-    expect(await screen.findByTestId('route-transition-veil')).toBeInTheDocument()
-    await waitForElementToBeRemoved(() => screen.queryByTestId('route-transition-veil'))
+    expect(await screen.findByText('books-content')).toBeInTheDocument()
+    expect(screen.queryByTestId('route-transition-veil')).not.toBeInTheDocument()
   })
 
   it('resets the scroll container to the top on route changes so the next page does not jump mid-scroll', async () => {
@@ -164,7 +170,7 @@ describe('AppLayout sidebar', () => {
   it('avoids animating sidebar width so collapse does not reflow the whole workspace continuously', () => {
     renderLayout()
 
-    const sidebar = screen.getByAltText('知序').closest('aside')
+    const sidebar = screen.getByAltText('知序').closest('[data-sidebar="sidebar"]')
     expect(sidebar).not.toHaveClass('transition-[width]')
   })
 
@@ -176,9 +182,9 @@ describe('AppLayout sidebar', () => {
       permission_codes: ['dashboard.view'],
     })
 
-    expect(screen.getByText('首页总览')).toBeVisible()
-    expect(screen.queryByText('图书管理')).not.toBeInTheDocument()
-    expect(screen.queryByText('推荐运营')).not.toBeInTheDocument()
+    expect(screen.getByText('首页')).toBeVisible()
+    expect(screen.queryByText('图书')).not.toBeInTheDocument()
+    expect(screen.queryByText('推荐运营台')).not.toBeInTheDocument()
     expect(screen.queryByText('系统配置')).not.toBeInTheDocument()
   })
 
@@ -190,8 +196,8 @@ describe('AppLayout sidebar', () => {
       permission_codes: ['system.audit.view', 'system.roles.manage'],
     })
 
-    expect(screen.getByRole('link', { name: '告警中心' })).toBeVisible()
-    expect(screen.getByRole('link', { name: '系统配置' })).toBeVisible()
-    expect(screen.queryByText('推荐运营')).not.toBeInTheDocument()
+    expect(screen.getByText('异常')).toBeVisible()
+    expect(screen.queryByText('系统配置')).not.toBeInTheDocument()
+    expect(screen.queryByText('推荐运营台')).not.toBeInTheDocument()
   })
 })

@@ -89,6 +89,133 @@ describe('HttpClient', () => {
     expect(toastError).toHaveBeenCalled()
   })
 
+  it('refreshes the session once and retries the original request after a 401', async () => {
+    storageUtils.set(STORAGE_KEYS.TOKEN, 'stale-token')
+    storageUtils.set(STORAGE_KEYS.REFRESH_TOKEN, 'refresh-token')
+    const request = vi.fn().mockImplementation(async (config: TransportConfig) => {
+      if (config.url === '/secure' && config.headers?.Authorization === 'Bearer stale-token') {
+        throw {
+          response: {
+            status: 401,
+            data: {
+              detail: 'expired',
+            },
+          },
+        }
+      }
+
+      if (config.url === '/api/v1/auth/refresh') {
+        expect(config.data).toEqual({
+          refresh_token: 'refresh-token',
+        })
+        return {
+          status: 200,
+          data: {
+            access_token: 'fresh-access',
+            refresh_token: 'fresh-refresh',
+            token_type: 'bearer',
+            account: {
+              id: 1,
+              username: 'admin',
+              role: 'admin',
+            },
+          },
+        }
+      }
+
+      return {
+        status: 200,
+        data: {
+          ok: true,
+        },
+      }
+    })
+    const redirectToLogin = vi.fn()
+    const toastError = vi.fn()
+    const client = new HttpClient(
+      'http://example.com',
+      1000,
+      {
+        request,
+      },
+      {
+        toastError,
+        redirectToLogin,
+      },
+    )
+
+    const response = await client.get<{ ok: boolean }>('/secure')
+
+    expect(response).toEqual({
+      success: true,
+      data: { ok: true },
+      message: undefined,
+      meta: undefined,
+    })
+    expect(storageUtils.get(STORAGE_KEYS.TOKEN)).toBe('fresh-access')
+    expect(storageUtils.get(STORAGE_KEYS.REFRESH_TOKEN)).toBe('fresh-refresh')
+    expect(request).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        url: '/secure',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer fresh-access',
+        }),
+      }),
+    )
+    expect(redirectToLogin).not.toHaveBeenCalled()
+    expect(toastError).not.toHaveBeenCalled()
+  })
+
+  it('clears auth state when refresh fails after a 401', async () => {
+    storageUtils.set(STORAGE_KEYS.TOKEN, 'stale-token')
+    storageUtils.set(STORAGE_KEYS.REFRESH_TOKEN, 'refresh-token')
+    const redirectToLogin = vi.fn()
+    const toastError = vi.fn()
+    const request = vi.fn().mockImplementation(async (config: TransportConfig) => {
+      if (config.url === '/secure') {
+        throw {
+          response: {
+            status: 401,
+            data: {
+              detail: 'expired',
+            },
+          },
+        }
+      }
+
+      throw {
+        response: {
+          status: 401,
+          data: {
+            detail: 'refresh expired',
+          },
+        },
+      }
+    })
+    const client = new HttpClient(
+      'http://example.com',
+      1000,
+      {
+        request,
+      },
+      {
+        toastError,
+        redirectToLogin,
+      },
+    )
+
+    await expect(client.get('/secure')).rejects.toMatchObject({
+      success: false,
+      status: 401,
+    })
+
+    expect(storageUtils.get(STORAGE_KEYS.TOKEN)).toBeNull()
+    expect(storageUtils.get(STORAGE_KEYS.REFRESH_TOKEN)).toBeNull()
+    expect(redirectToLogin).toHaveBeenCalled()
+    expect(toastError).toHaveBeenCalled()
+  })
+
   it('shows a forbidden toast without redirecting when access is denied', async () => {
     const redirectToLogin = vi.fn()
     const toastError = vi.fn()

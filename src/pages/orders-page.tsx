@@ -3,6 +3,10 @@ import { createColumnHelper, type ColumnDef } from '@tanstack/react-table'
 import { Link } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 
+import {
+  filledPrimaryActionButtonClassName,
+  tonalPrimaryActionButtonClassName,
+} from '@/components/shared/action-button-styles'
 import { DataTable } from '@/components/shared/data-table'
 import { EmptyState } from '@/components/shared/empty-state'
 import { LoadingState } from '@/components/shared/loading-state'
@@ -23,13 +27,21 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { getAdminOrder, getAdminOrders, interveneAdminOrder, prioritizeAdminOrder, retryAdminOrder } from '@/lib/api/admin'
+import {
+  formatInterventionStatusLabel,
+  formatOrderModeLabel,
+  formatPriorityLabel,
+  formatStatusLabel,
+} from '@/lib/display-labels'
 import { getAdminPageHero } from '@/lib/page-hero'
+import { patchSearchParams, readOptionalSearchParam, useOptionalSearchParams } from '@/lib/search-params'
 import type { OrderBundle } from '@/types/domain'
 import { formatDateTime } from '@/utils'
 
 const columnHelper = createColumnHelper<OrderBundle>()
 const pageHero = getAdminPageHero('orders')
 type ActiveQuickDialog = 'detail' | 'priority' | 'intervention' | 'retry' | null
+const ORDERS_PAGE_SIZE = 20
 
 function snapshotValue(value?: string | number | null) {
   if (value === null || value === undefined || value === '') {
@@ -40,7 +52,11 @@ function snapshotValue(value?: string | number | null) {
 
 export function OrdersPage() {
   const queryClient = useQueryClient()
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [searchParams, setSearchParams] = useOptionalSearchParams()
+  const statusFilter = readOptionalSearchParam(searchParams, 'status') ?? 'all'
+  const priorityFilter = readOptionalSearchParam(searchParams, 'priority') ?? 'all'
+  const interventionFilter = readOptionalSearchParam(searchParams, 'intervention_status') ?? 'all'
+  const [page, setPage] = useState(1)
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null)
   const [activeQuickDialog, setActiveQuickDialog] = useState<ActiveQuickDialog>(null)
   const [priorityDraft, setPriorityDraft] = useState('urgent')
@@ -48,8 +64,15 @@ export function OrdersPage() {
   const [failureReasonDraft, setFailureReasonDraft] = useState('')
   const [retryNote, setRetryNote] = useState('')
   const ordersQuery = useQuery({
-    queryKey: ['admin', 'orders'],
-    queryFn: getAdminOrders,
+    queryKey: ['admin', 'orders', statusFilter, priorityFilter, interventionFilter, page],
+    queryFn: () =>
+      getAdminOrders({
+        page,
+        pageSize: ORDERS_PAGE_SIZE,
+        status: statusFilter === 'all' ? undefined : statusFilter,
+        priority: priorityFilter === 'all' ? undefined : priorityFilter,
+        interventionStatus: interventionFilter === 'all' ? undefined : interventionFilter,
+      }),
   })
   const detailQuery = useQuery({
     enabled: Number.isFinite(selectedOrderId),
@@ -57,9 +80,8 @@ export function OrdersPage() {
     queryFn: () => getAdminOrder(selectedOrderId as number),
   })
 
-  const orders = (ordersQuery.data ?? []).filter((item) =>
-    statusFilter === 'all' ? true : item.borrow_order.status === statusFilter,
-  )
+  const orders = ordersQuery.data?.items ?? []
+  const filteredTotal = ordersQuery.data?.total ?? 0
   const urgentCount = orders.filter((item) => item.borrow_order.priority === 'urgent').length
   const interventionCount = orders.filter((item) => Boolean(item.borrow_order.intervention_status)).length
   const detailBundle = detailQuery.data
@@ -114,6 +136,14 @@ export function OrdersPage() {
     setActiveQuickDialog('detail')
   }
 
+  function updateFilters(patch: Record<string, string | undefined>) {
+    setPage(1)
+    setSearchParams(
+      patchSearchParams(searchParams, patch),
+      { replace: true },
+    )
+  }
+
   function openActionDialog(nextDialog: Exclude<ActiveQuickDialog, 'detail' | null>) {
     setActiveQuickDialog(nextDialog)
   }
@@ -131,8 +161,8 @@ export function OrdersPage() {
     }),
     columnHelper.accessor((row) => row.borrow_order.order_mode, {
       id: 'mode',
-      header: '模式',
-      cell: (info) => info.getValue(),
+      header: '取书方式',
+      cell: (info) => formatOrderModeLabel(info.getValue()),
     }),
     columnHelper.accessor((row) => row.borrow_order.status, {
       id: 'status',
@@ -142,15 +172,16 @@ export function OrdersPage() {
     columnHelper.accessor((row) => row.borrow_order.priority ?? 'normal', {
       id: 'priority',
       header: '优先级',
-      cell: (info) => <StatusBadge status={info.getValue()} />,
+      cell: (info) => <StatusBadge status={info.getValue()} label={formatPriorityLabel(info.getValue())} />,
     }),
     columnHelper.accessor((row) => row.borrow_order.intervention_status ?? '—', {
       id: 'intervention_status',
-      header: '人工介入',
+      header: '人工跟进',
+      cell: (info) => formatInterventionStatusLabel(info.getValue()),
     }),
     columnHelper.accessor((row) => row.delivery_order?.delivery_target ?? '—', {
       id: 'target',
-      header: '目标位置',
+      header: '送书位置',
     }),
     columnHelper.accessor((row) => row.borrow_order.attempt_count ?? 0, {
       id: 'attempt_count',
@@ -181,48 +212,109 @@ export function OrdersPage() {
   return (
     <PageShell
       {...pageHero}
-      eyebrow="订单管理"
-      title="订单管理"
-      description="查看借阅订单和处理状态。"
+      eyebrow="订单"
+      title="订单"
+      description="查看借书订单现在处理到哪一步。"
       statusLine="订单列表"
     >
       <MetricStrip
         items={[
-          { label: '订单总数', value: ordersQuery.data?.length ?? 0, hint: '当前拉取到的借阅订单' },
-          { label: '当前筛选', value: orders.length, hint: `状态：${statusFilter}` },
-          { label: '高优先级', value: urgentCount, hint: 'priority 为 urgent 的订单' },
-          { label: '人工处理', value: interventionCount, hint: '有人工处理标记的订单' },
+          { label: '订单总数', value: filteredTotal, hint: '符合当前条件的订单数量' },
+          { label: '当前状态', value: filteredTotal, hint: `正在查看：${statusFilter === 'all' ? '全部' : formatStatusLabel(statusFilter)}` },
+          { label: '加急订单', value: urgentCount, hint: '当前这一页里的加急单' },
+          { label: '人工跟进', value: interventionCount, hint: '当前这一页里需要人工跟进的订单' },
         ]}
         className="xl:grid-cols-4"
       />
       <WorkspacePanel
         title="订单列表"
-        description="把订单状态、处理信息和重试情况放在一起。"
+        description="把状态、优先级、人工跟进和重试次数放在一起看。"
         action={
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Input readOnly value={`订单总数：${ordersQuery.data?.length ?? 0}`} className="sm:w-56" />
+            <Input readOnly value={`订单总数：${filteredTotal}`} className="sm:w-56" />
             <Input readOnly value={`高优先级：${urgentCount}`} className="sm:w-40" />
-            <Input readOnly value={`人工处理：${interventionCount}`} className="sm:w-40" />
+            <Input readOnly value={`人工跟进：${interventionCount}`} className="sm:w-40" />
             <select
               className="h-11 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-sm text-[var(--foreground)]"
               value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
+              onChange={(event) => {
+                updateFilters({
+                  status: event.target.value === 'all' ? undefined : event.target.value,
+                })
+              }}
             >
               <option value="all">全部</option>
-              <option value="created">created</option>
-              <option value="awaiting_pick">awaiting_pick</option>
-              <option value="picked_from_cabinet">picked_from_cabinet</option>
-              <option value="delivering">delivering</option>
-              <option value="delivered">delivered</option>
-              <option value="completed">completed</option>
+              <option value="created">{formatStatusLabel('created')}</option>
+              <option value="awaiting_pick">{formatStatusLabel('awaiting_pick')}</option>
+              <option value="picked_from_cabinet">{formatStatusLabel('picked_from_cabinet')}</option>
+              <option value="delivering">{formatStatusLabel('delivering')}</option>
+              <option value="delivered">{formatStatusLabel('delivered')}</option>
+              <option value="completed">{formatStatusLabel('completed')}</option>
             </select>
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-2 py-2">
+              <span className="px-2 text-xs font-medium text-[var(--muted-foreground)]">优先级</span>
+              {[
+                ['all', '全部'],
+                ['normal', formatPriorityLabel('normal')],
+                ['high', formatPriorityLabel('high')],
+                ['urgent', formatPriorityLabel('urgent')],
+              ].map(([value, label]) => (
+                <Button
+                  key={value}
+                  type="button"
+                  size="sm"
+                  variant={priorityFilter === value ? 'default' : 'secondary'}
+                  onClick={() =>
+                    updateFilters({
+                      priority: value === 'all' ? undefined : value,
+                    })
+                  }
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-2 py-2">
+              <span className="px-2 text-xs font-medium text-[var(--muted-foreground)]">人工跟进</span>
+              {[
+                ['all', '全部'],
+                ['manual_review', formatInterventionStatusLabel('manual_review')],
+                ['escalated', formatInterventionStatusLabel('escalated')],
+                ['resolved', formatInterventionStatusLabel('resolved')],
+              ].map(([value, label]) => (
+                <Button
+                  key={value}
+                  type="button"
+                  size="sm"
+                  variant={interventionFilter === value ? 'default' : 'secondary'}
+                  onClick={() =>
+                    updateFilters({
+                      intervention_status: value === 'all' ? undefined : value,
+                    })
+                  }
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
           </div>
         }
       >
         {ordersQuery.isLoading ? (
-          <LoadingState label="加载中" />
+          <LoadingState label="正在载入" />
         ) : (
-          <DataTable columns={columns} data={orders} emptyTitle="暂无数据" emptyDescription="当前条件下没有可用数据。" />
+          <DataTable
+            columns={columns}
+            data={orders}
+            emptyTitle="没有找到内容"
+            emptyDescription="换个条件再试试。"
+            pagination={{
+              page: ordersQuery.data?.page ?? page,
+              pageSize: ordersQuery.data?.page_size ?? ORDERS_PAGE_SIZE,
+              total: filteredTotal,
+              onPageChange: setPage,
+            }}
+          />
         )}
       </WorkspacePanel>
 
@@ -230,16 +322,16 @@ export function OrdersPage() {
         <DialogContent className="w-[min(880px,calc(100vw-2rem))]">
           <DialogHeader>
             <DialogTitle>{selectedOrderId ? `订单 #${selectedOrderId}` : '订单详情'}</DialogTitle>
-            <DialogDescription>先快速看清当前状态，再决定是直接处理，还是进入完整详情页。</DialogDescription>
+            <DialogDescription>先看清订单现在的情况，再决定是直接处理，还是打开完整页面。</DialogDescription>
           </DialogHeader>
 
           {detailQuery.isLoading ? (
             <div className="py-10">
-              <LoadingState label="加载中" />
+              <LoadingState label="正在载入" />
             </div>
           ) : !detailBundle ? (
             <div className="py-10">
-              <EmptyState title="暂无数据" description="当前条件下没有可用数据。" />
+              <EmptyState title="没有找到内容" description="换个条件再试试。" />
             </div>
           ) : (
             <>
@@ -261,11 +353,11 @@ export function OrdersPage() {
                     </div>
                   </div>
                   <p className="mt-3 text-sm text-[var(--muted-foreground)]">
-                    模式 {detailBundle.borrow_order.order_mode} · 创建于 {formatDateTime(detailBundle.borrow_order.created_at)}
+                    模式 {formatOrderModeLabel(detailBundle.borrow_order.order_mode)} · 创建于 {formatDateTime(detailBundle.borrow_order.created_at)}
                   </p>
                 </div>
                 <div className="rounded-[1.5rem] border border-[var(--line-subtle)] bg-[var(--surface-bright)] p-5">
-                  <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">目标与运力</p>
+                  <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">送书位置和机器人</p>
                   <p className="mt-3 text-lg font-semibold text-[var(--foreground)]">
                     {detailBundle.delivery_order?.delivery_target ?? '柜前自取'}
                   </p>
@@ -274,10 +366,10 @@ export function OrdersPage() {
                   </p>
                 </div>
                 <div className="rounded-[1.5rem] border border-[var(--line-subtle)] bg-[var(--surface-bright)] p-5">
-                  <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">处理摘要</p>
+                  <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">处理情况</p>
                   <div className="mt-3 space-y-2 text-sm text-[var(--muted-foreground)]">
-                    <p>优先级：{snapshotValue(detailBundle.borrow_order.priority ?? detailBundle.delivery_order?.priority)}</p>
-                    <p>人工处理：{snapshotValue(detailBundle.borrow_order.intervention_status)}</p>
+                    <p>优先级：{formatPriorityLabel(detailBundle.borrow_order.priority ?? detailBundle.delivery_order?.priority)}</p>
+                    <p>人工跟进：{formatInterventionStatusLabel(detailBundle.borrow_order.intervention_status)}</p>
                     <p>重试次数：{snapshotValue(detailBundle.borrow_order.attempt_count ?? 0)}</p>
                   </div>
                 </div>
@@ -293,32 +385,32 @@ export function OrdersPage() {
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                   <div className="space-y-1">
                     <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">快速操作</p>
-                    <p className="text-sm text-[var(--muted-foreground)]">常用处理放在这里，深处理再进入完整详情。</p>
+                    <p className="text-sm text-[var(--muted-foreground)]">常用操作放在这里，更细的内容再打开完整页面。</p>
                   </div>
                   <div className="flex flex-wrap gap-2 lg:justify-end">
                     <Button
-                      variant="secondary"
-                      className="bg-[rgba(33,73,140,0.08)] text-[var(--primary)] shadow-none hover:bg-[rgba(33,73,140,0.14)]"
+                      variant="outline"
+                      className={tonalPrimaryActionButtonClassName}
                       onClick={() => openActionDialog('priority')}
                     >
                       调整优先级
                     </Button>
                     <Button
-                      variant="secondary"
-                      className="bg-[rgba(33,73,140,0.08)] text-[var(--primary)] shadow-none hover:bg-[rgba(33,73,140,0.14)]"
+                      variant="outline"
+                      className={tonalPrimaryActionButtonClassName}
                       onClick={() => openActionDialog('intervention')}
                     >
-                      人工处理
+                      人工跟进
                     </Button>
                     <Button
-                      variant="secondary"
-                      className="bg-[rgba(33,73,140,0.08)] text-[var(--primary)] shadow-none hover:bg-[rgba(33,73,140,0.14)]"
+                      variant="outline"
+                      className={tonalPrimaryActionButtonClassName}
                       onClick={() => openActionDialog('retry')}
                     >
-                      重试订单
+                      重新处理
                     </Button>
                     <Button asChild variant="ghost" className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
-                      <Link to={`/orders/${detailBundle.borrow_order.id}`}>进入完整详情</Link>
+                      <Link to={`/orders/${detailBundle.borrow_order.id}`}>打开完整页面</Link>
                     </Button>
                   </div>
                 </div>
@@ -335,7 +427,7 @@ export function OrdersPage() {
         <DialogContent className="w-[min(560px,calc(100vw-2rem))]">
           <DialogHeader>
             <DialogTitle>调整优先级</DialogTitle>
-            <DialogDescription>快速修改当前订单的优先级。</DialogDescription>
+            <DialogDescription>修改这个订单的处理优先级。</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="quick-order-priority">优先级</Label>
@@ -347,14 +439,14 @@ export function OrdersPage() {
             >
               {['urgent', 'high', 'normal', 'low'].map((value) => (
                 <option key={value} value={value}>
-                  {value}
+                  {formatPriorityLabel(value)}
                 </option>
               ))}
             </select>
           </div>
           <DialogFooter>
-            <Button variant="secondary" onClick={returnToDetailDialog}>
-              返回摘要
+            <Button variant="default" className={filledPrimaryActionButtonClassName} onClick={returnToDetailDialog}>
+              返回订单信息
             </Button>
             <Button disabled={priorityMutation.isPending} onClick={() => priorityMutation.mutate()}>
               {priorityMutation.isPending ? '更新中…' : '更新优先级'}
@@ -369,35 +461,41 @@ export function OrdersPage() {
       >
         <DialogContent className="w-[min(640px,calc(100vw-2rem))]">
           <DialogHeader>
-            <DialogTitle>人工处理</DialogTitle>
-            <DialogDescription>记录人工接管状态和异常说明。</DialogDescription>
+            <DialogTitle>人工跟进</DialogTitle>
+            <DialogDescription>记录为什么要改成人工处理，以及现在处理到哪一步。</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="quick-intervention-status">人工处理状态</Label>
-              <Input
+              <Label htmlFor="quick-intervention-status">处理情况</Label>
+              <select
                 id="quick-intervention-status"
+                className="h-11 w-full rounded-xl border border-[rgba(193,198,214,0.32)] bg-white px-4 text-base sm:text-sm"
                 value={interventionDraft}
                 onChange={(event) => setInterventionDraft(event.target.value)}
-                placeholder="manual_review"
-              />
+              >
+                {['manual_review', 'escalated', 'resolved'].map((value) => (
+                  <option key={value} value={value}>
+                    {formatInterventionStatusLabel(value)}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="quick-failure-reason">异常说明</Label>
+              <Label htmlFor="quick-failure-reason">处理说明</Label>
               <Textarea
                 id="quick-failure-reason"
                 value={failureReasonDraft}
                 onChange={(event) => setFailureReasonDraft(event.target.value)}
-                placeholder="描述当前为什么需要人工介入"
+                placeholder="写清楚为什么要改成人工处理"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="secondary" onClick={returnToDetailDialog}>
-              返回摘要
+            <Button variant="default" className={filledPrimaryActionButtonClassName} onClick={returnToDetailDialog}>
+              返回订单信息
             </Button>
             <Button disabled={interventionMutation.isPending} onClick={() => interventionMutation.mutate()}>
-              {interventionMutation.isPending ? '提交中…' : '提交人工处理'}
+              {interventionMutation.isPending ? '提交中…' : '保存处理情况'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -409,8 +507,8 @@ export function OrdersPage() {
       >
         <DialogContent className="w-[min(640px,calc(100vw-2rem))]">
           <DialogHeader>
-            <DialogTitle>重试订单</DialogTitle>
-            <DialogDescription>填写备注后重新发起当前订单的处理流程。</DialogDescription>
+            <DialogTitle>重新处理</DialogTitle>
+            <DialogDescription>填好备注后，系统会重新处理这个订单。</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="quick-retry-note">重试备注</Label>
@@ -418,12 +516,12 @@ export function OrdersPage() {
               id="quick-retry-note"
               value={retryNote}
               onChange={(event) => setRetryNote(event.target.value)}
-              placeholder="例如：人工确认通道恢复后重新派单"
+              placeholder="例如：已确认通道恢复，可以重新派单"
             />
           </div>
           <DialogFooter>
-            <Button variant="secondary" onClick={returnToDetailDialog}>
-              返回摘要
+            <Button variant="default" className={filledPrimaryActionButtonClassName} onClick={returnToDetailDialog}>
+              返回订单信息
             </Button>
             <Button disabled={retryMutation.isPending} onClick={() => retryMutation.mutate()}>
               {retryMutation.isPending ? '处理中…' : '重试订单'}

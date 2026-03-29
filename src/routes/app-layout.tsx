@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useLocation, useOutlet } from 'react-router-dom'
 import { AnimatePresence, motion, useIsPresent, useReducedMotion } from 'framer-motion'
@@ -6,6 +6,7 @@ import { AnimatePresence, motion, useIsPresent, useReducedMotion } from 'framer-
 import { Sidebar } from '@/components/layout/sidebar'
 import { Topbar } from '@/components/layout/topbar'
 import { GridPattern } from '@/components/ui/grid-pattern'
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { STORAGE_KEYS } from '@/constants/constant'
 import { cn } from '@/lib/utils'
 import { storageUtils } from '@/utils'
@@ -35,7 +36,6 @@ function RouteScene({ children }: { children: ReactNode }) {
     </motion.div>
   )
 }
-
 
 export function AppLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -76,53 +76,59 @@ export function AppLayout() {
   }, [])
 
 
-  const handleToggleSidebar = () => {
-    setSidebarCollapsed((current) => {
-      const next = !current
-      storageUtils.set(STORAGE_KEYS.SIDEBAR_COLLAPSED, next)
-      return next
-    })
+  const handleSidebarOpenChange = (open: boolean) => {
+    const nextCollapsed = !open
+    storageUtils.set(STORAGE_KEYS.SIDEBAR_COLLAPSED, nextCollapsed)
+    setSidebarCollapsed(nextCollapsed)
   }
 
   return (
-    <div className="h-screen overflow-hidden bg-transparent text-[var(--foreground)]">
-      <div className="flex h-screen overflow-hidden">
-        <Sidebar collapsed={sidebarCollapsed} onToggle={handleToggleSidebar} />
-        <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-transparent">
-          <div
-            className="pointer-events-none absolute inset-0 z-0"
-            style={{
-              background: [
-                'radial-gradient(circle at top left, rgba(33,73,140,0.08) 0%, transparent 28%)',
-                'radial-gradient(circle at bottom right, rgba(138,90,40,0.06) 0%, transparent 22%)',
-              ].join(', '),
-            }}
-          />
-          <GridPattern
-            width={32}
-            height={32}
-            x={-1}
-            y={-1}
-            className="absolute inset-0 z-0 h-full w-full fill-[var(--primary)]/[0.03] stroke-[var(--primary)]/[0.1] [mask-image:linear-gradient(to_bottom,rgba(0,0,0,0.68)_0%,rgba(0,0,0,0.32)_62%,transparent_100%)]"
-          />
-          <Topbar />
-          <main
-            ref={mainRef}
-            data-testid="app-layout-main"
-            className="relative z-10 flex-1 overflow-x-hidden overflow-y-auto px-5 py-6 lg:px-8 lg:py-8"
-          >
-            <div data-testid="route-scene-stage" className="relative min-h-full w-full overflow-hidden">
-              <AnimatePresence initial={false} mode="wait">
-                <RouteScene key={location.pathname}>
-                  <Suspense fallback={null}>
-                    {currentOutlet}
-                  </Suspense>
-                </RouteScene>
-              </AnimatePresence>
-            </div>
-          </main>
-        </div>
-      </div>
-    </div>
+    <SidebarProvider
+      open={!sidebarCollapsed}
+      onOpenChange={handleSidebarOpenChange}
+      className="h-screen overflow-hidden bg-transparent text-[var(--foreground)]"
+      style={
+        {
+          '--sidebar-width': '18rem',
+          '--sidebar-width-icon': '6rem',
+        } as CSSProperties
+      }
+    >
+      <Sidebar />
+      <SidebarInset className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-transparent">
+        <div
+          className="pointer-events-none absolute inset-0 z-0"
+          style={{
+            background: [
+              'radial-gradient(circle at top left, rgba(33,73,140,0.08) 0%, transparent 28%)',
+              'radial-gradient(circle at bottom right, rgba(138,90,40,0.06) 0%, transparent 22%)',
+            ].join(', '),
+          }}
+        />
+        <GridPattern
+          width={32}
+          height={32}
+          x={-1}
+          y={-1}
+          className="absolute inset-0 z-0 h-full w-full fill-[var(--primary)]/[0.03] stroke-[var(--primary)]/[0.1] [mask-image:linear-gradient(to_bottom,rgba(0,0,0,0.68)_0%,rgba(0,0,0,0.32)_62%,transparent_100%)]"
+        />
+        <Topbar />
+        <main
+          ref={mainRef}
+          data-testid="app-layout-main"
+          className="relative z-10 flex-1 overflow-x-hidden overflow-y-auto px-5 py-6 lg:px-8 lg:py-8"
+        >
+          <div data-testid="route-scene-stage" className="relative min-h-full w-full overflow-hidden">
+            <AnimatePresence initial={false} mode="wait">
+              <RouteScene key={location.pathname}>
+                <Suspense fallback={null}>
+                  {currentOutlet}
+                </Suspense>
+              </RouteScene>
+            </AnimatePresence>
+          </div>
+        </main>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }

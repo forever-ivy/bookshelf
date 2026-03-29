@@ -1,13 +1,23 @@
-import { createContext, useContext, useState, type PropsWithChildren } from 'react'
+import { createContext, useContext, useEffect, useState, type PropsWithChildren } from 'react'
 
-import { STORAGE_KEYS } from '@/constants/constant'
+import { fetchAdminIdentity } from '@/lib/api/auth'
+import {
+  clearStoredSession,
+  getSessionSnapshot,
+  setStoredSession,
+  subscribeSession,
+  syncStoredIdentity,
+  type SessionSnapshot,
+} from '@/lib/session-store'
 import type { AuthAccount, AuthPayload } from '@/types/domain'
-import { storageUtils } from '@/utils'
+
+export type SessionStatus = 'bootstrapping' | 'authenticated' | 'unauthenticated'
 
 type SessionContextValue = {
   token: string | null
   refreshToken: string | null
   account: AuthAccount | null
+  status: SessionStatus
   isAuthenticated: boolean
   setSession: (payload: AuthPayload) => void
   clearSession: () => void
@@ -15,40 +25,67 @@ type SessionContextValue = {
 
 const SessionContext = createContext<SessionContextValue | null>(null)
 
-function getStoredAccount() {
-  return storageUtils.get<AuthAccount>(STORAGE_KEYS.ACCOUNT)
-}
-
 export function SessionProvider({ children }: PropsWithChildren) {
-  const [token, setToken] = useState(() => storageUtils.get<string>(STORAGE_KEYS.TOKEN))
-  const [refreshToken, setRefreshToken] = useState(() => storageUtils.get<string>(STORAGE_KEYS.REFRESH_TOKEN))
-  const [account, setAccount] = useState<AuthAccount | null>(() => getStoredAccount())
+  const [snapshot, setSnapshot] = useState<SessionSnapshot>(() => getSessionSnapshot())
+  const [status, setStatus] = useState<SessionStatus>(() => (getSessionSnapshot().token ? 'bootstrapping' : 'unauthenticated'))
+
+  useEffect(() => subscribeSession(setSnapshot), [])
+
+  useEffect(() => {
+    if (!snapshot.token) {
+      setStatus('unauthenticated')
+      return
+    }
+
+    setStatus((current) => (current === 'unauthenticated' ? 'authenticated' : current))
+  }, [snapshot.token])
+
+  useEffect(() => {
+    if (!snapshot.token) {
+      return
+    }
+
+    let cancelled = false
+    setStatus('bootstrapping')
+    void fetchAdminIdentity()
+      .then((identity) => {
+        if (cancelled) {
+          return
+        }
+        syncStoredIdentity(identity)
+        setStatus('authenticated')
+      })
+      .catch(() => {
+        if (cancelled) {
+          return
+        }
+        clearStoredSession()
+        setStatus('unauthenticated')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [snapshot.token])
 
   const setSession = (payload: AuthPayload) => {
-    storageUtils.set(STORAGE_KEYS.TOKEN, payload.access_token)
-    storageUtils.set(STORAGE_KEYS.REFRESH_TOKEN, payload.refresh_token)
-    storageUtils.set(STORAGE_KEYS.ACCOUNT, payload.account)
-    setToken(payload.access_token)
-    setRefreshToken(payload.refresh_token)
-    setAccount(payload.account)
+    setStoredSession(payload)
+    setStatus('authenticated')
   }
 
   const clearSession = () => {
-    storageUtils.remove(STORAGE_KEYS.TOKEN)
-    storageUtils.remove(STORAGE_KEYS.REFRESH_TOKEN)
-    storageUtils.remove(STORAGE_KEYS.ACCOUNT)
-    setToken(null)
-    setRefreshToken(null)
-    setAccount(null)
+    clearStoredSession()
+    setStatus('unauthenticated')
   }
 
   return (
     <SessionContext.Provider
       value={{
-        token,
-        refreshToken,
-        account,
-        isAuthenticated: Boolean(token),
+        token: snapshot.token,
+        refreshToken: snapshot.refreshToken,
+        account: snapshot.account,
+        status,
+        isAuthenticated: status === 'authenticated' && Boolean(snapshot.token),
         setSession,
         clearSession,
       }}

@@ -1,9 +1,25 @@
 import { http } from '@/lib/http'
-import type { AdminReturnRequest, OrderBundle, RobotEvent, RobotTask, RobotUnit } from '@/types/domain'
+import type { AdminReturnRequest, OrderBundle, PaginatedResponse, RobotEvent, RobotTask, RobotUnit } from '@/types/domain'
 
-export async function getAdminOrders() {
-  const response = await http.get<{ items: OrderBundle[] }>('/api/v1/admin/orders')
-  return response.data.items
+type AdminOrdersQuery = {
+  query?: string
+  page?: number
+  pageSize?: number
+  status?: string
+  priority?: string
+  interventionStatus?: string
+}
+
+export async function getAdminOrders(params: AdminOrdersQuery = {}) {
+  const response = await http.get<PaginatedResponse<OrderBundle>>('/api/v1/admin/orders', {
+    query: params.query,
+    page: params.page ?? 1,
+    page_size: params.pageSize ?? 20,
+    status: params.status,
+    priority: params.priority,
+    intervention_status: params.interventionStatus,
+  })
+  return response.data
 }
 
 export async function getAdminOrder(orderId: number) {

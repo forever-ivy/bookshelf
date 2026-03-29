@@ -1,14 +1,15 @@
+import { useState } from 'react'
+
 import { useQuery } from '@tanstack/react-query'
-import { BookOpenText, Bot, Clock3, Gauge, Users } from 'lucide-react'
+import { format } from 'date-fns'
+import { BookOpenText, CalendarDays, Clock3, Gauge, Users } from 'lucide-react'
 import {
   Area,
   AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
-  ComposedChart,
   Legend,
-  Line,
   PolarAngleAxis,
   RadialBar,
   RadialBarChart,
@@ -22,6 +23,8 @@ import { MetricStrip } from '@/components/shared/metric-strip'
 import { PageShell } from '@/components/shared/page-shell'
 import { SectionIntro } from '@/components/shared/section-intro'
 import { WorkspacePanel } from '@/components/shared/workspace-panel'
+import { Button } from '@/components/ui/button'
+import { Calendar } from '@/components/ui/calendar'
 import {
   ChartContainer,
   ChartLegendContent,
@@ -29,14 +32,14 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from '@/components/ui/chart'
+import { Label } from '@/components/ui/label'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { getAdminPageHero } from '@/lib/page-hero'
 import {
   getAdminBorrowTrends,
-  getAdminCabinetTurnover,
   getAdminCollegePreferences,
   getAdminPopularBooks,
   getAdminRetention,
-  getAdminRobotEfficiency,
   getAdminTimePeaks,
 } from '@/lib/api/analytics'
 
@@ -64,21 +67,36 @@ const collegePreferenceChartConfig = {
 
 const popularBooksChartConfig = {
   borrow_count: { label: '借阅次数', color: analyticsChartColors.coral },
-  prediction_score: { label: '预测分', color: analyticsChartColors.amber },
-} satisfies ChartConfig
-
-const cabinetTurnoverChartConfig = {
-  turnover_rate: { label: '周转率', color: analyticsChartColors.amber },
 } satisfies ChartConfig
 
 const retentionChartConfig = {
   retention: { label: '留存率', color: analyticsChartColors.aqua },
 } satisfies ChartConfig
-
-const robotPalette = [analyticsChartColors.lakeBlue, analyticsChartColors.mint, analyticsChartColors.coral]
+const ANALYTICS_WINDOW_DAYS = 7
 
 function formatShortDate(date: string) {
   return date.length >= 10 ? date.slice(5) : date
+}
+
+function getTodayInputValue() {
+  const now = new Date()
+  const timezoneOffset = now.getTimezoneOffset() * 60_000
+  return new Date(now.getTime() - timezoneOffset).toISOString().slice(0, 10)
+}
+
+function shiftDateString(dateValue: string, days: number) {
+  const date = parseDateString(dateValue)
+  date.setDate(date.getDate() + days)
+  return formatDateString(date)
+}
+
+function parseDateString(dateValue: string) {
+  const [year, month, day] = dateValue.split('-').map(Number)
+  return new Date(year, (month || 1) - 1, day || 1)
+}
+
+function formatDateString(date: Date) {
+  return format(date, 'yyyy-MM-dd')
 }
 
 function formatHour(hour?: number | null) {
@@ -98,33 +116,30 @@ function clampPercent(value: number) {
 }
 
 export function AnalyticsPage() {
+  const [anchorDate, setAnchorDate] = useState(getTodayInputValue)
+  const windowStart = shiftDateString(anchorDate, -(ANALYTICS_WINDOW_DAYS - 1))
+  const selectedAnchorDate = parseDateString(anchorDate)
+  const maxAnchorDate = parseDateString(getTodayInputValue())
+
   const borrowTrendsQuery = useQuery({
-    queryKey: ['admin', 'analytics', 'borrow-trends'],
-    queryFn: () => getAdminBorrowTrends(7),
+    queryKey: ['admin', 'analytics', 'borrow-trends', ANALYTICS_WINDOW_DAYS, anchorDate],
+    queryFn: () => getAdminBorrowTrends(ANALYTICS_WINDOW_DAYS, anchorDate),
   })
   const collegePreferencesQuery = useQuery({
-    queryKey: ['admin', 'analytics', 'college-preferences'],
-    queryFn: getAdminCollegePreferences,
+    queryKey: ['admin', 'analytics', 'college-preferences', ANALYTICS_WINDOW_DAYS, anchorDate],
+    queryFn: () => getAdminCollegePreferences(ANALYTICS_WINDOW_DAYS, anchorDate),
   })
   const timePeaksQuery = useQuery({
-    queryKey: ['admin', 'analytics', 'time-peaks'],
-    queryFn: () => getAdminTimePeaks(7),
+    queryKey: ['admin', 'analytics', 'time-peaks', ANALYTICS_WINDOW_DAYS, anchorDate],
+    queryFn: () => getAdminTimePeaks(ANALYTICS_WINDOW_DAYS, anchorDate),
   })
   const popularBooksQuery = useQuery({
-    queryKey: ['admin', 'analytics', 'popular-books'],
-    queryFn: () => getAdminPopularBooks(5),
-  })
-  const cabinetTurnoverQuery = useQuery({
-    queryKey: ['admin', 'analytics', 'cabinet-turnover'],
-    queryFn: () => getAdminCabinetTurnover(7),
-  })
-  const robotEfficiencyQuery = useQuery({
-    queryKey: ['admin', 'analytics', 'robot-efficiency'],
-    queryFn: getAdminRobotEfficiency,
+    queryKey: ['admin', 'analytics', 'popular-books', 5, ANALYTICS_WINDOW_DAYS, anchorDate],
+    queryFn: () => getAdminPopularBooks(5, ANALYTICS_WINDOW_DAYS, anchorDate),
   })
   const retentionQuery = useQuery({
-    queryKey: ['admin', 'analytics', 'retention'],
-    queryFn: getAdminRetention,
+    queryKey: ['admin', 'analytics', 'retention', anchorDate],
+    queryFn: () => getAdminRetention(anchorDate),
   })
 
   const isLoading =
@@ -132,20 +147,18 @@ export function AnalyticsPage() {
     collegePreferencesQuery.isLoading ||
     timePeaksQuery.isLoading ||
     popularBooksQuery.isLoading ||
-    cabinetTurnoverQuery.isLoading ||
-    robotEfficiencyQuery.isLoading ||
     retentionQuery.isLoading
 
   if (isLoading) {
     return (
       <PageShell
         {...pageHero}
-        eyebrow="数据分析"
-        title="数据分析"
-        description="查看借阅、偏好、库存和设备数据。"
-        statusLine="分析简报"
+        eyebrow="统计"
+        title="借阅统计"
+        description="查看借书趋势、读者活跃情况和热门图书。"
+        statusLine="借阅统计"
       >
-        <LoadingState label="加载中" />
+        <LoadingState label="正在载入" />
       </PageShell>
     )
   }
@@ -154,20 +167,18 @@ export function AnalyticsPage() {
   const collegePreferences = collegePreferencesQuery.data
   const timePeaks = timePeaksQuery.data
   const popularBooks = popularBooksQuery.data
-  const cabinetTurnover = cabinetTurnoverQuery.data
-  const robotEfficiency = robotEfficiencyQuery.data
   const retention = retentionQuery.data
 
-  if (!borrowTrends || !collegePreferences || !timePeaks || !popularBooks || !cabinetTurnover || !robotEfficiency || !retention) {
+  if (!borrowTrends || !collegePreferences || !timePeaks || !popularBooks || !retention) {
     return (
       <PageShell
         {...pageHero}
-        eyebrow="数据分析"
-        title="数据分析"
-        description="查看借阅、偏好、库存和设备数据。"
-        statusLine="分析简报"
+        eyebrow="统计"
+        title="借阅统计"
+        description="查看借书趋势、读者活跃情况和热门图书。"
+        statusLine="借阅统计"
       >
-        <EmptyState title="暂无数据" description="当前条件下没有可用数据。" />
+        <EmptyState title="没有找到内容" description="换个条件再试试。" />
       </PageShell>
     )
   }
@@ -189,13 +200,6 @@ export function AnalyticsPage() {
     short_title: item.title.length > 8 ? `${item.title.slice(0, 8)}…` : item.title,
   }))
 
-  const cabinetTurnoverData = [...cabinetTurnover.items]
-    .sort((first, second) => second.turnover_rate - first.turnover_rate)
-    .map((item) => ({
-      ...item,
-      label: item.cabinet_id,
-    }))
-
   const timePeakData = timePeaks.items.map((item) => ({
     ...item,
     label: formatHour(item.hour),
@@ -206,11 +210,52 @@ export function AnalyticsPage() {
   return (
     <PageShell
       {...pageHero}
-      eyebrow="数据分析"
-      title="数据分析"
-      description="查看借阅、偏好、库存和设备数据。"
-      statusLine="分析简报"
+      eyebrow="统计"
+      title="借阅统计"
+      description="查看借书趋势、读者活跃情况和热门图书。"
+      statusLine="借阅统计"
     >
+      <div className="grid gap-4 rounded-[1.6rem] border border-[var(--line-subtle)] bg-[var(--surface-panel)] px-5 py-5 md:grid-cols-[1fr_220px] md:items-end">
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-[var(--foreground)]">分析观察日</p>
+          <p className="text-sm leading-6 text-[var(--muted-foreground)]">
+            当前查看 {anchorDate} 的统计结果，时间范围是 {windowStart} 到 {anchorDate}。
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label id="analytics-anchor-date-label" className="block text-sm text-[var(--muted-foreground)]">
+            选择日期
+          </Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                id="analytics-anchor-date"
+                type="button"
+                variant="secondary"
+                className="w-full justify-between rounded-2xl"
+                aria-labelledby="analytics-anchor-date-label analytics-anchor-date-value"
+              >
+                <span id="analytics-anchor-date-value">{anchorDate}</span>
+                <CalendarDays data-icon="inline-end" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-auto p-3">
+              <Calendar
+                mode="single"
+                selected={selectedAnchorDate}
+                month={selectedAnchorDate}
+                disabled={{ after: maxAnchorDate }}
+                onSelect={(date) => {
+                  if (date) {
+                    setAnchorDate(formatDateString(date))
+                  }
+                }}
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+      </div>
+
       <MetricStrip
         items={[
           {
@@ -242,15 +287,15 @@ export function AnalyticsPage() {
       />
 
       <SectionIntro
-        eyebrow="分析"
-        title="分析简报"
-        description="用趋势、分布与效率图表查看近期借阅节奏、学院偏好与设备表现。"
+        eyebrow="统计"
+        title="统计看板"
+        description="用图表看看最近借书变化、读者活跃情况和热门图书。"
       />
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <WorkspacePanel
-          title="借阅趋势总览"
-          description="近 7 日借阅量变化与峰值日对比。"
+          title="近 7 天借书趋势"
+          description="看看近 7 天借书数量怎么变化，哪一天最多。"
           action={<span className="text-sm text-[var(--muted-foreground)]">总计 {borrowTrends.summary.total_orders} 单</span>}
         >
           <div className="space-y-4">
@@ -303,8 +348,8 @@ export function AnalyticsPage() {
         </WorkspacePanel>
 
         <WorkspacePanel
-          title="时段与留存洞察"
-          description="高峰借阅时段与 7 日活跃留存概览。"
+          title="高峰时段和活跃情况"
+          description="看看一天里什么时候最忙，以及近 7 天有多少读者还在使用。"
           tone="muted"
         >
           <div className="space-y-4">
@@ -371,8 +416,8 @@ export function AnalyticsPage() {
 
       <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <WorkspacePanel
-          title="学院借阅偏好"
-          description="按学院查看借阅单量，并保留主要分类偏好。"
+          title="各学院借书情况"
+          description="按学院看看借书数量和常借的分类。"
         >
           <div className="space-y-4">
             <ChartContainer config={collegePreferenceChartConfig} className="h-[340px]">
@@ -409,40 +454,24 @@ export function AnalyticsPage() {
         </WorkspacePanel>
 
         <WorkspacePanel
-          title="热门书目热度"
-          description="借阅热度与预测分并排观察，辅助下一步推荐判断。"
+          title="热门图书"
+          description="按借出次数看看哪些图书最受欢迎。"
           tone="muted"
         >
           <div className="space-y-4">
             <ChartContainer config={popularBooksChartConfig}>
-              <ComposedChart data={popularBooksData} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
+              <BarChart data={popularBooksData} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
                 <CartesianGrid vertical={false} stroke="var(--line-subtle)" strokeDasharray="3 3" />
                 <XAxis dataKey="short_title" tickLine={false} axisLine={false} tickMargin={10} />
-                <YAxis yAxisId="left" allowDecimals={false} tickLine={false} axisLine={false} width={30} />
-                <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} width={30} />
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      formatter={(value, name) => (name === '预测分' ? Number(value).toFixed(1) : value)}
-                    />
-                  }
-                />
+                <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={30} />
+                <ChartTooltip content={<ChartTooltipContent />} />
                 <Legend content={<ChartLegendContent />} />
                 <Bar
-                  yAxisId="left"
                   dataKey="borrow_count"
                   fill="var(--color-borrow_count)"
                   radius={[10, 10, 4, 4]}
                 />
-                <Line
-                  yAxisId="right"
-                  type="monotone"
-                  dataKey="prediction_score"
-                  stroke="var(--color-prediction_score)"
-                  strokeWidth={2.5}
-                  dot={{ r: 3, fill: 'var(--color-prediction_score)' }}
-                />
-              </ComposedChart>
+              </BarChart>
             </ChartContainer>
 
             <div className="space-y-3">
@@ -455,10 +484,7 @@ export function AnalyticsPage() {
                     <p className="font-semibold text-[var(--foreground)]">{book.title}</p>
                     <p className="mt-1 text-sm text-[var(--muted-foreground)]">借阅 {book.borrow_count} 次</p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-xl font-semibold tracking-[-0.04em] text-[var(--foreground)]">{book.prediction_score}</p>
-                    <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">预测分</p>
-                  </div>
+                  <p className="text-xl font-semibold tracking-[-0.04em] text-[var(--foreground)]">{book.borrow_count}</p>
                 </div>
               ))}
             </div>
@@ -466,104 +492,6 @@ export function AnalyticsPage() {
         </WorkspacePanel>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-        <WorkspacePanel
-          title="书柜周转对比"
-          description="按书柜查看库存事件与周转强度。"
-        >
-          <div className="space-y-4">
-            <ChartContainer config={cabinetTurnoverChartConfig}>
-              <BarChart data={cabinetTurnoverData} layout="vertical" margin={{ left: 8, right: 16, top: 8, bottom: 0 }}>
-                <CartesianGrid horizontal={false} stroke="var(--line-subtle)" strokeDasharray="3 3" />
-                <XAxis type="number" tickLine={false} axisLine={false} />
-                <YAxis type="category" dataKey="label" tickLine={false} axisLine={false} width={92} />
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent formatter={(value, name) => (name === '周转率' ? Number(value).toFixed(2) : value)} />
-                  }
-                />
-                <Bar dataKey="turnover_rate" fill="var(--color-turnover_rate)" radius={[0, 12, 12, 0]} />
-              </BarChart>
-            </ChartContainer>
-
-            <div className="space-y-3">
-              {cabinetTurnover.items.map((item) => (
-                <div
-                  key={item.cabinet_id}
-                  className="flex items-center justify-between rounded-[1.2rem] border border-[var(--line-subtle)] bg-[var(--surface-container-lowest)] px-4 py-4"
-                >
-                  <div>
-                    <p className="font-semibold text-[var(--foreground)]">{item.cabinet_id}</p>
-                    <p className="text-sm text-[var(--muted-foreground)]">{item.cabinet_name}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xl font-semibold tracking-[-0.04em] text-[var(--foreground)]">{item.turnover_rate}</p>
-                    <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">周转率</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </WorkspacePanel>
-
-        <WorkspacePanel
-          title="机器人执行效率"
-          description="按机器人查看任务完成率与当前任务压力。"
-          tone="muted"
-        >
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {robotEfficiency.items.map((robot, index) => {
-              const robotRate = clampPercent(robot.completion_rate)
-              const robotColor = robotPalette[index % robotPalette.length]
-              const robotChartConfig = {
-                completion_rate: { label: '完成率', color: robotColor },
-              } satisfies ChartConfig
-
-              return (
-                <div
-                  key={robot.robot_id}
-                  className="rounded-[1.2rem] border border-[var(--line-subtle)] bg-[var(--surface-container-lowest)] px-4 py-4"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <Bot className="size-4 text-[var(--primary)]" />
-                      <div>
-                        <p className="font-semibold text-[var(--foreground)]">{robot.code}</p>
-                        <p className="text-sm text-[var(--muted-foreground)]">进行中任务 {robot.active_tasks}</p>
-                      </div>
-                    </div>
-                    <span className="text-sm text-[var(--muted-foreground)]">{robot.total_tasks} 项</span>
-                  </div>
-
-                  <div className="relative mt-4">
-                    <ChartContainer config={robotChartConfig} className="h-[210px] border-none bg-transparent p-0">
-                      <RadialBarChart
-                        data={[{ name: '完成率', completion_rate: robotRate }]}
-                        innerRadius="72%"
-                        outerRadius="100%"
-                        startAngle={90}
-                        endAngle={-270}
-                      >
-                        <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
-                        <RadialBar
-                          dataKey="completion_rate"
-                          cornerRadius={14}
-                          fill="var(--color-completion_rate)"
-                          background={{ fill: 'rgba(24,24,20,0.08)' }}
-                        />
-                      </RadialBarChart>
-                    </ChartContainer>
-                    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                      <p className="text-[1.8rem] font-semibold tracking-[-0.05em] text-[var(--foreground)]">{formatPercent(robotRate)}</p>
-                      <p className="text-xs uppercase tracking-[0.16em] text-[var(--muted-foreground)]">完成率</p>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </WorkspacePanel>
-      </div>
     </PageShell>
   )
 }

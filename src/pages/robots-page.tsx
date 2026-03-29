@@ -15,7 +15,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAdminEventsStream } from '@/hooks/use-admin-events-stream'
 import { getAdminEvents, getAdminRobots, getAdminTasks, reassignAdminTask } from '@/lib/api/admin'
+import { formatStatusLabel } from '@/lib/display-labels'
 import { getAdminPageHero } from '@/lib/page-hero'
+import { patchSearchParams, readOptionalSearchParam, useOptionalSearchParams } from '@/lib/search-params'
 import type { RobotEvent, RobotTask, RobotUnit } from '@/types/domain'
 import { formatDateTime } from '@/utils'
 
@@ -24,6 +26,10 @@ const pageHero = getAdminPageHero('robots')
 
 export function RobotsPage() {
   const queryClient = useQueryClient()
+  const [searchParams, setSearchParams] = useOptionalSearchParams()
+  const robotStatusFilter = readOptionalSearchParam(searchParams, 'robot_status')
+  const taskStatusFilter = readOptionalSearchParam(searchParams, 'task_status')
+  const eventTypeFilter = readOptionalSearchParam(searchParams, 'event_type')
   const robotsQuery = useQuery({ queryKey: ['admin', 'robots'], queryFn: getAdminRobots })
   const tasksQuery = useQuery({ queryKey: ['admin', 'tasks'], queryFn: getAdminTasks })
   const eventsQuery = useQuery({ queryKey: ['admin', 'events', 20], queryFn: () => getAdminEvents(20) })
@@ -34,9 +40,17 @@ export function RobotsPage() {
 
   const tasks = tasksQuery.data ?? []
   const robots = robotsQuery.data ?? []
+  const visibleRobots = useMemo(
+    () => robots.filter((robot) => (robotStatusFilter ? robot.status === robotStatusFilter : true)),
+    [robotStatusFilter, robots],
+  )
+  const visibleTasks = useMemo(
+    () => tasks.filter((task) => (taskStatusFilter ? task.status === taskStatusFilter : true)),
+    [taskStatusFilter, tasks],
+  )
   const activeTasks = useMemo(
-    () => tasks.filter((task) => task.status !== 'completed'),
-    [tasks],
+    () => visibleTasks.filter((task) => task.status !== 'completed'),
+    [visibleTasks],
   )
 
   const reassignMutation = useMutation({
@@ -72,6 +86,14 @@ export function RobotsPage() {
   })
 
   const visibleEvents = liveEvents ?? eventsQuery.data ?? []
+  const filteredEvents = useMemo(
+    () => visibleEvents.filter((event) => (eventTypeFilter ? event.event_type === eventTypeFilter : true)),
+    [eventTypeFilter, visibleEvents],
+  )
+
+  function updateRobotFilters(patch: Record<string, string | undefined>) {
+    setSearchParams(patchSearchParams(searchParams, patch), { replace: true })
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const columns: Array<ColumnDef<RobotTask, any>> = [
@@ -97,31 +119,52 @@ export function RobotsPage() {
   ]
 
   if (robotsQuery.isLoading && tasksQuery.isLoading && eventsQuery.isLoading) {
-    return <LoadingState label="数据装载中" />
+    return <LoadingState label="正在载入数据" />
   }
 
   return (
     <PageShell
       {...pageHero}
-      eyebrow="机器人管理"
-      title="机器人管理"
-      description="查看设备状态、任务和事件。"
+      eyebrow="机器人"
+      title="机器人"
+      description="查看机器人状态、任务和最新记录。"
       statusLine="机器人列表"
     >
       <MetricStrip
         items={[
-          { label: '机器人数量', value: robots.length, hint: '当前接入系统的机器人' },
-          { label: '在线数量', value: robots.filter((robot) => robot.status !== 'offline').length, hint: '当前在线的机器人' },
-          { label: '进行中任务', value: activeTasks.length, hint: '尚未完成的任务' },
-          { label: '最近事件', value: visibleEvents.length, hint: '最近 20 条记录' },
+          { label: '机器人数量', value: visibleRobots.length, hint: '符合当前条件的机器人数量' },
+          { label: '在线数量', value: visibleRobots.filter((robot) => robot.status !== 'offline').length, hint: '现在在线的机器人' },
+          { label: '处理中任务', value: activeTasks.length, hint: '还没完成的任务' },
+          { label: '最近事件', value: filteredEvents.length, hint: '最近 20 条记录' },
         ]}
         className="xl:grid-cols-4"
       />
       <div className="grid gap-6 xl:grid-cols-[1fr_0.95fr]">
         <div className="space-y-6">
-          <WorkspacePanel title="机器人列表" description="按机器人查看状态、电量、心跳和当前任务。">
+          <WorkspacePanel
+            title="机器人列表"
+            description="查看每台机器人的状态、电量、最后上报时间和当前任务。"
+            action={
+              <select
+                aria-label="机器人状态筛选"
+                className="h-10 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-sm text-[var(--foreground)]"
+                value={robotStatusFilter ?? 'all'}
+                onChange={(event) =>
+                  updateRobotFilters({
+                    robot_status: event.target.value === 'all' ? undefined : event.target.value,
+                  })
+                }
+              >
+                <option value="all">全部状态</option>
+                <option value="assigned">已分配</option>
+                <option value="idle">空闲</option>
+                <option value="carrying">配送中</option>
+                <option value="offline">离线</option>
+              </select>
+            }
+          >
             <div className="grid gap-4 md:grid-cols-2">
-              {robots.map((robot: RobotUnit) => (
+              {visibleRobots.map((robot: RobotUnit) => (
                 <div key={robot.id} className="rounded-[1.45rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.34)] p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -140,7 +183,7 @@ export function RobotsPage() {
                       </p>
                     </div>
                     <div className="rounded-xl bg-[var(--surface-container-low)] px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">心跳</p>
+                      <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">最后上报</p>
                       <p className="mt-2 text-sm font-semibold text-[var(--foreground)]">
                         {formatDateTime(robot.heartbeat_at)}
                       </p>
@@ -150,15 +193,35 @@ export function RobotsPage() {
               ))}
             </div>
           </WorkspacePanel>
-          <WorkspacePanel title="任务列表" description="把任务状态、重试次数和异常原因放在一起。">
-            <DataTable columns={columns} data={tasks} emptyTitle="暂无数据" emptyDescription="当前条件下没有可用数据。" />
+          <WorkspacePanel
+            title="任务列表"
+            description="把任务状态、重试次数和异常说明放在一起看。"
+            action={
+              <select
+                aria-label="任务状态筛选"
+                className="h-10 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-sm text-[var(--foreground)]"
+                value={taskStatusFilter ?? 'all'}
+                onChange={(event) =>
+                  updateRobotFilters({
+                    task_status: event.target.value === 'all' ? undefined : event.target.value,
+                  })
+                }
+              >
+                <option value="all">全部任务</option>
+                <option value="assigned">已分配</option>
+                <option value="carrying">配送中</option>
+                <option value="completed">已完成</option>
+              </select>
+            }
+          >
+            <DataTable columns={columns} data={visibleTasks} emptyTitle="没有找到内容" emptyDescription="换个条件再试试。" />
           </WorkspacePanel>
         </div>
 
         <div className="space-y-6">
-          <InspectorPanel title="任务重分配" description="机器人低电量、离线或受阻时，可以手动切换执行机器人。">
-              {activeTasks.length === 0 || robots.length === 0 ? (
-                <EmptyState title="暂无数据" description="当前条件下没有可用数据。" />
+          <InspectorPanel title="改派任务" description="机器人电量低、离线或卡住时，可以把任务换给别的机器人。">
+              {activeTasks.length === 0 || visibleRobots.length === 0 ? (
+                <EmptyState title="没有找到内容" description="换个条件再试试。" />
               ) : (
                 <>
                   <div className="space-y-2">
@@ -169,32 +232,32 @@ export function RobotsPage() {
                       value={selectedTaskId}
                       onChange={(event) => setSelectedTaskId(event.target.value)}
                     >
-                      <option value="">选择任务</option>
+                      <option value="">请选择任务</option>
                       {activeTasks.map((task) => (
                         <option key={task.id} value={task.id}>
-                          任务 #{task.id} · 当前机器人 #{task.robot_id} · {task.status}
+                          任务 #{task.id} · 当前机器人 #{task.robot_id} · {formatStatusLabel(task.status)}
                         </option>
                       ))}
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="reassign-robot">目标机器人</Label>
+                    <Label htmlFor="reassign-robot">改派给哪台机器人</Label>
                     <select
                       id="reassign-robot"
                       className="h-11 w-full rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-sm"
                       value={selectedRobotId}
                       onChange={(event) => setSelectedRobotId(event.target.value)}
                     >
-                      <option value="">选择机器人</option>
-                      {robots.map((robot) => (
+                      <option value="">请选择机器人</option>
+                      {visibleRobots.map((robot) => (
                         <option key={robot.id} value={robot.id}>
-                          {robot.code} · {robot.status} · 电量 {robot.battery_level ?? '—'}%
+                          {robot.code} · {formatStatusLabel(robot.status)} · 电量 {robot.battery_level ?? '—'}%
                         </option>
                       ))}
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="reassign-reason">重分配原因</Label>
+                    <Label htmlFor="reassign-reason">改派原因</Label>
                     <Input
                       id="reassign-reason"
                       value={reassignReason}
@@ -207,15 +270,35 @@ export function RobotsPage() {
                     disabled={reassignMutation.isPending || !selectedTaskId || !selectedRobotId}
                     onClick={() => reassignMutation.mutate()}
                   >
-                    {reassignMutation.isPending ? '处理中…' : '执行重分配'}
+                    {reassignMutation.isPending ? '处理中…' : '确认改派'}
                   </Button>
                 </>
               )}
           </InspectorPanel>
 
-          <WorkspacePanel title="事件记录" description="自动合并历史事件和当前推送。">
+          <WorkspacePanel
+            title="事件记录"
+            description="这里会合并历史记录和刚收到的新消息。"
+            action={
+              <select
+                aria-label="事件类型筛选"
+                className="h-10 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-4 text-sm text-[var(--foreground)]"
+                value={eventTypeFilter ?? 'all'}
+                onChange={(event) =>
+                  updateRobotFilters({
+                    event_type: event.target.value === 'all' ? undefined : event.target.value,
+                  })
+                }
+              >
+                <option value="all">全部事件</option>
+                <option value="order_created">创建订单</option>
+                <option value="task_reassigned">任务重分配</option>
+                <option value="robot_offline">机器人离线</option>
+              </select>
+            }
+          >
             <div className="space-y-3">
-              {visibleEvents.map((event) => (
+              {filteredEvents.map((event) => (
                 <div key={`${event.id}-${event.created_at}`} className="rounded-[1.35rem] bg-[var(--surface-container-low)] p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
@@ -227,10 +310,10 @@ export function RobotsPage() {
                   <p className="mt-2 text-sm text-[var(--muted-foreground)]">
                     任务 #{event.task_id ?? '—'} ·{' '}
                     {event.metadata?.delivery_target
-                      ? `目标：${String(event.metadata.delivery_target)}`
+                      ? `送书位置：${String(event.metadata.delivery_target)}`
                       : event.metadata?.reason
-                        ? `原因：${String(event.metadata.reason)}`
-                        : '等待更多元数据'}
+                        ? `说明：${String(event.metadata.reason)}`
+                        : '还没有更多说明'}
                   </p>
                 </div>
               ))}

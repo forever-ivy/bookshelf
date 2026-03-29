@@ -24,12 +24,12 @@ export function WorkspacePanel({
         className,
       )}
     >
-      <div className="flex flex-col gap-3 border-b border-[var(--line-subtle)] pb-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-1">
+      <div className="flex flex-col gap-3 border-b border-[var(--line-subtle)] pb-4 xl:flex-row xl:items-end xl:justify-between">
+        <div className="min-w-0 flex-1 space-y-1 xl:min-w-[16rem]">
           <h3 className="text-[1.15rem] font-semibold tracking-[-0.03em] text-[var(--foreground)]">{title}</h3>
           {description ? <p className="text-sm leading-6 text-[var(--muted-foreground)]">{description}</p> : null}
         </div>
-        {action ? <div className="w-full lg:w-auto lg:shrink-0">{action}</div> : null}
+        {action ? <div className="w-full xl:w-auto xl:max-w-full xl:shrink-0">{action}</div> : null}
       </div>
       <div className="pt-5">{children}</div>
     </section>
