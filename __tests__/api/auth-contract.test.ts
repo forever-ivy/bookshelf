@@ -1,4 +1,4 @@
-import { getMe, login, registerReader } from '@/lib/api/auth';
+import { getMe, login, refreshSession, registerReader } from '@/lib/api/auth';
 
 describe('auth contract', () => {
   const originalBaseUrl = process.env.EXPO_PUBLIC_LIBRARY_SERVICE_URL;
@@ -140,5 +140,44 @@ describe('auth contract', () => {
       needsProfileBinding: true,
     });
     expect(session.accessToken).toBe('reader-token');
+  });
+
+  it('posts the refresh token to the dedicated refresh endpoint and normalizes the session payload', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      json: async () => ({
+        access_token: 'next-reader-token',
+        refresh_token: 'next-reader-refresh',
+        account: {
+          id: 1,
+          role: 'reader',
+          username: 'student-reader',
+        },
+        profile: {
+          account_id: 1,
+          affiliation_type: 'student',
+          college: '信息与电气工程学院',
+          display_name: '陈知行',
+          grade_year: '2023',
+          id: 1,
+          interest_tags: ['AI'],
+          major: '人工智能',
+          reading_profile_summary: '偏好先看章节框架，再进入细节和例题。',
+        },
+      }),
+      ok: true,
+    });
+
+    const session = await refreshSession('reader-refresh');
+
+    expect((global.fetch as jest.Mock).mock.calls[0]?.[0]).toBe(
+      'https://library.example/api/v1/auth/refresh'
+    );
+    expect(
+      JSON.parse(String((global.fetch as jest.Mock).mock.calls[0]?.[1]?.body))
+    ).toEqual({
+      refresh_token: 'reader-refresh',
+    });
+    expect(session.accessToken).toBe('next-reader-token');
+    expect(session.refreshToken).toBe('next-reader-refresh');
   });
 });

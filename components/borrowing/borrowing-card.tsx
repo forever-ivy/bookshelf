@@ -14,7 +14,7 @@ type BorrowingCardProps = {
   href?: Href;
   note: string;
   onPress?: () => void;
-  status: 'active' | 'completed' | 'dueSoon' | 'overdue' | 'renewable';
+  status: 'active' | 'cancelled' | 'completed' | 'dueSoon' | 'overdue' | 'renewable';
   title: string;
 };
 

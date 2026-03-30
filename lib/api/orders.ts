@@ -1,4 +1,4 @@
-import type { BorrowOrderView } from '@/lib/api/types';
+import type { BorrowOrderView, ReturnRequestDetail, ReturnRequestSummary } from '@/lib/api/types';
 import {
   createMockBorrowOrder,
   getMockOrder,
@@ -10,6 +10,7 @@ import { normalizeBookCard } from '@/lib/api/catalog';
 
 const readerFacingStatusLabelByCode: Record<string, BorrowOrderView['statusLabel']> = {
   active: '进行中',
+  cancelled: '已取消',
   completed: '已完成',
   dueSoon: '即将到期',
   manual_review: '待馆员确认',
@@ -33,6 +34,29 @@ export async function listActiveOrders(token?: string | null): Promise<BorrowOrd
 export async function listOrderHistory(token?: string | null): Promise<BorrowOrderView[]> {
   return libraryRequest('/api/v1/orders/me/history', {
     fallback: async () => listMockOrders().filter((order) => order.status === 'completed'),
+    method: 'GET',
+    token,
+  }).then((payload: any) => normalizeOrderList(payload));
+}
+
+export async function listBorrowOrders(
+  filters: {
+    activeOnly?: boolean;
+    status?: string | null;
+  } = {},
+  token?: string | null
+): Promise<BorrowOrderView[]> {
+  const search = new URLSearchParams();
+  if (filters.status) {
+    search.set('status', filters.status);
+  }
+  if (filters.activeOnly) {
+    search.set('active_only', 'true');
+  }
+  const suffix = search.size ? `?${search.toString()}` : '';
+
+  return libraryRequest(`/api/v1/orders/borrow-orders${suffix}`, {
+    fallback: async () => listMockOrders(),
     method: 'GET',
     token,
   }).then((payload: any) => normalizeOrderList(payload));
@@ -81,6 +105,45 @@ export async function createReturnRequest(orderId: number, token?: string | null
   });
 }
 
+export async function listReturnRequests(token?: string | null): Promise<ReturnRequestSummary[]> {
+  return libraryRequest('/api/v1/orders/return-requests', {
+    fallback: async () => [],
+    method: 'GET',
+    token,
+  }).then((payload: any) => normalizeReturnRequestList(payload));
+}
+
+export async function getReturnRequest(
+  returnRequestId: number,
+  token?: string | null
+): Promise<ReturnRequestDetail> {
+  return libraryRequest(`/api/v1/orders/return-requests/${returnRequestId}`, {
+    fallback: async () => ({
+      order: getMockOrder(returnRequestId),
+      return_request: {
+        borrow_order_id: returnRequestId,
+        id: returnRequestId,
+        status: 'created',
+      },
+    }),
+    method: 'GET',
+    token,
+  }).then((payload: any) => normalizeReturnRequestDetail(payload));
+}
+
+export async function cancelBorrowOrder(orderId: number, token?: string | null): Promise<BorrowOrderView> {
+  return libraryRequest(`/api/v1/orders/borrow-orders/${orderId}/cancel`, {
+    fallback: () => ({
+      ...getMockOrder(orderId),
+      status: 'cancelled',
+      statusLabel: '已取消',
+      timeline: [{ completed: true, label: '已取消' }],
+    }),
+    method: 'POST',
+    token,
+  }).then((payload: any) => normalizeOrder(payload));
+}
+
 function normalizeOrderList(payload: any): BorrowOrderView[] {
   if (Array.isArray(payload?.items)) {
     return payload.items.map(normalizeOrder);
@@ -93,7 +156,7 @@ function normalizeOrderList(payload: any): BorrowOrderView[] {
   return listMockOrders();
 }
 
-function normalizeOrder(raw: any): BorrowOrderView {
+export function normalizeOrder(raw: any): BorrowOrderView {
   if (!raw) {
     throw new Error('order_not_found');
   }
@@ -114,7 +177,9 @@ function normalizeOrder(raw: any): BorrowOrderView {
         : '',
     renewable: raw.renewable ?? raw.borrow_order?.renewable ?? false,
     status:
-      rawStatus === 'completed'
+      rawStatus === 'cancelled'
+        ? 'cancelled'
+        : rawStatus === 'completed'
         ? 'completed'
         : rawStatus === 'overdue'
           ? 'overdue'
@@ -132,12 +197,46 @@ function normalizeOrder(raw: any): BorrowOrderView {
   };
 }
 
+function normalizeReturnRequestList(payload: any): ReturnRequestSummary[] {
+  if (!Array.isArray(payload?.items)) {
+    return [];
+  }
+
+  return payload.items.map(normalizeReturnRequestSummary);
+}
+
+function normalizeReturnRequestDetail(payload: any): ReturnRequestDetail {
+  const rawOrder = payload?.order?.borrow_order
+    ? {
+        ...payload.order.borrow_order,
+        book: payload.order.book,
+      }
+    : payload?.order;
+
+  return {
+    order: normalizeOrder(rawOrder),
+    returnRequest: normalizeReturnRequestSummary(payload?.return_request ?? payload?.returnRequest ?? payload),
+  };
+}
+
+function normalizeReturnRequestSummary(raw: any): ReturnRequestSummary {
+  return {
+    borrowOrderId: raw?.borrow_order_id ?? raw?.borrowOrderId ?? 0,
+    borrowOrderStatus: raw?.borrow_order_status ?? raw?.borrowOrderStatus ?? null,
+    id: raw?.id ?? 0,
+    note: raw?.note ?? null,
+    readerId: raw?.reader_id ?? raw?.readerId ?? null,
+    status: raw?.status ?? 'created',
+  };
+}
+
 function getMockBookForOrder(bookId: number) {
   return {
     id: bookId,
     author: '未知作者',
     availabilityLabel: '馆藏充足 · 可立即借阅',
     cabinetLabel: '默认书柜',
+    category: null,
     coverTone: 'blue' as const,
     coverUrl: null,
     deliveryAvailable: true,

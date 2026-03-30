@@ -41,13 +41,14 @@ describe('search stack layouts', () => {
     mockRecordedChildScreenProps = [];
   });
 
-  it('disables the native stack header for the standalone search stack', () => {
+  it('keeps the native stack header enabled for the standalone search stack search bar', () => {
     render(<SearchGroupLayout />);
 
     expect(screen.getByTestId('mock-stack')).toBeTruthy();
     expect(recordedScreenOptions).toEqual(
       expect.objectContaining({
-        headerShown: false,
+        headerTransparent: false,
+        headerShown: true,
       })
     );
     expect(mockRecordedChildScreenProps).toContainEqual(
@@ -60,13 +61,14 @@ describe('search stack layouts', () => {
     );
   });
 
-  it('disables the native stack header for the tab search stack', () => {
+  it('keeps the native stack header enabled for the tab search stack search bar', () => {
     render(<SearchLayout />);
 
     expect(screen.getByTestId('mock-stack')).toBeTruthy();
     expect(recordedScreenOptions).toEqual(
       expect.objectContaining({
-        headerShown: false,
+        headerTransparent: false,
+        headerShown: true,
       })
     );
     expect(mockRecordedChildScreenProps).toContainEqual(

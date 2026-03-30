@@ -1,6 +1,7 @@
-import type { OnboardingState, StudentProfile } from '@/lib/api/types';
+import type { OnboardingState, ReaderOverview, ReaderOverviewStats, StudentProfile } from '@/lib/api/types';
 import { libraryRequest } from '@/lib/api/client';
 import { getMockSessionMe, updateMockProfile } from '@/lib/api/mock';
+import { normalizeOrder } from '@/lib/api/orders';
 
 export type ProfileUpdateInput = Partial<
   Pick<StudentProfile, 'college' | 'major' | 'gradeYear' | 'displayName'>
@@ -12,6 +13,16 @@ export type ProfileUpdateInput = Partial<
 export type ReaderProfileSnapshot = {
   onboarding: OnboardingState;
   profile: StudentProfile | null;
+};
+
+const emptyOverviewStats: ReaderOverviewStats = {
+  activeOrdersCount: 0,
+  borrowHistoryCount: 0,
+  conversationCount: 0,
+  lastActiveAt: null,
+  readingEventCount: 0,
+  recommendationCount: 0,
+  searchCount: 0,
 };
 
 type ProfileNormalizationOptions = {
@@ -150,6 +161,75 @@ export async function updateMyProfile(
         response?.profile?.account_id ??
         response?.identity?.accountId ??
         1,
-    })
+      })
   );
+}
+
+function normalizeReaderOverviewStats(raw: any): ReaderOverviewStats {
+  if (!raw) {
+    return emptyOverviewStats;
+  }
+
+  return {
+    activeOrdersCount: raw.active_orders_count ?? raw.activeOrdersCount ?? 0,
+    borrowHistoryCount: raw.borrow_history_count ?? raw.borrowHistoryCount ?? 0,
+    conversationCount: raw.conversation_count ?? raw.conversationCount ?? 0,
+    lastActiveAt: raw.last_active_at ?? raw.lastActiveAt ?? null,
+    readingEventCount: raw.reading_event_count ?? raw.readingEventCount ?? 0,
+    recommendationCount: raw.recommendation_count ?? raw.recommendationCount ?? 0,
+    searchCount: raw.search_count ?? raw.searchCount ?? 0,
+  };
+}
+
+function normalizeReaderOverview(payload: any): ReaderOverview {
+  const overview = payload?.overview ?? payload ?? {};
+
+  return {
+    profile: normalizeStudentProfile(overview.profile ?? null),
+    recentConversations: Array.isArray(overview.recent_conversations ?? overview.recentConversations)
+      ? (overview.recent_conversations ?? overview.recentConversations)
+      : [],
+    recentOrders: Array.isArray(overview.recent_orders ?? overview.recentOrders)
+      ? (overview.recent_orders ?? overview.recentOrders).map(normalizeOrder)
+      : [],
+    recentQueries: Array.isArray(overview.recent_queries ?? overview.recentQueries)
+      ? (overview.recent_queries ?? overview.recentQueries)
+      : [],
+    recentReadingEvents: Array.isArray(overview.recent_reading_events ?? overview.recentReadingEvents)
+      ? (overview.recent_reading_events ?? overview.recentReadingEvents)
+      : [],
+    recentRecommendations: Array.isArray(overview.recent_recommendations ?? overview.recentRecommendations)
+      ? (overview.recent_recommendations ?? overview.recentRecommendations)
+      : [],
+    stats: normalizeReaderOverviewStats(overview.stats),
+  };
+}
+
+export async function getMyOverview(token?: string | null): Promise<ReaderOverview> {
+  return libraryRequest('/api/v1/readers/me/overview', {
+    fallback: async () => ({
+      overview: {
+        profile: getMockSessionMe().profile,
+        recent_orders: [],
+        recent_queries: [],
+        stats: emptyOverviewStats,
+      },
+    }),
+    method: 'GET',
+    token,
+  }).then((payload: any) => normalizeReaderOverview(payload));
+}
+
+export async function listMyOrders(token?: string | null) {
+  return libraryRequest('/api/v1/readers/me/orders', {
+    fallback: async () => [],
+    method: 'GET',
+    token,
+  }).then((payload: any) => {
+    if (Array.isArray(payload?.items)) {
+      return payload.items.map(normalizeOrder);
+    }
+
+    return [];
+  });
 }

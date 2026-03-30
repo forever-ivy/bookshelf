@@ -97,6 +97,35 @@ export type RecommendationFeed = {
   todayRecommendations: BookCard[];
 };
 
+export type RecommendationModule = {
+  error: string | null;
+  ok: boolean;
+  results: BookCard[];
+  sourceBook: {
+    bookId: number | null;
+    title: string | null;
+  } | null;
+};
+
+export type RecommendationDashboard = {
+  focusBook: {
+    bookId: number | null;
+    title: string | null;
+  } | null;
+  historyBooks: Array<{
+    bookId: number | null;
+    title: string | null;
+  }>;
+  modules: {
+    collaborative: RecommendationModule;
+    hybrid: RecommendationModule;
+    similar: RecommendationModule;
+  };
+  personalized: BookCard[];
+  readerId: number | null;
+  suggestedQueries: string[];
+};
+
 export type DeliveryStatusTimeline = Array<{
   completed: boolean;
   label: string;
@@ -111,9 +140,23 @@ export type BorrowOrderView = {
   mode: 'cabinet_pickup' | 'robot_delivery';
   note: string;
   renewable: boolean;
-  status: 'active' | 'completed' | 'dueSoon' | 'overdue' | 'renewable';
+  status: 'active' | 'cancelled' | 'completed' | 'dueSoon' | 'overdue' | 'renewable';
   statusLabel: string;
   timeline: DeliveryStatusTimeline;
+};
+
+export type ReturnRequestSummary = {
+  borrowOrderId: number;
+  borrowOrderStatus: string | null;
+  id: number;
+  note: string | null;
+  readerId: number | null;
+  status: string;
+};
+
+export type ReturnRequestDetail = {
+  order: BorrowOrderView;
+  returnRequest: ReturnRequestSummary;
 };
 
 export type FavoriteBook = {
@@ -146,4 +189,24 @@ export type AchievementSummary = {
     totalBorrowedBooks: number;
   };
   streakLabel: string;
+};
+
+export type ReaderOverviewStats = {
+  activeOrdersCount: number;
+  borrowHistoryCount: number;
+  searchCount: number;
+  recommendationCount: number;
+  conversationCount: number;
+  readingEventCount: number;
+  lastActiveAt: string | null;
+};
+
+export type ReaderOverview = {
+  profile: StudentProfile | null;
+  recentConversations: Array<Record<string, unknown>>;
+  recentOrders: BorrowOrderView[];
+  recentQueries: string[];
+  recentReadingEvents: Array<Record<string, unknown>>;
+  recentRecommendations: Array<Record<string, unknown>>;
+  stats: ReaderOverviewStats;
 };

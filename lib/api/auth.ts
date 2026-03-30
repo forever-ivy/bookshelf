@@ -5,7 +5,7 @@ import {
   mockLoginSession,
   mockRegisterSession,
 } from '@/lib/api/mock';
-import { libraryRequest } from '@/lib/api/client';
+import { libraryFetchJson, libraryRequest } from '@/lib/api/client';
 import { normalizeReaderProfilePayload } from '@/lib/api/readers';
 
 export type LoginInput = {
@@ -106,4 +106,14 @@ export async function getMe(token?: string | null): Promise<SessionPayload> {
       fallbackAccessToken: token ?? createMockSessionPayload().accessToken,
     })
   );
+}
+
+export async function refreshSession(refreshToken: string): Promise<SessionPayload> {
+  return libraryFetchJson('/api/v1/auth/refresh', {
+    body: JSON.stringify({
+      refresh_token: refreshToken,
+    }),
+    method: 'POST',
+    token: null,
+  }).then((payload: any) => normalizeSessionPayload(payload));
 }

@@ -3,7 +3,7 @@ jest.mock('@/lib/api/client', () => ({
 }));
 
 import { libraryRequest } from '@/lib/api/client';
-import { getHomeFeed } from '@/lib/api/recommendation';
+import { getHomeFeed, getRecommendationDashboard } from '@/lib/api/recommendation';
 
 describe('recommendation contract', () => {
   beforeEach(() => {
@@ -38,5 +38,84 @@ describe('recommendation contract', () => {
         source: 'system_generated',
       }),
     ]);
+  });
+
+  it('normalizes recommendation dashboard modules into reader-facing cards and book lists', async () => {
+    (libraryRequest as jest.Mock).mockResolvedValue({
+      focus_book: {
+        book_id: 5,
+        title: '机器学习',
+      },
+      history_books: [
+        {
+          book_id: 5,
+          title: '机器学习',
+        },
+      ],
+      modules: {
+        collaborative: {
+          error: null,
+          ok: true,
+          results: [
+            {
+              author: '李航',
+              available_copies: 2,
+              book_id: 7,
+              deliverable: true,
+              explanation: '和你的借阅群体高度重合。',
+              title: '统计学习方法',
+            },
+          ],
+          source_book: {
+            book_id: 5,
+            title: '机器学习',
+          },
+        },
+        hybrid: {
+          error: null,
+          ok: true,
+          results: [],
+          source_book: {
+            book_id: 5,
+            title: '机器学习',
+          },
+        },
+        similar: {
+          error: 'book_embedding_missing',
+          ok: false,
+          results: [],
+          source_book: {
+            book_id: 5,
+            title: '机器学习',
+          },
+        },
+      },
+      personalized: [
+        {
+          author: '周志华',
+          available_copies: 1,
+          book_id: 5,
+          deliverable: true,
+          explanation: '与你最近的借阅主题高度相关。',
+          title: '机器学习',
+        },
+      ],
+      reader_id: 1,
+      suggested_queries: ['推荐系统', '深度学习'],
+    });
+
+    const result = await getRecommendationDashboard('reader-token');
+
+    expect(result.suggestedQueries).toEqual(['推荐系统', '深度学习']);
+    expect(result.personalized[0]).toMatchObject({
+      id: 5,
+      title: '机器学习',
+    });
+    expect(result.modules.collaborative.results[0]).toMatchObject({
+      id: 7,
+      title: '统计学习方法',
+    });
+    expect(result.modules.similar.ok).toBe(false);
+    expect(result.modules.similar.error).toBe('book_embedding_missing');
   });
 });

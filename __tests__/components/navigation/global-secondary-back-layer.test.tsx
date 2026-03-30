@@ -91,6 +91,7 @@ describe('GlobalSecondaryBackLayer', () => {
   it('only shows on non-primary routes', () => {
     expect(shouldShowSecondaryBackButton('/')).toBe(false);
     expect(shouldShowSecondaryBackButton('/search')).toBe(false);
+    expect(shouldShowSecondaryBackButton('/search/borrow-now')).toBe(true);
     expect(shouldShowSecondaryBackButton('/borrowing')).toBe(false);
     expect(shouldShowSecondaryBackButton('/me')).toBe(false);
     expect(shouldShowSecondaryBackButton('/login')).toBe(false);

@@ -23,12 +23,6 @@ export default function RootLayout() {
               headerShown: false,
             }}>
             <Stack.Screen name="(tabs)" />
-            <Stack.Screen
-              name="search"
-              options={{
-                headerShown: false,
-              }}
-            />
             <Stack.Screen name="login" options={{ presentation: 'card' }} />
             <Stack.Screen name="register" options={{ presentation: 'card' }} />
             <Stack.Screen name="onboarding/profile" options={{ presentation: 'card' }} />
@@ -36,11 +30,7 @@ export default function RootLayout() {
             <Stack.Screen name="books/[bookId]" options={{ presentation: 'card' }} />
             <Stack.Screen name="borrow/[bookId]" options={{ presentation: 'card' }} />
             <Stack.Screen name="orders/[orderId]" options={{ presentation: 'card' }} />
-            <Stack.Screen name="collections" options={{ presentation: 'card' }} />
-            <Stack.Screen name="recommendations" options={{ presentation: 'card' }} />
-            <Stack.Screen name="notifications" options={{ presentation: 'card' }} />
-            <Stack.Screen name="returns" options={{ presentation: 'card' }} />
-            <Stack.Screen name="delivery-records" options={{ presentation: 'card' }} />
+            <Stack.Screen name="returns/[returnRequestId]" options={{ presentation: 'card' }} />
             <Stack.Screen
               name="profile"
               options={{

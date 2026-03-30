@@ -46,6 +46,7 @@ export default function RegisterRoute() {
         identity: session.identity,
         onboarding: session.onboarding,
         profile: session.profile,
+        refreshToken: session.refreshToken ?? null,
         token: session.accessToken,
       });
 

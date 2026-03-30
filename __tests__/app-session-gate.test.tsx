@@ -25,6 +25,7 @@ describe('AppSessionGate', () => {
           identity: null,
           onboarding: null,
           profile: null,
+          refreshToken: null,
           token: null,
         }}>
         <Text>protected</Text>
@@ -46,6 +47,7 @@ describe('AppSessionGate', () => {
             needsProfileBinding: true,
           },
           profile: null,
+          refreshToken: null,
           token: 'reader-token',
         }}>
         <Text>protected</Text>
@@ -67,6 +69,7 @@ describe('AppSessionGate', () => {
             needsProfileBinding: false,
           },
           profile: null,
+          refreshToken: null,
           token: 'reader-token',
         }}>
         <Text>protected</Text>
@@ -88,6 +91,7 @@ describe('AppSessionGate', () => {
             needsProfileBinding: false,
           },
           profile: null,
+          refreshToken: null,
           token: 'reader-token',
         }}>
         <Text>protected</Text>

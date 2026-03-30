@@ -1,21 +1,33 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
+  cancelBorrowOrder,
   createBooklist,
   createBorrowOrder,
   createReturnRequest,
   getAchievements,
   getBook,
+  getCollaborativeBooks,
   getHomeFeed,
+  getHybridBooks,
   getMe,
   getOrder,
+  getPersonalizedRecommendations,
+  getRecommendationDashboard,
+  getReturnRequest,
+  getSimilarBooks,
+  getMyOverview,
   listActiveOrders,
   listBooklists,
+  listBorrowOrders,
   listBooks,
   listFavorites,
+  listMyOrders,
   listNotifications,
   listOrderHistory,
+  listReturnRequests,
   login,
+  searchBooksExplicit,
   registerReader,
   renewBorrowOrder,
   searchRecommendations,
@@ -50,12 +62,23 @@ export function useHomeFeedQuery() {
   });
 }
 
-export function useBookSearchQuery(query: string) {
+export function useBookSearchQuery(query: string, enabled = true) {
   const { token } = useAppSession();
 
   return useQuery({
+    enabled,
     queryFn: () => listBooks(query, token),
     queryKey: ['books', query, token],
+  });
+}
+
+export function useExplicitBookSearchQuery(query: string, enabled = true) {
+  const { token } = useAppSession();
+
+  return useQuery({
+    enabled: enabled && query.trim().length > 0,
+    queryFn: () => searchBooksExplicit(query, token),
+    queryKey: ['books', 'explicit-search', query, token],
   });
 }
 
@@ -76,6 +99,54 @@ export function useBookDetailQuery(bookId: number) {
     enabled: Number.isFinite(bookId),
     queryFn: () => getBook(bookId, token),
     queryKey: ['book', bookId, token],
+  });
+}
+
+export function useRecommendationDashboardQuery() {
+  const { token } = useAppSession();
+
+  return useQuery({
+    queryFn: () => getRecommendationDashboard(token),
+    queryKey: ['recommendation', 'dashboard', token],
+  });
+}
+
+export function usePersonalizedRecommendationsQuery(options: { historyLimit?: number; limit?: number } = {}) {
+  const { token } = useAppSession();
+
+  return useQuery({
+    queryFn: () => getPersonalizedRecommendations(token, options),
+    queryKey: ['recommendation', 'personalized', options.historyLimit ?? 3, options.limit ?? 5, token],
+  });
+}
+
+export function useSimilarBooksQuery(bookId: number, limit = 5) {
+  const { token } = useAppSession();
+
+  return useQuery({
+    enabled: Number.isFinite(bookId),
+    queryFn: () => getSimilarBooks(bookId, token, limit),
+    queryKey: ['recommendation', 'similar', bookId, limit, token],
+  });
+}
+
+export function useCollaborativeBooksQuery(bookId: number, limit = 5) {
+  const { token } = useAppSession();
+
+  return useQuery({
+    enabled: Number.isFinite(bookId),
+    queryFn: () => getCollaborativeBooks(bookId, token, limit),
+    queryKey: ['recommendation', 'collaborative', bookId, limit, token],
+  });
+}
+
+export function useHybridBooksQuery(bookId: number, limit = 5) {
+  const { token } = useAppSession();
+
+  return useQuery({
+    enabled: Number.isFinite(bookId),
+    queryFn: () => getHybridBooks(bookId, token, limit),
+    queryKey: ['recommendation', 'hybrid', bookId, limit, token],
   });
 }
 
@@ -107,12 +178,63 @@ export function useOrderDetailQuery(orderId: number) {
   });
 }
 
+export function useBorrowOrdersQuery(
+  filters: {
+    activeOnly?: boolean;
+    status?: string | null;
+  } = {}
+) {
+  const { token } = useAppSession();
+
+  return useQuery({
+    queryFn: () => listBorrowOrders(filters, token),
+    queryKey: ['orders', 'list', filters.status ?? null, filters.activeOnly ?? false, token],
+  });
+}
+
+export function useReturnRequestsQuery() {
+  const { token } = useAppSession();
+
+  return useQuery({
+    queryFn: () => listReturnRequests(token),
+    queryKey: ['orders', 'return-requests', token],
+  });
+}
+
+export function useReturnRequestDetailQuery(returnRequestId: number) {
+  const { token } = useAppSession();
+
+  return useQuery({
+    enabled: Number.isFinite(returnRequestId),
+    queryFn: () => getReturnRequest(returnRequestId, token),
+    queryKey: ['orders', 'return-request-detail', returnRequestId, token],
+  });
+}
+
 export function useFavoritesQuery() {
   const { token } = useAppSession();
 
   return useQuery({
     queryFn: () => listFavorites(token),
     queryKey: ['favorites', token],
+  });
+}
+
+export function useMyOverviewQuery() {
+  const { token } = useAppSession();
+
+  return useQuery({
+    queryFn: () => getMyOverview(token),
+    queryKey: ['readers', 'overview', token],
+  });
+}
+
+export function useMyOrdersQuery() {
+  const { token } = useAppSession();
+
+  return useQuery({
+    queryFn: () => listMyOrders(token),
+    queryKey: ['readers', 'orders', token],
   });
 }
 
@@ -157,7 +279,7 @@ export function useRegisterMutation() {
 
 export function useUpdateProfileMutation() {
   const queryClient = useQueryClient();
-  const { identity, setSession, token } = useAppSession();
+  const { identity, refreshToken, setSession, token } = useAppSession();
 
   return useMutation({
     mutationFn: (payload: ProfileUpdateInput) => updateMyProfile(token, payload),
@@ -170,6 +292,7 @@ export function useUpdateProfileMutation() {
         identity,
         onboarding: sessionSnapshot.onboarding,
         profile: sessionSnapshot.profile,
+        refreshToken,
         token,
       });
       queryClient.invalidateQueries({ queryKey: ['session'] });
@@ -201,6 +324,19 @@ export function useRenewBorrowOrderMutation() {
   });
 }
 
+export function useCancelBorrowOrderMutation() {
+  const queryClient = useQueryClient();
+  const { token } = useAppSession();
+
+  return useMutation({
+    mutationFn: (orderId: number) => cancelBorrowOrder(orderId, token),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['readers', 'overview'] });
+    },
+  });
+}
+
 export function useReturnRequestMutation() {
   const queryClient = useQueryClient();
   const { token } = useAppSession();
@@ -210,6 +346,7 @@ export function useReturnRequestMutation() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['readers', 'overview'] });
     },
   });
 }

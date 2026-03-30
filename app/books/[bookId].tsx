@@ -12,9 +12,12 @@ import { useAppTheme } from '@/hooks/use-app-theme';
 import { getLibraryErrorMessage } from '@/lib/api/client';
 import {
   useBookDetailQuery,
+  useCollaborativeBooksQuery,
   useCreateBooklistMutation,
   useCreateBorrowOrderMutation,
   useFavoritesQuery,
+  useHybridBooksQuery,
+  useSimilarBooksQuery,
   useToggleFavoriteMutation,
 } from '@/hooks/use-library-app-data';
 
@@ -24,7 +27,10 @@ export default function BookDetailRoute() {
   const { theme } = useAppTheme();
   const router = useRouter();
   const detailQuery = useBookDetailQuery(bookId);
+  const collaborativeQuery = useCollaborativeBooksQuery(bookId);
   const favoritesQuery = useFavoritesQuery();
+  const hybridQuery = useHybridBooksQuery(bookId);
+  const similarQuery = useSimilarBooksQuery(bookId);
   const createBooklistMutation = useCreateBooklistMutation();
   const borrowMutation = useCreateBorrowOrderMutation();
   const favoriteMutation = useToggleFavoriteMutation();
@@ -39,6 +45,10 @@ export default function BookDetailRoute() {
     favoritesQuery.data?.some((item) => item.book.id === bookId)
   );
   const detailError = detailQuery.error ?? favoritesQuery.error;
+  const collaborativeBooks =
+    collaborativeQuery.data?.length ? collaborativeQuery.data : detailQuery.data?.peopleAlsoBorrowed ?? [];
+  const similarBooks = similarQuery.data?.length ? similarQuery.data : detailQuery.data?.relatedBooks ?? [];
+  const hybridBooks = hybridQuery.data ?? [];
 
   return (
     <ProtectedRoute>
@@ -173,7 +183,7 @@ export default function BookDetailRoute() {
                   description: `来自《${book.title}》的待读标记`,
                   title: '稍后阅读',
                 });
-                router.push('/collections');
+                router.push('/(tabs)/me');
               } catch (error) {
                 setActionError(getLibraryErrorMessage(error, '加入书单失败，请稍后重试。'));
               }
@@ -234,7 +244,7 @@ export default function BookDetailRoute() {
         <View style={{ gap: theme.spacing.lg }}>
         <SectionTitle title="借过这本书的人还借了什么" />
         <View style={{ gap: theme.spacing.lg }}>
-          {(detailQuery.data?.peopleAlsoBorrowed ?? []).map((item) => (
+          {collaborativeBooks.map((item) => (
             <SearchResultCard
               key={item.id}
               availability={item.availabilityLabel}
@@ -247,13 +257,23 @@ export default function BookDetailRoute() {
               title={item.title}
             />
           ))}
+          {!collaborativeBooks.length ? (
+            <StateMessageCard
+              description={
+                collaborativeQuery.error
+                  ? getLibraryErrorMessage(collaborativeQuery.error, '协同推荐暂时不可用。')
+                  : '等更多读者借阅过这本书后，这里会出现协同过滤结果。'
+              }
+              title="协同推荐还在生成"
+            />
+          ) : null}
         </View>
         </View>
 
         <View style={{ gap: theme.spacing.lg }}>
         <SectionTitle title="相似图书" />
         <View style={{ gap: theme.spacing.lg }}>
-          {(detailQuery.data?.relatedBooks ?? []).map((item) => (
+          {similarBooks.map((item) => (
             <SearchResultCard
               key={item.id}
               availability={item.availabilityLabel}
@@ -266,7 +286,46 @@ export default function BookDetailRoute() {
               title={item.title}
             />
           ))}
+          {!similarBooks.length ? (
+            <StateMessageCard
+              description={
+                similarQuery.error
+                  ? getLibraryErrorMessage(similarQuery.error, '相似图书服务暂时不可用。')
+                  : '还没有足够的内容特征来生成相似图书。'
+              }
+              title="相似图书暂时为空"
+            />
+          ) : null}
         </View>
+        </View>
+
+        <View style={{ gap: theme.spacing.lg }}>
+          <SectionTitle title="综合推荐" />
+          <View style={{ gap: theme.spacing.lg }}>
+            {hybridBooks.map((item) => (
+              <SearchResultCard
+                key={item.id}
+                availability={item.availabilityLabel}
+                author={item.author}
+                coverTone={item.coverTone}
+                eta={item.etaLabel}
+                href={`/books/${item.id}`}
+                location={item.cabinetLabel}
+                reason={item.recommendationReason}
+                title={item.title}
+              />
+            ))}
+            {!hybridBooks.length ? (
+              <StateMessageCard
+                description={
+                  hybridQuery.error
+                    ? getLibraryErrorMessage(hybridQuery.error, '混合推荐暂时不可用。')
+                    : '混合推荐会在内容相似度和借阅行为信号都足够时出现。'
+                }
+                title="综合推荐正在准备"
+              />
+            ) : null}
+          </View>
         </View>
       </PageShell>
     </ProtectedRoute>

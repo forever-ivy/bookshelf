@@ -9,6 +9,7 @@ export function useAppSession() {
   const identity = useSessionStore((state) => state.identity);
   const onboarding = useSessionStore((state) => state.onboarding);
   const profile = useSessionStore((state) => state.profile);
+  const refreshToken = useSessionStore((state) => state.refreshToken);
   const setBootstrapStatus = useSessionStore((state) => state.setBootstrapStatus);
   const setSession = useSessionStore((state) => state.setSession);
   const token = useSessionStore((state) => state.token);
@@ -22,6 +23,7 @@ export function useAppSession() {
       isAuthenticated: Boolean(token),
       onboarding,
       profile,
+      refreshToken,
       setBootstrapStatus,
       setSession,
       token,
@@ -33,6 +35,7 @@ export function useAppSession() {
       identity,
       onboarding,
       profile,
+      refreshToken,
       setBootstrapStatus,
       setSession,
       token,

@@ -60,6 +60,7 @@ export function AppProviders({ children }: AppProvidersProps) {
             identity: session.identity,
             onboarding: session.onboarding,
             profile: session.profile,
+            refreshToken: session.refreshToken ?? null,
             token: session.accessToken,
           });
         }

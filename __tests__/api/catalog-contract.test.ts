@@ -3,7 +3,7 @@ jest.mock('@/lib/api/client', () => ({
 }));
 
 import { libraryRequest } from '@/lib/api/client';
-import { getBook, listBooks } from '@/lib/api/catalog';
+import { getBook, listBooks, searchBooksExplicit } from '@/lib/api/catalog';
 import { searchRecommendations } from '@/lib/api/recommendation';
 
 describe('catalog contract', () => {
@@ -81,5 +81,26 @@ describe('catalog contract', () => {
       }),
     ]);
     expect(result[0]).not.toHaveProperty('classificationCode');
+  });
+
+  it('uses the explicit search endpoint when the app requests a required query search', async () => {
+    (libraryRequest as jest.Mock).mockResolvedValue({
+      items: [
+        {
+          id: 21,
+          title: '知识治理',
+        },
+      ],
+    });
+
+    await searchBooksExplicit('知识治理', 'reader-token');
+
+    expect(libraryRequest).toHaveBeenCalledWith(
+      '/api/v1/catalog/books/search?query=%E7%9F%A5%E8%AF%86%E6%B2%BB%E7%90%86',
+      expect.objectContaining({
+        method: 'GET',
+        token: 'reader-token',
+      })
+    );
   });
 });

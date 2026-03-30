@@ -67,6 +67,7 @@ export default function LoginRoute() {
         identity: session.identity,
         onboarding: session.onboarding,
         profile: session.profile,
+        refreshToken: session.refreshToken ?? null,
         token: session.accessToken,
       });
 

@@ -15,6 +15,20 @@ export async function listBooks(query?: string, token?: string | null): Promise<
   );
 }
 
+export async function searchBooksExplicit(query: string, token?: string | null): Promise<BookCard[]> {
+  const search = `?query=${encodeURIComponent(query)}`;
+
+  return libraryRequest(`/api/v1/catalog/books/search${search}`, {
+    fallback: () => listMockBooks(query),
+    method: 'GET',
+    token,
+  }).then((payload: any) =>
+    Array.isArray(payload?.items)
+      ? payload.items.map(normalizeBookCard)
+      : listMockBooks(query)
+  );
+}
+
 export async function getBook(bookId: number, token?: string | null): Promise<BookDetail> {
   return libraryRequest(`/api/v1/catalog/books/${bookId}`, {
     fallback: () => getMockBookDetail(bookId),

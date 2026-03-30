@@ -107,6 +107,12 @@ jest.mock('@/hooks/use-library-app-data', () => ({
       todayRecommendations: [],
     },
   }),
+  usePersonalizedRecommendationsQuery: () => ({
+    data: [],
+  }),
+  useRecommendationDashboardQuery: () => ({
+    data: null,
+  }),
 }));
 
 import HomeRoute from '@/app/(tabs)/index';
@@ -128,7 +134,7 @@ describe('HomeRoute quick actions', () => {
     fireEvent.press(screen.getByTestId('home-quick-action-recommendation_reason'));
 
     expect(mockRouter.push).toHaveBeenNthCalledWith(1, '/search/borrow-now');
-    expect(mockRouter.push).toHaveBeenNthCalledWith(2, '/delivery-records');
-    expect(mockRouter.push).toHaveBeenNthCalledWith(3, '/recommendations');
+    expect(mockRouter.push).toHaveBeenNthCalledWith(2, '/(tabs)/borrowing');
+    expect(mockRouter.push).toHaveBeenNthCalledWith(3, '/search');
   });
 });

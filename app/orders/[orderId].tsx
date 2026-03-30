@@ -7,6 +7,7 @@ import { StateMessageCard } from '@/components/base/state-message-card';
 import { ProtectedRoute } from '@/components/navigation/protected-route';
 import { PageShell } from '@/components/navigation/page-shell';
 import {
+  useCancelBorrowOrderMutation,
   useOrderDetailQuery,
   useRenewBorrowOrderMutation,
   useReturnRequestMutation,
@@ -18,6 +19,7 @@ export default function OrderDetailRoute() {
   const params = useLocalSearchParams<{ orderId: string }>();
   const orderId = Number(params.orderId);
   const orderQuery = useOrderDetailQuery(orderId);
+  const cancelMutation = useCancelBorrowOrderMutation();
   const renewMutation = useRenewBorrowOrderMutation();
   const returnRequestMutation = useReturnRequestMutation();
   const router = useRouter();
@@ -41,6 +43,8 @@ export default function OrderDetailRoute() {
   }
 
   const order = orderQuery.data;
+  const canCancel = order.status === 'active' || order.status === 'renewable' || order.status === 'dueSoon';
+  const canReturn = order.status !== 'completed' && order.status !== 'cancelled';
 
   return (
     <ProtectedRoute>
@@ -87,20 +91,37 @@ export default function OrderDetailRoute() {
                 variant="accent"
               />
             ) : null}
-            <PillButton
-              href={undefined}
-              label={returnRequestMutation.isPending ? '提交中…' : '发起归还'}
-              onPress={async () => {
-                try {
-                  setActionError(null);
-                  await returnRequestMutation.mutateAsync(order.id);
-                  router.push('/returns');
-                } catch (error) {
-                  setActionError(getLibraryErrorMessage(error, '归还请求提交失败，请稍后重试。'));
-                }
-              }}
-              variant="soft"
-            />
+            {canReturn ? (
+              <PillButton
+                href={undefined}
+                label={returnRequestMutation.isPending ? '提交中…' : '发起归还'}
+                onPress={async () => {
+                  try {
+                    setActionError(null);
+                    await returnRequestMutation.mutateAsync(order.id);
+                    router.push('/(tabs)/borrowing');
+                  } catch (error) {
+                    setActionError(getLibraryErrorMessage(error, '归还请求提交失败，请稍后重试。'));
+                  }
+                }}
+                variant="soft"
+              />
+            ) : null}
+            {canCancel ? (
+              <PillButton
+                href={undefined}
+                label={cancelMutation.isPending ? '取消中…' : '取消借阅'}
+                onPress={async () => {
+                  try {
+                    setActionError(null);
+                    await cancelMutation.mutateAsync(order.id);
+                  } catch (error) {
+                    setActionError(getLibraryErrorMessage(error, '取消借阅失败，请稍后重试。'));
+                  }
+                }}
+                variant="soft"
+              />
+            ) : null}
           </View>
         </View>
 

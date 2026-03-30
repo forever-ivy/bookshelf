@@ -3,7 +3,7 @@ import { Text, View } from 'react-native';
 
 import { useAppTheme } from '@/hooks/use-app-theme';
 
-type DueState = 'active' | 'completed' | 'dueSoon' | 'overdue' | 'renewable';
+type DueState = 'active' | 'cancelled' | 'completed' | 'dueSoon' | 'overdue' | 'renewable';
 
 export function DueStateChip({ state }: { state: DueState }) {
   const { theme } = useAppTheme();
@@ -18,6 +18,11 @@ export function DueStateChip({ state }: { state: DueState }) {
       backgroundColor: theme.colors.surfaceMuted,
       color: theme.colors.textMuted,
       label: '已完成',
+    },
+    cancelled: {
+      backgroundColor: '#F4E9E7',
+      color: '#9B675C',
+      label: '已取消',
     },
     dueSoon: {
       backgroundColor: theme.colors.warningSoft,

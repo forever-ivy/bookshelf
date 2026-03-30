@@ -9,7 +9,10 @@
       "Bash(npx vitest:*)",
       "Bash(ls:*)",
       "Bash(cd:*)",
-      "Bash(xxd /Users/Code/bookshelf/bookshelf/.worktrees/admin-worktree/src/components/layout/sidebar.tsx)"
+      "Bash(xxd /Users/Code/bookshelf/bookshelf/.worktrees/admin-worktree/src/components/layout/sidebar.tsx)",
+      "Bash(rm /Users/Code/bookshelf/bookshelf/app/search/_layout.tsx /Users/Code/bookshelf/bookshelf/app/search/borrow-now.tsx)",
+      "Bash(rmdir /Users/Code/bookshelf/bookshelf/app/search)",
+      "Bash(python3:*)"
     ]
   }
 }

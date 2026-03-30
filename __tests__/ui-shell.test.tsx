@@ -4,12 +4,13 @@ import { Keyboard, StyleSheet } from 'react-native';
 
 let mockLocalSearchParams: Record<string, string | undefined> = {};
 let mockBookSearchQueries: unknown[] = [];
+let mockLastHeaderSearchBarOptions: unknown;
 const mockClearSession = jest.fn();
 const mockKeyboardListeners = {
-  keyboardDidHide: new Set<() => void>(),
-  keyboardDidShow: new Set<() => void>(),
-  keyboardWillHide: new Set<() => void>(),
-  keyboardWillShow: new Set<() => void>(),
+  keyboardDidHide: new Set<(payload?: { duration?: number }) => void>(),
+  keyboardDidShow: new Set<(payload?: { duration?: number }) => void>(),
+  keyboardWillHide: new Set<(payload?: { duration?: number }) => void>(),
+  keyboardWillShow: new Set<(payload?: { duration?: number }) => void>(),
 };
 
 function emitKeyboardEvent(
@@ -83,24 +84,34 @@ jest.mock('expo-router', () => {
   const Stack = ({ children }: { children: React.ReactNode }) =>
     React.createElement(View, { testID: 'mock-stack' }, children);
 
-  const StackScreen = ({ children }: { children?: React.ReactNode }) =>
-    React.createElement(View, null, children);
+  const StackScreen = ({
+    children,
+    options,
+  }: {
+    children?: React.ReactNode;
+    options?: { headerSearchBarOptions?: { onChangeText?: (value: unknown) => void; placeholder?: string } };
+  }) => {
+    const headerSearchBarOptions = options?.headerSearchBarOptions;
+    mockLastHeaderSearchBarOptions = headerSearchBarOptions;
+
+    return React.createElement(
+      View,
+      null,
+      headerSearchBarOptions
+        ? React.createElement(TextInput, {
+            onChangeText: headerSearchBarOptions.onChangeText,
+            placeholder: headerSearchBarOptions.placeholder,
+            testID: 'native-search-bar',
+          })
+        : null,
+      children
+    );
+  };
   StackScreen.Title = ({ children }: { children: React.ReactNode }) =>
     React.createElement(Text, null, children);
 
   Stack.Screen = StackScreen;
-  Stack.SearchBar = ({
-    onChangeText,
-    placeholder,
-  }: {
-    onChangeText?: (value: unknown) => void;
-    placeholder?: string;
-  }) =>
-    React.createElement(TextInput, {
-      onChangeText,
-      placeholder,
-      testID: 'native-search-bar',
-    });
+  Stack.SearchBar = () => null;
 
   return {
     Redirect: ({ href }: { href: string }) =>
@@ -123,8 +134,8 @@ jest.mock('expo-router/unstable-native-tabs', () => {
   const React = require('react');
   const { Text, View } = require('react-native');
 
-  const NativeTabs = ({ children }: { children: React.ReactNode }) =>
-    React.createElement(View, { testID: 'native-tabs' }, children);
+  const NativeTabs = ({ children, ...props }: { children: React.ReactNode }) =>
+    React.createElement(View, { testID: 'native-tabs', ...props }, children);
 
   const Trigger: any = ({
     children,
@@ -253,13 +264,105 @@ jest.mock('@/hooks/use-library-app-data', () => ({
       ],
     };
   },
+  useBorrowOrdersQuery: () => ({
+    data: [
+      {
+        actionableLabel: '查看状态',
+        book: {
+          author: '周志华',
+          availabilityLabel: '馆藏充足 · 可立即借阅',
+          cabinetLabel: '智能书柜 A-03',
+          coverTone: 'lavender',
+          deliveryAvailable: true,
+          etaLabel: '18 分钟可送达',
+          etaMinutes: 18,
+          id: 101,
+          matchedFields: ['课程推荐'],
+          recommendationReason: '配套课程：人工智能导论 · 可先看第 1 章',
+          shelfLabel: '主馆 2 楼',
+          stockStatus: 'available',
+          summary: '课程导读与基础概念整理。',
+          tags: ['AI', '课程推荐'],
+          title: '机器学习',
+        },
+        id: 101,
+        mode: 'robot_delivery',
+        note: '配套课程：人工智能导论 · 可先看第 1 章',
+        renewable: true,
+        status: 'renewable',
+        statusLabel: '可续借',
+        timeline: [],
+        dueDateLabel: '4 月 2 日',
+      },
+      {
+        actionableLabel: '查看状态',
+        book: {
+          author: '原研哉',
+          availabilityLabel: '已完成',
+          cabinetLabel: '主馆 1 楼',
+          coverTone: 'mint',
+          deliveryAvailable: false,
+          etaLabel: '到柜自取',
+          etaMinutes: null,
+          id: 201,
+          matchedFields: [],
+          recommendationReason: null,
+          shelfLabel: '主馆 1 楼',
+          stockStatus: 'available',
+          summary: '已完成历史借阅。',
+          tags: ['设计'],
+          title: '设计中的设计',
+        },
+        id: 201,
+        mode: 'cabinet_pickup',
+        note: '已归还',
+        renewable: false,
+        status: 'completed',
+        statusLabel: '已完成',
+        timeline: [],
+        dueDateLabel: '3 月 20 日',
+      },
+    ],
+    isError: false,
+  }),
+  useCancelBorrowOrderMutation: () => ({ isPending: false, mutate: jest.fn(), mutateAsync: jest.fn() }),
+  useExplicitBookSearchQuery: (query: unknown) => ({
+    data:
+      typeof query === 'string' && query.trim().length > 0
+        ? [
+            {
+              availabilityLabel: '馆藏充足 · 可立即借阅',
+              author: '李航',
+              cabinetLabel: '智能书柜 B-02',
+              coverTone: 'coral',
+              etaLabel: '12 分钟可送达',
+              id: 3,
+              recommendationReason: '显式搜索命中统计学习主题',
+              summary: '适合继续补齐统计学习方法。',
+              title: '统计学习方法',
+            },
+          ]
+        : [],
+  }),
   useBooklistsQuery: () => ({
     data: {
       customItems: [
-        { description: '今晚先看的两本轻量阅读。', id: 'tonight', source: 'custom', title: '今晚预习' },
+        {
+          books: [{ id: 1 }, { id: 2 }],
+          description: '今晚先看的两本轻量阅读。',
+          id: 'tonight',
+          source: 'custom',
+          title: '今晚预习',
+        },
       ],
       systemItems: [
-        { description: '适合刚开始接触 AI 的同学', id: 'system-ai', source: 'system', title: 'AI 入门书单' },
+        {
+          books: [{ id: 3 }, { id: 4 }, { id: 5 }],
+          description: '适合刚开始接触 AI 的同学',
+          id: 'system-ai',
+          source: 'system',
+          title: 'AI 入门书单',
+        },
       ],
     },
   }),
@@ -336,6 +439,38 @@ jest.mock('@/hooks/use-library-app-data', () => ({
       { body: '你的 AI 入门书单已更新 2 本新推荐。', id: 'note-2', kind: 'achievement', title: '推荐更新' },
     ],
   }),
+  useMyOverviewQuery: () => ({
+    data: {
+      profile: null,
+      recentConversations: [],
+      recentOrders: [
+        {
+          actionableLabel: '查看状态',
+          book: { title: '机器学习' },
+          dueDateLabel: '4 月 2 日',
+          id: 101,
+          mode: 'robot_delivery',
+          note: '配套课程：人工智能导论 · 可先看第 1 章',
+          renewable: true,
+          status: 'renewable',
+          statusLabel: '可续借',
+          timeline: [],
+        },
+      ],
+      recentQueries: ['机器学习', '深度学习'],
+      recentReadingEvents: [],
+      recentRecommendations: [],
+      stats: {
+        activeOrdersCount: 1,
+        borrowHistoryCount: 8,
+        conversationCount: 0,
+        lastActiveAt: '2026-03-29',
+        readingEventCount: 0,
+        recommendationCount: 12,
+        searchCount: 5,
+      },
+    },
+  }),
   useOrderHistoryQuery: () => ({
     data: [
       {
@@ -345,6 +480,12 @@ jest.mock('@/hooks/use-library-app-data', () => ({
         statusLabel: '已完成',
       },
     ],
+  }),
+  usePersonalizedRecommendationsQuery: () => ({
+    data: [],
+  }),
+  useRecommendationDashboardQuery: () => ({
+    data: null,
   }),
   useRecommendationSearchQuery: () => ({
     data: [
@@ -361,6 +502,10 @@ jest.mock('@/hooks/use-library-app-data', () => ({
     ],
   }),
   useRenewBorrowOrderMutation: () => ({ mutate: jest.fn(), mutateAsync: jest.fn() }),
+  useReturnRequestMutation: () => ({ isPending: false, mutate: jest.fn(), mutateAsync: jest.fn() }),
+  useReturnRequestsQuery: () => ({
+    data: [],
+  }),
 }));
 
 jest.mock('@/lib/app/artwork', () => ({
@@ -401,7 +546,7 @@ describe('UI shell routes', () => {
         event === 'keyboardWillShow' ||
         event === 'keyboardWillHide'
       ) {
-        mockKeyboardListeners[event].add(listener as () => void);
+        mockKeyboardListeners[event].add(listener as (payload?: { duration?: number }) => void);
       }
 
       return {
@@ -412,16 +557,17 @@ describe('UI shell routes', () => {
             event === 'keyboardWillShow' ||
             event === 'keyboardWillHide'
           ) {
-            mockKeyboardListeners[event].delete(listener as () => void);
+            mockKeyboardListeners[event].delete(listener as (payload?: { duration?: number }) => void);
           }
         },
-      } as { remove: () => void };
+      } as ReturnType<typeof Keyboard.addListener>;
     });
   });
 
   afterEach(() => {
     mockLocalSearchParams = {};
     mockBookSearchQueries = [];
+    mockLastHeaderSearchBarOptions = undefined;
     act(() => {
       jest.runOnlyPendingTimers();
     });
@@ -446,6 +592,11 @@ describe('UI shell routes', () => {
   it('renders the search route as an independent find-book workspace', () => {
     renderWithProviders(<SearchRoute />);
 
+    expect(mockLastHeaderSearchBarOptions).toEqual(
+      expect.objectContaining({
+        placeholder: '搜索书名、作者、课程或自然语言',
+      })
+    );
     expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('找书');
     expect(screen.getByText('筛选')).toBeTruthy();
     expect(screen.queryByTestId('borrow-now-search-dock')).toBeNull();
@@ -457,6 +608,20 @@ describe('UI shell routes', () => {
     expect(screen.getByText('没看到想找的书？')).toBeTruthy();
     expect(screen.getByTestId('search-fallback-artwork')).toBeTruthy();
     expect(screen.getByPlaceholderText('搜索书名、作者、课程或自然语言')).toBeTruthy();
+  });
+
+  it('renders the standalone borrow-now search route with its own native search bar', () => {
+    renderWithProviders(<BorrowNowSearchRoute />);
+
+    expect(mockLastHeaderSearchBarOptions).toEqual(
+      expect.objectContaining({
+        placeholder: '搜索想立刻借走的书',
+      })
+    );
+    expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('立即可借');
+    expect(screen.getByTestId('native-search-bar')).toBeTruthy();
+    expect(screen.getByPlaceholderText('搜索想立刻借走的书')).toBeTruthy();
+    expect(screen.getAllByText('只看可借可送').length).toBeGreaterThan(0);
   });
 
   it('accepts native-event payloads from the stack search bar without crashing', () => {
@@ -472,6 +637,20 @@ describe('UI shell routes', () => {
     });
 
     expect(mockBookSearchQueries.at(-1)).toBe('深度学习');
+    expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('找书');
+  });
+
+  it('accepts direct text payloads from the native stack search bar', () => {
+    renderWithProviders(<SearchRoute />);
+
+    act(() => {
+      const nativeSearchBar = screen.getByTestId('native-search-bar');
+      nativeSearchBar.props.onChangeText({
+        text: '统计学习',
+      });
+    });
+
+    expect(mockBookSearchQueries.at(-1)).toBe('统计学习');
     expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('找书');
   });
 
@@ -511,22 +690,6 @@ describe('UI shell routes', () => {
     expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('找书');
   });
 
-  it('renders the dedicated borrow-now route as an immediate borrow workspace', () => {
-    renderWithProviders(<BorrowNowSearchRoute />);
-
-    expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('立即可借');
-    expect(screen.getByTestId('secondary-back-button')).toBeTruthy();
-    expect(screen.getAllByText('立即可借').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('只看可借可送').length).toBeGreaterThan(0);
-    expect(screen.getByTestId('search-results-list')).toBeTruthy();
-    expect(screen.getAllByTestId('search-result-cell').length).toBeGreaterThan(0);
-    expect(screen.queryByText('立即借这本')).toBeNull();
-    expect(screen.getByTestId('native-search-bar')).toBeTruthy();
-    expect(screen.queryByTestId('borrow-now-search-dock')).toBeNull();
-    expect(screen.queryByTestId('borrow-now-search-bar-surface')).toBeNull();
-    expect(screen.getByPlaceholderText('搜索想立刻借走的书')).toBeTruthy();
-  });
-
   it('renders borrowing route sections', () => {
     renderWithProviders(<BorrowingRoute />);
 
@@ -544,8 +707,8 @@ describe('UI shell routes', () => {
     expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('我的');
     expect(screen.getByText('今日提醒')).toBeTruthy();
     expect(screen.getByText('打开个人中心')).toBeTruthy();
-    expect(screen.getAllByText('收藏与书单').length).toBeGreaterThan(0);
-    expect(screen.getByText('常用入口')).toBeTruthy();
+    expect(screen.getByText('收藏图书')).toBeTruthy();
+    expect(screen.getByText('书单')).toBeTruthy();
     expect(screen.getByText('退出登录')).toBeTruthy();
 
     fireEvent.press(screen.getByText('退出登录'));
@@ -584,6 +747,12 @@ describe('UI shell routes', () => {
     expect(screen.getByText('找书')).toBeTruthy();
     expect(screen.getByText('借阅')).toBeTruthy();
     expect(screen.getByText('我的')).toBeTruthy();
+    expect(screen.getByTestId('native-tabs').props.backgroundColor).toBeUndefined();
+    expect(screen.getByTestId('native-tabs').props.blurEffect).toBeUndefined();
+    expect(screen.getByTestId('native-tabs').props.iconColor).toBeUndefined();
+    expect(screen.getByTestId('native-tabs').props.labelStyle).toBeUndefined();
+    expect(screen.getByTestId('native-tabs').props.tintColor).toBeUndefined();
+    expect(screen.getByTestId('native-tabs').props.disableTransparentOnScrollEdge).toBe(true);
     expect(screen.getByTestId('native-tab-search').props.accessibilityLabel).toBe('search');
 
     renderWithProviders(<WebTabsLayout />);

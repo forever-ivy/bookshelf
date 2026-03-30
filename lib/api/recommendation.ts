@@ -1,4 +1,4 @@
-import type { RecommendationFeed, BookCard } from '@/lib/api/types';
+import type { RecommendationDashboard, RecommendationFeed, BookCard, RecommendationModule } from '@/lib/api/types';
 import { getMockHomeFeed, listMockBooks } from '@/lib/api/mock';
 import { libraryRequest } from '@/lib/api/client';
 import { listBooks } from '@/lib/api/catalog';
@@ -26,6 +26,69 @@ export async function searchRecommendations(query: string, token?: string | null
   });
 }
 
+export async function getRecommendationDashboard(token?: string | null): Promise<RecommendationDashboard> {
+  return libraryRequest('/api/v1/recommendation/me/dashboard', {
+    fallback: async () => ({
+      focus_book: null,
+      history_books: [],
+      modules: {
+        collaborative: { error: null, ok: false, results: [], source_book: null },
+        hybrid: { error: null, ok: false, results: [], source_book: null },
+        similar: { error: null, ok: false, results: [], source_book: null },
+      },
+      personalized: [],
+      reader_id: null,
+      suggested_queries: [],
+    }),
+    method: 'GET',
+    token,
+  }).then((payload: any) => normalizeRecommendationDashboard(payload));
+}
+
+export async function getPersonalizedRecommendations(
+  token?: string | null,
+  options: { historyLimit?: number; limit?: number } = {}
+): Promise<BookCard[]> {
+  const search = new URLSearchParams();
+  if (options.limit) {
+    search.set('limit', String(options.limit));
+  }
+  if (options.historyLimit) {
+    search.set('history_limit', String(options.historyLimit));
+  }
+  const suffix = search.size ? `?${search.toString()}` : '';
+
+  return libraryRequest(`/api/v1/recommendation/me/personalized${suffix}`, {
+    fallback: async () => getMockHomeFeed().todayRecommendations,
+    method: 'GET',
+    token,
+  }).then((payload: any) => normalizeRecommendationResultList(payload));
+}
+
+export async function getSimilarBooks(
+  bookId: number,
+  token?: string | null,
+  limit = 5
+): Promise<BookCard[]> {
+  return getBookRecommendationList(`/api/v1/recommendation/books/${bookId}/similar?limit=${limit}`, token);
+}
+
+export async function getCollaborativeBooks(
+  bookId: number,
+  token?: string | null,
+  limit = 5
+): Promise<BookCard[]> {
+  return getBookRecommendationList(`/api/v1/recommendation/books/${bookId}/collaborative?limit=${limit}`, token);
+}
+
+export async function getHybridBooks(
+  bookId: number,
+  token?: string | null,
+  limit = 5
+): Promise<BookCard[]> {
+  return getBookRecommendationList(`/api/v1/recommendation/books/${bookId}/hybrid?limit=${limit}`, token);
+}
+
 function normalizeSearchResult(raw: any): BookCard {
   return {
     id: raw.book_id ?? raw.id,
@@ -46,6 +109,63 @@ function normalizeSearchResult(raw: any): BookCard {
     tags: raw.tags ?? [],
     title: raw.title ?? raw.result_title ?? '未命名图书',
   };
+}
+
+function normalizeRecommendationDashboard(payload: any): RecommendationDashboard {
+  return {
+    focusBook: normalizeRecommendationSourceBook(payload?.focus_book ?? payload?.focusBook ?? null),
+    historyBooks: Array.isArray(payload?.history_books ?? payload?.historyBooks)
+      ? (payload.history_books ?? payload.historyBooks).map(normalizeRecommendationSourceBook)
+      : [],
+    modules: {
+      collaborative: normalizeRecommendationModule(payload?.modules?.collaborative),
+      hybrid: normalizeRecommendationModule(payload?.modules?.hybrid),
+      similar: normalizeRecommendationModule(payload?.modules?.similar),
+    },
+    personalized: Array.isArray(payload?.personalized)
+      ? payload.personalized.map(normalizeSearchResult)
+      : [],
+    readerId: payload?.reader_id ?? payload?.readerId ?? null,
+    suggestedQueries: Array.isArray(payload?.suggested_queries ?? payload?.suggestedQueries)
+      ? (payload.suggested_queries ?? payload.suggestedQueries)
+      : [],
+  };
+}
+
+function normalizeRecommendationResultList(payload: any): BookCard[] {
+  if (Array.isArray(payload?.results)) {
+    return payload.results.map(normalizeSearchResult);
+  }
+
+  return [];
+}
+
+function normalizeRecommendationModule(raw: any): RecommendationModule {
+  return {
+    error: raw?.error ?? null,
+    ok: Boolean(raw?.ok),
+    results: Array.isArray(raw?.results) ? raw.results.map(normalizeSearchResult) : [],
+    sourceBook: normalizeRecommendationSourceBook(raw?.source_book ?? raw?.sourceBook ?? null),
+  };
+}
+
+function normalizeRecommendationSourceBook(raw: any) {
+  if (!raw) {
+    return null;
+  }
+
+  return {
+    bookId: raw.book_id ?? raw.bookId ?? null,
+    title: raw.title ?? null,
+  };
+}
+
+async function getBookRecommendationList(path: string, token?: string | null) {
+  return libraryRequest(path, {
+    fallback: async () => [],
+    method: 'GET',
+    token,
+  }).then((payload: any) => normalizeRecommendationResultList(payload));
 }
 
 function normalizeHomeFeed(payload: any): RecommendationFeed {

@@ -6,10 +6,10 @@ import { PageShell } from '@/components/navigation/page-shell';
 
 const mockBack = jest.fn();
 const mockKeyboardListeners = {
-  keyboardDidHide: new Set<() => void>(),
-  keyboardDidShow: new Set<() => void>(),
-  keyboardWillHide: new Set<() => void>(),
-  keyboardWillShow: new Set<() => void>(),
+  keyboardDidHide: new Set<(payload?: { duration?: number }) => void>(),
+  keyboardDidShow: new Set<(payload?: { duration?: number }) => void>(),
+  keyboardWillHide: new Set<(payload?: { duration?: number }) => void>(),
+  keyboardWillShow: new Set<(payload?: { duration?: number }) => void>(),
 };
 
 function emitKeyboardEvent(
@@ -53,7 +53,7 @@ describe('PageShell', () => {
         event === 'keyboardWillShow' ||
         event === 'keyboardWillHide'
       ) {
-        mockKeyboardListeners[event].add(listener as () => void);
+        mockKeyboardListeners[event].add(listener as (payload?: { duration?: number }) => void);
       }
 
       return {
@@ -64,10 +64,10 @@ describe('PageShell', () => {
             event === 'keyboardWillShow' ||
             event === 'keyboardWillHide'
           ) {
-            mockKeyboardListeners[event].delete(listener as () => void);
+            mockKeyboardListeners[event].delete(listener as (payload?: { duration?: number }) => void);
           }
         },
-      } as { remove: () => void };
+      } as ReturnType<typeof Keyboard.addListener>;
     });
   });
 

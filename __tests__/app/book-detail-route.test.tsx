@@ -154,6 +154,28 @@ jest.mock('@/hooks/use-library-app-data', () => ({
     isPending: false,
     mutateAsync: jest.fn(async () => ({ id: 101 })),
   }),
+  useCollaborativeBooksQuery: () => ({
+    data: [
+      {
+        author: 'Ian Goodfellow',
+        availabilityLabel: '馆藏充足 · 可立即借阅',
+        cabinetLabel: '主馆 2 楼',
+        coverTone: 'blue',
+        deliveryAvailable: false,
+        etaLabel: '到柜自取',
+        etaMinutes: null,
+        id: 2,
+        matchedFields: ['title'],
+        recommendationReason: '如果你在做深度学习专题，它会更系统',
+        shelfLabel: '主馆 2 楼',
+        stockStatus: 'limited',
+        summary: '适合继续拓展模型与训练方法。',
+        tags: ['深度学习'],
+        title: 'Deep Learning',
+      },
+    ],
+    error: null,
+  }),
   useFavoritesQuery: () => ({
     data: [
       {
@@ -161,6 +183,50 @@ jest.mock('@/hooks/use-library-app-data', () => ({
         id: 'fav-1',
       },
     ],
+  }),
+  useHybridBooksQuery: () => ({
+    data: [
+      {
+        author: '李航',
+        availabilityLabel: '馆藏充足 · 可立即借阅',
+        cabinetLabel: '智能书柜 B-02',
+        coverTone: 'coral',
+        deliveryAvailable: true,
+        etaLabel: '12 分钟可送达',
+        etaMinutes: 12,
+        id: 4,
+        matchedFields: ['title'],
+        recommendationReason: '综合你的课程与借阅轨迹生成',
+        shelfLabel: '主馆 3 楼',
+        stockStatus: 'available',
+        summary: '适合进一步补齐统计学习方法。',
+        tags: ['统计学习'],
+        title: '统计学习方法',
+      },
+    ],
+    error: null,
+  }),
+  useSimilarBooksQuery: () => ({
+    data: [
+      {
+        author: '格致',
+        availabilityLabel: '馆藏充足 · 可立即借阅',
+        cabinetLabel: '默认书柜',
+        coverTone: 'mint',
+        deliveryAvailable: true,
+        etaLabel: '明早可达',
+        etaMinutes: 480,
+        id: 3,
+        matchedFields: ['title'],
+        recommendationReason: '偏兴趣阅读，适合碎片时间浏览',
+        shelfLabel: '主馆 2 楼',
+        stockStatus: 'available',
+        summary: '适合兴趣阅读和跨学科补充。',
+        tags: ['心理学'],
+        title: '心理学入门',
+      },
+    ],
+    error: null,
   }),
   useToggleFavoriteMutation: () => ({
     isPending: false,
@@ -184,6 +250,8 @@ describe('BookDetailRoute', () => {
     expect(screen.getByText('Deep Learning')).toBeTruthy();
     expect(screen.getByText('相似图书')).toBeTruthy();
     expect(screen.getByText('心理学入门')).toBeTruthy();
+    expect(screen.getByText('综合推荐')).toBeTruthy();
+    expect(screen.getByText('统计学习方法')).toBeTruthy();
     expect(screen.getByText('已收藏')).toBeTruthy();
     expect(screen.getByText('加入稍后阅读')).toBeTruthy();
   });

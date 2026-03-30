@@ -1,4 +1,3 @@
-import { Stack } from 'expo-router';
 import React from 'react';
 import { Text, View } from 'react-native';
 
@@ -7,7 +6,11 @@ import { SectionTitle } from '@/components/base/section-title';
 import { StateMessageCard } from '@/components/base/state-message-card';
 import { PageShell } from '@/components/navigation/page-shell';
 import { SearchResultCard } from '@/components/search/search-result-card';
-import { useBookSearchQuery, useRecommendationSearchQuery } from '@/hooks/use-library-app-data';
+import {
+  useBookSearchQuery,
+  useExplicitBookSearchQuery,
+  useRecommendationSearchQuery,
+} from '@/hooks/use-library-app-data';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { getLibraryErrorMessage } from '@/lib/api/client';
 import { appArtwork } from '@/lib/app/artwork';
@@ -27,9 +30,14 @@ function isBorrowReadyResult(item: {
   return isAvailable && supportsDelivery;
 }
 
-function resolveSearchText(value: unknown) {
+export function resolveSearchText(value: unknown) {
   if (typeof value === 'string') {
     return value;
+  }
+
+  if (value && typeof value === 'object' && 'text' in value) {
+    const directText = (value as { text?: string }).text;
+    return typeof directText === 'string' ? directText : '';
   }
 
   if (value && typeof value === 'object' && 'nativeEvent' in value) {
@@ -40,19 +48,26 @@ function resolveSearchText(value: unknown) {
   return '';
 }
 
-export function SearchScreen({ borrowNowMode = false }: { borrowNowMode?: boolean }) {
-  const [query, setQuery] = React.useState(borrowNowMode ? '' : '机器学习');
-  const bookSearchQuery = useBookSearchQuery(query);
+export function SearchScreen({
+  borrowNowMode = false,
+  query,
+}: {
+  borrowNowMode?: boolean;
+  query: string;
+}) {
+  const normalizedQuery = query.trim();
+  const isDefaultDiscoveryQuery = !borrowNowMode && normalizedQuery === '机器学习';
+  const shouldUseExplicitSearch = normalizedQuery.length > 0 && !isDefaultDiscoveryQuery;
+  const shouldUseCatalogList = borrowNowMode ? normalizedQuery.length === 0 : !shouldUseExplicitSearch;
+  const bookSearchQuery = useBookSearchQuery(query, shouldUseCatalogList);
+  const explicitBookSearchQuery = useExplicitBookSearchQuery(normalizedQuery, shouldUseExplicitSearch);
   const recommendationSearchQuery = useRecommendationSearchQuery(
-    query,
-    !borrowNowMode || query.trim().length > 0
+    normalizedQuery,
+    isDefaultDiscoveryQuery || normalizedQuery.length > 0
   );
   const { theme } = useAppTheme();
-  const searchError = bookSearchQuery.error ?? recommendationSearchQuery.error;
-
-  React.useEffect(() => {
-    setQuery(borrowNowMode ? '' : '机器学习');
-  }, [borrowNowMode]);
+  const activeCatalogQuery = shouldUseExplicitSearch ? explicitBookSearchQuery : bookSearchQuery;
+  const searchError = activeCatalogQuery.error ?? recommendationSearchQuery.error;
 
   const filterPalettes = [
     { backgroundColor: theme.colors.successSoft, color: theme.colors.success },
@@ -67,7 +82,7 @@ export function SearchScreen({ borrowNowMode = false }: { borrowNowMode?: boolea
   ] as const;
 
   const resultCards = React.useMemo(() => {
-    const merged = [...(bookSearchQuery.data ?? []), ...(recommendationSearchQuery.data ?? [])];
+    const merged = [...(activeCatalogQuery.data ?? []), ...(recommendationSearchQuery.data ?? [])];
     const seen = new Set<number>();
 
     return merged.filter((item) => {
@@ -78,7 +93,7 @@ export function SearchScreen({ borrowNowMode = false }: { borrowNowMode?: boolea
       seen.add(item.id);
       return true;
     });
-  }, [bookSearchQuery.data, recommendationSearchQuery.data]);
+  }, [activeCatalogQuery.data, recommendationSearchQuery.data]);
 
   const displayCards = React.useMemo(
     () => (borrowNowMode ? resultCards.filter(isBorrowReadyResult) : resultCards),
@@ -111,11 +126,10 @@ export function SearchScreen({ borrowNowMode = false }: { borrowNowMode?: boolea
   const showEmptyState =
     (borrowNowMode || query.trim().length > 0) &&
     !searchError &&
-    !bookSearchQuery.isFetching &&
+    !activeCatalogQuery.isFetching &&
     !recommendationSearchQuery.isFetching &&
     displayCards.length === 0;
   const searchTitle = borrowNowMode ? '立即可借' : '找书';
-  const searchPlaceholder = borrowNowMode ? '搜索想立刻借走的书' : '搜索书名、作者、课程或自然语言';
   const emptyTitle = borrowNowMode ? '当前没有可立即借走的图书' : '这次没找到完全匹配的图书';
   const emptyDescription = borrowNowMode
     ? '可以换个关键词，或者稍后再看新的可借可送图书。'
@@ -125,174 +139,166 @@ export function SearchScreen({ borrowNowMode = false }: { borrowNowMode?: boolea
   const shellInsetBottom = 112;
 
   return (
-    <>
-      <Stack.SearchBar
-        hideWhenScrolling={false}
-        onChangeText={(value) => setQuery(resolveSearchText(value))}
-        placement="automatic"
-        placeholder={searchPlaceholder}
-      />
-      <View style={{ flex: 1 }}>
-        <PageShell
-          headerTitle={searchTitle}
-          hideHeaderTitleWhenKeyboardVisible={!borrowNowMode}
-          insetBottom={shellInsetBottom}
-          mode="task"
-          showBackButton={borrowNowMode}>
-          {borrowNowMode ? (
-            <View
+    <View style={{ flex: 1 }}>
+      <PageShell
+        headerTitle={searchTitle}
+        hideHeaderTitleWhenKeyboardVisible={!borrowNowMode}
+        insetBottom={shellInsetBottom}
+        mode="task"
+        showBackButton={borrowNowMode}>
+        {borrowNowMode ? (
+          <View
+            style={{
+              alignSelf: 'flex-start',
+              backgroundColor: theme.colors.successSoft,
+              borderColor: theme.colors.borderStrong,
+              borderRadius: theme.radii.md,
+              borderWidth: 1,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+            }}>
+            <Text
               style={{
-                alignSelf: 'flex-start',
-                backgroundColor: theme.colors.successSoft,
-                borderColor: theme.colors.borderStrong,
-                borderRadius: theme.radii.md,
-                borderWidth: 1,
-                paddingHorizontal: 12,
-                paddingVertical: 8,
+                color: theme.colors.success,
+                ...theme.typography.medium,
+                fontSize: 13,
               }}>
-              <Text
-                style={{
-                  color: theme.colors.success,
-                  ...theme.typography.medium,
-                  fontSize: 13,
-                }}>
-                只看可借可送
-              </Text>
-            </View>
-          ) : null}
-
-          <View style={{ gap: theme.spacing.lg }}>
-            <SectionTitle title="筛选" />
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm }}>
-              {filterChips.map((filter, index) => {
-                const palette = filterPalettes[index % filterPalettes.length];
-                const isPrimaryChip = borrowNowMode && index === 0;
-
-                return (
-                  <View
-                    key={filter}
-                    style={{
-                      backgroundColor: isPrimaryChip ? theme.colors.successSoft : palette.backgroundColor,
-                      borderColor: theme.colors.borderStrong,
-                      borderRadius: theme.radii.md,
-                      borderWidth: 1,
-                      paddingHorizontal: 12,
-                      paddingVertical: 8,
-                    }}>
-                    <Text
-                      style={{
-                        color: isPrimaryChip ? theme.colors.success : palette.color,
-                        ...theme.typography.medium,
-                        fontSize: 13,
-                      }}>
-                      {filter}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
+              只看可借可送
+            </Text>
           </View>
+        ) : null}
 
-          <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
-            {resultInsights.map((item, index) => {
-              const palette = collectionPalettes[index % collectionPalettes.length];
+        <View style={{ gap: theme.spacing.lg }}>
+          <SectionTitle title="筛选" />
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm }}>
+            {filterChips.map((filter, index) => {
+              const palette = filterPalettes[index % filterPalettes.length];
+              const isPrimaryChip = borrowNowMode && index === 0;
 
               return (
                 <View
-                  key={item.title}
+                  key={filter}
                   style={{
-                    backgroundColor: palette.backgroundColor,
+                    backgroundColor: isPrimaryChip ? theme.colors.successSoft : palette.backgroundColor,
                     borderColor: theme.colors.borderStrong,
-                    borderRadius: theme.radii.lg,
+                    borderRadius: theme.radii.md,
                     borderWidth: 1,
-                    flex: 1,
-                    gap: 6,
-                    padding: theme.spacing.md,
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
                   }}>
                   <Text
                     style={{
-                      color: item.tone ?? palette.color,
-                      ...theme.typography.semiBold,
-                      fontSize: 14,
+                      color: isPrimaryChip ? theme.colors.success : palette.color,
+                      ...theme.typography.medium,
+                      fontSize: 13,
                     }}>
-                    {item.title}
-                  </Text>
-                  <Text
-                    style={{
-                      color: theme.colors.textMuted,
-                      ...theme.typography.body,
-                      fontSize: 12,
-                      lineHeight: 16,
-                    }}>
-                    {item.detail}
+                    {filter}
                   </Text>
                 </View>
               );
             })}
           </View>
+        </View>
 
-          <View style={{ gap: theme.spacing.lg }}>
-            <SectionTitle title={resultSectionTitle} />
-            <View
-              style={{
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.borderSoft,
-                borderRadius: theme.radii.xl,
-                borderWidth: 1,
-                overflow: 'hidden',
-              }}
-              testID="search-results-list">
-              {searchError ? (
-                <StateMessageCard
-                  description={getLibraryErrorMessage(
-                    searchError,
-                    '搜索服务暂时不可用，请确认 recommendation 和 catalog 接口可访问。'
-                  )}
-                  title="找书联调失败"
-                  tone="danger"
-                />
-              ) : null}
-              {displayCards.map((item, index) => (
-                <SearchResultCard
-                  key={item.id}
-                  actionLabel={borrowNowMode ? '立即借这本' : '查看详情并借阅'}
-                  availability={item.availabilityLabel}
-                  author={item.author}
-                  coverTone={item.coverTone}
-                  eta={item.etaLabel}
-                  href={`/books/${item.id}`}
-                  listPosition={
-                    displayCards.length === 1
-                      ? 'single'
-                      : index === 0
-                        ? 'first'
-                        : index === displayCards.length - 1
-                          ? 'last'
-                          : 'middle'
-                  }
-                  location={item.cabinetLabel}
-                  reason={item.recommendationReason}
-                  summary={item.summary}
-                  title={item.title}
-                  variant="list"
-                />
-              ))}
-              {showEmptyState ? (
-                <StateMessageCard description={emptyDescription} title={emptyTitle} />
-              ) : null}
-            </View>
-          </View>
+        <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
+          {resultInsights.map((item, index) => {
+            const palette = collectionPalettes[index % collectionPalettes.length];
 
-          <View style={{ gap: theme.spacing.lg }}>
-            <SectionTitle title="没看到想找的书？" />
-            <EditorialIllustration
-              height={178}
-              source={appArtwork.notionNoResults}
-              testID="search-fallback-artwork"
-            />
+            return (
+              <View
+                key={item.title}
+                style={{
+                  backgroundColor: palette.backgroundColor,
+                  borderColor: theme.colors.borderStrong,
+                  borderRadius: theme.radii.lg,
+                  borderWidth: 1,
+                  flex: 1,
+                  gap: 6,
+                  padding: theme.spacing.md,
+                }}>
+                <Text
+                  style={{
+                    color: item.tone ?? palette.color,
+                    ...theme.typography.semiBold,
+                    fontSize: 14,
+                  }}>
+                  {item.title}
+                </Text>
+                <Text
+                  style={{
+                    color: theme.colors.textMuted,
+                    ...theme.typography.body,
+                    fontSize: 12,
+                    lineHeight: 16,
+                  }}>
+                  {item.detail}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+
+        <View style={{ gap: theme.spacing.lg }}>
+          <SectionTitle title={resultSectionTitle} />
+          <View
+            style={{
+              backgroundColor: theme.colors.surface,
+              borderColor: theme.colors.borderSoft,
+              borderRadius: theme.radii.xl,
+              borderWidth: 1,
+              overflow: 'hidden',
+            }}
+            testID="search-results-list">
+            {searchError ? (
+              <StateMessageCard
+                description={getLibraryErrorMessage(
+                  searchError,
+                  '搜索服务暂时不可用，请确认 recommendation 和 catalog 接口可访问。'
+                )}
+                title="找书联调失败"
+                tone="danger"
+              />
+            ) : null}
+            {displayCards.map((item, index) => (
+              <SearchResultCard
+                key={item.id}
+                actionLabel={borrowNowMode ? '立即借这本' : '查看详情并借阅'}
+                availability={item.availabilityLabel}
+                author={item.author}
+                coverTone={item.coverTone}
+                eta={item.etaLabel}
+                href={`/books/${item.id}`}
+                listPosition={
+                  displayCards.length === 1
+                    ? 'single'
+                    : index === 0
+                      ? 'first'
+                      : index === displayCards.length - 1
+                        ? 'last'
+                        : 'middle'
+                }
+                location={item.cabinetLabel}
+                reason={item.recommendationReason}
+                summary={item.summary}
+                title={item.title}
+                variant="list"
+              />
+            ))}
+            {showEmptyState ? (
+              <StateMessageCard description={emptyDescription} title={emptyTitle} />
+            ) : null}
           </View>
-        </PageShell>
-      </View>
-    </>
+        </View>
+
+        <View style={{ gap: theme.spacing.lg }}>
+          <SectionTitle title="没看到想找的书？" />
+          <EditorialIllustration
+            height={178}
+            source={appArtwork.notionNoResults}
+            testID="search-fallback-artwork"
+          />
+        </View>
+      </PageShell>
+    </View>
   );
 }

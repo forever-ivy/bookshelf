@@ -1,4 +1,4 @@
-import { readStoredSessionToken } from '@/stores';
+import { readStoredRefreshToken, readStoredSessionToken, replaceStoredSessionTokens } from '@/stores';
 
 export class LibraryApiError extends Error {
   code: string;
@@ -99,6 +99,66 @@ export async function libraryFetchJson<T>(
   return response.json() as Promise<T>;
 }
 
+async function refreshAccessToken() {
+  const baseUrl = getLibraryServiceBaseUrl();
+  const refreshToken = await readStoredRefreshToken();
+
+  if (!baseUrl || !refreshToken) {
+    throw new LibraryApiError('refresh_token_missing', {
+      code: 'refresh_token_missing',
+      status: 401,
+    });
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/api/v1/auth/refresh`, {
+      body: JSON.stringify({
+        refresh_token: refreshToken,
+      }),
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+    });
+  } catch {
+    throw new LibraryApiError('library_network_error', {
+      code: 'network_error',
+    });
+  }
+
+  if (!response.ok) {
+    throw new LibraryApiError(`http_${response.status}`, {
+      code: `http_${response.status}`,
+      status: response.status,
+    });
+  }
+
+  const payload = (await response.json()) as {
+    access_token?: string;
+    accessToken?: string;
+    refresh_token?: string | null;
+    refreshToken?: string | null;
+  };
+  const nextAccessToken = payload.access_token ?? payload.accessToken;
+  const nextRefreshToken = payload.refresh_token ?? payload.refreshToken ?? refreshToken;
+
+  if (!nextAccessToken) {
+    throw new LibraryApiError('refresh_token_invalid_payload', {
+      code: 'refresh_token_invalid_payload',
+      status: 500,
+    });
+  }
+
+  await replaceStoredSessionTokens({
+    accessToken: nextAccessToken,
+    refreshToken: nextRefreshToken,
+  });
+
+  return nextAccessToken;
+}
+
 export async function libraryRequest<T>(
   path: string,
   options: RequestInit & {
@@ -114,6 +174,14 @@ export async function libraryRequest<T>(
   try {
     return await libraryFetchJson<T>(path, options);
   } catch (error) {
+    if (isLibraryAuthError(error)) {
+      const refreshedToken = await refreshAccessToken();
+      return libraryFetchJson<T>(path, {
+        ...options,
+        token: refreshedToken,
+      });
+    }
+
     if (options.fallbackOnError) {
       return options.fallback();
     }
