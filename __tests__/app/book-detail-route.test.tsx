@@ -353,4 +353,26 @@ describe('BookDetailRoute', () => {
     expect(screen.getByTestId('book-detail-hybrid-skeleton')).toBeTruthy();
     expect(screen.queryByText('机器学习从零到一')).toBeNull();
   });
+
+  it('keeps detail sections mounted with skeletons while loading', () => {
+    mockDetailLoading = true;
+    mockCollaborativeLoading = true;
+    mockSimilarLoading = true;
+    mockHybridLoading = true;
+
+    render(<BookDetailRoute />);
+
+    expect(screen.getByText('为什么可能适合你')).toBeTruthy();
+    expect(screen.getByText('目录')).toBeTruthy();
+    expect(screen.getByText('借过这本的人也借了')).toBeTruthy();
+    expect(screen.getByText('同主题图书')).toBeTruthy();
+    expect(screen.getByText('你可能还想借')).toBeTruthy();
+    expect(screen.getByTestId('book-detail-primary-skeleton')).toBeTruthy();
+    expect(screen.getByTestId('book-detail-recommendation-skeleton')).toBeTruthy();
+    expect(screen.getByTestId('book-detail-contents-skeleton')).toBeTruthy();
+    expect(screen.getByTestId('book-detail-collaborative-skeleton')).toBeTruthy();
+    expect(screen.getByTestId('book-detail-similar-skeleton')).toBeTruthy();
+    expect(screen.getByTestId('book-detail-hybrid-skeleton')).toBeTruthy();
+    expect(screen.queryByText('机器学习从零到一')).toBeNull();
+  });
 });
