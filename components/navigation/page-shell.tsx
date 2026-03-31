@@ -1,7 +1,18 @@
+import { usePathname } from 'expo-router';
 import React from 'react';
-import { Animated, Easing, Keyboard, Platform, ScrollView, Text, View } from 'react-native';
+import {
+  Animated,
+  Easing,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { shouldShowSecondaryBackButton } from '@/components/navigation/global-secondary-back-layer';
 import { SecondaryBackButton } from '@/components/navigation/secondary-back-button';
 import { useAppTheme } from '@/hooks/use-app-theme';
 
@@ -18,27 +29,34 @@ function resolveKeyboardAnimationDuration(event?: { duration?: number }) {
 export function PageShell({
   backgroundDecoration,
   children,
+  headerContent,
   headerDescription,
   headerTitle,
+  keyboardAware = false,
   hideHeaderTitleWhenKeyboardVisible = false,
   insetBottom = 120,
   mode = 'discovery',
   padded = true,
   scrollEnabled = true,
+  scrollViewResetKey,
   showBackButton = false,
 }: {
   backgroundDecoration?: React.ReactNode;
   children?: React.ReactNode;
+  headerContent?: React.ReactNode;
   headerDescription?: string;
   headerTitle?: string;
+  keyboardAware?: boolean;
   hideHeaderTitleWhenKeyboardVisible?: boolean;
   insetBottom?: number;
   mode?: 'discovery' | 'task' | 'workspace';
   padded?: boolean;
   scrollEnabled?: boolean;
+  scrollViewResetKey?: number | string;
   showBackButton?: boolean;
 }) {
   const { theme } = useAppTheme();
+  const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const [isKeyboardVisible, setIsKeyboardVisible] = React.useState(false);
   const shouldAnimateHeaderTitle = hideHeaderTitleWhenKeyboardVisible && Boolean(headerTitle);
@@ -52,9 +70,27 @@ export function PageShell({
         ? theme.colors.backgroundTask
         : theme.colors.background;
   const resolvedHeaderTitle = headerTitle;
-  const hasHeader = Boolean(resolvedHeaderTitle || headerDescription || showBackButton);
+  const hasHeader = Boolean(headerContent || resolvedHeaderTitle || headerDescription || showBackButton);
   const scrollTopPadding = hasHeader ? 0 : theme.spacing.lg;
   const titleSlotHeight = shouldHideHeaderTitle ? 0 : HEADER_TITLE_LINE_HEIGHT;
+  const floatingBackButtonVisible = shouldShowSecondaryBackButton(pathname) && !showBackButton;
+  const headerGap = showBackButton
+    ? theme.spacing.md
+    : floatingBackButtonVisible
+      ? theme.spacing.xl
+      : theme.spacing.lg;
+  const headerCopyPaddingLeft = 0;
+  const headerTopPadding = showBackButton
+    ? theme.spacing.xs
+    : floatingBackButtonVisible
+      ? theme.spacing.xxxl + theme.spacing.xxxl + theme.spacing.xl
+      : theme.spacing.lg;
+  const scrollViewProps = keyboardAware
+    ? {
+        automaticallyAdjustKeyboardInsets: true,
+        keyboardShouldPersistTaps: 'handled' as const,
+      }
+    : {};
 
   const runHeaderTitleAnimation = React.useCallback(
     (nextHidden: boolean, duration: number) => {
@@ -132,6 +168,99 @@ export function PageShell({
     }
   }, [headerTitle, shouldAnimateHeaderTitle, titleOpacity, titleTranslateY]);
 
+  const shellContent = (
+    <ScrollView
+      bounces={false}
+      contentInsetAdjustmentBehavior="automatic"
+      key={scrollViewResetKey}
+      contentContainerStyle={{
+        flexGrow: keyboardAware ? 1 : undefined,
+        gap: theme.spacing.xxl,
+        paddingBottom: insets.bottom + insetBottom,
+        paddingHorizontal: padded ? theme.spacing.xl : 0,
+        paddingTop: scrollTopPadding,
+      }}
+      keyboardDismissMode="on-drag"
+      scrollEnabled={scrollEnabled}
+      showsVerticalScrollIndicator={false}
+      {...scrollViewProps}>
+      {hasHeader ? (
+        <View
+          style={{
+            gap: headerGap,
+            paddingTop: headerTopPadding,
+          }}
+          testID="page-shell-header">
+          {showBackButton ? <SecondaryBackButton /> : null}
+          {headerContent ? (
+            headerContent
+          ) : resolvedHeaderTitle || headerDescription ? (
+            <View
+              style={{
+                gap: theme.spacing.sm,
+                paddingLeft: headerCopyPaddingLeft,
+              }}
+              testID="page-shell-header-copy">
+              {resolvedHeaderTitle ? (
+                shouldAnimateHeaderTitle ? (
+                  <View
+                    style={{
+                      height: titleSlotHeight,
+                      overflow: 'hidden',
+                    }}
+                    testID="page-shell-header-title-slot">
+                    <Animated.View
+                      style={{
+                        opacity: titleOpacity,
+                        transform: [{ translateY: titleTranslateY }],
+                      }}>
+                      <Text
+                        style={{
+                          color: theme.colors.text,
+                          ...theme.typography.heading,
+                          fontSize: 30,
+                          letterSpacing: -0.7,
+                          lineHeight: HEADER_TITLE_LINE_HEIGHT,
+                        }}
+                        testID="page-shell-header-title">
+                        {resolvedHeaderTitle}
+                      </Text>
+                    </Animated.View>
+                  </View>
+                ) : (
+                  <Text
+                    style={{
+                      color: theme.colors.text,
+                      ...theme.typography.heading,
+                      fontSize: 30,
+                      letterSpacing: -0.7,
+                      lineHeight: HEADER_TITLE_LINE_HEIGHT,
+                    }}
+                    testID="page-shell-header-title">
+                    {resolvedHeaderTitle}
+                  </Text>
+                )
+              ) : null}
+              {headerDescription ? (
+                <Text
+                  style={{
+                    color: theme.colors.textMuted,
+                    ...theme.typography.body,
+                    fontSize: 14,
+                    lineHeight: 21,
+                    maxWidth: 560,
+                  }}>
+                  {headerDescription}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+      {children}
+    </ScrollView>
+  );
+
   return (
     <View style={{ backgroundColor, flex: 1 }}>
       {backgroundDecoration ? (
@@ -147,85 +276,15 @@ export function PageShell({
           {backgroundDecoration}
         </View>
       ) : null}
-      <ScrollView
-        bounces={false}
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{
-          gap: theme.spacing.xxl,
-          paddingBottom: insets.bottom + insetBottom,
-          paddingHorizontal: padded ? theme.spacing.xl : 0,
-          paddingTop: scrollTopPadding,
-        }}
-        keyboardDismissMode="on-drag"
-        scrollEnabled={scrollEnabled}
-        showsVerticalScrollIndicator={false}>
-        {hasHeader ? (
-          <View
-            style={{
-              gap: theme.spacing.lg,
-              paddingTop: theme.spacing.lg,
-            }}>
-            {showBackButton ? <SecondaryBackButton /> : null}
-            {resolvedHeaderTitle || headerDescription ? (
-              <View style={{ gap: theme.spacing.sm }}>
-                {resolvedHeaderTitle ? (
-                  shouldAnimateHeaderTitle ? (
-                    <View
-                      style={{
-                        height: titleSlotHeight,
-                        overflow: 'hidden',
-                      }}
-                      testID="page-shell-header-title-slot">
-                      <Animated.View
-                        style={{
-                          opacity: titleOpacity,
-                          transform: [{ translateY: titleTranslateY }],
-                        }}>
-                        <Text
-                          style={{
-                            color: theme.colors.text,
-                            ...theme.typography.heading,
-                            fontSize: 30,
-                            letterSpacing: -0.7,
-                            lineHeight: HEADER_TITLE_LINE_HEIGHT,
-                          }}
-                          testID="page-shell-header-title">
-                          {resolvedHeaderTitle}
-                        </Text>
-                      </Animated.View>
-                    </View>
-                  ) : (
-                    <Text
-                      style={{
-                        color: theme.colors.text,
-                        ...theme.typography.heading,
-                        fontSize: 30,
-                        letterSpacing: -0.7,
-                        lineHeight: HEADER_TITLE_LINE_HEIGHT,
-                      }}
-                      testID="page-shell-header-title">
-                      {resolvedHeaderTitle}
-                    </Text>
-                  )
-                ) : null}
-                {headerDescription ? (
-                  <Text
-                    style={{
-                      color: theme.colors.textMuted,
-                      ...theme.typography.body,
-                      fontSize: 14,
-                      lineHeight: 21,
-                      maxWidth: 560,
-                    }}>
-                    {headerDescription}
-                  </Text>
-                ) : null}
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-        {children}
-      </ScrollView>
+      {keyboardAware ? (
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}>
+          {shellContent}
+        </KeyboardAvoidingView>
+      ) : (
+        shellContent
+      )}
     </View>
   );
 }

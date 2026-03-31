@@ -12,34 +12,13 @@ export const homeHero = {
 export const homeLearningFocus = {
   action: '继续学习',
   bullets: [
-    '先借《机器学习从零到一》，可直接配送到阅览室 A-12',
+    '先从《机器学习从零到一》开始，可直接配送到阅览室 A-12',
     '继续上次的第 2 章总结和 5 道练习题',
     '预计 35 分钟可以完成一轮预习',
   ],
   summary: '把今晚要处理的书、配送和 AI 学习动作排成一条最短路径。',
-  title: '今晚学习',
+  title: '快速开始',
 } as const;
-
-export const homeQuickActions = [
-  {
-    description: '从可借、可配送、适合课程的图书里直接开始',
-    icon: 'spark',
-    meta: '3 本优先推荐已就绪',
-    title: '今晚待开始',
-  },
-  {
-    description: '查看机器人、书柜和到座配送的履约进度',
-    icon: 'truck',
-    meta: '1 单配送中',
-    title: '配送状态',
-  },
-  {
-    description: '继续上次生成的章节总结、概念拆解和练习题',
-    icon: 'bookmark',
-    meta: '2 条 AI 学习记录待继续',
-    title: '学习记录',
-  },
-] as const;
 
 export const homeShelves = [
   {

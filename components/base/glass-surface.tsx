@@ -1,4 +1,10 @@
-import { GlassView, isGlassEffectAPIAvailable, isLiquidGlassAvailable } from 'expo-glass-effect';
+import {
+  GlassView,
+  type GlassEffectStyleConfig,
+  type GlassStyle,
+  isGlassEffectAPIAvailable,
+  isLiquidGlassAvailable,
+} from 'expo-glass-effect';
 import React from 'react';
 import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
@@ -6,14 +12,18 @@ import { useAppTheme } from '@/hooks/use-app-theme';
 
 type GlassSurfaceProps = {
   children: React.ReactNode;
-  intensity?: 'clear' | 'regular';
+  glassEffectStyle?: GlassStyle | GlassEffectStyleConfig;
+  glassViewTestID?: string;
+  interactive?: boolean;
   style?: StyleProp<ViewStyle>;
   tintColor?: string;
 };
 
 export function GlassSurface({
   children,
-  intensity = 'regular',
+  glassEffectStyle = 'regular',
+  glassViewTestID,
+  interactive = false,
   style,
   tintColor,
 }: GlassSurfaceProps) {
@@ -25,38 +35,48 @@ export function GlassSurface({
   const canUseLiquidGlass =
     Platform.OS === 'ios' && supportsGlassAPI && supportsLiquidGlass;
 
+  const surfaceStyle: StyleProp<ViewStyle> = [
+    {
+      borderColor: theme.colors.borderSoft,
+      borderRadius: theme.radii.xl,
+      borderWidth: 1,
+      boxShadow: theme.shadows.card,
+      overflow: 'hidden',
+    },
+    style,
+  ];
+
+  if (canUseLiquidGlass) {
+    return (
+      <GlassView
+        colorScheme="light"
+        glassEffectStyle={glassEffectStyle}
+        isInteractive={interactive}
+        style={surfaceStyle}
+        testID={glassViewTestID}
+        tintColor={tintColor ?? theme.colors.glassTint}>
+        {children}
+      </GlassView>
+    );
+  }
+
   return (
     <View
       style={[
+        surfaceStyle,
         {
-          backgroundColor: canUseLiquidGlass ? 'transparent' : theme.colors.surface,
-          borderColor: theme.colors.borderSoft,
-          borderRadius: theme.radii.xl,
-          borderWidth: 1,
-          boxShadow: theme.shadows.card,
-          overflow: 'hidden',
+          backgroundColor: theme.colors.surface,
         },
-        style,
       ]}>
-      {canUseLiquidGlass ? (
-        <GlassView
-          colorScheme="light"
-          glassEffectStyle={intensity}
-          isInteractive={false}
-          style={StyleSheet.absoluteFill}
-          tintColor={tintColor ?? theme.colors.glassTint}
-        />
-      ) : (
-        <View
-          pointerEvents="none"
-          style={[
-            StyleSheet.absoluteFill,
-            {
-              backgroundColor: tintColor ?? theme.colors.surface,
-            },
-          ]}
-        />
-      )}
+      <View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            backgroundColor: tintColor ?? theme.colors.surface,
+          },
+        ]}
+      />
       <View>{children}</View>
     </View>
   );

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   cancelBorrowOrder,
@@ -19,6 +19,7 @@ import {
   getMyOverview,
   listActiveOrders,
   listBooklists,
+  listBooksPage,
   listBorrowOrders,
   listBooks,
   listFavorites,
@@ -72,13 +73,43 @@ export function useBookSearchQuery(query: string, enabled = true) {
   });
 }
 
-export function useExplicitBookSearchQuery(query: string, enabled = true) {
+export function useCatalogBookSearchPageQuery(
+  query: string,
+  options: {
+    enabled?: boolean;
+    limit?: number;
+    offset?: number;
+  } = {}
+) {
   const { token } = useAppSession();
+  const enabled = options.enabled ?? true;
+  const limit = options.limit ?? 20;
+  const offset = options.offset ?? 0;
+
+  return useQuery({
+    enabled,
+    queryFn: () => listBooksPage(query, token, { limit, offset }),
+    queryKey: ['books', 'catalog-page', query, limit, offset, token],
+  });
+}
+
+export function useExplicitBookSearchQuery(
+  query: string,
+  options: {
+    enabled?: boolean;
+    limit?: number;
+    offset?: number;
+  } = {}
+) {
+  const { token } = useAppSession();
+  const enabled = options.enabled ?? true;
+  const limit = options.limit ?? 20;
+  const offset = options.offset ?? 0;
 
   return useQuery({
     enabled: enabled && query.trim().length > 0,
-    queryFn: () => searchBooksExplicit(query, token),
-    queryKey: ['books', 'explicit-search', query, token],
+    queryFn: () => searchBooksExplicit(query, token, { limit, offset }),
+    queryKey: ['books', 'explicit-search', query, limit, offset, token],
   });
 }
 
@@ -99,6 +130,19 @@ export function useBookDetailQuery(bookId: number) {
     enabled: Number.isFinite(bookId),
     queryFn: () => getBook(bookId, token),
     queryKey: ['book', bookId, token],
+  });
+}
+
+export function useBookDetailQueries(bookIds: number[]) {
+  const { token } = useAppSession();
+  const uniqueBookIds = Array.from(new Set(bookIds.filter((bookId) => Number.isFinite(bookId))));
+
+  return useQueries({
+    queries: uniqueBookIds.map((bookId) => ({
+      enabled: Number.isFinite(bookId),
+      queryFn: () => getBook(bookId, token),
+      queryKey: ['book', 'detail', bookId, token],
+    })),
   });
 }
 

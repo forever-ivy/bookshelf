@@ -1,178 +1,537 @@
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { useRouter, type Href } from 'expo-router';
+import { Link, type Href } from 'expo-router';
 
-import { AppIcon } from '@/components/base/app-icon';
+import { AppIcon, type AppIconName } from '@/components/base/app-icon';
 import { EditorialIllustration } from '@/components/base/editorial-illustration';
-import { MarkerHighlightText } from '@/components/base/marker-highlight-text';
+import {
+  LoadingSkeletonBlock,
+  LoadingSkeletonCard,
+  LoadingSkeletonText,
+} from '@/components/base/loading-skeleton';
+import {
+  MarkerHighlightText,
+  type MarkerHighlightTone,
+} from '@/components/base/marker-highlight-text';
 import { PillButton } from '@/components/base/pill-button';
-import { SearchResultCard } from '@/components/search/search-result-card';
 import { SectionTitle } from '@/components/base/section-title';
 import { StateMessageCard } from '@/components/base/state-message-card';
-import { SoftSearchBar } from '@/components/base/soft-search-bar';
 import { PageShell } from '@/components/navigation/page-shell';
+import { useAppSession } from '@/hooks/use-app-session';
 import {
   useActiveOrdersQuery,
+  useBookDetailQueries,
   useHomeFeedQuery,
   usePersonalizedRecommendationsQuery,
-  useRecommendationDashboardQuery,
 } from '@/hooks/use-library-app-data';
 import { useAppTheme } from '@/hooks/use-app-theme';
-import { getLibraryErrorMessage } from '@/lib/api/client';
+import { getLibraryErrorMessage, hasLibraryService } from '@/lib/api/client';
 import { appArtwork } from '@/lib/app/artwork';
-import { homeHero, homeLearningFocus, homeQuickActions, homeShelves } from '@/lib/app/mock-data';
+import { homeHero } from '@/lib/app/mock-data';
 
-function resolveQuickActionIcon(index: number): 'bookmark' | 'spark' | 'truck' {
-  if (index === 0) {
-    return 'spark';
+function resolveHomeGreeting(hour: number) {
+  if (hour >= 5 && hour < 11) {
+    return '早上好 ☀️';
   }
 
-  if (index === 1) {
-    return 'truck';
+  if (hour >= 11 && hour < 14) {
+    return '中午好 🌤️';
   }
 
-  return 'bookmark';
+  if (hour >= 14 && hour < 18) {
+    return '下午好 🍃';
+  }
+
+  return '晚上好！ 🌙';
+}
+
+function mergeRecommendationLocation<T extends { cabinetLabel: string; id: number; shelfLabel: string }>(
+  item: T,
+  fallback?: { cabinetLabel: string; shelfLabel: string }
+) {
+  if (!fallback) {
+    return item;
+  }
+
+  const needsCabinetFallback = !item.cabinetLabel || item.cabinetLabel === '位置待确认';
+  const needsShelfFallback = !item.shelfLabel || item.shelfLabel === '主馆 2 楼';
+
+  if (!needsCabinetFallback && !needsShelfFallback) {
+    return item;
+  }
+
+  return {
+    ...item,
+    cabinetLabel: needsCabinetFallback ? fallback.cabinetLabel : item.cabinetLabel,
+    shelfLabel: needsShelfFallback ? fallback.shelfLabel : item.shelfLabel,
+  };
+}
+
+type QuickStartItem = {
+  description: string;
+  descriptionHighlight?: string;
+  highlightTone?: MarkerHighlightTone;
+  icon: AppIconName;
+  iconBackgroundColor: string;
+  iconColor: string;
+  key: string;
+  title: string;
+};
+
+type HomeBookLinkItem = {
+  author: string;
+  availabilityLabel: string;
+  cabinetLabel: string;
+  etaLabel: string;
+  href: Href;
+  id: number;
+  title: string;
+};
+
+function HomeQuickStartSkeleton() {
+  const { theme } = useAppTheme();
+
+  return (
+    <View style={{ gap: theme.spacing.lg }} testID="home-quick-start-skeleton">
+      {Array.from({ length: 3 }, (_, index) => (
+        <View
+          key={`quick-start-skeleton-${index}`}
+          style={{
+            borderTopColor: index === 0 ? 'transparent' : theme.colors.borderSoft,
+            borderTopWidth: index === 0 ? 0 : 1,
+            flexDirection: 'row',
+            gap: theme.spacing.lg,
+            paddingTop: index === 0 ? 0 : theme.spacing.lg,
+          }}>
+          <LoadingSkeletonBlock borderRadius={theme.radii.md} height={44} width={44} />
+          <View style={{ flex: 1, gap: 8, paddingTop: 2 }}>
+            <LoadingSkeletonBlock height={16} width="28%" />
+            <LoadingSkeletonBlock height={14} width={index === 1 ? '56%' : '72%'} />
+          </View>
+        </View>
+      ))}
+      <LoadingSkeletonBlock borderRadius={theme.radii.pill} height={48} />
+    </View>
+  );
+}
+
+function HomeBookLinkListSkeleton({ testID }: { testID: string }) {
+  const { theme } = useAppTheme();
+
+  return (
+    <View
+      style={{
+        backgroundColor: theme.colors.surface,
+        borderColor: theme.colors.borderStrong,
+        borderRadius: theme.radii.lg,
+        borderWidth: 1,
+        overflow: 'hidden',
+      }}
+      testID={testID}>
+      {Array.from({ length: 2 }, (_, index) => (
+        <View
+          key={`${testID}-${index}`}
+          style={{
+            borderTopColor: index === 0 ? 'transparent' : theme.colors.borderSoft,
+            borderTopWidth: index === 0 ? 0 : 1,
+            flexDirection: 'row',
+            gap: theme.spacing.md,
+            paddingHorizontal: theme.spacing.lg,
+            paddingVertical: theme.spacing.md,
+          }}>
+          <View style={{ flex: 1, gap: 8 }}>
+            <LoadingSkeletonBlock height={16} width={index === 0 ? '66%' : '58%'} />
+            <LoadingSkeletonBlock height={12} width="42%" />
+            <LoadingSkeletonBlock height={12} width="54%" />
+          </View>
+          <LoadingSkeletonBlock borderRadius={theme.radii.pill} height={16} width={16} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function HomeFeaturedShelfSkeleton() {
+  const { theme } = useAppTheme();
+
+  return (
+    <View style={{ gap: theme.spacing.md }} testID="home-featured-skeleton">
+      <LoadingSkeletonCard>
+        <LoadingSkeletonBlock height={16} width="32%" />
+        <LoadingSkeletonText lineHeight={12} widths={['58%', '42%']} />
+      </LoadingSkeletonCard>
+      <LoadingSkeletonBlock height={12} width={96} />
+      <HomeBookLinkListSkeleton testID="home-featured-book-links-skeleton" />
+    </View>
+  );
+}
+
+function resolveHomeBookLocation(location?: string | null) {
+  const normalized = location?.trim();
+
+  if (!normalized || normalized === '位置待确认' || normalized === '馆藏位置待确认' || normalized === '默认书柜') {
+    return '馆藏位置待确认';
+  }
+
+  return normalized;
+}
+
+function resolveHomeBookAuthor(author?: string | null) {
+  const normalized = author?.trim();
+
+  if (!normalized || /^nan$/i.test(normalized)) {
+    return '佚名';
+  }
+
+  return normalized;
+}
+
+function resolveRecommendationHighlight(text: string) {
+  const normalized = text.trim();
+
+  const priorityPhrase = normalized.match(/优先展示[^。；]*/)?.[0]?.trim();
+
+  if (priorityPhrase) {
+    return priorityPhrase;
+  }
+
+  const immediatePhrase = normalized.match(/(?:当前可借|能立即拿到)[^。；]*/)?.[0]?.trim();
+
+  if (immediatePhrase) {
+    return immediatePhrase;
+  }
+
+  const easierToBorrowPhrase = normalized.match(/(?:更容易借到|方便尽快借到)[^。；]*/)?.[0]?.trim();
+
+  if (easierToBorrowPhrase) {
+    return easierToBorrowPhrase;
+  }
+
+  const clauses = normalized
+    .split(/[，。；]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return clauses.at(-1) ?? normalized;
+}
+
+function formatRecommendationSummary(text?: string | null) {
+  const normalized = text?.trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  if (/系统会结合|优先展示|馆内热度|最近借阅|收藏|课程/.test(normalized)) {
+    return '这些书更贴近你最近在看的方向，也优先帮你挑出现在更容易借到的书。';
+  }
+
+  return normalized;
+}
+
+function HomeBookLinkList({
+  items,
+  testIDPrefix,
+}: {
+  items: HomeBookLinkItem[];
+  testIDPrefix: string;
+}) {
+  const { theme } = useAppTheme();
+
+  return (
+    <View
+      style={{
+        backgroundColor: theme.colors.surface,
+        borderColor: theme.colors.borderStrong,
+        borderRadius: theme.radii.lg,
+        borderWidth: 1,
+        overflow: 'hidden',
+      }}>
+      {items.map((item, index) => (
+        <Link key={`${testIDPrefix}-${item.id}`} asChild href={item.href}>
+          <Pressable
+            accessibilityRole="button"
+            testID={`${testIDPrefix}-${item.id}`}
+            style={({ pressed }) => ({
+              opacity: pressed ? 0.94 : 1,
+            })}>
+            <View
+              style={{
+                borderTopColor: index === 0 ? 'transparent' : theme.colors.borderSoft,
+                borderTopWidth: index === 0 ? 0 : 1,
+                flexDirection: 'row',
+                gap: theme.spacing.md,
+                paddingHorizontal: theme.spacing.lg,
+                paddingVertical: theme.spacing.md,
+              }}>
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: theme.colors.text,
+                    ...theme.typography.semiBold,
+                    fontSize: 15,
+                    lineHeight: 21,
+                  }}>
+                  {item.title}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: theme.colors.textMuted,
+                    ...theme.typography.medium,
+                    fontSize: 13,
+                    lineHeight: 18,
+                  }}>
+                  {resolveHomeBookAuthor(item.author)} · {resolveHomeBookLocation(item.cabinetLabel)}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: theme.colors.textSoft,
+                    ...theme.typography.body,
+                    fontSize: 12,
+                    lineHeight: 17,
+                  }}>
+                  {item.availabilityLabel} · {item.etaLabel}
+                </Text>
+              </View>
+              <View
+                style={{
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                <AppIcon color={theme.colors.textSoft} name="chevronRight" size={16} strokeWidth={1.7} />
+              </View>
+            </View>
+          </Pressable>
+        </Link>
+      ))}
+    </View>
+  );
 }
 
 export default function HomeRoute() {
   const activeOrdersQuery = useActiveOrdersQuery();
   const homeFeedQuery = useHomeFeedQuery();
-  const dashboardQuery = useRecommendationDashboardQuery();
   const personalizedQuery = usePersonalizedRecommendationsQuery({ historyLimit: 5, limit: 8 });
-  const router = useRouter();
+  const { profile } = useAppSession();
   const { theme } = useAppTheme();
   const homeError = homeFeedQuery.error ?? activeOrdersQuery.error;
+  const hasRealLibraryService = hasLibraryService();
   const feedData = homeFeedQuery.data;
-  const dashboard = dashboardQuery.data;
+  const greeting = resolveHomeGreeting(new Date().getHours());
+  const displayName = profile?.displayName?.trim() ? profile.displayName.trim() : '同学';
 
   const chipPalettes = [
     { backgroundColor: theme.colors.primarySoft, color: theme.colors.primaryStrong },
     { backgroundColor: theme.colors.warningSoft, color: theme.colors.warning },
     { backgroundColor: theme.colors.successSoft, color: theme.colors.success },
   ] as const;
-  const actionPalettes = [
-    { iconBackground: theme.colors.primarySoft, iconColor: theme.colors.primaryStrong },
-    { iconBackground: theme.colors.warningSoft, iconColor: theme.colors.warning },
-    { iconBackground: theme.colors.successSoft, iconColor: theme.colors.success },
-  ] as const;
-  const resolveQuickActionHref = (code?: string, title?: string): Href => {
-    if (code === 'borrow_now' || title === '今晚待开始') {
-      return '/search/borrow-now';
-    }
-
-    if (code === 'delivery_status' || title === '配送状态') {
-      return '/(tabs)/borrowing';
-    }
-
-    if (title === '学习记录') {
-      return '/profile';
-    }
-
-    return '/search';
-  };
-  const quickActions = homeFeedQuery.data?.quickActions?.length
-    ? homeFeedQuery.data.quickActions.map((item, index) => ({
-        code: item.code,
-        description: item.description,
-        icon: resolveQuickActionIcon(index),
-        meta: item.meta,
-        title: item.title,
-      }))
-    : homeError
-      ? []
-      : homeQuickActions.map((item) => ({
-        code: undefined,
-        ...item,
-      }));
+  const activeOrder = hasRealLibraryService ? activeOrdersQuery.data?.[0] : undefined;
   const recommendationCards = homeFeedQuery.data?.todayRecommendations ?? [];
   const booklistCards = homeFeedQuery.data?.systemBooklists ?? [];
-  const leadRecommendation = recommendationCards[0];
-  const activeOrder = activeOrdersQuery.data?.[0];
-  const learningBullets = [
-    leadRecommendation
-      ? `先借《${leadRecommendation.title}》，${leadRecommendation.etaLabel}`
-      : homeLearningFocus.bullets[0],
-    leadRecommendation?.recommendationReason
-      ? `推荐解释：${leadRecommendation.recommendationReason}`
-      : homeLearningFocus.bullets[1],
-    activeOrder
-      ? `预计 35 分钟可以完成一轮预习，当前履约：${activeOrder.statusLabel}`
-      : homeLearningFocus.bullets[2],
-  ];
-  const recommendationSections = homeError
-    ? []
-    : booklistCards.length
+  const quickStartItems: QuickStartItem[] = activeOrder?.book?.title
+    ? [
+        {
+          description: `《${activeOrder.book.title}》`,
+          icon: 'bookmark',
+          iconBackgroundColor: theme.colors.accentLavender,
+          iconColor: theme.colors.knowledgeStrong,
+          key: 'continue-reading',
+          title: '继续阅读',
+        },
+        {
+          description: [activeOrder.statusLabel, activeOrder.dueDateLabel].filter(Boolean).join(' · '),
+          descriptionHighlight: activeOrder.dueDateLabel ?? activeOrder.statusLabel,
+          highlightTone: 'blue',
+          icon: 'clock',
+          iconBackgroundColor: theme.colors.warningSoft,
+          iconColor: theme.colors.warning,
+          key: 'view-progress',
+          title: '查看进度',
+        },
+        {
+          description: '处理续借、归还和查看进度',
+          descriptionHighlight: '处理续借、归还和查看进度',
+          highlightTone: 'green',
+          icon: 'borrowing',
+          iconBackgroundColor: theme.colors.successSoft,
+          iconColor: theme.colors.success,
+          key: 'manage-borrowing',
+          title: '去借阅页',
+        },
+      ]
+    : hasRealLibraryService
       ? [
           {
-            items: booklistCards.slice(0, 2).map((item, index) => ({
-              coverTone: index % 2 === 0 ? 'apricot' : 'lavender',
-              description: item.description,
-              kicker: '系统书单',
-              title: item.title,
-            })),
-            title: '系统生成书单',
+            description: '按书名、作者或主题开始',
+            highlightTone: 'orange',
+            icon: 'search',
+            iconBackgroundColor: theme.colors.accentLavender,
+            iconColor: theme.colors.knowledgeStrong,
+            key: 'go-search',
+            title: '去找书',
           },
           {
-            items: recommendationCards.slice(0, 2).map((item, index) => ({
-              coverTone: index % 2 === 0 ? item.coverTone : 'mint',
-              description: item.recommendationReason ?? item.summary,
-              kicker: index === 0 ? '今日推荐' : '推荐解释',
-              title: item.title,
-            })),
-            title: '个性化推荐',
+            description: '优先查看可借可送图书',
+            highlightTone: 'blue',
+            icon: 'spark',
+            iconBackgroundColor: theme.colors.warningSoft,
+            iconColor: theme.colors.warning,
+            key: 'borrow-now',
+            title: '看可立即借',
+          },
+          {
+            description: '确认位置后再决定',
+            highlightTone: 'green',
+            icon: 'bookmark',
+            iconBackgroundColor: theme.colors.successSoft,
+            iconColor: theme.colors.success,
+            key: 'check-location',
+            title: '查看馆藏',
           },
         ]
-      : homeShelves;
+      : [];
+  const quickStartState = !hasRealLibraryService
+    ? {
+        description: '连接真实 service 后，这里会展示基于当前借阅和馆藏状态的入口动作。',
+        title: '尚未连接真实数据',
+        tone: 'info' as const,
+      }
+    : homeError
+      ? {
+          description: getLibraryErrorMessage(homeError, '首页入口暂时不可用，请检查 service 是否已启动。'),
+          title: '首页入口暂时不可用',
+          tone: 'danger' as const,
+        }
+      : null;
 
-  // 推荐引擎状态
-  const dashboardModules = [
-    {
-      detail:
-        dashboard?.modules.similar.ok && dashboard.modules.similar.results.length
-          ? `${dashboard.modules.similar.results.length} 本基于内容相似度`
-          : dashboard?.modules.similar.error ?? '当前缺少足够的内容特征，稍后会继续补充',
-      title: '内容相似推荐',
-      tone: theme.colors.primaryStrong,
-    },
-    {
-      detail:
-        dashboard?.modules.collaborative.ok && dashboard.modules.collaborative.results.length
-          ? `${dashboard.modules.collaborative.results.length} 本来自相近读者借阅行为`
-          : dashboard?.modules.collaborative.error ?? '借阅行为信号还在积累中',
-      title: '协同过滤推荐',
-      tone: theme.colors.success,
-    },
-    {
-      detail:
-        dashboard?.modules.hybrid.ok && dashboard.modules.hybrid.results.length
-          ? `${dashboard.modules.hybrid.results.length} 本来自混合召回`
-          : dashboard?.modules.hybrid.error ?? '混合推荐暂时没有可展示结果',
-      title: '混合推荐',
-      tone: theme.colors.warning,
-    },
-  ];
+  const recommendationLocationById = new Map(
+    recommendationCards.map((item) => [
+      item.id,
+      {
+        cabinetLabel: item.cabinetLabel,
+        shelfLabel: item.shelfLabel,
+      },
+      ])
+  );
+  const personalizedBooksSource =
+    personalizedQuery.data?.length ? personalizedQuery.data : feedData?.todayRecommendations ?? [];
+  const personalizedBooksWithFeedLocations = personalizedBooksSource.map((item) =>
+    mergeRecommendationLocation(item, recommendationLocationById.get(item.id))
+  );
+  const missingPersonalizedLocationIds = personalizedBooksWithFeedLocations
+    .filter((item) => item.cabinetLabel === '位置待确认')
+    .map((item) => item.id);
+  const personalizedBookDetails = useBookDetailQueries(hasRealLibraryService ? missingPersonalizedLocationIds : []);
+  const personalizedDetailLocationById = new Map(
+    personalizedBookDetails
+      .map((query) => query.data?.catalog)
+      .filter(
+        (catalog): catalog is { cabinetLabel: string; id: number; shelfLabel: string } => Boolean(catalog)
+      )
+      .map((catalog) => [
+        catalog.id,
+        {
+          cabinetLabel: catalog.cabinetLabel,
+          shelfLabel: catalog.shelfLabel,
+        },
+      ])
+  );
+  const personalizedBooks = personalizedBooksWithFeedLocations.map((item) =>
+    mergeRecommendationLocation(item, personalizedDetailLocationById.get(item.id))
+  );
+  const personalizedDetailsLoading = personalizedBookDetails.some(
+    (query) => Boolean(query.isFetching) && !query.data
+  );
 
-  // 个性化推荐
-  const personalizedBooks =
-    personalizedQuery.data?.length ? personalizedQuery.data : dashboard?.personalized ?? feedData?.todayRecommendations ?? [];
-
-  // 考试专区
+  const homeRecommendationCards = personalizedBooks.slice(0, 2);
   const examZone = feedData?.examZone ?? [];
+  const hasFeaturedCollections = booklistCards.length > 0 || examZone.length > 0;
+  const homeRecommendationLinks = homeRecommendationCards.map((item) => ({
+    author: item.author,
+    availabilityLabel: item.availabilityLabel,
+    cabinetLabel: item.cabinetLabel,
+    etaLabel: item.etaLabel,
+    href: `/books/${item.id}` as Href,
+    id: item.id,
+    title: item.title,
+  }));
+  const showQuickStartSkeleton =
+    hasRealLibraryService && !quickStartState && !activeOrdersQuery.data && Boolean(activeOrdersQuery.isFetching);
+  const showRecommendationSkeleton =
+    hasRealLibraryService &&
+    !homeRecommendationLinks.length &&
+    !homeError &&
+    (Boolean(homeFeedQuery.isFetching) || Boolean(personalizedQuery.isFetching) || personalizedDetailsLoading);
+  const showFeaturedCollectionsSkeleton =
+    hasRealLibraryService &&
+    !hasFeaturedCollections &&
+    !homeError &&
+    Boolean(homeFeedQuery.isFetching);
+  const recommendationReasonSummary =
+    formatRecommendationSummary(feedData?.explanationCard?.body) ||
+    homeRecommendationCards
+      .map((item) => item.recommendationReason?.trim())
+      .filter((item): item is string => Boolean(item))
+      .slice(0, 2)
+      .join('；') ||
+    '这些书更贴近你最近在看的方向，也更容易借到。';
+  const featuredBookLinks = examZone.map((item) => ({
+    author: item.author,
+    availabilityLabel: item.availabilityLabel,
+    cabinetLabel: item.cabinetLabel,
+    etaLabel: item.etaLabel,
+    href: `/books/${item.id}` as Href,
+    id: item.id,
+    title: item.title,
+  }));
+  const quickStartCta = activeOrder?.book?.title
+    ? {
+        href: '/(tabs)/borrowing' as const,
+        label: '查看当前借阅',
+      }
+    : {
+        href: '/search' as const,
+        label: '去找书',
+      };
 
-  // 推荐解释
-  const explanationTitle = dashboard?.focusBook?.title
-    ? `围绕《${dashboard.focusBook.title}》继续延展`
-    : feedData?.explanationCard?.title ?? '今日推荐解释';
-  const explanationBody = dashboard?.suggestedQueries?.length
-    ? `系统识别到你最近关注 ${dashboard.suggestedQueries.slice(0, 3).join('、')}，所以优先推荐更贴近当前课程和阅读轨迹的图书。`
-    : feedData?.explanationCard?.body ?? '这里会汇总今日推荐、考试专区、热门榜单和推荐解释。';
-
-  // 阅读历史
-  const historyBooks = dashboard?.historyBooks ?? [];
+  const homeHeader = (
+    <View
+      style={{
+        gap: theme.spacing.xs,
+        maxWidth: 320,
+      }}
+      testID="home-greeting-header">
+      <Text
+        style={{
+          color: theme.colors.text,
+          ...theme.typography.heading,
+          fontSize: 36,
+          letterSpacing: -1.1,
+          lineHeight: 42,
+        }}
+        testID="home-greeting-label">
+        {greeting}
+      </Text>
+      <Text
+        style={{
+          color: theme.colors.textMuted,
+          ...theme.typography.medium,
+          fontSize: 22,
+          letterSpacing: -0.2,
+          lineHeight: 28,
+        }}
+        testID="home-greeting-name">
+        {displayName}
+      </Text>
+    </View>
+  );
 
   return (
-    <PageShell headerTitle={homeHero.title} mode="discovery">
+    <PageShell headerContent={homeHeader} mode="discovery">
       <View style={{ gap: theme.spacing.md }}>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm }}>
           {homeHero.chips.map((chip, index) => {
@@ -208,10 +567,6 @@ export default function HomeRoute() {
         />
       </Animated.View>
 
-      <Animated.View entering={FadeInUp.delay(100).duration(480)}>
-        <SoftSearchBar onPress={() => router.push('/search')} />
-      </Animated.View>
-
       {homeError ? (
         <StateMessageCard
           description={getLibraryErrorMessage(homeError, '首页推荐暂时不可用，请检查 service 是否已启动。')}
@@ -220,64 +575,150 @@ export default function HomeRoute() {
         />
       ) : null}
 
-      <Animated.View entering={FadeInUp.delay(140).duration(560)}>
+      <View style={{ gap: theme.spacing.lg }}>
+        <SectionTitle title="快速开始" />
         <View
           style={{
             backgroundColor: theme.colors.surface,
             borderColor: theme.colors.borderStrong,
             borderRadius: theme.radii.lg,
             borderWidth: 1,
-            overflow: 'hidden',
+            gap: theme.spacing.lg,
+            padding: theme.spacing.xl,
           }}>
-          {quickActions.map((item, index) => {
-            const palette = actionPalettes[index % actionPalettes.length];
-
-            return (
-              <Pressable
-                key={item.title}
-                accessibilityRole="button"
-                onPress={() => router.push(resolveQuickActionHref(item.code, item.title))}
-                testID={`home-quick-action-${item.code ?? item.title}`}
+          {showQuickStartSkeleton ? (
+            <HomeQuickStartSkeleton />
+          ) : quickStartState ? (
+            <StateMessageCard
+              description={quickStartState.description}
+              testID="home-quick-start-empty-state"
+              title={quickStartState.title}
+              tone={quickStartState.tone}
+            />
+          ) : (
+            quickStartItems.map((item, index) => (
+              <View
+                key={item.key}
                 style={{
                   borderTopColor: index === 0 ? 'transparent' : theme.colors.borderSoft,
                   borderTopWidth: index === 0 ? 0 : 1,
                   flexDirection: 'row',
-                  gap: theme.spacing.md,
-                  padding: theme.spacing.lg,
-                }}>
+                  gap: theme.spacing.lg,
+                  paddingTop: index === 0 ? 0 : theme.spacing.lg,
+                }}
+                testID="home-quick-start-item">
                 <View
                   style={{
                     alignItems: 'center',
-                    backgroundColor: palette.iconBackground,
+                    backgroundColor: item.iconBackgroundColor,
                     borderRadius: theme.radii.md,
-                    height: 34,
+                    height: 44,
                     justifyContent: 'center',
-                    width: 34,
-                  }}>
-                  <AppIcon color={palette.iconColor} name={item.icon} size={15} strokeWidth={1.7} />
+                    width: 44,
+                  }}
+                  testID="home-quick-start-item-icon">
+                  <AppIcon color={item.iconColor} name={item.icon} size={18} strokeWidth={1.7} />
                 </View>
-                <View style={{ flex: 1, gap: 4 }}>
-                  {item.title === '今晚待开始' ? (
+                <View style={{ flex: 1, gap: 4, paddingTop: 2 }}>
+                  <Text
+                    style={{
+                      color: theme.colors.text,
+                      ...theme.typography.semiBold,
+                      fontSize: 15,
+                      lineHeight: 22,
+                    }}>
+                    {item.title}
+                  </Text>
+                  {item.descriptionHighlight ? (
                     <MarkerHighlightText
-                      highlight="今晚待开始"
-                      highlightTone="orange"
-                      text={item.title}
+                      highlight={item.descriptionHighlight}
+                      highlightTone={item.highlightTone}
+                      numberOfLines={1}
+                      text={item.description}
                       textStyle={{
-                        color: theme.colors.text,
-                        ...theme.typography.semiBold,
-                        fontSize: 15,
+                        color: theme.colors.textMuted,
+                        ...theme.typography.medium,
+                        flex: 1,
+                        fontSize: 14,
+                        lineHeight: 20,
                       }}
                     />
                   ) : (
                     <Text
+                      numberOfLines={1}
                       style={{
-                        color: theme.colors.text,
-                        ...theme.typography.semiBold,
-                        fontSize: 15,
+                        color: theme.colors.textMuted,
+                        ...theme.typography.medium,
+                        flex: 1,
+                        fontSize: 14,
+                        lineHeight: 20,
                       }}>
-                      {item.title}
+                      {item.description}
                     </Text>
                   )}
+                </View>
+              </View>
+            ))
+          )}
+          {!showQuickStartSkeleton ? (
+            <PillButton href={quickStartCta.href} icon="bookmark" label={quickStartCta.label} variant="accent" />
+          ) : null}
+        </View>
+      </View>
+
+      {showRecommendationSkeleton || homeRecommendationLinks.length > 0 ? (
+        <View style={{ gap: theme.spacing.lg }}>
+          <SectionTitle title="推荐借阅" />
+          {showRecommendationSkeleton ? (
+            <View style={{ gap: theme.spacing.sm }} testID="home-recommendation-skeleton">
+              <LoadingSkeletonText lineHeight={14} widths={['92%', '78%']} />
+              <HomeBookLinkListSkeleton testID="home-recommendation-links-skeleton" />
+            </View>
+          ) : (
+            <View style={{ gap: theme.spacing.sm }}>
+              <MarkerHighlightText
+                highlight={resolveRecommendationHighlight(recommendationReasonSummary)}
+                highlightTone="orange"
+                text={recommendationReasonSummary}
+                textStyle={{
+                  color: theme.colors.textMuted,
+                  ...theme.typography.body,
+                  fontSize: 14,
+                  lineHeight: 22,
+                }}
+              />
+              <HomeBookLinkList items={homeRecommendationLinks} testIDPrefix="home-recommendation-link" />
+            </View>
+          )}
+        </View>
+      ) : null}
+
+      {showFeaturedCollectionsSkeleton || hasFeaturedCollections ? (
+        <View style={{ gap: theme.spacing.lg }}>
+          <SectionTitle title="专题书单" />
+          {showFeaturedCollectionsSkeleton ? (
+            <HomeFeaturedShelfSkeleton />
+          ) : (
+            <View style={{ gap: theme.spacing.md }}>
+              {booklistCards.map((item) => (
+                <View
+                  key={item.id}
+                  style={{
+                    backgroundColor: theme.colors.surface,
+                    borderColor: theme.colors.borderStrong,
+                    borderRadius: theme.radii.lg,
+                    borderWidth: 1,
+                    gap: 4,
+                    padding: theme.spacing.lg,
+                  }}>
+                  <Text
+                    style={{
+                      color: theme.colors.text,
+                      ...theme.typography.semiBold,
+                      fontSize: 15,
+                    }}>
+                    {item.title}
+                  </Text>
                   <Text
                     style={{
                       color: theme.colors.textMuted,
@@ -288,289 +729,27 @@ export default function HomeRoute() {
                     {item.description}
                   </Text>
                 </View>
-              </Pressable>
-            );
-          })}
-        </View>
-      </Animated.View>
-
-      <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle title={homeLearningFocus.title} />
-        <View
-          style={{
-            backgroundColor: theme.colors.surface,
-            borderColor: theme.colors.borderStrong,
-            borderRadius: theme.radii.lg,
-            borderWidth: 1,
-            gap: theme.spacing.lg,
-            padding: theme.spacing.xl,
-          }}>
-          {learningBullets.map((item, index) => (
-            <View
-              key={item}
-              style={{
-                borderTopColor: index === 0 ? 'transparent' : theme.colors.borderSoft,
-                borderTopWidth: index === 0 ? 0 : 1,
-                flexDirection: 'row',
-                gap: theme.spacing.md,
-                paddingTop: index === 0 ? 0 : theme.spacing.lg,
-              }}>
-              <View
-                style={{
-                  backgroundColor: theme.colors.primaryStrong,
-                  borderRadius: theme.radii.pill,
-                  height: 6,
-                  marginTop: 7,
-                  width: 6,
-                }}
-              />
-              {item.includes('35 分钟') ? (
-                <MarkerHighlightText
-                  highlight="35 分钟"
-                  highlightColor="#F28A14"
-                  highlightTone="orange"
-                  text={item}
-                  variant="underline"
-                  textStyle={{
-                    color: theme.colors.text,
-                    ...theme.typography.medium,
-                    flex: 1,
-                    fontSize: 14,
-                    lineHeight: 20,
-                  }}
-                />
-              ) : (
-                <Text
-                  style={{
-                    color: theme.colors.text,
-                    ...theme.typography.medium,
-                    flex: 1,
-                    fontSize: 14,
-                    lineHeight: 20,
-                  }}>
-                  {item}
-                </Text>
-              )}
+              ))}
+              {featuredBookLinks.length > 0 ? (
+                <View style={{ gap: theme.spacing.sm }}>
+                  <MarkerHighlightText
+                    highlight="这几本"
+                    highlightTone="green"
+                    text="先从这几本看起"
+                    textStyle={{
+                      color: theme.colors.textSoft,
+                      ...theme.typography.medium,
+                      fontSize: 12,
+                      lineHeight: 18,
+                    }}
+                  />
+                  <HomeBookLinkList items={featuredBookLinks} testIDPrefix="home-booklist-link" />
+                </View>
+              ) : null}
             </View>
-          ))}
-          <PillButton href="/(tabs)/borrowing" icon="bookmark" label={homeHero.primaryCta} variant="accent" />
-        </View>
-      </View>
-
-      {/* ── 推荐解释 ── */}
-      <View
-        style={{
-          backgroundColor: theme.colors.surface,
-          borderColor: theme.colors.borderStrong,
-          borderRadius: theme.radii.lg,
-          borderWidth: 1,
-          gap: theme.spacing.sm,
-          padding: theme.spacing.xl,
-        }}>
-        <Text
-          style={{
-            color: theme.colors.primaryStrong,
-            ...theme.typography.medium,
-            fontSize: 12,
-          }}>
-          {explanationTitle}
-        </Text>
-        <Text
-          style={{
-            color: theme.colors.text,
-            ...theme.typography.semiBold,
-            fontSize: 16,
-            lineHeight: 22,
-          }}>
-          {explanationBody}
-        </Text>
-      </View>
-
-      {/* ── 个性化推荐 ── */}
-      <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle title="个性化推荐" />
-        <View style={{ gap: theme.spacing.lg }}>
-          {personalizedBooks.map((item) => (
-            <SearchResultCard
-              key={item.id}
-              availability={item.availabilityLabel}
-              author={item.author}
-              coverTone={item.coverTone}
-              eta={item.etaLabel}
-              href={`/books/${item.id}`}
-              location={item.cabinetLabel}
-              reason={item.recommendationReason}
-              title={item.title}
-            />
-          ))}
-          {personalizedBooks.length === 0 ? (
-            <StateMessageCard
-              description="还没有足够的个性化信号，先去找书页浏览几本感兴趣的书吧。"
-              title="个性化推荐正在养成"
-            />
-          ) : null}
-        </View>
-      </View>
-
-      {/* ── 推荐引擎状态 ── */}
-      <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle title="推荐引擎状态" />
-        <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
-          {dashboardModules.map((item) => (
-            <View
-              key={item.title}
-              style={{
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.borderStrong,
-                borderRadius: theme.radii.lg,
-                borderWidth: 1,
-                flex: 1,
-                gap: 6,
-                padding: theme.spacing.md,
-              }}>
-              <Text style={{ color: item.tone, ...theme.typography.semiBold, fontSize: 14 }}>{item.title}</Text>
-              <Text
-                style={{
-                  color: theme.colors.textMuted,
-                  ...theme.typography.body,
-                  fontSize: 12,
-                  lineHeight: 17,
-                }}>
-                {item.detail}
-              </Text>
-            </View>
-          ))}
-        </View>
-      </View>
-
-      {/* ── 最近阅读方向 ── */}
-      {historyBooks.length > 0 ? (
-        <View style={{ gap: theme.spacing.lg }}>
-          <SectionTitle title="最近读过这些方向" />
-          <View style={{ gap: theme.spacing.sm }}>
-            {historyBooks.map((item, index) => (
-              <View
-                key={`${item.bookId ?? index}-${item.title ?? 'history'}`}
-                style={{
-                  backgroundColor: theme.colors.surface,
-                  borderColor: theme.colors.borderStrong,
-                  borderRadius: theme.radii.lg,
-                  borderWidth: 1,
-                  gap: 4,
-                  padding: theme.spacing.lg,
-                }}>
-                <Text style={{ color: theme.colors.text, ...theme.typography.semiBold, fontSize: 15 }}>
-                  {item.title ?? `近期阅读主题 ${index + 1}`}
-                </Text>
-                <Text style={{ color: theme.colors.textMuted, ...theme.typography.body, fontSize: 13 }}>
-                  {item.bookId ? `已纳入推荐上下文 · 图书 ID ${item.bookId}` : '会继续用来优化后续推荐'}
-                </Text>
-              </View>
-            ))}
-          </View>
+          )}
         </View>
       ) : null}
-
-      {/* ── 考试专区 ── */}
-      {examZone.length > 0 ? (
-        <View style={{ gap: theme.spacing.lg }}>
-          <SectionTitle title="考试专区" />
-          <View style={{ gap: theme.spacing.lg }}>
-            {examZone.map((item) => (
-              <SearchResultCard
-                key={item.id}
-                availability={item.availabilityLabel}
-                author={item.author}
-                coverTone={item.coverTone}
-                eta={item.etaLabel}
-                href={`/books/${item.id}`}
-                location={item.cabinetLabel}
-                reason={item.recommendationReason}
-                title={item.title}
-              />
-            ))}
-          </View>
-        </View>
-      ) : null}
-
-      {/* ── 系统书单 ── */}
-      {booklistCards.length > 0 ? (
-        <View style={{ gap: theme.spacing.lg }}>
-          <SectionTitle title="系统书单" />
-          <View style={{ gap: theme.spacing.sm }}>
-            {booklistCards.map((item) => (
-              <View
-                key={item.id}
-                style={{
-                  backgroundColor: theme.colors.primarySoft,
-                  borderRadius: theme.radii.lg,
-                  gap: 4,
-                  padding: theme.spacing.lg,
-                }}>
-                <Text style={{ color: theme.colors.primaryStrong, ...theme.typography.semiBold, fontSize: 15 }}>
-                  {item.title}
-                </Text>
-                <Text style={{ color: theme.colors.primaryStrong, ...theme.typography.body, fontSize: 13 }}>
-                  {item.description}
-                </Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      ) : null}
-
-      <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle title="推荐起点" />
-        <View
-          style={{
-            backgroundColor: theme.colors.surface,
-            borderColor: theme.colors.borderStrong,
-            borderRadius: theme.radii.lg,
-            borderWidth: 1,
-            overflow: 'hidden',
-          }}>
-          {recommendationSections.flatMap((group) => group.items).map((item, index) => (
-            <View
-              key={item.title}
-              style={{
-                borderTopColor: index === 0 ? 'transparent' : theme.colors.borderSoft,
-                borderTopWidth: index === 0 ? 0 : 1,
-                gap: 4,
-                padding: theme.spacing.lg,
-              }}>
-              <Text
-                style={{
-                  color: theme.colors.textSoft,
-                  ...theme.typography.medium,
-                  fontSize: 12,
-                }}>
-                {item.kicker}
-              </Text>
-              {item.title === '机器学习从零到一' ? (
-                <MarkerHighlightText
-                  highlight="机器学习从零到一"
-                  highlightTone="green"
-                  text={item.title}
-                  textStyle={{
-                    color: theme.colors.text,
-                    ...theme.typography.semiBold,
-                    fontSize: 15,
-                  }}
-                />
-              ) : (
-                <Text
-                  style={{
-                    color: theme.colors.text,
-                    ...theme.typography.semiBold,
-                    fontSize: 15,
-                  }}>
-                  {item.title}
-                </Text>
-              )}
-            </View>
-          ))}
-        </View>
-      </View>
     </PageShell>
   );
 }

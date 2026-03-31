@@ -4,7 +4,7 @@ import React from 'react';
 import { SearchScreen, resolveSearchText } from '@/components/search/search-screen';
 
 export default function SearchRoute() {
-  const [query, setQuery] = React.useState('机器学习');
+  const [query, setQuery] = React.useState('');
   const handleSearchTextChange = React.useCallback((value: unknown) => {
     setQuery(resolveSearchText(value));
   }, []);
@@ -13,7 +13,7 @@ export default function SearchRoute() {
       onChangeText: handleSearchTextChange,
       onSearchButtonPress: handleSearchTextChange,
       placement: 'automatic' as const,
-      placeholder: '搜索书名、作者、课程或自然语言',
+      placeholder: '搜索书名、作者、更多信息',
     }),
     [handleSearchTextChange]
   );

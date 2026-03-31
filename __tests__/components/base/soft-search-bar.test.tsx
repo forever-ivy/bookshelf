@@ -7,10 +7,10 @@ describe('SoftSearchBar', () => {
   it('uses the marker-highlight component for the primary prompt', () => {
     render(<SoftSearchBar />);
 
-    expect(screen.getByText('搜索书名、作者、课程或自然语言')).toBeTruthy();
+    expect(screen.getByText('搜索书名、作者、更多信息')).toBeTruthy();
     expect(screen.queryByTestId('marker-highlight-overlay')).toBeNull();
 
-    fireEvent(screen.getByText(/课程或自然语言/), 'textLayout', {
+    fireEvent(screen.getByText(/更多信息/), 'textLayout', {
       nativeEvent: {
         lines: [{ height: 20, width: 72, x: 0, y: 0 }],
       },

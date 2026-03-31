@@ -23,6 +23,7 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 jest.mock('expo-router', () => ({
+  usePathname: () => '/register',
   useRouter: () => mockRouter,
 }));
 

@@ -90,11 +90,13 @@ export async function getHybridBooks(
 }
 
 function normalizeSearchResult(raw: any): BookCard {
+  const cabinetLabel = resolveRecommendationLocation(raw);
+
   return {
     id: raw.book_id ?? raw.id,
     author: raw.author ?? '未知作者',
     availabilityLabel: raw.deliverable ? '可立即借阅' : '暂不可借',
-    cabinetLabel: raw.cabinet_label ?? '默认书柜',
+    cabinetLabel,
     category: raw.category ?? null,
     coverTone: raw.cover_tone ?? 'blue',
     coverUrl: raw.cover_url ?? null,
@@ -109,6 +111,31 @@ function normalizeSearchResult(raw: any): BookCard {
     tags: raw.tags ?? [],
     title: raw.title ?? raw.result_title ?? '未命名图书',
   };
+}
+
+function resolveRecommendationLocation(raw: any) {
+  const directLocation =
+    raw.cabinetLabel ??
+    raw.cabinet_label ??
+    raw.locationNote ??
+    raw.location_note ??
+    raw.location ??
+    raw.slotCode ??
+    raw.slot_code;
+
+  if (typeof directLocation === 'string' && directLocation.trim()) {
+    return directLocation.trim();
+  }
+
+  const storageSlots = raw.storageSlots ?? raw.storage_slots;
+  if (Array.isArray(storageSlots)) {
+    const firstSlot = storageSlots.find((slot) => typeof slot === 'string' && slot.trim());
+    if (firstSlot) {
+      return firstSlot.trim();
+    }
+  }
+
+  return '位置待确认';
 }
 
 function normalizeRecommendationDashboard(payload: any): RecommendationDashboard {

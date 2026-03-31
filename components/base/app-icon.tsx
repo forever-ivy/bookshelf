@@ -3,6 +3,7 @@ import {
   Bell,
   Bookmark,
   BookOpen,
+  ChevronLeft,
   ChevronRight,
   CircleUserRound,
   Clock3,
@@ -20,6 +21,7 @@ export type AppIconName =
   | 'bell'
   | 'bookmark'
   | 'borrowing'
+  | 'chevronLeft'
   | 'chevronRight'
   | 'clock'
   | 'home'
@@ -33,6 +35,7 @@ const iconByName: Record<AppIconName, LucideIcon> = {
   bell: Bell,
   bookmark: Bookmark,
   borrowing: BookOpen,
+  chevronLeft: ChevronLeft,
   chevronRight: ChevronRight,
   clock: Clock3,
   home: House,

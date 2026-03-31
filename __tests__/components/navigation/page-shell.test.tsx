@@ -5,6 +5,7 @@ import { Animated, Keyboard, StyleSheet, Text } from 'react-native';
 import { PageShell } from '@/components/navigation/page-shell';
 
 const mockBack = jest.fn();
+let mockPathname = '/';
 const mockKeyboardListeners = {
   keyboardDidHide: new Set<(payload?: { duration?: number }) => void>(),
   keyboardDidShow: new Set<(payload?: { duration?: number }) => void>(),
@@ -24,6 +25,7 @@ function emitKeyboardEvent(
 }
 
 jest.mock('expo-router', () => ({
+  usePathname: () => mockPathname,
   useRouter: () => ({
     back: mockBack,
   }),
@@ -42,6 +44,7 @@ describe('PageShell', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     mockBack.mockReset();
+    mockPathname = '/';
     mockKeyboardListeners.keyboardDidHide.clear();
     mockKeyboardListeners.keyboardDidShow.clear();
     mockKeyboardListeners.keyboardWillHide.clear();
@@ -88,6 +91,32 @@ describe('PageShell', () => {
 
     expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('图书详情');
     expect(screen.getByTestId('secondary-back-button')).toBeTruthy();
+    expect(screen.getByText('页面内容')).toBeTruthy();
+  });
+
+  it('pushes the title block down on secondary routes when the floating back button is showing', () => {
+    mockPathname = '/profile';
+
+    render(
+      <PageShell headerTitle="阅读画像" mode="workspace">
+        <Text>页面内容</Text>
+      </PageShell>
+    );
+
+    expect(StyleSheet.flatten(screen.getByTestId('page-shell-header').props.style).paddingTop).toBe(104);
+    expect(StyleSheet.flatten(screen.getByTestId('page-shell-header').props.style).gap).toBe(24);
+    expect(StyleSheet.flatten(screen.getByTestId('page-shell-header-copy').props.style).paddingLeft).toBe(0);
+  });
+
+  it('renders custom header content when provided', () => {
+    render(
+      <PageShell headerContent={<Text testID="custom-home-header">下午好 / 陈知行</Text>}>
+        <Text>页面内容</Text>
+      </PageShell>
+    );
+
+    expect(screen.getByTestId('custom-home-header')).toHaveTextContent('下午好 / 陈知行');
+    expect(screen.queryByTestId('page-shell-header-title')).toBeNull();
     expect(screen.getByText('页面内容')).toBeTruthy();
   });
 

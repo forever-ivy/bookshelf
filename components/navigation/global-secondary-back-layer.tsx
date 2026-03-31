@@ -116,12 +116,12 @@ export function GlobalSecondaryBackLayer() {
         left: theme.spacing.xl,
         opacity,
         position: 'absolute',
-        top: insets.top + theme.spacing.sm,
+        top: insets.top + theme.spacing.xl + 10,
         transform: [{ translateY }, { scale }],
         zIndex: 80,
       }}
       testID="secondary-back-layer">
-      <SecondaryBackButton />
+      <SecondaryBackButton glassVisible={shouldShow} />
     </Animated.View>
   );
 }

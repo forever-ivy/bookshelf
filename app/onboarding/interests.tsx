@@ -59,10 +59,9 @@ export default function OnboardingInterestsRoute() {
 
   return (
     <PageShell
-      headerDescription="选完后，首页、推荐和书单会更贴近你的学习节奏。"
-      headerTitle="选择阅读兴趣标签"
-      mode="workspace"
-      showBackButton>
+      headerDescription="选一些你常借的主题，之后找书、推荐借阅和专题书单会更贴近你。"
+      headerTitle="选择借阅偏好"
+      mode="workspace">
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm }}>
         {interestTags.map((tag) => {
           const selected = selectedTags.includes(tag);
@@ -104,6 +103,9 @@ export default function OnboardingInterestsRoute() {
         {submitError ? (
           <StateMessageCard description={submitError} title="设置没有完成" tone="danger" />
         ) : null}
+        <Text style={{ color: theme.colors.primaryStrong, ...theme.typography.medium, fontSize: 13 }}>
+          第 2 步，共 2 步
+        </Text>
 
         <Text
           style={{
@@ -111,7 +113,7 @@ export default function OnboardingInterestsRoute() {
             ...theme.typography.semiBold,
             fontSize: 16,
           }}>
-          已选 {selectedTags.length} 个标签
+          已选 {selectedTags.length} 个偏好
         </Text>
         <Text
           style={{
@@ -120,11 +122,11 @@ export default function OnboardingInterestsRoute() {
             fontSize: 13,
             lineHeight: 18,
           }}>
-          你之后还可以在个人中心继续调整。
+          之后还可以在“我的”里继续调整。
         </Text>
         <PillButton
           href={undefined}
-          label={updateProfileMutation.isPending ? '保存中…' : '完成设置'}
+          label={updateProfileMutation.isPending ? '保存中…' : '完成建档，进入首页'}
           onPress={handleContinue}
           variant="accent"
         />

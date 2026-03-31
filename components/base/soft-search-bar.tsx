@@ -8,7 +8,7 @@ import { useAppTheme } from '@/hooks/use-app-theme';
 export function SoftSearchBar({
   inputTestID,
   onChangeText,
-  placeholder = '搜索书名、作者、课程或自然语言',
+  placeholder = '搜索书名、作者、更多信息',
   testID,
   value,
   mode = 'teaser',
@@ -71,7 +71,7 @@ export function SoftSearchBar({
             />
           ) : (
             <MarkerHighlightText
-              highlight="课程或自然语言"
+              highlight="更多信息"
               text={placeholder}
               textStyle={{
                 color: theme.colors.text,

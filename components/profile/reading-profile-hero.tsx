@@ -54,12 +54,12 @@ export function ReadingProfileHero({
           }}>
           <View style={{ flex: 1, gap: 4 }}>
             <Text
-              style={{
+            style={{
                 color: theme.colors.textSoft,
                 ...theme.typography.medium,
                 fontSize: 12,
               }}>
-              阅读关键词
+              常借主题
             </Text>
             <Text
               style={{
@@ -73,12 +73,12 @@ export function ReadingProfileHero({
           </View>
           <View style={{ flex: 1, gap: 4 }}>
             <Text
-              style={{
+            style={{
                 color: theme.colors.textSoft,
                 ...theme.typography.medium,
                 fontSize: 12,
               }}>
-              学习节奏
+              阅读习惯
             </Text>
             <Text
               style={{

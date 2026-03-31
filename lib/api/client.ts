@@ -60,6 +60,40 @@ export function getLibraryErrorMessage(error: unknown, fallback = '借阅服务�
   return fallback;
 }
 
+export function getAuthActionErrorMessage(
+  error: unknown,
+  options: {
+    action: 'login' | 'register';
+    fallback: string;
+  }
+) {
+  if (!isLibraryApiError(error)) {
+    return options.fallback;
+  }
+
+  if (error.status === 400) {
+    return options.action === 'login'
+      ? '请输入完整的账号和密码后再试。'
+      : '请把账号、昵称和密码填写完整后再试。';
+  }
+
+  if (error.status === 401 || error.status === 403) {
+    return options.action === 'login'
+      ? '账号或密码不正确，请重新输入后再试。'
+      : '注册信息暂时未通过校验，请检查后再试。';
+  }
+
+  if (options.action === 'register' && error.status === 409) {
+    return '这个账号名已经被使用，请换一个后再试。';
+  }
+
+  if (error.code === 'network_error') {
+    return '暂时无法连接图书馆服务，请确认网络和后端服务状态后重试。';
+  }
+
+  return options.fallback;
+}
+
 export async function libraryFetchJson<T>(
   path: string,
   options: RequestInit & { token?: string | null } = {}

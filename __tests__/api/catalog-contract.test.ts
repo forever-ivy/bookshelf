@@ -3,7 +3,7 @@ jest.mock('@/lib/api/client', () => ({
 }));
 
 import { libraryRequest } from '@/lib/api/client';
-import { getBook, listBooks, searchBooksExplicit } from '@/lib/api/catalog';
+import { getBook, listBooks, listBooksPage, searchBooksExplicit } from '@/lib/api/catalog';
 import { searchRecommendations } from '@/lib/api/recommendation';
 
 describe('catalog contract', () => {
@@ -91,15 +91,97 @@ describe('catalog contract', () => {
           title: '知识治理',
         },
       ],
+      total: 1,
+      limit: 20,
+      offset: 0,
+      has_more: false,
     });
 
-    await searchBooksExplicit('知识治理', 'reader-token');
+    const result = await searchBooksExplicit('知识治理', 'reader-token', { limit: 20, offset: 0 });
 
     expect(libraryRequest).toHaveBeenCalledWith(
-      '/api/v1/catalog/books/search?query=%E7%9F%A5%E8%AF%86%E6%B2%BB%E7%90%86',
+      '/api/v1/catalog/books/search?query=%E7%9F%A5%E8%AF%86%E6%B2%BB%E7%90%86&limit=20&offset=0',
       expect.objectContaining({
         method: 'GET',
         token: 'reader-token',
+      })
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        hasMore: false,
+        limit: 20,
+        offset: 0,
+        total: 1,
+      })
+    );
+    expect(result.items[0]).toEqual(expect.objectContaining({ id: 21, title: '知识治理' }));
+  });
+
+  it('maps paginated catalog list responses into a reusable search page shape', async () => {
+    (libraryRequest as jest.Mock).mockResolvedValue({
+      items: [
+        {
+          id: 31,
+          title: '安全工程案例',
+          author: '王岭',
+          category: '环境科学、安全科学',
+        },
+      ],
+      total: 42,
+      limit: 20,
+      offset: 20,
+      has_more: true,
+      query: '安全',
+    });
+
+    const result = await listBooksPage('安全', 'reader-token', { limit: 20, offset: 20 });
+
+    expect(libraryRequest).toHaveBeenCalledWith(
+      '/api/v1/catalog/books?query=%E5%AE%89%E5%85%A8&limit=20&offset=20',
+      expect.objectContaining({
+        method: 'GET',
+        token: 'reader-token',
+      })
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        hasMore: true,
+        limit: 20,
+        offset: 20,
+        query: '安全',
+        total: 42,
+      })
+    );
+    expect(result.items[0]).toEqual(expect.objectContaining({ id: 31, title: '安全工程案例' }));
+  });
+
+  it('uses location-oriented fallbacks instead of the fake default cabinet label', async () => {
+    (libraryRequest as jest.Mock).mockResolvedValue({
+      items: [
+        {
+          id: 58,
+          title: '帝国主义论',
+          author: '列宁',
+          location_note: '东区主书柜 A058',
+        },
+        {
+          id: 59,
+          title: '资本论',
+          author: '马克思',
+        },
+      ],
+    });
+
+    const result = await listBooks(undefined, 'reader-token');
+
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        cabinetLabel: '东区主书柜 A058',
+      })
+    );
+    expect(result[1]).toEqual(
+      expect.objectContaining({
+        cabinetLabel: '位置待确认',
       })
     );
   });

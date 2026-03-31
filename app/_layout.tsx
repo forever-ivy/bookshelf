@@ -5,6 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
+import { GlobalSecondaryBackLayer } from '@/components/navigation/global-secondary-back-layer';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { AppProviders } from '@/providers/app-providers';
 
@@ -44,6 +45,7 @@ export default function RootLayout() {
               }}
             />
           </Stack>
+          <GlobalSecondaryBackLayer />
           <StatusBar style="dark" />
         </AppProviders>
       </SafeAreaProvider>

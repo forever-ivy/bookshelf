@@ -1,5 +1,33 @@
 import type { ForwardedRef } from 'react';
 
+jest.mock('react-native-reanimated', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+
+  const chain = {
+    delay: () => chain,
+    duration: () => chain,
+  };
+
+  return {
+    __esModule: true,
+    Easing: {
+      ease: 'ease',
+      inOut: (value: unknown) => value,
+    },
+    FadeInUp: chain,
+    useAnimatedStyle: (updater: () => Record<string, unknown>) => updater(),
+    useSharedValue: (value: unknown) => ({ value }),
+    withRepeat: (value: unknown) => value,
+    withSequence: (...values: unknown[]) => values.at(-1),
+    withTiming: (value: unknown) => value,
+    default: {
+      View: ({ children, ...props }: React.ComponentProps<typeof View>) =>
+        React.createElement(View, props, children),
+    },
+  };
+});
+
 jest.mock('expo-image', () => {
   const React = require('react');
   const { Image } = require('react-native');
@@ -64,6 +92,7 @@ jest.mock('expo-glass-effect', () => {
       ...props
     }: Record<string, unknown> & { children?: React.ReactNode }) =>
       React.createElement(View, props, children),
+    isGlassEffectAPIAvailable: jest.fn(() => true),
     isLiquidGlassAvailable: jest.fn(() => true),
   };
 });
@@ -93,12 +122,14 @@ jest.mock('@expo/ui/swift-ui', () => {
       modifiers,
       onPress,
       systemImage,
+      ...restProps
     }: {
       children?: React.ReactNode;
       label?: string;
       modifiers?: Array<{ type?: string; value?: boolean }>;
       onPress?: () => void;
       systemImage?: string;
+      [key: string]: unknown;
     }) => {
       const isDisabled = modifiers?.some(
         (modifier) => modifier.type === 'disabled' && modifier.value
@@ -130,6 +161,7 @@ jest.mock('@expo/ui/swift-ui', () => {
             disabled: isDisabled,
             onPress: isDisabled ? undefined : onPress,
             testID: 'swift-button',
+            ...restProps,
           },
           systemImage ? React.createElement(Text, null, systemImage) : null,
           label ? React.createElement(Text, null, label) : null,

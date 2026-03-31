@@ -1,6 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { render, screen } from '@testing-library/react-native';
 import React from 'react';
-import { StyleSheet } from 'react-native';
+
+let mockProfile: { displayName?: string | null } | null = {
+  displayName: '陈知行',
+};
+let mockHasLibraryService = true;
 
 jest.mock('react-native-reanimated', () => {
   const React = require('react');
@@ -43,6 +47,7 @@ jest.mock('expo-router', () => {
 
   return {
     Link,
+    usePathname: () => '/',
     useRouter: () => ({
       back: jest.fn(),
       push: jest.fn(),
@@ -65,21 +70,35 @@ jest.mock('@/hooks/use-app-session', () => ({
       needsInterestSelection: false,
       needsProfileBinding: false,
     },
-    profile: null,
+    profile: mockProfile,
     setBootstrapStatus: jest.fn(),
     setSession: jest.fn(),
     token: 'reader-token',
   }),
 }));
 
+jest.mock('@/lib/api/client', () => {
+  const actual = jest.requireActual('@/lib/api/client');
+
+  return {
+    ...actual,
+    hasLibraryService: () => mockHasLibraryService,
+  };
+});
+
 jest.mock('@/hooks/use-library-app-data', () => ({
   useActiveOrdersQuery: () => ({
     data: [
       {
+        book: {
+          title: '机器学习',
+        },
+        dueDateLabel: '4 月 2 日',
         statusLabel: '进行中',
       },
     ],
   }),
+  useBookDetailQueries: () => [],
   useHomeFeedQuery: () => ({
     data: {
       quickActions: [],
@@ -87,58 +106,75 @@ jest.mock('@/hooks/use-library-app-data', () => ({
       todayRecommendations: [],
     },
   }),
+  usePersonalizedRecommendationsQuery: () => ({
+    data: [],
+  }),
+  useRecommendationDashboardQuery: () => ({
+    data: null,
+  }),
 }));
 
 import HomeRoute from '@/app/(tabs)/index';
-import { appTheme } from '@/constants/app-theme';
-
-function getHighlightedTextNode(text: string) {
-  const matches = screen.getAllByText(text);
-  const highlighted = matches.find((node) => typeof node.props.onTextLayout === 'function');
-
-  expect(highlighted).toBeTruthy();
-
-  return highlighted!;
-}
 
 describe('HomeRoute marker highlights', () => {
-  it('shows the approved homepage highlights only after layout', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-03-30T16:26:00+08:00'));
+    mockHasLibraryService = true;
+    mockProfile = {
+      displayName: '陈知行',
+    };
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('renders quick-start tasks with icon chips and marker-highlighted detail lines', () => {
     render(<HomeRoute />);
 
-    expect(screen.getByText('今晚路径')).toBeTruthy();
-    expect(screen.queryAllByTestId('marker-highlight-overlay')).toHaveLength(0);
-    expect(
-      StyleSheet.flatten(getHighlightedTextNode('今晚待开始').props.style).backgroundColor
-    ).toBe(`${appTheme.colors.markerHighlightOrange}88`);
-    expect(
-      StyleSheet.flatten(getHighlightedTextNode('35 分钟').props.style)
-    ).toMatchObject({
-      textDecorationColor: '#F28A14',
-      textDecorationLine: 'underline',
-    });
-    expect(
-      StyleSheet.flatten(getHighlightedTextNode('机器学习从零到一').props.style).backgroundColor
-    ).toBe(`${appTheme.colors.markerHighlightGreen}88`);
+    expect(screen.getByText('下午好 🍃')).toBeTruthy();
+    expect(screen.getByText('陈知行')).toBeTruthy();
+    expect(screen.queryByTestId('home-greeting-divider')).toBeNull();
+    expect(screen.queryByText('今晚路径')).toBeNull();
+    expect(screen.getByText('快速开始')).toBeTruthy();
+    expect(screen.queryByText(/推荐解释：/)).toBeNull();
+    expect(screen.getByText('继续阅读')).toBeTruthy();
+    expect(screen.getByText('《机器学习》')).toBeTruthy();
+    expect(screen.getByText('查看进度')).toBeTruthy();
+    expect(screen.getByText('进行中 · 4 月 2 日')).toBeTruthy();
+    expect(screen.getByText('去借阅页')).toBeTruthy();
+    expect(screen.getByText('处理续借、归还和查看进度')).toBeTruthy();
+    expect(screen.queryByText('个性化推荐')).toBeNull();
+    expect(screen.queryByText('推荐引擎状态')).toBeNull();
+    expect(screen.getAllByTestId('home-quick-start-item')).toHaveLength(3);
+    expect(screen.getAllByTestId('home-quick-start-item-icon')).toHaveLength(3);
+    expect(screen.getAllByTestId('marker-highlight-root')).toHaveLength(2);
+    expect(screen.queryByText('继续借阅')).toBeNull();
+    expect(screen.queryByText('搜索书名、作者、更多信息')).toBeNull();
+    expect(screen.queryByText('更多信息')).toBeNull();
+  });
 
-    fireEvent(getHighlightedTextNode('今晚待开始'), 'textLayout', {
-      nativeEvent: {
-        lines: [{ height: 18, width: 66, x: 0, y: 0 }],
-      },
-    });
+  it('falls back to a generic name when the profile display name is unavailable', () => {
+    mockProfile = {
+      displayName: '   ',
+    };
 
-    fireEvent(getHighlightedTextNode('35 分钟'), 'textLayout', {
-      nativeEvent: {
-        lines: [{ height: 20, width: 52, x: 0, y: 0 }],
-      },
-    });
+    render(<HomeRoute />);
 
-    fireEvent(getHighlightedTextNode('机器学习从零到一'), 'textLayout', {
-      nativeEvent: {
-        lines: [{ height: 20, width: 118, x: 0, y: 0 }],
-      },
-    });
+    expect(screen.getByText('下午好 🍃')).toBeTruthy();
+    expect(screen.getByText('同学')).toBeTruthy();
+  });
 
-    expect(screen.getAllByTestId('marker-highlight-overlay')).toHaveLength(3);
-    expect(screen.getAllByTestId('marker-highlight-skia-canvas')).toHaveLength(3);
+  it('does not render mock quick-start bullets when the real service is unavailable', () => {
+    mockHasLibraryService = false;
+
+    render(<HomeRoute />);
+
+    expect(screen.getByText('快速开始')).toBeTruthy();
+    expect(screen.getByTestId('home-quick-start-empty-state')).toBeTruthy();
+    expect(screen.getByText('尚未连接真实数据')).toBeTruthy();
+    expect(screen.queryByText(/预计 35 分钟可以完成一轮预习/)).toBeNull();
+    expect(screen.queryByText(/这本适合你：/)).toBeNull();
   });
 });

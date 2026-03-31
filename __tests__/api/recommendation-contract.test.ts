@@ -118,4 +118,47 @@ describe('recommendation contract', () => {
     expect(result.modules.similar.ok).toBe(false);
     expect(result.modules.similar.error).toBe('book_embedding_missing');
   });
+
+  it('prefers real location fields in home-feed recommendations instead of the default cabinet placeholder', async () => {
+    (libraryRequest as jest.Mock).mockResolvedValue({
+      exam_zone: [],
+      explanation_card: {
+        body: '因为这些书和你当前的课程进度相关。',
+        title: '为什么推荐给你',
+      },
+      hot_lists: [],
+      quick_actions: [],
+      system_booklists: [],
+      today_recommendations: [
+        {
+          author: '列宁',
+          available_copies: 1,
+          book_id: 21608,
+          cabinetLabel: 'A058',
+          deliverable: true,
+          explanation: '与你最近借阅的主题相关。',
+          shelf_label: '东区主书柜',
+          title: '帝国主义论',
+        },
+        {
+          author: '列宁',
+          available_copies: 0,
+          book_id: 21589,
+          deliverable: false,
+          explanation: '同主题补充阅读。',
+          title: '帝国主义论增订本',
+        },
+      ],
+    });
+
+    const result = await getHomeFeed('reader-token');
+
+    expect(result.todayRecommendations[0]).toMatchObject({
+      cabinetLabel: 'A058',
+      shelfLabel: '东区主书柜',
+    });
+    expect(result.todayRecommendations[1]).toMatchObject({
+      cabinetLabel: '位置待确认',
+    });
+  });
 });
