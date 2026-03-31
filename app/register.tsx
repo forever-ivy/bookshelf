@@ -63,7 +63,7 @@ export default function RegisterRoute() {
   };
 
   return (
-    <PageShell headerTitle="创建账号" mode="workspace" showBackButton>
+    <PageShell headerTitle="创建账号" mode="workspace">
       <View
         style={{
           backgroundColor: theme.colors.surface,

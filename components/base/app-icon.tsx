@@ -3,6 +3,7 @@ import {
   Bell,
   Bookmark,
   BookOpen,
+  ChevronLeft,
   ChevronRight,
   CircleUserRound,
   Clock3,
@@ -11,6 +12,7 @@ import {
   Search,
   Sparkles,
   Truck,
+  X,
   type LucideIcon,
 } from 'lucide-react-native';
 
@@ -20,6 +22,7 @@ export type AppIconName =
   | 'bell'
   | 'bookmark'
   | 'borrowing'
+  | 'chevronLeft'
   | 'chevronRight'
   | 'clock'
   | 'home'
@@ -27,12 +30,14 @@ export type AppIconName =
   | 'profile'
   | 'search'
   | 'spark'
-  | 'truck';
+  | 'truck'
+  | 'x';
 
 const iconByName: Record<AppIconName, LucideIcon> = {
   bell: Bell,
   bookmark: Bookmark,
   borrowing: BookOpen,
+  chevronLeft: ChevronLeft,
   chevronRight: ChevronRight,
   clock: Clock3,
   home: House,
@@ -41,6 +46,7 @@ const iconByName: Record<AppIconName, LucideIcon> = {
   search: Search,
   spark: Sparkles,
   truck: Truck,
+  x: X,
 };
 
 export function AppIcon({

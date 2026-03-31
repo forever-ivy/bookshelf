@@ -1,7 +1,7 @@
 import { Redirect, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import React from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Keyboard, Platform, Pressable, Text, TextInput, View } from 'react-native';
 
 import { StateMessageCard } from '@/components/base/state-message-card';
 import { PageShell } from '@/components/navigation/page-shell';
@@ -17,9 +17,44 @@ export default function LoginRoute() {
   const { theme } = useAppTheme();
   const router = useRouter();
   const loginMutation = useLoginMutation();
+  const [isKeyboardVisible, setIsKeyboardVisible] = React.useState(false);
+  const [scrollViewResetKey, setScrollViewResetKey] = React.useState(0);
   const [password, setPassword] = React.useState('');
   const [submitError, setSubmitError] = React.useState<string | null>(null);
   const [username, setUsername] = React.useState('');
+  const hasOpenedKeyboardRef = React.useRef(false);
+
+  React.useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSubscription = Keyboard.addListener(showEvent, () => {
+      hasOpenedKeyboardRef.current = true;
+      setIsKeyboardVisible(true);
+    });
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      if (hasOpenedKeyboardRef.current) {
+        hasOpenedKeyboardRef.current = false;
+        setScrollViewResetKey((currentValue) => currentValue + 1);
+      }
+      setIsKeyboardVisible(false);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+
+  const heroStageHeight = isKeyboardVisible ? 224 : 360;
+  const heroIllustrationSize = isKeyboardVisible ? 196 : 330;
+  const heroDecorationOpacity = isKeyboardVisible ? 0.3 : 1;
+  const titleGap = isKeyboardVisible ? theme.spacing.sm : theme.spacing.sm;
+  const titleFontSize = isKeyboardVisible ? 38 : 48;
+  const titleLineHeight = isKeyboardVisible ? 44 : 54;
+  const subtitleFontSize = isKeyboardVisible ? 18 : 22;
+  const subtitleLineHeight = isKeyboardVisible ? 24 : 28;
+  const formMarginTop = isKeyboardVisible ? 24 : 34;
+  const formPaddingBottom = isKeyboardVisible ? theme.spacing.md : theme.spacing.xl;
 
   if (bootstrapStatus !== 'ready') {
     return (
@@ -86,16 +121,18 @@ export default function LoginRoute() {
   return (
     <PageShell
       backgroundDecoration={<LoginBackgroundDecoration />}
-      insetBottom={72}
+      insetBottom={isKeyboardVisible ? 24 : 72}
+      keyboardAware
       mode="workspace"
       padded={false}
-      scrollEnabled={false}>
+      scrollViewResetKey={scrollViewResetKey}
+      scrollEnabled={isKeyboardVisible}>
       <View
         style={{
           alignItems: 'center',
-          minHeight: 820,
+          minHeight: isKeyboardVisible ? 680 : 820,
           paddingHorizontal: theme.spacing.xl,
-          paddingTop: 12,
+          paddingTop: isKeyboardVisible ? theme.spacing.md : 12,
         }}>
         <View
           style={{
@@ -107,8 +144,8 @@ export default function LoginRoute() {
             style={{
               alignItems: 'center',
               justifyContent: 'center',
-              marginTop: 12,
-              minHeight: 360,
+              marginTop: isKeyboardVisible ? theme.spacing.xs : 12,
+              minHeight: heroStageHeight,
               width: '100%',
             }}
             testID="login-hero-stage">
@@ -118,6 +155,7 @@ export default function LoginRoute() {
                 borderRadius: 120,
                 height: 170,
                 left: 0,
+                opacity: heroDecorationOpacity,
                 position: 'absolute',
                 top: 22,
                 transform: [{ rotate: '-14deg' }],
@@ -129,6 +167,7 @@ export default function LoginRoute() {
                 backgroundColor: 'rgba(78, 99, 121, 0.10)',
                 borderRadius: 132,
                 height: 224,
+                opacity: heroDecorationOpacity,
                 position: 'absolute',
                 right: -10,
                 top: 42,
@@ -144,6 +183,7 @@ export default function LoginRoute() {
                 bottom: 40,
                 height: 210,
                 left: 10,
+                opacity: heroDecorationOpacity,
                 position: 'absolute',
                 right: 10,
                 transform: [{ rotate: '-9deg' }],
@@ -156,6 +196,7 @@ export default function LoginRoute() {
                 bottom: 28,
                 height: 178,
                 left: 34,
+                opacity: heroDecorationOpacity,
                 position: 'absolute',
                 right: 34,
                 transform: [{ rotate: '7deg' }],
@@ -165,8 +206,8 @@ export default function LoginRoute() {
               contentFit="contain"
               source={loginHeroArtwork}
               style={{
-                height: 330,
-                width: 330,
+                height: heroIllustrationSize,
+                width: heroIllustrationSize,
               }}
               testID="login-hero-illustration"
             />
@@ -175,16 +216,16 @@ export default function LoginRoute() {
           <View
             style={{
               alignItems: 'center',
-              gap: theme.spacing.sm,
-              marginTop: 2,
+              gap: titleGap,
+              marginTop: isKeyboardVisible ? theme.spacing.xs : 2,
             }}>
             <Text
               style={{
                 color: theme.colors.text,
                 ...theme.typography.heading,
-                fontSize: 48,
+                fontSize: titleFontSize,
                 letterSpacing: -2.2,
-                lineHeight: 54,
+                lineHeight: titleLineHeight,
               }}>
               知序
             </Text>
@@ -192,9 +233,9 @@ export default function LoginRoute() {
               style={{
                 color: 'rgba(31, 30, 27, 0.72)',
                 ...theme.typography.medium,
-                fontSize: 22,
+                fontSize: subtitleFontSize,
                 letterSpacing: -0.8,
-                lineHeight: 28,
+                lineHeight: subtitleLineHeight,
                 textAlign: 'center',
               }}>
               整理你的知识
@@ -204,8 +245,8 @@ export default function LoginRoute() {
           <View
             style={{
               gap: theme.spacing.lg,
-              marginTop: 34,
-              paddingBottom: theme.spacing.xl,
+              marginTop: formMarginTop,
+              paddingBottom: formPaddingBottom,
               width: '100%',
             }}>
             {submitError ? (

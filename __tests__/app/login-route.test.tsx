@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import React from 'react';
-import { ScrollView } from 'react-native';
+import { Keyboard, ScrollView, StyleSheet } from 'react-native';
 
 import LoginRoute from '@/app/login';
 import { LibraryApiError } from '@/lib/api/client';
@@ -24,6 +24,23 @@ const mockSessionState = {
 };
 const mockSetSession = jest.fn();
 const mockMutateAsync = jest.fn();
+const mockKeyboardListeners = {
+  keyboardDidHide: new Set<(payload?: { duration?: number }) => void>(),
+  keyboardDidShow: new Set<(payload?: { duration?: number }) => void>(),
+  keyboardWillHide: new Set<(payload?: { duration?: number }) => void>(),
+  keyboardWillShow: new Set<(payload?: { duration?: number }) => void>(),
+};
+
+function emitKeyboardEvent(
+  event: keyof typeof mockKeyboardListeners,
+  payload?: { duration?: number }
+) {
+  mockKeyboardListeners[event].forEach((listener) =>
+    listener({
+      duration: payload?.duration ?? 220,
+    } as never)
+  );
+}
 
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaProvider: ({ children }: { children: React.ReactNode }) => children,
@@ -44,6 +61,7 @@ jest.mock('expo-router', () => {
         href,
         testID: 'route-redirect',
       }),
+    usePathname: () => '/login',
     useRouter: () => mockRouter,
   };
 });
@@ -66,13 +84,49 @@ jest.mock('@/hooks/use-library-app-data', () => ({
 
 describe('LoginRoute', () => {
   beforeEach(() => {
+    jest.useFakeTimers();
     jest.clearAllMocks();
     mockSessionState.bootstrapStatus = 'ready';
     mockSessionState.onboarding = null;
     mockSessionState.token = null;
+    mockKeyboardListeners.keyboardDidHide.clear();
+    mockKeyboardListeners.keyboardDidShow.clear();
+    mockKeyboardListeners.keyboardWillHide.clear();
+    mockKeyboardListeners.keyboardWillShow.clear();
+    jest.spyOn(Keyboard, 'addListener').mockImplementation((event, listener) => {
+      if (
+        event === 'keyboardDidShow' ||
+        event === 'keyboardDidHide' ||
+        event === 'keyboardWillShow' ||
+        event === 'keyboardWillHide'
+      ) {
+        mockKeyboardListeners[event].add(listener as (payload?: { duration?: number }) => void);
+      }
+
+      return {
+        remove: () => {
+          if (
+            event === 'keyboardDidShow' ||
+            event === 'keyboardDidHide' ||
+            event === 'keyboardWillShow' ||
+            event === 'keyboardWillHide'
+          ) {
+            mockKeyboardListeners[event].delete(listener as (payload?: { duration?: number }) => void);
+          }
+        },
+      } as ReturnType<typeof Keyboard.addListener>;
+    });
   });
 
-  it('renders the zhixu welcome layout with the approved slogan and hero illustration', () => {
+  afterEach(() => {
+    act(() => {
+      jest.runOnlyPendingTimers();
+    });
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  it('keeps the zhixu welcome layout locked until the keyboard is visible', () => {
     const view = render(<LoginRoute />);
     const scrollView = view.UNSAFE_getByType(ScrollView);
 
@@ -89,6 +143,45 @@ describe('LoginRoute', () => {
     expect(screen.queryByText('登录与身份绑定')).toBeNull();
     expect(screen.queryByText('先用学号或手机号进入，再补全学院、专业、年级和兴趣标签。')).toBeNull();
     expect(scrollView.props.scrollEnabled).toBe(false);
+    expect(scrollView.props.automaticallyAdjustKeyboardInsets).toBe(true);
+  });
+
+  it('enables scrolling and collapses the hero artwork when the keyboard becomes visible', () => {
+    const view = render(<LoginRoute />);
+    const scrollView = view.UNSAFE_getByType(ScrollView);
+
+    expect(StyleSheet.flatten(screen.getByTestId('login-hero-stage').props.style).minHeight).toBe(360);
+    expect(StyleSheet.flatten(screen.getByTestId('login-hero-illustration').props.style).height).toBe(330);
+    expect(scrollView.props.scrollEnabled).toBe(false);
+
+    act(() => {
+      emitKeyboardEvent('keyboardWillShow', { duration: 280 });
+      jest.advanceTimersByTime(280);
+    });
+
+    expect(view.UNSAFE_getByType(ScrollView).props.scrollEnabled).toBe(true);
+    expect(StyleSheet.flatten(screen.getByTestId('login-hero-stage').props.style).minHeight).toBe(224);
+    expect(StyleSheet.flatten(screen.getByTestId('login-hero-illustration').props.style).height).toBe(196);
+  });
+
+  it('returns to the initial layout state after the keyboard is dismissed', () => {
+    const view = render(<LoginRoute />);
+    const initialScrollView = view.UNSAFE_getByType(ScrollView);
+
+    act(() => {
+      emitKeyboardEvent('keyboardWillShow', { duration: 280 });
+      jest.advanceTimersByTime(280);
+    });
+
+    act(() => {
+      emitKeyboardEvent('keyboardWillHide', { duration: 240 });
+      jest.advanceTimersByTime(240);
+    });
+
+    expect(view.UNSAFE_getByType(ScrollView)).not.toBe(initialScrollView);
+    expect(view.UNSAFE_getByType(ScrollView).props.scrollEnabled).toBe(false);
+    expect(StyleSheet.flatten(screen.getByTestId('login-hero-stage').props.style).minHeight).toBe(360);
+    expect(StyleSheet.flatten(screen.getByTestId('login-hero-illustration').props.style).height).toBe(330);
   });
 
   it('shows an inline auth error instead of throwing when login is rejected', async () => {

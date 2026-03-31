@@ -1,32 +1,41 @@
-import type { BookCard, BookDetail } from '@/lib/api/types';
+import type { BookCard, BookCardPage, BookDetail } from '@/lib/api/types';
 import { getMockBook, getMockBookDetail, listMockBooks } from '@/lib/api/mock';
 import { libraryRequest } from '@/lib/api/client';
 
 export async function listBooks(query?: string, token?: string | null): Promise<BookCard[]> {
-  const search = query ? `?query=${encodeURIComponent(query)}` : '';
-  return libraryRequest(`/api/v1/catalog/books${search}`, {
-    fallback: () => listMockBooks(query),
-    method: 'GET',
-    token,
-  }).then((payload: any) =>
-    Array.isArray(payload?.items)
-      ? payload.items.map(normalizeBookCard)
-      : listMockBooks(query)
-  );
+  return listBooksPage(query, token).then((payload) => payload.items);
 }
 
-export async function searchBooksExplicit(query: string, token?: string | null): Promise<BookCard[]> {
-  const search = `?query=${encodeURIComponent(query)}`;
+export async function listBooksPage(
+  query: string | undefined,
+  token?: string | null,
+  options: { limit?: number; offset?: number } = {}
+): Promise<BookCardPage> {
+  const limit = clampPageSize(options.limit);
+  const offset = clampOffset(options.offset);
+  const search = buildSearchParams(query, limit, offset);
 
-  return libraryRequest(`/api/v1/catalog/books/search${search}`, {
-    fallback: () => listMockBooks(query),
+  return libraryRequest(`/api/v1/catalog/books${search}`, {
+    fallback: () => createFallbackBookCardPage(query, limit, offset),
     method: 'GET',
     token,
-  }).then((payload: any) =>
-    Array.isArray(payload?.items)
-      ? payload.items.map(normalizeBookCard)
-      : listMockBooks(query)
-  );
+  }).then((payload: any) => normalizeBookCardPage(payload, query, limit, offset));
+}
+
+export async function searchBooksExplicit(
+  query: string,
+  token?: string | null,
+  options: { limit?: number; offset?: number } = {}
+): Promise<BookCardPage> {
+  const limit = clampPageSize(options.limit);
+  const offset = clampOffset(options.offset);
+  const search = buildSearchParams(query, limit, offset);
+
+  return libraryRequest(`/api/v1/catalog/books/search${search}`, {
+    fallback: () => createFallbackBookCardPage(query, limit, offset),
+    method: 'GET',
+    token,
+  }).then((payload: any) => normalizeBookCardPage(payload, query, limit, offset));
 }
 
 export async function getBook(bookId: number, token?: string | null): Promise<BookDetail> {
@@ -46,11 +55,13 @@ export async function getRelatedBooks(bookId: number, token?: string | null): Pr
 }
 
 export function normalizeBookCard(raw: any): BookCard {
+  const cabinetLabel = resolveBookLocation(raw);
+
   return {
     id: raw.id,
     author: raw.author ?? '未知作者',
     availabilityLabel: raw.availabilityLabel ?? raw.availability_label ?? '馆藏充足 · 可立即借阅',
-    cabinetLabel: raw.cabinetLabel ?? raw.cabinet_label ?? raw.location ?? '默认书柜',
+    cabinetLabel,
     category: raw.category ?? null,
     coverTone: raw.coverTone ?? raw.cover_tone ?? 'blue',
     coverUrl: raw.coverUrl ?? raw.cover_url ?? null,
@@ -65,6 +76,109 @@ export function normalizeBookCard(raw: any): BookCard {
     tags: raw.tags ?? raw.tag_names ?? [],
     title: raw.title ?? '未命名图书',
   };
+}
+
+function resolveBookLocation(raw: any) {
+  const directLocation =
+    raw.cabinetLabel ??
+    raw.cabinet_label ??
+    raw.locationNote ??
+    raw.location_note ??
+    raw.location ??
+    raw.slotCode ??
+    raw.slot_code;
+
+  if (typeof directLocation === 'string' && directLocation.trim()) {
+    return directLocation.trim();
+  }
+
+  const storageSlots = raw.storageSlots ?? raw.storage_slots;
+  if (Array.isArray(storageSlots)) {
+    const firstSlot = storageSlots.find((slot) => typeof slot === 'string' && slot.trim());
+    if (firstSlot) {
+      return firstSlot.trim();
+    }
+  }
+
+  return '位置待确认';
+}
+
+function normalizeBookCardPage(
+  raw: any,
+  query: string | undefined,
+  limit: number,
+  offset: number
+): BookCardPage {
+  const fallback = createFallbackBookCardPage(query, limit, offset);
+  if (!raw) {
+    return fallback;
+  }
+
+  const items = Array.isArray(raw.items) ? raw.items.map(normalizeBookCard) : fallback.items;
+  const total = typeof raw.total === 'number' ? raw.total : items.length;
+  const resolvedLimit = typeof raw.limit === 'number' ? raw.limit : limit;
+  const resolvedOffset = typeof raw.offset === 'number' ? raw.offset : offset;
+  const resolvedQuery =
+    typeof raw.query === 'string' ? raw.query : typeof query === 'string' ? query : '';
+  const hasMore =
+    typeof raw.has_more === 'boolean'
+      ? raw.has_more
+      : typeof raw.hasMore === 'boolean'
+        ? raw.hasMore
+        : resolvedOffset + items.length < total;
+
+  return {
+    hasMore,
+    items,
+    limit: resolvedLimit,
+    offset: resolvedOffset,
+    query: resolvedQuery,
+    total,
+  };
+}
+
+function createFallbackBookCardPage(
+  query: string | undefined,
+  limit: number,
+  offset: number
+): BookCardPage {
+  const allItems = listMockBooks(query);
+  const items = allItems.slice(offset, offset + limit);
+
+  return {
+    hasMore: offset + items.length < allItems.length,
+    items,
+    limit,
+    offset,
+    query: query ?? '',
+    total: allItems.length,
+  };
+}
+
+function buildSearchParams(query: string | undefined, limit: number, offset: number) {
+  const params = new URLSearchParams();
+  if (query) {
+    params.set('query', query);
+  }
+  params.set('limit', String(limit));
+  params.set('offset', String(offset));
+  return `?${params.toString()}`;
+}
+
+function clampPageSize(value?: number) {
+  if (!Number.isFinite(value)) {
+    return 20;
+  }
+
+  return Math.min(Math.max(Number(value), 1), 50);
+}
+
+function clampOffset(value?: number) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.max(0, Number(value));
 }
 
 function normalizeBookDetail(raw: any, bookId: number): BookDetail {

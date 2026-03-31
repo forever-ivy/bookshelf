@@ -1,12 +1,19 @@
 import { render, screen } from '@testing-library/react-native';
 import React from 'react';
 
+let mockOverviewLoading = false;
+let mockFavoritesLoading = false;
+let mockBooklistsLoading = false;
+let mockNotificationsLoading = false;
+let mockAchievementsLoading = false;
+
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaProvider: ({ children }: { children: React.ReactNode }) => children,
   useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
 }));
 
 jest.mock('expo-router', () => ({
+  usePathname: () => '/me',
   useRouter: () => ({
     push: jest.fn(),
   }),
@@ -37,59 +44,144 @@ jest.mock('@/hooks/use-app-session', () => ({
 
 jest.mock('@/hooks/use-library-app-data', () => ({
   useBooklistsQuery: () => ({
-    data: { customItems: [{ id: '1' }], systemItems: [{ id: '2' }] },
+    data: mockBooklistsLoading
+      ? undefined
+      : {
+          customItems: [{ books: [], description: '我的书单', id: '1', title: '我的书单' }],
+          systemItems: [{ books: [], description: '系统书单', id: '2', title: '系统书单' }],
+        },
+    isFetching: mockBooklistsLoading,
   }),
   useFavoritesQuery: () => ({
-    data: [{ id: 'fav-1' }, { id: 'fav-2' }],
+    data: mockFavoritesLoading
+      ? undefined
+      : [
+          {
+            book: {
+              author: '周志华',
+              availabilityLabel: '馆藏充足 · 可立即借阅',
+              cabinetLabel: '智能书柜 A-03',
+              coverTone: 'lavender',
+              etaLabel: '18 分钟可送达',
+              id: 11,
+              recommendationReason: null,
+              summary: '课程导读',
+              title: '机器学习',
+            },
+            id: 'fav-1',
+          },
+          {
+            book: {
+              author: '李航',
+              availabilityLabel: '馆藏充足 · 可立即借阅',
+              cabinetLabel: '智能书柜 B-01',
+              coverTone: 'coral',
+              etaLabel: '12 分钟可送达',
+              id: 12,
+              recommendationReason: null,
+              summary: '统计学习方法',
+              title: '统计学习方法',
+            },
+            id: 'fav-2',
+          },
+        ],
+    isFetching: mockFavoritesLoading,
   }),
   useMyOverviewQuery: () => ({
-    data: {
-      profile: null,
-      recentConversations: [],
-      recentOrders: [
-        {
-          actionableLabel: '查看详情',
-          book: { title: '机器学习从零到一' },
-          dueDateLabel: '3 月 31 日前归还',
-          id: 101,
-          mode: 'robot_delivery',
-          note: '已送达阅览室',
-          renewable: false,
-          status: 'active',
-          statusLabel: '借阅中',
-          timeline: [],
+    data: mockOverviewLoading
+      ? undefined
+      : {
+          profile: null,
+          recentConversations: [],
+          recentOrders: [
+            {
+              actionableLabel: '查看详情',
+              book: { title: '机器学习从零到一' },
+              dueDateLabel: '3 月 31 日前归还',
+              id: 101,
+              mode: 'robot_delivery',
+              note: '已送达阅览室',
+              renewable: false,
+              status: 'active',
+              statusLabel: '借阅中',
+              timeline: [],
+            },
+          ],
+          recentQueries: ['机器学习', '推荐系统'],
+          recentReadingEvents: [],
+          recentRecommendations: [],
+          stats: {
+            activeOrdersCount: 1,
+            borrowHistoryCount: 8,
+            conversationCount: 0,
+            lastActiveAt: '2026-03-29',
+            readingEventCount: 0,
+            recommendationCount: 12,
+            searchCount: 5,
+          },
         },
-      ],
-      recentQueries: ['机器学习', '推荐系统'],
-      recentReadingEvents: [],
-      recentRecommendations: [],
-      stats: {
-        activeOrdersCount: 1,
-        borrowHistoryCount: 8,
-        conversationCount: 0,
-        lastActiveAt: '2026-03-29',
-        readingEventCount: 0,
-        recommendationCount: 12,
-        searchCount: 5,
-      },
-    },
+    isFetching: mockOverviewLoading,
   }),
   useNotificationsQuery: () => ({
-    data: [{ id: 'notice-1' }],
+    data: mockNotificationsLoading
+      ? undefined
+      : [{ body: '提醒', id: 'notice-1', kind: 'borrowing', title: '借阅提醒' }],
+    isFetching: mockNotificationsLoading,
+  }),
+  useAchievementsQuery: () => ({
+    data: mockAchievementsLoading ? undefined : null,
+    isFetching: mockAchievementsLoading,
   }),
 }));
 
 import MeRoute from '@/app/(tabs)/me';
 
 describe('MeRoute', () => {
-  it('renders overview-driven stats and recent search context', () => {
+  beforeEach(() => {
+    mockOverviewLoading = false;
+    mockFavoritesLoading = false;
+    mockBooklistsLoading = false;
+    mockNotificationsLoading = false;
+    mockAchievementsLoading = false;
+  });
+
+  it('renders reader-facing account overview and usage records', () => {
     render(<MeRoute />);
 
-    expect(screen.getByText('借阅与推荐概览')).toBeTruthy();
-    expect(screen.getByText('1 条进行中借阅')).toBeTruthy();
-    expect(screen.getByText('12 条推荐记录')).toBeTruthy();
-    expect(screen.getByText('最近搜索与推荐')).toBeTruthy();
+    expect(screen.getByText('账户概览')).toBeTruthy();
+    expect(screen.getByText('当前借阅')).toBeTruthy();
+    expect(screen.getAllByText('收藏图书').length).toBeGreaterThan(0);
+    expect(screen.getByText('书单与通知')).toBeTruthy();
+    expect(screen.getByText('最近使用记录')).toBeTruthy();
     expect(screen.getByText('机器学习、推荐系统')).toBeTruthy();
     expect(screen.getByText('机器学习从零到一')).toBeTruthy();
+    expect(screen.queryByText('借阅与推荐概览')).toBeNull();
+    expect(screen.queryByText('推荐信号')).toBeNull();
+    expect(screen.queryByText('找书行为')).toBeNull();
+    expect(screen.queryByText('最近搜索与推荐')).toBeNull();
+  });
+
+  it('keeps account sections mounted with skeletons during first load', () => {
+    mockOverviewLoading = true;
+    mockFavoritesLoading = true;
+    mockBooklistsLoading = true;
+    mockNotificationsLoading = true;
+    mockAchievementsLoading = true;
+
+    render(<MeRoute />);
+
+    expect(screen.getByText('今日提醒')).toBeTruthy();
+    expect(screen.getByText('账户概览')).toBeTruthy();
+    expect(screen.getAllByText('收藏图书').length).toBeGreaterThan(0);
+    expect(screen.getByText('书单')).toBeTruthy();
+    expect(screen.getByText('消息通知')).toBeTruthy();
+    expect(screen.getByText('阅读成就')).toBeTruthy();
+    expect(screen.getByTestId('me-reminders-skeleton')).toBeTruthy();
+    expect(screen.getByTestId('me-profile-summary-skeleton')).toBeTruthy();
+    expect(screen.getAllByTestId('me-collection-skeleton').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('me-history-skeleton')).toBeTruthy();
+    expect(screen.getByTestId('me-booklists-skeleton')).toBeTruthy();
+    expect(screen.getByTestId('me-notifications-skeleton')).toBeTruthy();
+    expect(screen.queryByText('机器学习从零到一')).toBeNull();
   });
 });

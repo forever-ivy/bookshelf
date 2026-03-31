@@ -14,7 +14,7 @@ type BorrowingSummaryProps = {
 export function BorrowingSummary({
   dueSoonCount = 2,
   focus = '时间简史 · 今天 21:00',
-  headline = '借阅任务面板',
+  headline = '借阅任务中心',
   renewableCount = 3,
   totalCount = 6,
 }: BorrowingSummaryProps) {

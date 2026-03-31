@@ -3,10 +3,15 @@ import { Text, View, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { EditorialIllustration } from '@/components/base/editorial-illustration';
+import {
+  LoadingSkeletonBlock,
+  LoadingSkeletonCard,
+} from '@/components/base/loading-skeleton';
 import { PillButton } from '@/components/base/pill-button';
 import { SectionTitle } from '@/components/base/section-title';
 import { StateMessageCard } from '@/components/base/state-message-card';
 import { BorrowingCard } from '@/components/borrowing/borrowing-card';
+import { BorrowingCardSkeleton } from '@/components/borrowing/borrowing-card-skeleton';
 import { BorrowingSummary } from '@/components/borrowing/borrowing-summary';
 import { PageShell } from '@/components/navigation/page-shell';
 import { getLibraryErrorMessage } from '@/lib/api/client';
@@ -28,6 +33,49 @@ const statusFilters = [
   { label: '已完成', value: 'completed' },
   { label: '已取消', value: 'cancelled' },
 ] as const;
+
+function BorrowingSummarySkeleton() {
+  const { theme } = useAppTheme();
+
+  return (
+    <LoadingSkeletonCard style={{ gap: theme.spacing.lg }} testID="borrowing-summary-skeleton">
+      <LoadingSkeletonBlock height={28} width="42%" />
+      <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
+        {Array.from({ length: 3 }, (_, index) => (
+          <View
+            key={`borrowing-summary-skeleton-${index}`}
+            style={{
+              backgroundColor:
+                index === 0
+                  ? theme.colors.primarySoft
+                  : index === 1
+                    ? theme.colors.warningSoft
+                    : theme.colors.successSoft,
+              borderRadius: theme.radii.md,
+              flex: 1,
+              gap: 6,
+              padding: theme.spacing.md,
+            }}>
+            <LoadingSkeletonBlock height={18} width="54%" />
+            <LoadingSkeletonBlock height={12} width="48%" />
+          </View>
+        ))}
+      </View>
+      <View
+        style={{
+          backgroundColor: theme.colors.warningSoft,
+          borderColor: theme.colors.borderSoft,
+          borderRadius: theme.radii.md,
+          borderWidth: 1,
+          gap: theme.spacing.sm,
+          padding: theme.spacing.md,
+        }}>
+        <LoadingSkeletonBlock height={10} width={96} />
+        <LoadingSkeletonBlock height={14} width="72%" />
+      </View>
+    </LoadingSkeletonCard>
+  );
+}
 
 export default function BorrowingRoute() {
   const [activeOnly, setActiveOnly] = React.useState(false);
@@ -54,27 +102,48 @@ export default function BorrowingRoute() {
     : activeOrders[0]?.note ?? '当前没有需要优先处理的借阅事项';
 
   // 还书相关数据
-  const returnableOrders = (allOrdersQuery.data ?? []).filter((item) =>
-    ['active', 'dueSoon', 'overdue', 'renewable'].includes(item.status)
-  );
   const returnRequests = returnRequestsQuery.data ?? [];
 
   // 配送记录数据
   const deliveryActive = (allOrdersQuery.data ?? []).filter((item) =>
     ['active', 'dueSoon', 'overdue', 'renewable'].includes(item.status)
   );
-  const deliveryHistory = (allOrdersQuery.data ?? []).filter((item) =>
-    ['completed', 'cancelled'].includes(item.status)
-  );
+  const isBorrowingLoading =
+    (!ordersQuery.data && Boolean(ordersQuery.isFetching)) ||
+    (!allOrdersQuery.data && Boolean(allOrdersQuery.isFetching)) ||
+    (!returnRequestsQuery.data && Boolean(returnRequestsQuery.isFetching));
+  const pendingTaskItems = [
+    ...dueSoonOrders.map((item) => ({
+      description: item.note,
+      dueDate: item.dueDateLabel,
+      id: `due-${item.id}`,
+      label: item.statusLabel,
+      title: item.book.title,
+      type: 'order' as const,
+    })),
+    ...returnRequests.map((item) => ({
+      description: item.note ?? '归还申请已提交，等待馆内处理。',
+      dueDate: item.borrowOrderStatus ?? '等待处理',
+      id: `return-${item.id}`,
+      label: item.status,
+      title: `归还请求 #${item.id}`,
+      type: 'return' as const,
+    })),
+  ];
 
   return (
     <PageShell headerTitle="借阅" insetBottom={112} mode="task">
-      <BorrowingSummary
-        dueSoonCount={dueSoonOrders.length}
-        focus={focusLabel}
-        renewableCount={activeOrders.filter((item) => item.renewable).length}
-        totalCount={activeOrders.length}
-      />
+      {isBorrowingLoading ? (
+        <BorrowingSummarySkeleton />
+      ) : (
+        <BorrowingSummary
+          dueSoonCount={dueSoonOrders.length}
+          focus={focusLabel}
+          headline="借阅任务中心"
+          renewableCount={activeOrders.filter((item) => item.renewable).length}
+          totalCount={activeOrders.length}
+        />
+      )}
 
       {borrowingError ? (
         <StateMessageCard
@@ -142,9 +211,13 @@ export default function BorrowingRoute() {
       </View>
 
       <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle title="当前借阅" />
+        <SectionTitle title="进行中借阅" />
         <View style={{ gap: theme.spacing.lg }}>
-          {currentOrders.map((item) => (
+          {isBorrowingLoading && currentOrders.length === 0
+            ? Array.from({ length: 2 }, (_, index) => (
+                <BorrowingCardSkeleton key={`borrowing-current-skeleton-${index}`} />
+              ))
+            : currentOrders.map((item) => (
             <BorrowingCard
               key={item.id}
               actionLabel={item.renewable ? '立即续借' : item.status === 'active' ? '查看详情' : item.actionableLabel}
@@ -163,9 +236,9 @@ export default function BorrowingRoute() {
               title={item.book.title}
             />
           ))}
-          {currentOrders.length === 0 && !ordersQuery.isError ? (
+          {currentOrders.length === 0 && !ordersQuery.isError && !isBorrowingLoading ? (
             <StateMessageCard
-              description="去首页或找书页挑一本适合今晚开始的书吧。"
+              description="去找书页看看当前可借的书，开始下一次借阅。"
               title="当前没有进行中的借阅"
             />
           ) : null}
@@ -173,9 +246,13 @@ export default function BorrowingRoute() {
       </View>
 
       <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle title="即将到期" />
+        <SectionTitle title="即将到期 / 需处理" />
         <View style={{ gap: theme.spacing.lg }}>
-          {dueSoonOrders.map((item) => (
+          {isBorrowingLoading && pendingTaskItems.length === 0
+            ? Array.from({ length: 2 }, (_, index) => (
+                <BorrowingCardSkeleton key={`borrowing-pending-skeleton-${index}`} />
+              ))
+            : dueSoonOrders.map((item) => (
             <BorrowingCard
               key={item.id}
               actionLabel="发起归还请求"
@@ -183,15 +260,98 @@ export default function BorrowingRoute() {
               coverTone={item.book.coverTone}
               dueDate={item.dueDateLabel}
               note={item.note}
-              onPress={() => {
-                returnRequestMutation.mutate(item.id);
+              onPress={async () => {
+                try {
+                  setSubmitError(null);
+                  await returnRequestMutation.mutateAsync(item.id);
+                } catch (error) {
+                  setSubmitError(getLibraryErrorMessage(error, '归还请求提交失败，请稍后重试。'));
+                }
               }}
               status={item.status}
               title={item.book.title}
             />
           ))}
-          {dueSoonOrders.length === 0 && !ordersQuery.isError ? (
-            <StateMessageCard description="当前借阅都还在安全借期内。" title="暂时没有临近到期的借阅" />
+          {returnRequests.map((item) => (
+            <View
+              key={`rr-${item.id}`}
+              style={{
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.borderStrong,
+                borderRadius: theme.radii.lg,
+                borderWidth: 1,
+                gap: theme.spacing.sm,
+                padding: theme.spacing.lg,
+              }}>
+              <Text style={{ color: theme.colors.text, ...theme.typography.semiBold, fontSize: 15 }}>
+                归还请求 #{item.id}
+              </Text>
+              <Text style={{ color: theme.colors.textMuted, ...theme.typography.body, fontSize: 13 }}>
+                当前状态 · {item.status}
+              </Text>
+              {item.note ? (
+                <Text style={{ color: theme.colors.textMuted, ...theme.typography.body, fontSize: 13 }}>
+                  {item.note}
+                </Text>
+              ) : null}
+              <PillButton href={`/returns/${item.id}`} label="查看详情" variant="soft" />
+            </View>
+          ))}
+          {pendingTaskItems.length === 0 && !ordersQuery.isError && !isBorrowingLoading ? (
+            <StateMessageCard
+              description="当前借阅都还在正常借期内，暂时没有需要额外处理的事项。"
+              title="暂时没有待处理任务"
+            />
+          ) : null}
+        </View>
+      </View>
+
+      <View style={{ gap: theme.spacing.lg }}>
+        <SectionTitle title="配送与取书进度" />
+        <View style={{ gap: theme.spacing.lg }}>
+          {isBorrowingLoading && deliveryActive.length === 0
+            ? Array.from({ length: 2 }, (_, index) => (
+                <LoadingSkeletonCard key={`borrowing-delivery-skeleton-${index}`}>
+                  <LoadingSkeletonBlock height={16} width="54%" />
+                  <LoadingSkeletonBlock height={12} width="42%" />
+                  <LoadingSkeletonBlock borderRadius={theme.radii.pill} height={42} width="38%" />
+                </LoadingSkeletonCard>
+              ))
+            : deliveryActive.map((order) => (
+            <View
+              key={`dl-${order.id}`}
+              style={{
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.borderStrong,
+                borderRadius: theme.radii.lg,
+                borderWidth: 1,
+                gap: 6,
+                padding: theme.spacing.lg,
+              }}>
+              <Text
+                style={{
+                  color: theme.colors.text,
+                  ...theme.typography.semiBold,
+                  fontSize: 15,
+                }}>
+                {order.book.title}
+              </Text>
+              <Text
+                style={{
+                  color: theme.colors.textMuted,
+                  ...theme.typography.body,
+                  fontSize: 13,
+                }}>
+                {order.statusLabel} · {order.mode === 'robot_delivery' ? '配送中 / 待送达' : '到柜自取'}
+              </Text>
+              <PillButton href={undefined} label="查看状态" onPress={() => router.push(`/orders/${order.id}`)} variant="soft" />
+            </View>
+          ))}
+          {deliveryActive.length === 0 && !allOrdersQuery.isError && !isBorrowingLoading ? (
+            <StateMessageCard
+              description="当前没有进行中的配送或到柜取书进度。"
+              title="配送与取书进度会显示在这里"
+            />
           ) : null}
         </View>
       </View>
@@ -206,7 +366,21 @@ export default function BorrowingRoute() {
             borderWidth: 1,
             overflow: 'hidden',
           }}>
-          {historyOrders.map((item, index) => (
+          {isBorrowingLoading && historyOrders.length === 0
+            ? Array.from({ length: 2 }, (_, index) => (
+                <View
+                  key={`history-skeleton-${index}`}
+                  style={{
+                    borderTopColor: index === 0 ? 'transparent' : theme.colors.borderSoft,
+                    borderTopWidth: index === 0 ? 0 : 1,
+                    gap: 8,
+                    padding: theme.spacing.lg,
+                  }}>
+                  <LoadingSkeletonBlock height={16} width="52%" />
+                  <LoadingSkeletonBlock height={12} width="38%" />
+                </View>
+              ))
+            : historyOrders.map((item, index) => (
             <View
               key={item.id}
               style={{
@@ -233,216 +407,13 @@ export default function BorrowingRoute() {
               </Text>
             </View>
           ))}
-          {historyOrders.length === 0 && !ordersQuery.isError ? (
+          {historyOrders.length === 0 && !ordersQuery.isError && !isBorrowingLoading ? (
             <View style={{ padding: theme.spacing.lg }}>
               <Text style={{ color: theme.colors.textMuted, ...theme.typography.body, fontSize: 13 }}>
-                还没有历史借阅记录。
+                还没有历史借阅记录，可以先去找书页挑一本开始。
               </Text>
             </View>
           ) : null}
-        </View>
-      </View>
-
-      {currentOrders.some((item) => item.status === 'active') ? (
-        <View style={{ gap: theme.spacing.lg }}>
-          <SectionTitle title="待确认动作" />
-          <View style={{ gap: theme.spacing.md }}>
-            {currentOrders
-              .filter((item) => item.status === 'active')
-              .slice(0, 2)
-              .map((item) => (
-                <View
-                  key={`cancel-${item.id}`}
-                  style={{
-                    backgroundColor: theme.colors.surface,
-                    borderColor: theme.colors.borderStrong,
-                    borderRadius: theme.radii.lg,
-                    borderWidth: 1,
-                    gap: 6,
-                    padding: theme.spacing.lg,
-                  }}>
-                  <Text style={{ color: theme.colors.text, ...theme.typography.semiBold, fontSize: 15 }}>
-                    {item.book.title}
-                  </Text>
-                  <Text style={{ color: theme.colors.textMuted, ...theme.typography.body, fontSize: 13 }}>
-                    {item.note}
-                  </Text>
-                  <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => router.push(`/orders/${item.id}`)}
-                      style={({ pressed }) => ({ opacity: pressed ? 0.92 : 1 })}>
-                      <View
-                        style={{
-                          backgroundColor: theme.colors.surface,
-                          borderColor: theme.colors.borderStrong,
-                          borderRadius: theme.radii.md,
-                          borderWidth: 1,
-                          paddingHorizontal: 12,
-                          paddingVertical: 10,
-                        }}>
-                        <Text style={{ color: theme.colors.text, ...theme.typography.semiBold, fontSize: 13 }}>
-                          查看详情
-                        </Text>
-                      </View>
-                    </Pressable>
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => cancelMutation.mutate(item.id)}
-                      style={({ pressed }) => ({ opacity: pressed ? 0.92 : 1 })}>
-                      <View
-                        style={{
-                          backgroundColor: theme.colors.warningSoft,
-                          borderColor: theme.colors.borderStrong,
-                          borderRadius: theme.radii.md,
-                          borderWidth: 1,
-                          paddingHorizontal: 12,
-                          paddingVertical: 10,
-                        }}>
-                        <Text style={{ color: theme.colors.warning, ...theme.typography.semiBold, fontSize: 13 }}>
-                          {cancelMutation.isPending ? '取消中…' : '取消借阅'}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  </View>
-                </View>
-              ))}
-          </View>
-        </View>
-      ) : null}
-
-      {/* ── 归还申请 ── */}
-      <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle title="归还申请" />
-        <View style={{ gap: theme.spacing.lg }}>
-          {returnableOrders.map((order) => (
-            <View
-              key={`return-${order.id}`}
-              style={{
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.borderStrong,
-                borderRadius: theme.radii.lg,
-                borderWidth: 1,
-                gap: theme.spacing.sm,
-                padding: theme.spacing.lg,
-              }}>
-              <Text style={{ color: theme.colors.text, ...theme.typography.semiBold, fontSize: 15 }}>
-                {order.book.title}
-              </Text>
-              <Text style={{ color: theme.colors.textMuted, ...theme.typography.body, fontSize: 13 }}>
-                {order.statusLabel} · {order.dueDateLabel}
-              </Text>
-              <PillButton
-                href={undefined}
-                label={returnRequestMutation.isPending ? '请求中…' : '发起归还请求'}
-                onPress={async () => {
-                  try {
-                    setSubmitError(null);
-                    await returnRequestMutation.mutateAsync(order.id);
-                  } catch (error) {
-                    setSubmitError(getLibraryErrorMessage(error, '归还请求提交失败，请稍后重试。'));
-                  }
-                }}
-                variant="accent"
-              />
-            </View>
-          ))}
-          {returnableOrders.length === 0 && !allOrdersQuery.isError ? (
-            <StateMessageCard
-              description="等你完成新的借阅后，这里会显示归还入口。"
-              title="当前没有可归还的借阅"
-            />
-          ) : null}
-        </View>
-      </View>
-
-      {/* ── 归还请求记录 ── */}
-      {returnRequests.length > 0 ? (
-        <View style={{ gap: theme.spacing.lg }}>
-          <SectionTitle title="归还请求记录" />
-          <View style={{ gap: theme.spacing.lg }}>
-            {returnRequests.map((item) => (
-              <View
-                key={`rr-${item.id}`}
-                style={{
-                  backgroundColor: theme.colors.surface,
-                  borderColor: theme.colors.borderStrong,
-                  borderRadius: theme.radii.lg,
-                  borderWidth: 1,
-                  gap: theme.spacing.sm,
-                  padding: theme.spacing.lg,
-                }}>
-                <Text style={{ color: theme.colors.text, ...theme.typography.semiBold, fontSize: 15 }}>
-                  归还请求 #{item.id}
-                </Text>
-                <Text style={{ color: theme.colors.textMuted, ...theme.typography.body, fontSize: 13 }}>
-                  状态 {item.status} · 借阅单 #{item.borrowOrderId}
-                </Text>
-                {item.note ? (
-                  <Text style={{ color: theme.colors.textMuted, ...theme.typography.body, fontSize: 13 }}>
-                    {item.note}
-                  </Text>
-                ) : null}
-                <PillButton href={`/returns/${item.id}`} label="查看详情" variant="soft" />
-              </View>
-            ))}
-          </View>
-        </View>
-      ) : null}
-
-      {/* ── 配送记录 ── */}
-      <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle title="配送记录" />
-        <View style={{ gap: theme.spacing.lg }}>
-          {deliveryActive.map((order) => (
-            <View
-              key={`dl-${order.id}`}
-              style={{
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.borderStrong,
-                borderRadius: theme.radii.lg,
-                borderWidth: 1,
-                gap: 6,
-                padding: theme.spacing.lg,
-              }}>
-              <Text style={{ color: theme.colors.text, ...theme.typography.semiBold, fontSize: 15 }}>
-                {order.book.title}
-              </Text>
-              <Text style={{ color: theme.colors.textMuted, ...theme.typography.body, fontSize: 13 }}>
-                {order.statusLabel} · {order.mode === 'robot_delivery' ? '机器人配送' : '到柜自取'}
-              </Text>
-              <PillButton
-                href={undefined}
-                label="查看状态"
-                onPress={() => router.push(`/orders/${order.id}`)}
-                variant="soft"
-              />
-            </View>
-          ))}
-          {deliveryActive.length === 0 && !allOrdersQuery.isError ? (
-            <Text style={{ color: theme.colors.textMuted, ...theme.typography.body, fontSize: 13 }}>
-              当前没有进行中的配送或到柜取书记录。
-            </Text>
-          ) : null}
-          {deliveryHistory.map((order) => (
-            <View
-              key={`dlh-${order.id}`}
-              style={{
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.borderSoft,
-                borderRadius: theme.radii.lg,
-                borderWidth: 1,
-                gap: 4,
-                padding: theme.spacing.lg,
-              }}>
-              <Text style={{ color: theme.colors.textMuted, ...theme.typography.semiBold, fontSize: 14 }}>
-                {order.book.title}
-              </Text>
-              <Text style={{ color: theme.colors.textMuted, ...theme.typography.body, fontSize: 12 }}>
-                {order.statusLabel} · {order.dueDateLabel}
-              </Text>
-            </View>
-          ))}
         </View>
       </View>
 

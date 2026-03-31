@@ -54,13 +54,6 @@ export default function WebTabsLayout() {
             title: '借阅',
           }}
         />
-        <Tabs.Screen
-          name="me"
-          options={{
-            tabBarIcon: ({ color }) => <AppIcon color={color} name="profile" />,
-            title: '我的',
-          }}
-        />
       </Tabs>
     </AppSessionGate>
   );

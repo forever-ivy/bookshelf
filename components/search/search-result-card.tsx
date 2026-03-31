@@ -22,6 +22,16 @@ type SearchResultCardProps = {
   variant?: 'card' | 'list';
 };
 
+function resolveLocationText(location?: string | null) {
+  const normalized = location?.trim();
+
+  if (!normalized || normalized === '位置待确认' || normalized === '馆藏位置待确认' || normalized === '默认书柜') {
+    return '馆藏位置待确认';
+  }
+
+  return normalized;
+}
+
 function coverColor(tone: SearchResultCardProps['coverTone']) {
   switch (tone) {
     case 'mint':
@@ -53,6 +63,7 @@ export function SearchResultCard({
   variant = 'card',
 }: SearchResultCardProps) {
   const { theme } = useAppTheme();
+  const resolvedLocation = resolveLocationText(location);
   const availabilityPalette =
     availability.includes('可立即借阅')
       ? { backgroundColor: theme.colors.successSoft, color: theme.colors.success }
@@ -181,8 +192,20 @@ export function SearchResultCard({
                     ...theme.typography.body,
                     fontSize: 12,
                   }}>
-                  {reason ? `推荐解释 · ${reason}` : location}
+                  {resolvedLocation}
                 </Text>
+                {reason ? (
+                  <Text
+                    numberOfLines={2}
+                    style={{
+                      color: theme.colors.textSoft,
+                      ...theme.typography.body,
+                      fontSize: 12,
+                      lineHeight: 16,
+                    }}>
+                    可能适合你 · {reason}
+                  </Text>
+                ) : null}
               </View>
               <View
                 style={{
@@ -289,7 +312,7 @@ export function SearchResultCard({
               ...theme.typography.medium,
               fontSize: 12,
             }}>
-            履约方式
+            馆藏位置
           </Text>
           <Text
             style={{
@@ -297,7 +320,7 @@ export function SearchResultCard({
               ...theme.typography.semiBold,
               fontSize: 14,
             }}>
-            {eta}
+            {resolvedLocation}
           </Text>
         </View>
         <View style={{ flex: 1, gap: 4 }}>
@@ -307,7 +330,7 @@ export function SearchResultCard({
               ...theme.typography.medium,
               fontSize: 12,
             }}>
-            所在位置
+            最快到手
           </Text>
           <Text
             style={{
@@ -315,7 +338,7 @@ export function SearchResultCard({
               ...theme.typography.semiBold,
               fontSize: 14,
             }}>
-            {location}
+            {eta}
           </Text>
         </View>
       </View>
@@ -335,7 +358,7 @@ export function SearchResultCard({
               fontSize: 12,
               lineHeight: 18,
             }}>
-            推荐解释 · {reason}
+            为什么可能适合你 · {reason}
           </Text>
         </View>
       ) : null}

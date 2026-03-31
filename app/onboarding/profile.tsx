@@ -54,10 +54,9 @@ export default function OnboardingProfileRoute() {
 
   return (
     <PageShell
-      headerDescription="这一步会影响首页推荐、考试专区和课程配套结果。"
-      headerTitle="绑定学院、专业、年级"
-      mode="workspace"
-      showBackButton>
+      headerDescription="填写学院、专业和年级后，找书结果会更贴近你的课程与馆藏。"
+      headerTitle="完善借阅资料"
+      mode="workspace">
       <View
         style={{
           backgroundColor: theme.colors.surface,
@@ -70,6 +69,9 @@ export default function OnboardingProfileRoute() {
         {submitError ? (
           <StateMessageCard description={submitError} title="资料没有保存" tone="danger" />
         ) : null}
+        <Text style={{ color: theme.colors.primaryStrong, ...theme.typography.medium, fontSize: 13 }}>
+          第 1 步，共 2 步
+        </Text>
 
         {[
           ['姓名', displayName, setDisplayName],
@@ -105,7 +107,7 @@ export default function OnboardingProfileRoute() {
 
         <PillButton
           href={undefined}
-          label={updateProfileMutation.isPending ? '保存中…' : '继续选择兴趣标签'}
+          label={updateProfileMutation.isPending ? '保存中…' : '保存并继续'}
           onPress={handleContinue}
           variant="accent"
         />

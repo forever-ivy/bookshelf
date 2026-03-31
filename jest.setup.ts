@@ -1,5 +1,33 @@
 import type { ForwardedRef } from 'react';
 
+jest.mock('react-native-reanimated', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+
+  const chain = {
+    delay: () => chain,
+    duration: () => chain,
+  };
+
+  return {
+    __esModule: true,
+    Easing: {
+      ease: 'ease',
+      inOut: (value: unknown) => value,
+    },
+    FadeInUp: chain,
+    useAnimatedStyle: (updater: () => Record<string, unknown>) => updater(),
+    useSharedValue: (value: unknown) => ({ value }),
+    withRepeat: (value: unknown) => value,
+    withSequence: (...values: unknown[]) => values.at(-1),
+    withTiming: (value: unknown) => value,
+    default: {
+      View: ({ children, ...props }: React.ComponentProps<typeof View>) =>
+        React.createElement(View, props, children),
+    },
+  };
+});
+
 jest.mock('expo-image', () => {
   const React = require('react');
   const { Image } = require('react-native');
@@ -64,6 +92,7 @@ jest.mock('expo-glass-effect', () => {
       ...props
     }: Record<string, unknown> & { children?: React.ReactNode }) =>
       React.createElement(View, props, children),
+    isGlassEffectAPIAvailable: jest.fn(() => true),
     isLiquidGlassAvailable: jest.fn(() => true),
   };
 });
@@ -85,20 +114,27 @@ jest.mock('@expo/ui/swift-ui', () => {
   );
 
   return {
-    BottomSheet: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement(View, { testID: 'swift-bottom-sheet' }, children),
+    BottomSheet: ({
+      children,
+      ...props
+    }: {
+      children?: React.ReactNode;
+      [key: string]: unknown;
+    }) => React.createElement(View, { testID: 'swift-bottom-sheet', ...props }, children),
     Button: ({
       children,
       label,
       modifiers,
       onPress,
       systemImage,
+      ...restProps
     }: {
       children?: React.ReactNode;
       label?: string;
       modifiers?: Array<{ type?: string; value?: boolean }>;
       onPress?: () => void;
       systemImage?: string;
+      [key: string]: unknown;
     }) => {
       const isDisabled = modifiers?.some(
         (modifier) => modifier.type === 'disabled' && modifier.value
@@ -130,6 +166,7 @@ jest.mock('@expo/ui/swift-ui', () => {
             disabled: isDisabled,
             onPress: isDisabled ? undefined : onPress,
             testID: 'swift-button',
+            ...restProps,
           },
           systemImage ? React.createElement(Text, null, systemImage) : null,
           label ? React.createElement(Text, null, label) : null,
@@ -144,13 +181,32 @@ jest.mock('@expo/ui/swift-ui', () => {
       children?: React.ReactNode;
       [key: string]: unknown;
     }) => React.createElement(View, { testID: 'swift-host', ...props }, children),
+    Group: ({
+      children,
+      ...props
+    }: {
+      children?: React.ReactNode;
+      [key: string]: unknown;
+    }) => React.createElement(View, { testID: 'swift-group', ...props }, children),
     HStack: ({ children }: { children?: React.ReactNode }) =>
       React.createElement(View, { testID: 'swift-hstack' }, children),
     Image: ({ systemName }: { systemName?: string }) =>
       React.createElement(Text, { testID: 'swift-image' }, systemName),
     ProgressView: () => React.createElement(Text, { testID: 'swift-progress' }, 'progress-view'),
-    RNHostView: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement(View, { testID: 'swift-rn-host' }, children),
+    RNHostView: ({
+      children,
+      ...props
+    }: {
+      children?: React.ReactNode;
+      [key: string]: unknown;
+    }) => React.createElement(View, { testID: 'swift-rn-host', ...props }, children),
+    ScrollView: ({
+      children,
+      ...props
+    }: {
+      children?: React.ReactNode;
+      [key: string]: unknown;
+    }) => React.createElement(View, { testID: 'swift-scroll-view', ...props }, children),
     Spacer: () => React.createElement(View, { testID: 'swift-spacer' }),
     Text: ({ children }: { children?: React.ReactNode }) =>
       React.createElement(Text, { testID: 'swift-text' }, children),
@@ -159,15 +215,23 @@ jest.mock('@expo/ui/swift-ui', () => {
 });
 
 jest.mock('@expo/ui/swift-ui/modifiers', () => ({
+  background: jest.fn((color: string) => ({ color, type: 'background' })),
   buttonStyle: jest.fn(() => ({ type: 'buttonStyle' })),
   controlSize: jest.fn(() => ({ type: 'controlSize' })),
   disabled: jest.fn((value: boolean) => ({ type: 'disabled', value })),
   frame: jest.fn(() => ({ type: 'frame' })),
   glassEffect: jest.fn(() => ({ type: 'glassEffect' })),
+  interactiveDismissDisabled: jest.fn(() => ({ type: 'interactiveDismissDisabled' })),
   labelStyle: jest.fn(() => ({ type: 'labelStyle' })),
   opacity: jest.fn(() => ({ type: 'opacity' })),
   padding: jest.fn(() => ({ type: 'padding' })),
+  presentationDetents: jest.fn(() => ({ type: 'presentationDetents' })),
+  presentationDragIndicator: jest.fn(() => ({ type: 'presentationDragIndicator' })),
   progressViewStyle: jest.fn(() => ({ type: 'progressViewStyle' })),
+  scrollContentBackground: jest.fn((visible: 'automatic' | 'hidden' | 'visible') => ({
+    type: 'scrollContentBackground',
+    visible,
+  })),
   textFieldStyle: jest.fn(() => ({ type: 'textFieldStyle' })),
   tint: jest.fn(() => ({ type: 'tint' })),
 }));

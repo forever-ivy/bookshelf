@@ -71,6 +71,15 @@ export type BookDetail = {
   relatedBooks: BookCard[];
 };
 
+export type BookCardPage = {
+  hasMore: boolean;
+  items: BookCard[];
+  limit: number;
+  offset: number;
+  query: string;
+  total: number;
+};
+
 export type RecommendationFeed = {
   examZone: BookCard[];
   explanationCard: {

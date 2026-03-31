@@ -21,10 +21,6 @@ export default function TabsLayout() {
           <NativeTabs.Trigger.Icon {...getNativeTabIconProps('borrowing')} />
           <NativeTabs.Trigger.Label>借阅</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
-        <NativeTabs.Trigger name="me">
-          <NativeTabs.Trigger.Icon {...getNativeTabIconProps('profile')} />
-          <NativeTabs.Trigger.Label>我的</NativeTabs.Trigger.Label>
-        </NativeTabs.Trigger>
         <NativeTabs.Trigger name="search" role="search">
           <NativeTabs.Trigger.Icon {...getNativeTabIconProps('search')} />
           <NativeTabs.Trigger.Label>找书</NativeTabs.Trigger.Label>

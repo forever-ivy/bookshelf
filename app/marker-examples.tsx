@@ -98,8 +98,7 @@ export default function MarkerExamplesRoute() {
       headerDescription="这里集中放当前项目里可直接复用的 marker 文本样式，方便你快速比较 `highlight`、`underline`、不同色调和自定义颜色。"
       headerTitle="文字高亮示例"
       insetBottom={96}
-      mode="workspace"
-      showBackButton>
+      mode="workspace">
       <View style={{ gap: theme.spacing.lg }}>
         <SectionTitle title="块状高亮" />
         <View style={{ gap: theme.spacing.md }}>

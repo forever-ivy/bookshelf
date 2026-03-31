@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import React from 'react';
-import { Animated } from 'react-native';
+import { Animated, Platform } from 'react-native';
 
 import {
   GlobalSecondaryBackLayer,
@@ -9,6 +9,8 @@ import {
 
 let mockPathname = '/profile';
 const mockBack = jest.fn();
+const originalPlatformOS = Platform.OS;
+const originalPlatformVersion = Platform.Version;
 
 jest.mock('expo-router', () => ({
   usePathname: () => mockPathname,
@@ -31,6 +33,14 @@ describe('GlobalSecondaryBackLayer', () => {
     jest.useFakeTimers();
     mockBack.mockReset();
     mockPathname = '/profile';
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: 'ios',
+    });
+    Object.defineProperty(Platform, 'Version', {
+      configurable: true,
+      value: 26,
+    });
   });
 
   afterEach(() => {
@@ -40,11 +50,23 @@ describe('GlobalSecondaryBackLayer', () => {
     jest.useRealTimers();
   });
 
+  afterAll(() => {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: originalPlatformOS,
+    });
+    Object.defineProperty(Platform, 'Version', {
+      configurable: true,
+      value: originalPlatformVersion,
+    });
+  });
+
   it('shows on secondary routes and stays mounted briefly after returning to a primary route', () => {
     const { rerender } = render(<GlobalSecondaryBackLayer />);
 
     expect(screen.getByTestId('secondary-back-layer')).toBeTruthy();
     expect(screen.getByTestId('secondary-back-button')).toBeTruthy();
+    expect(screen.getByTestId('secondary-back-layer').props.style.top).toBe(34);
 
     mockPathname = '/';
     rerender(<GlobalSecondaryBackLayer />);
@@ -61,9 +83,24 @@ describe('GlobalSecondaryBackLayer', () => {
   it('triggers router.back when pressed', () => {
     render(<GlobalSecondaryBackLayer />);
 
-    fireEvent.press(screen.getByTestId('secondary-back-button'));
+    fireEvent.press(screen.getByTestId('secondary-back-button-swift'));
 
     expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses interactive liquid glass and animates the glass style during exit', () => {
+    const { rerender } = render(<GlobalSecondaryBackLayer />);
+
+    expect(screen.queryByTestId('secondary-back-ambient-blur')).toBeNull();
+    expect(screen.queryByTestId('secondary-back-ambient-glass')).toBeNull();
+    expect(screen.getByTestId('secondary-back-button-host')).toBeTruthy();
+    expect(screen.getByTestId('secondary-back-button-swift')).toBeTruthy();
+    expect(screen.getByText('chevron.backward')).toBeTruthy();
+
+    mockPathname = '/';
+    rerender(<GlobalSecondaryBackLayer />);
+
+    expect(screen.getByTestId('secondary-back-button-host')).toBeTruthy();
   });
 
   it('uses a grow-then-shrink exit animation when returning to a primary route', () => {
@@ -93,7 +130,7 @@ describe('GlobalSecondaryBackLayer', () => {
     expect(shouldShowSecondaryBackButton('/search')).toBe(false);
     expect(shouldShowSecondaryBackButton('/search/borrow-now')).toBe(true);
     expect(shouldShowSecondaryBackButton('/borrowing')).toBe(false);
-    expect(shouldShowSecondaryBackButton('/me')).toBe(false);
+    expect(shouldShowSecondaryBackButton('/me')).toBe(true);
     expect(shouldShowSecondaryBackButton('/login')).toBe(false);
     expect(shouldShowSecondaryBackButton('/profile')).toBe(true);
     expect(shouldShowSecondaryBackButton('/books/42')).toBe(true);

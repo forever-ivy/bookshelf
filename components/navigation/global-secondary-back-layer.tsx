@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SecondaryBackButton } from '@/components/navigation/secondary-back-button';
 import { useAppTheme } from '@/hooks/use-app-theme';
 
-const PRIMARY_ROUTE_PATHS = new Set(['/', '/search', '/borrowing', '/me', '/login']);
+const PRIMARY_ROUTE_PATHS = new Set(['/', '/search', '/borrowing', '/login']);
 
 export function shouldShowSecondaryBackButton(pathname?: string | null) {
   if (!pathname) {
@@ -116,12 +116,12 @@ export function GlobalSecondaryBackLayer() {
         left: theme.spacing.xl,
         opacity,
         position: 'absolute',
-        top: insets.top + theme.spacing.sm,
+        top: insets.top + theme.spacing.xl + 10,
         transform: [{ translateY }, { scale }],
         zIndex: 80,
       }}
       testID="secondary-back-layer">
-      <SecondaryBackButton />
+      <SecondaryBackButton glassVisible={shouldShow} />
     </Animated.View>
   );
 }

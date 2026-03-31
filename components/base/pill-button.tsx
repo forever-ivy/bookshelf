@@ -10,6 +10,7 @@ type PillButtonProps = {
   href?: Href;
   label: string;
   onPress?: () => void;
+  testID?: string;
   variant?: 'accent' | 'glass' | 'soft';
 };
 
@@ -18,6 +19,7 @@ export function PillButton({
   icon,
   label,
   onPress,
+  testID,
   variant = 'soft',
 }: PillButtonProps) {
   const { theme } = useAppTheme();
@@ -59,6 +61,7 @@ export function PillButton({
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
+      testID={testID}
       style={({ pressed }) => ({
         opacity: pressed ? 0.9 : 1,
         transform: [{ scale: pressed ? 0.985 : 1 }],

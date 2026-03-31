@@ -1,0 +1,62 @@
+<h2>首页问候区方向</h2>
+<p class="subtitle">请选择更接近你想要的感觉。两版都采用上下结构：上面是分时段问候，下面是用户名。</p>
+
+<div class="cards" style="grid-template-columns: repeat(2, minmax(0, 1fr));">
+  <div class="card" data-choice="editorial" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">A. Editorial</div>
+        <div class="mockup-body" style="padding: 20px; background: linear-gradient(160deg, #fff8ef 0%, #f7ead8 52%, #f0dcc2 100%);">
+          <div style="display:flex; flex-direction:column; gap:14px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div style="width:10px; height:10px; border-radius:999px; background:#c47d2c;"></div>
+              <div style="height:1px; flex:1; background:rgba(125, 74, 18, 0.18);"></div>
+            </div>
+            <div style="font-size:16px; letter-spacing:3px; text-transform:uppercase; color:#9a6326;">GOOD EVENING</div>
+            <div style="font-size:34px; line-height:1.08; font-weight:800; color:#2d2015;">晚上好！</div>
+            <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:12px;">
+              <div>
+                <div style="font-size:13px; color:#8e6b47; margin-bottom:6px;">今天也适合继续读下去</div>
+                <div style="font-size:28px; line-height:1.1; font-weight:700; color:#2d2015;">陈知行</div>
+              </div>
+              <div style="width:56px; height:56px; border-radius:18px; background:rgba(255,255,255,0.52); border:1px solid rgba(125,74,18,0.12);"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>杂志感</h3>
+      <p>更像首页主视觉，标题有层次，名字像被郑重介绍出来，气质更强。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="glass-card" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">B. Glass Card</div>
+        <div class="mockup-body" style="padding: 20px; background: radial-gradient(circle at top left, #fff6ec 0%, #f4ede3 45%, #e9e0d2 100%);">
+          <div style="padding:20px; border-radius:28px; background:rgba(255,255,255,0.62); border:1px solid rgba(120, 86, 40, 0.14); box-shadow: 0 10px 28px rgba(78, 51, 16, 0.08); display:flex; flex-direction:column; gap:14px;">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <div style="font-size:14px; color:#8b6845;">Tonight's welcome</div>
+              <div style="padding:6px 10px; border-radius:999px; background:#f6e5ce; color:#9a6326; font-size:12px;">18:30</div>
+            </div>
+            <div style="font-size:30px; line-height:1.12; font-weight:800; color:#2f2419;">晚上好！</div>
+            <div style="height:1px; background:rgba(125, 74, 18, 0.12);"></div>
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <div>
+                <div style="font-size:12px; color:#96724e; margin-bottom:6px;">欢迎回来</div>
+                <div style="font-size:24px; line-height:1.12; font-weight:700; color:#2f2419;">陈知行</div>
+              </div>
+              <div style="width:44px; height:44px; border-radius:999px; background:linear-gradient(180deg, #f6d5a9 0%, #e7b778 100%);"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>轻奢卡片感</h3>
+      <p>更柔和，更像欢迎模块，适合和当前卡片式内容自然衔接，风险更小。</p>
+    </div>
+  </div>
+</div>
