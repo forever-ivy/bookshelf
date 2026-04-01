@@ -14,6 +14,8 @@ import { PageShell } from '@/components/navigation/page-shell';
 import { useBookDetailQuery, useCreateBorrowOrderMutation } from '@/hooks/use-library-app-data';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { getLibraryErrorMessage } from '@/lib/api/client';
+import { resolveBookEtaDisplay } from '@/lib/book-delivery';
+import { resolveBookLocationDisplay } from '@/lib/book-location';
 
 const MODE_OPTIONS = [
   { label: '到柜自取', value: 'cabinet_pickup' },
@@ -63,11 +65,7 @@ export default function BorrowRoute() {
 
   return (
     <ProtectedRoute>
-      <PageShell
-        headerDescription={book ? `${book.title} · ${book.etaLabel} · ${book.cabinetLabel}` : undefined}
-        headerTitle="借阅下单"
-        insetBottom={72}
-        mode="workspace">
+      <PageShell insetBottom={72} mode="workspace">
         {submitError ? (
           <StateMessageCard description={submitError} title="借阅请求没有完成" tone="danger" />
         ) : null}
@@ -75,16 +73,26 @@ export default function BorrowRoute() {
         {showBorrowSkeleton ? (
           <BorrowRouteSkeleton />
         ) : book ? (
-          <View
-            style={{
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.borderStrong,
-              borderRadius: theme.radii.lg,
-              borderWidth: 1,
-              gap: theme.spacing.lg,
-              padding: theme.spacing.xl,
-            }}>
-            <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
+          <>
+            <Text
+              style={{
+                color: theme.colors.textMuted,
+                ...theme.typography.body,
+                fontSize: 14,
+                lineHeight: 21,
+              }}>
+              {`${book.title} · ${resolveBookEtaDisplay(book.etaLabel)} · ${resolveBookLocationDisplay(book.cabinetLabel)}`}
+            </Text>
+            <View
+              style={{
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.borderStrong,
+                borderRadius: theme.radii.lg,
+                borderWidth: 1,
+                gap: theme.spacing.lg,
+                padding: theme.spacing.xl,
+              }}>
+              <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
               {MODE_OPTIONS.map((item) => {
                 const selected = mode === item.value;
 
@@ -142,28 +150,29 @@ export default function BorrowRoute() {
                 padding: theme.spacing.md,
               }}>
               <Text style={{ color: theme.colors.warning, ...theme.typography.medium, fontSize: 13 }}>
-                预计等待时间 · {book.etaLabel}
+                预计等待时间 · {resolveBookEtaDisplay(book.etaLabel)}
               </Text>
             </View>
 
-            <PillButton
-              label={createBorrowOrderMutation.isPending ? '下单中...' : '确认借阅'}
-              onPress={async () => {
-                try {
-                  setSubmitError(null);
-                  const order = await createBorrowOrderMutation.mutateAsync({
-                    bookId,
-                    deliveryTarget: target,
-                    mode,
-                  });
-                  router.replace(`/orders/${order.id}`);
-                } catch (error) {
-                  setSubmitError(getLibraryErrorMessage(error, '借阅下单失败，请稍后重试。'));
-                }
-              }}
-              variant="accent"
-            />
-          </View>
+              <PillButton
+                label={createBorrowOrderMutation.isPending ? '下单中...' : '确认借阅'}
+                onPress={async () => {
+                  try {
+                    setSubmitError(null);
+                    const order = await createBorrowOrderMutation.mutateAsync({
+                      bookId,
+                      deliveryTarget: target,
+                      mode,
+                    });
+                    router.replace(`/orders/${order.id}`);
+                  } catch (error) {
+                    setSubmitError(getLibraryErrorMessage(error, '借阅下单失败，请稍后重试。'));
+                  }
+                }}
+                variant="accent"
+              />
+            </View>
+          </>
         ) : null}
       </PageShell>
     </ProtectedRoute>

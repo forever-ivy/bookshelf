@@ -64,7 +64,7 @@ export default function ProfileRoute() {
 
   return (
     <ProtectedRoute>
-      <PageShell headerTitle="借阅偏好" mode="workspace">
+      <PageShell mode="workspace">
         <ReadingProfileHero
           headline={profile ? `${profile.displayName} · 借阅偏好` : '借阅偏好'}
           keywords={(profile?.interestTags?.length ? profile.interestTags : profilePortrait.keywords).slice(0, 3)}

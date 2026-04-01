@@ -1,6 +1,7 @@
 import type { RecommendationDashboard, RecommendationFeed, BookCard, RecommendationModule } from '@/lib/api/types';
 import { getMockHomeFeed, listMockBooks } from '@/lib/api/mock';
 import { libraryRequest } from '@/lib/api/client';
+import { resolveBookEtaLabel } from '@/lib/book-delivery';
 import { listBooks } from '@/lib/api/catalog';
 
 export async function getHomeFeed(token?: string | null): Promise<RecommendationFeed> {
@@ -11,10 +12,16 @@ export async function getHomeFeed(token?: string | null): Promise<Recommendation
   }).then((payload: any) => normalizeHomeFeed(payload));
 }
 
-export async function searchRecommendations(query: string, token?: string | null): Promise<BookCard[]> {
+export async function searchRecommendations(
+  query: string,
+  token?: string | null,
+  options: { limit?: number } = {}
+): Promise<BookCard[]> {
+  const limit = Number.isFinite(options.limit) ? Math.max(1, Number(options.limit)) : 5;
+
   return libraryRequest('/api/v1/recommendation/search', {
-    body: JSON.stringify({ limit: 5, query }),
-    fallback: async () => listMockBooks(query),
+    body: JSON.stringify({ limit, query }),
+    fallback: async () => listMockBooks(query).slice(0, limit),
     method: 'POST',
     token,
   }).then(async (payload: any) => {
@@ -22,7 +29,7 @@ export async function searchRecommendations(query: string, token?: string | null
       return payload.results.map(normalizeSearchResult);
     }
 
-    return listBooks(query, token);
+    return listBooks(query, token).then((items) => items.slice(0, limit));
   });
 }
 
@@ -91,26 +98,58 @@ export async function getHybridBooks(
 
 function normalizeSearchResult(raw: any): BookCard {
   const cabinetLabel = resolveRecommendationLocation(raw);
+  const availableCopies =
+    typeof raw.available_copies === 'number'
+      ? raw.available_copies
+      : typeof raw.availableCopies === 'number'
+        ? raw.availableCopies
+        : 0;
+  const etaMinutes = raw.eta_minutes ?? raw.etaMinutes ?? null;
+  const deliveryAvailable = Boolean(raw.deliverable);
 
   return {
     id: raw.book_id ?? raw.id,
-    author: raw.author ?? '未知作者',
-    availabilityLabel: raw.deliverable ? '可立即借阅' : '暂不可借',
+    author: resolveRecommendationAuthor(raw.author),
+    availabilityLabel: resolveRecommendationAvailabilityLabel({
+      availableCopies,
+      deliverable: raw.deliverable,
+    }),
     cabinetLabel,
     category: raw.category ?? null,
     coverTone: raw.cover_tone ?? 'blue',
     coverUrl: raw.cover_url ?? null,
-    deliveryAvailable: Boolean(raw.deliverable),
-    etaLabel: raw.eta_minutes ? `${raw.eta_minutes} 分钟可送达` : '到柜自取',
-    etaMinutes: raw.eta_minutes ?? null,
+    deliveryAvailable,
+    etaLabel: resolveBookEtaLabel({
+      deliveryAvailable,
+      etaMinutes,
+    }),
+    etaMinutes,
     matchedFields: raw.evidence?.matched_fields ?? [],
     recommendationReason: raw.explanation ?? null,
     shelfLabel: raw.shelf_label ?? '主馆 2 楼',
-    stockStatus: raw.available_copies > 0 ? 'available' : 'limited',
+    stockStatus: availableCopies > 0 ? 'available' : 'limited',
     summary: raw.summary ?? '',
     tags: raw.tags ?? [],
     title: raw.title ?? raw.result_title ?? '未命名图书',
   };
+}
+
+function resolveRecommendationAvailabilityLabel({
+  availableCopies,
+  deliverable,
+}: {
+  availableCopies: number;
+  deliverable: unknown;
+}) {
+  if (deliverable) {
+    return '可立即借阅';
+  }
+
+  if (availableCopies > 0) {
+    return '可到柜自取';
+  }
+
+  return '暂不可借';
 }
 
 function resolveRecommendationLocation(raw: any) {
@@ -120,6 +159,8 @@ function resolveRecommendationLocation(raw: any) {
     raw.locationNote ??
     raw.location_note ??
     raw.location ??
+    raw.shelfLabel ??
+    raw.shelf_label ??
     raw.slotCode ??
     raw.slot_code;
 
@@ -136,6 +177,19 @@ function resolveRecommendationLocation(raw: any) {
   }
 
   return '位置待确认';
+}
+
+function resolveRecommendationAuthor(author: unknown) {
+  if (typeof author !== 'string') {
+    return '佚名';
+  }
+
+  const normalized = author.trim();
+  if (!normalized || /^nan$/i.test(normalized)) {
+    return '佚名';
+  }
+
+  return normalized;
 }
 
 function normalizeRecommendationDashboard(payload: any): RecommendationDashboard {

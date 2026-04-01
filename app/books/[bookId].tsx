@@ -16,6 +16,8 @@ import { SearchResultCardSkeleton } from '@/components/search/search-result-skel
 import { PageShell } from '@/components/navigation/page-shell';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { getLibraryErrorMessage } from '@/lib/api/client';
+import { resolveBookEtaDisplay } from '@/lib/book-delivery';
+import { resolveBookLocationDisplay } from '@/lib/book-location';
 import {
   useBookDetailQuery,
   useCollaborativeBooksQuery,
@@ -27,16 +29,6 @@ import {
   useToggleFavoriteMutation,
 } from '@/hooks/use-library-app-data';
 import { useProfileSheet } from '@/providers/profile-sheet-provider';
-
-function resolveLocationText(value?: string | null) {
-  const normalized = value?.trim();
-
-  if (!normalized || normalized === '位置待确认' || normalized === '馆藏位置待确认' || normalized === '默认书柜') {
-    return '馆藏位置待确认';
-  }
-
-  return normalized;
-}
 
 function BookDetailHeroSkeleton() {
   const { theme } = useAppTheme();
@@ -143,7 +135,7 @@ export default function BookDetailRoute() {
     collaborativeQuery.data?.length ? collaborativeQuery.data : detailQuery.data?.peopleAlsoBorrowed ?? [];
   const similarBooks = similarQuery.data?.length ? similarQuery.data : detailQuery.data?.relatedBooks ?? [];
   const hybridBooks = hybridQuery.data ?? [];
-  const locationNote = resolveLocationText(book?.locationNote ?? book?.cabinetLabel);
+  const locationNote = resolveBookLocationDisplay(book?.locationNote ?? book?.cabinetLabel);
   const isDetailLoading = !detailError && !detailQuery.data && Boolean(detailQuery.isFetching);
   const isCollaborativeLoading = Boolean(collaborativeQuery.isFetching) && collaborativeBooks.length === 0;
   const isSimilarLoading = Boolean(similarQuery.isFetching) && similarBooks.length === 0;
@@ -151,7 +143,7 @@ export default function BookDetailRoute() {
 
   return (
     <ProtectedRoute>
-      <PageShell headerTitle="图书详情" mode="workspace">
+      <PageShell mode="workspace">
         {detailError ? (
           <StateMessageCard
             description={getLibraryErrorMessage(detailError, '图书详情暂时不可用，请检查 catalog 和 favorites 接口。')}
@@ -217,7 +209,7 @@ export default function BookDetailRoute() {
                   馆藏位置
                 </Text>
                 <Text style={{ color: theme.colors.text, ...theme.typography.semiBold, fontSize: 14 }}>
-                  {resolveLocationText(book.cabinetLabel)}
+                  {resolveBookLocationDisplay(book.cabinetLabel)}
                 </Text>
               </View>
               <View style={{ flex: 1, gap: 4 }}>
@@ -233,7 +225,7 @@ export default function BookDetailRoute() {
                   最快到手
                 </Text>
                 <Text style={{ color: theme.colors.text, ...theme.typography.semiBold, fontSize: 14 }}>
-                  {book.etaLabel}
+                  {resolveBookEtaDisplay(book.etaLabel)}
                 </Text>
               </View>
             </View>

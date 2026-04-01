@@ -1,8 +1,11 @@
 import { render, screen } from '@testing-library/react-native';
 import React from 'react';
+import { Platform } from 'react-native';
 
 let recordedScreenOptions: Record<string, unknown> | undefined;
 let mockRecordedChildScreenProps: { name?: string; options?: Record<string, unknown> }[] = [];
+const expectedHeaderActionKey =
+  Platform.OS === 'ios' ? 'unstable_headerRightItems' : 'headerRight';
 
 jest.mock('expo-router', () => {
   const React = require('react');
@@ -32,6 +35,12 @@ jest.mock('expo-router', () => {
   return { Stack };
 });
 
+jest.mock('@/providers/profile-sheet-provider', () => ({
+  useProfileSheet: () => ({
+    openProfileSheet: jest.fn(),
+  }),
+}));
+
 import SearchGroupLayout from '@/app/search/_layout';
 import SearchLayout from '@/app/(tabs)/search/_layout';
 
@@ -55,7 +64,7 @@ describe('search stack layouts', () => {
       expect.objectContaining({
         name: 'borrow-now',
         options: expect.objectContaining({
-          title: '',
+          title: '立即可借',
         }),
       })
     );
@@ -67,7 +76,9 @@ describe('search stack layouts', () => {
     expect(screen.getByTestId('mock-stack')).toBeTruthy();
     expect(recordedScreenOptions).toEqual(
       expect.objectContaining({
-        headerTransparent: false,
+        headerLargeStyle:
+          Platform.OS === 'ios' ? expect.objectContaining({ backgroundColor: 'transparent' }) : undefined,
+        headerTransparent: Platform.OS === 'ios',
         headerShown: true,
       })
     );
@@ -75,7 +86,7 @@ describe('search stack layouts', () => {
       expect.objectContaining({
         name: 'index',
         options: expect.objectContaining({
-          title: '',
+          headerLargeTitleShadowVisible: false,
         }),
       })
     );

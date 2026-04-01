@@ -2,6 +2,26 @@ import { render, screen } from '@testing-library/react-native';
 import React from 'react';
 
 let mockHasLibraryService = true;
+let mockPersonalizedData:
+  | Array<{
+      author: string;
+      availabilityLabel: string;
+      cabinetLabel: string;
+      coverTone: 'lavender';
+      deliveryAvailable: boolean;
+      etaLabel: string;
+      etaMinutes: number;
+      id: number;
+      matchedFields: [];
+      recommendationReason: string;
+      shelfLabel: string;
+      stockStatus: 'available';
+      summary: string;
+      tags: [];
+      title: string;
+    }>
+  | undefined;
+let mockPersonalizedLoading = false;
 
 jest.mock('react-native-reanimated', () => {
   const React = require('react');
@@ -14,7 +34,16 @@ jest.mock('react-native-reanimated', () => {
 
   return {
     __esModule: true,
+    Easing: {
+      ease: 'ease',
+      inOut: (value: unknown) => value,
+    },
     FadeInUp: chain,
+    useAnimatedStyle: (updater: () => Record<string, unknown>) => updater(),
+    useSharedValue: (value: unknown) => ({ value }),
+    withRepeat: (value: unknown) => value,
+    withSequence: (...values: unknown[]) => values.at(-1),
+    withTiming: (value: unknown) => value,
     default: {
       View: ({ children, ...props }: React.ComponentProps<typeof View>) =>
         React.createElement(View, props, children),
@@ -42,8 +71,24 @@ jest.mock('expo-router', () => {
   Link.Trigger = ({ children }: { children: React.ReactNode }) =>
     React.createElement(View, null, children);
 
+  const StackScreen = ({ children }: { children?: React.ReactNode }) =>
+    React.createElement(View, null, children);
+  StackScreen.Title = ({ children }: { children?: React.ReactNode }) =>
+    React.createElement(View, null, children);
+
+  const Toolbar = ({ children }: { children?: React.ReactNode }) =>
+    React.createElement(View, null, children);
+  Toolbar.Button = () => null;
+  Toolbar.View = ({ children }: { children?: React.ReactNode }) => React.createElement(View, null, children);
+
+  const Stack = {
+    Screen: StackScreen,
+    Toolbar,
+  };
+
   return {
     Link,
+    Stack,
     usePathname: () => '/',
     useRouter: () => ({
       back: jest.fn(),
@@ -51,6 +96,12 @@ jest.mock('expo-router', () => {
     }),
   };
 });
+
+jest.mock('@/providers/profile-sheet-provider', () => ({
+  useProfileSheet: () => ({
+    openProfileSheet: jest.fn(),
+  }),
+}));
 
 jest.mock('@/hooks/use-app-session', () => ({
   useAppSession: () => ({
@@ -84,6 +135,18 @@ jest.mock('@/lib/api/client', () => {
 });
 
 jest.mock('@/hooks/use-library-app-data', () => ({
+  useAchievementsQuery: () => ({
+    data: {
+      currentPoints: 860,
+      streakLabel: '连续学习 9 天',
+      summary: {
+        aiAssists: 14,
+        completedOrders: 7,
+        readingDays: 28,
+        totalBorrowedBooks: 28,
+      },
+    },
+  }),
   useActiveOrdersQuery: () => ({
     data: [],
   }),
@@ -124,7 +187,21 @@ jest.mock('@/hooks/use-library-app-data', () => ({
     },
   }),
   usePersonalizedRecommendationsQuery: () => ({
-    data: [
+    data: mockPersonalizedData,
+    isFetching: mockPersonalizedLoading,
+  }),
+  useRecommendationDashboardQuery: () => ({
+    data: null,
+  }),
+}));
+
+import HomeRoute from '@/app/(tabs)/(home)';
+
+describe('HomeRoute recommendation location merge', () => {
+  beforeEach(() => {
+    mockHasLibraryService = true;
+    mockPersonalizedLoading = false;
+    mockPersonalizedData = [
       {
         author: '列宁著',
         availabilityLabel: '可立即借阅',
@@ -142,24 +219,24 @@ jest.mock('@/hooks/use-library-app-data', () => ({
         tags: [],
         title: '帝国主义论',
       },
-    ],
-  }),
-  useRecommendationDashboardQuery: () => ({
-    data: null,
-  }),
-}));
-
-import HomeRoute from '@/app/(tabs)/index';
-
-describe('HomeRoute recommendation location merge', () => {
-  beforeEach(() => {
-    mockHasLibraryService = true;
+    ];
   });
 
   it('uses home-feed location when personalized results miss the real cabinet label', () => {
     render(<HomeRoute />);
 
-    expect(screen.getByText('A058')).toBeTruthy();
+    expect(screen.getByText(/A058/)).toBeTruthy();
     expect(screen.queryByText('位置待确认')).toBeNull();
+  });
+
+  it('keeps the recommendation skeleton visible until personalized results are ready', () => {
+    mockPersonalizedData = undefined;
+    mockPersonalizedLoading = true;
+
+    render(<HomeRoute />);
+
+    expect(screen.getByTestId('home-recommendation-skeleton')).toBeTruthy();
+    expect(screen.queryByTestId('home-recommendation-link-21608')).toBeNull();
+    expect(screen.queryByText('帝国主义论')).toBeNull();
   });
 });

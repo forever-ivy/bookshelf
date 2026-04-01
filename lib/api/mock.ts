@@ -39,7 +39,7 @@ function createBaseBook(
     coverTone: options.coverTone ?? 'blue',
     coverUrl: options.coverUrl ?? null,
     deliveryAvailable: options.deliveryAvailable ?? true,
-    etaLabel: options.etaLabel ?? '15 分钟可送达',
+    etaLabel: options.etaLabel ?? '可送达',
     etaMinutes: options.etaMinutes ?? 15,
     matchedFields: options.matchedFields ?? ['title', 'keywords'],
     recommendationReason: options.recommendationReason ?? '与你的课程和阅读偏好高度相关',
@@ -60,7 +60,7 @@ const bookLearning = createBaseBook(
   {
     category: '人工智能',
     coverTone: 'lavender',
-    etaLabel: '18 分钟可送达',
+    etaLabel: '可送达',
     etaMinutes: 18,
     recommendationReason: '适合本周课程的起步阅读',
   }
@@ -91,7 +91,7 @@ const bookPsychology = createBaseBook(
   {
     category: '哲学、宗教',
     coverTone: 'mint',
-    etaLabel: '明早可达',
+    etaLabel: '可送达',
     etaMinutes: 480,
     deliveryAvailable: true,
     recommendationReason: '偏兴趣阅读，适合碎片时间浏览',
@@ -107,7 +107,7 @@ const bookProduct = createBaseBook(
   {
     category: '工业技术',
     coverTone: 'coral',
-    etaLabel: '10 分钟可送达',
+    etaLabel: '可送达',
     etaMinutes: 10,
     recommendationReason: '如果你今晚想换换学习主题，这本很适合',
   }

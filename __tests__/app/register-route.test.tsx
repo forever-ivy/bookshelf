@@ -51,7 +51,6 @@ describe('RegisterRoute', () => {
   it('renders the public registration form for new readers', () => {
     render(<RegisterRoute />);
 
-    expect(screen.getByText('创建账号')).toBeTruthy();
     expect(screen.getByPlaceholderText('请输入用户名')).toBeTruthy();
     expect(screen.getByPlaceholderText('请输入显示名称')).toBeTruthy();
     expect(screen.getByPlaceholderText('请输入密码')).toBeTruthy();

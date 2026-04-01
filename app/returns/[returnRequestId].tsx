@@ -41,7 +41,7 @@ export default function ReturnRequestDetailRoute() {
 
   return (
     <ProtectedRoute>
-      <PageShell headerTitle="归还请求详情" mode="workspace">
+      <PageShell mode="workspace">
         {detailQuery.isError ? (
           <StateMessageCard
             description={getLibraryErrorMessage(detailQuery.error, '归还请求详情暂时不可用，请检查 orders 接口。')}

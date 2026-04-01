@@ -1,6 +1,7 @@
 import type { BookCard, BookCardPage, BookDetail } from '@/lib/api/types';
 import { getMockBook, getMockBookDetail, listMockBooks } from '@/lib/api/mock';
 import { libraryRequest } from '@/lib/api/client';
+import { resolveBookDeliveryAvailable, resolveBookEtaLabel } from '@/lib/book-delivery';
 
 export async function listBooks(query?: string, token?: string | null): Promise<BookCard[]> {
   return listBooksPage(query, token).then((payload) => payload.items);
@@ -56,18 +57,29 @@ export async function getRelatedBooks(bookId: number, token?: string | null): Pr
 
 export function normalizeBookCard(raw: any): BookCard {
   const cabinetLabel = resolveBookLocation(raw);
+  const etaMinutes = raw.etaMinutes ?? raw.eta_minutes ?? null;
+  const rawEtaLabel = raw.etaLabel ?? raw.eta_label ?? null;
+  const deliveryAvailable = resolveBookDeliveryAvailable({
+    deliveryAvailable: raw.deliveryAvailable ?? raw.delivery_available,
+    etaLabel: rawEtaLabel,
+    etaMinutes,
+  });
 
   return {
     id: raw.id,
-    author: raw.author ?? '未知作者',
+    author: resolveBookAuthor(raw.author),
     availabilityLabel: raw.availabilityLabel ?? raw.availability_label ?? '馆藏充足 · 可立即借阅',
     cabinetLabel,
     category: raw.category ?? null,
     coverTone: raw.coverTone ?? raw.cover_tone ?? 'blue',
     coverUrl: raw.coverUrl ?? raw.cover_url ?? null,
-    deliveryAvailable: raw.deliveryAvailable ?? raw.delivery_available ?? Boolean(raw.eta_minutes ?? raw.etaMinutes),
-    etaLabel: raw.etaLabel ?? raw.eta_label ?? (raw.eta_minutes ? `${raw.eta_minutes} 分钟可送达` : '到柜自取'),
-    etaMinutes: raw.etaMinutes ?? raw.eta_minutes ?? null,
+    deliveryAvailable,
+    etaLabel: resolveBookEtaLabel({
+      deliveryAvailable,
+      etaLabel: rawEtaLabel,
+      etaMinutes,
+    }),
+    etaMinutes,
     matchedFields: raw.matchedFields ?? raw.matched_fields ?? [],
     recommendationReason: raw.recommendationReason ?? raw.recommendation_reason ?? null,
     shelfLabel: raw.shelfLabel ?? raw.shelf_label ?? '主馆 2 楼',
@@ -85,6 +97,8 @@ function resolveBookLocation(raw: any) {
     raw.locationNote ??
     raw.location_note ??
     raw.location ??
+    raw.shelfLabel ??
+    raw.shelf_label ??
     raw.slotCode ??
     raw.slot_code;
 
@@ -101,6 +115,19 @@ function resolveBookLocation(raw: any) {
   }
 
   return '位置待确认';
+}
+
+function resolveBookAuthor(author: unknown) {
+  if (typeof author !== 'string') {
+    return '佚名';
+  }
+
+  const normalized = author.trim();
+  if (!normalized || /^nan$/i.test(normalized)) {
+    return '佚名';
+  }
+
+  return normalized;
 }
 
 function normalizeBookCardPage(
@@ -200,7 +227,9 @@ function normalizeBookDetail(raw: any, bookId: number): BookDetail {
         raw.catalog?.location_note ??
         raw.locationNote ??
         raw.location_note ??
-        `${catalog.shelfLabel} · ${catalog.cabinetLabel}`,
+        (catalog.shelfLabel === catalog.cabinetLabel
+          ? catalog.cabinetLabel
+          : `${catalog.shelfLabel} · ${catalog.cabinetLabel}`),
     },
     peopleAlsoBorrowed: Array.isArray(raw.peopleAlsoBorrowed ?? raw.people_also_borrowed)
       ? (raw.peopleAlsoBorrowed ?? raw.people_also_borrowed).map(normalizeBookCard)

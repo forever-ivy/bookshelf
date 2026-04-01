@@ -299,7 +299,7 @@ describe('BookDetailRoute', () => {
 
     expect(screen.getByText('馆藏与借阅')).toBeTruthy();
     expect(screen.getByText('智能书柜 A-03')).toBeTruthy();
-    expect(screen.getByText('18 分钟可送达')).toBeTruthy();
+    expect(screen.getAllByText('可送达').length).toBeGreaterThan(0);
     expect(screen.getByText('为什么可能适合你')).toBeTruthy();
     expect(screen.getByText('与你本周的课程和 AI 学习记录最相关')).toBeTruthy();
     expect(screen.getByText('借过这本的人也借了')).toBeTruthy();
@@ -313,7 +313,8 @@ describe('BookDetailRoute', () => {
     expect(screen.queryByText('推荐理由')).toBeNull();
     expect(screen.queryByText('综合推荐')).toBeNull();
     expect(screen.queryByText('默认书柜')).toBeNull();
-    expect(screen.getAllByText('馆藏位置待确认').length).toBeGreaterThan(0);
+    expect(screen.queryByText('馆藏位置待确认')).toBeNull();
+    expect(screen.getAllByText('书库').length).toBeGreaterThan(0);
   });
 
   it('adds the book into a later-reading list and opens the profile sheet', async () => {

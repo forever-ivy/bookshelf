@@ -56,7 +56,6 @@ describe('OnboardingInterestsRoute', () => {
   it('explains the second onboarding step in product language', () => {
     render(<OnboardingInterestsRoute />);
 
-    expect(screen.getByText('选择借阅偏好')).toBeTruthy();
     expect(screen.getByText('第 2 步，共 2 步')).toBeTruthy();
     expect(screen.getByText(/找书、推荐借阅和专题书单会更贴近你/)).toBeTruthy();
     expect(screen.getByText('完成建档，进入首页')).toBeTruthy();

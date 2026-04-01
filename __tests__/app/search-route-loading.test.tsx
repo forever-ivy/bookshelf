@@ -1,6 +1,29 @@
 import { render, screen } from '@testing-library/react-native';
 import React from 'react';
 
+let mockCatalogData:
+  | {
+      hasMore: boolean;
+      items: Array<{
+        author: string;
+        availabilityLabel: string;
+        cabinetLabel: string;
+        coverTone: 'lavender';
+        etaLabel: string;
+        id: number;
+        recommendationReason: string | null;
+        title: string;
+      }>;
+      limit: number;
+      offset: number;
+      query: string;
+      total: number;
+    }
+  | undefined;
+let mockCatalogFetching = true;
+let mockRecommendationData: Array<unknown> | undefined;
+let mockRecommendationFetching = true;
+
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaProvider: ({ children }: { children: React.ReactNode }) => children,
   useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
@@ -27,9 +50,9 @@ jest.mock('expo-router', () => {
 
 jest.mock('@/hooks/use-library-app-data', () => ({
   useCatalogBookSearchPageQuery: () => ({
-    data: undefined,
+    data: mockCatalogData,
     error: null,
-    isFetching: true,
+    isFetching: mockCatalogFetching,
   }),
   useExplicitBookSearchQuery: () => ({
     data: undefined,
@@ -37,15 +60,22 @@ jest.mock('@/hooks/use-library-app-data', () => ({
     isFetching: false,
   }),
   useRecommendationSearchQuery: () => ({
-    data: undefined,
+    data: mockRecommendationData,
     error: null,
-    isFetching: true,
+    isFetching: mockRecommendationFetching,
   }),
 }));
 
 import { SearchScreen } from '@/components/search/search-screen';
 
 describe('SearchScreen loading state', () => {
+  beforeEach(() => {
+    mockCatalogData = undefined;
+    mockCatalogFetching = true;
+    mockRecommendationData = undefined;
+    mockRecommendationFetching = true;
+  });
+
   it('keeps the filter and result containers mounted with skeletons during first load', () => {
     render(<SearchScreen query="" />);
 
@@ -56,5 +86,36 @@ describe('SearchScreen loading state', () => {
     expect(screen.getByTestId('search-result-skeleton-2')).toBeTruthy();
     expect(screen.getByTestId('search-result-skeleton-3')).toBeTruthy();
     expect(screen.queryByText('这次没找到完全匹配的图书')).toBeNull();
+  });
+
+  it('keeps showing skeletons while discovery recommendations are still loading even if catalog results arrived first', () => {
+    mockCatalogData = {
+      hasMore: false,
+      items: [
+        {
+          author: '周志华',
+          availabilityLabel: '馆藏充足 · 可立即借阅',
+          cabinetLabel: '主馆 2 楼',
+          coverTone: 'lavender',
+          etaLabel: '可送达',
+          id: 1,
+          recommendationReason: null,
+          title: '机器学习',
+        },
+      ],
+      limit: 20,
+      offset: 0,
+      query: '',
+      total: 1,
+    };
+    mockCatalogFetching = false;
+    mockRecommendationData = undefined;
+    mockRecommendationFetching = true;
+
+    render(<SearchScreen query="" />);
+
+    expect(screen.getByTestId('search-result-skeleton-1')).toBeTruthy();
+    expect(screen.queryByText('机器学习')).toBeNull();
+    expect(screen.queryByTestId('search-result-cell')).toBeNull();
   });
 });

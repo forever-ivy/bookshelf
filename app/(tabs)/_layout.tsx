@@ -13,7 +13,7 @@ export default function TabsLayout() {
       <NativeTabs
         disableTransparentOnScrollEdge
         minimizeBehavior="onScrollDown">
-        <NativeTabs.Trigger name="index">
+        <NativeTabs.Trigger name="(home)">
           <NativeTabs.Trigger.Icon {...getNativeTabIconProps('home')} />
           <NativeTabs.Trigger.Label>首页</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>

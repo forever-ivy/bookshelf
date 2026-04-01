@@ -1,7 +1,7 @@
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
-import { Link, type Href } from 'expo-router';
+import { Platform, Pressable, Text, View } from 'react-native';
+import { Link, Stack, type Href } from 'expo-router';
 
 import { AppIcon, type AppIconName } from '@/components/base/app-icon';
 import { EditorialIllustration } from '@/components/base/editorial-illustration';
@@ -18,9 +18,14 @@ import { PillButton } from '@/components/base/pill-button';
 import { SectionTitle } from '@/components/base/section-title';
 import { StateMessageCard } from '@/components/base/state-message-card';
 import { PageShell } from '@/components/navigation/page-shell';
+import { ProfileSheetTriggerButton } from '@/components/navigation/profile-sheet-trigger-button';
+import { ToolbarInlineTitle } from '@/components/navigation/toolbar-inline-title';
+import { ToolbarProfileAction } from '@/components/navigation/toolbar-profile-action';
 import { useAppSession } from '@/hooks/use-app-session';
+import { useHeaderChromeVisibility } from '@/hooks/use-header-chrome-visibility';
 import {
   useActiveOrdersQuery,
+  useAchievementsQuery,
   useBookDetailQueries,
   useHomeFeedQuery,
   usePersonalizedRecommendationsQuery,
@@ -28,7 +33,9 @@ import {
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { getLibraryErrorMessage, hasLibraryService } from '@/lib/api/client';
 import { appArtwork } from '@/lib/app/artwork';
-import { homeHero } from '@/lib/app/mock-data';
+import { resolveBookEtaDisplay } from '@/lib/book-delivery';
+import { isUnresolvedBookLocation, resolveBookLocationDisplay } from '@/lib/book-location';
+import { useProfileSheet } from '@/providers/profile-sheet-provider';
 
 function resolveHomeGreeting(hour: number) {
   if (hour >= 5 && hour < 11) {
@@ -54,7 +61,7 @@ function mergeRecommendationLocation<T extends { cabinetLabel: string; id: numbe
     return item;
   }
 
-  const needsCabinetFallback = !item.cabinetLabel || item.cabinetLabel === '位置待确认';
+  const needsCabinetFallback = isUnresolvedBookLocation(item.cabinetLabel);
   const needsShelfFallback = !item.shelfLabel || item.shelfLabel === '主馆 2 楼';
 
   if (!needsCabinetFallback && !needsShelfFallback) {
@@ -167,14 +174,8 @@ function HomeFeaturedShelfSkeleton() {
   );
 }
 
-function resolveHomeBookLocation(location?: string | null) {
-  const normalized = location?.trim();
-
-  if (!normalized || normalized === '位置待确认' || normalized === '馆藏位置待确认' || normalized === '默认书柜') {
-    return '馆藏位置待确认';
-  }
-
-  return normalized;
+function formatHomeHeaderTitle() {
+  return '首页';
 }
 
 function resolveHomeBookAuthor(author?: string | null) {
@@ -228,6 +229,25 @@ function formatRecommendationSummary(text?: string | null) {
   }
 
   return normalized;
+}
+
+function countDeliveryOrders(
+  orders: { mode?: string | null; statusLabel?: string | null }[]
+) {
+  return orders.filter(
+    (order) => order.mode === 'robot_delivery' || Boolean(order.statusLabel?.includes('配送'))
+  ).length;
+}
+
+function countDueSoonOrders(
+  orders: { status?: string | null; statusLabel?: string | null }[]
+) {
+  return orders.filter(
+    (order) =>
+      order.status === 'dueSoon' ||
+      order.status === 'overdue' ||
+      Boolean(order.statusLabel?.includes('到期'))
+  ).length;
 }
 
 function HomeBookLinkList({
@@ -284,17 +304,17 @@ function HomeBookLinkList({
                     fontSize: 13,
                     lineHeight: 18,
                   }}>
-                  {resolveHomeBookAuthor(item.author)} · {resolveHomeBookLocation(item.cabinetLabel)}
+                  {resolveHomeBookAuthor(item.author)} · {resolveBookLocationDisplay(item.cabinetLabel)}
                 </Text>
                 <Text
                   numberOfLines={1}
                   style={{
                     color: theme.colors.textSoft,
                     ...theme.typography.body,
-                    fontSize: 12,
-                    lineHeight: 17,
-                  }}>
-                  {item.availabilityLabel} · {item.etaLabel}
+                  fontSize: 12,
+                  lineHeight: 17,
+                }}>
+                  {item.availabilityLabel} · {resolveBookEtaDisplay(item.etaLabel)}
                 </Text>
               </View>
               <View
@@ -314,21 +334,42 @@ function HomeBookLinkList({
 
 export default function HomeRoute() {
   const activeOrdersQuery = useActiveOrdersQuery();
+  const achievementsQuery = useAchievementsQuery();
   const homeFeedQuery = useHomeFeedQuery();
   const personalizedQuery = usePersonalizedRecommendationsQuery({ historyLimit: 5, limit: 8 });
   const { profile } = useAppSession();
+  const { openProfileSheet } = useProfileSheet();
   const { theme } = useAppTheme();
   const homeError = homeFeedQuery.error ?? activeOrdersQuery.error;
   const hasRealLibraryService = hasLibraryService();
   const feedData = homeFeedQuery.data;
-  const greeting = resolveHomeGreeting(new Date().getHours());
+  const now = new Date();
+  const isIos = Platform.OS === 'ios';
+  const greeting = resolveHomeGreeting(now.getHours());
   const displayName = profile?.displayName?.trim() ? profile.displayName.trim() : '同学';
+  const homeHeaderTitle = formatHomeHeaderTitle();
+  const { onScroll: handleHomeScroll, showHeaderChrome: showHomeHeaderChrome } =
+    useHeaderChromeVisibility();
 
   const chipPalettes = [
     { backgroundColor: theme.colors.primarySoft, color: theme.colors.primaryStrong },
     { backgroundColor: theme.colors.warningSoft, color: theme.colors.warning },
     { backgroundColor: theme.colors.successSoft, color: theme.colors.success },
   ] as const;
+  const deliveryOrderCount = countDeliveryOrders(activeOrdersQuery.data ?? []);
+  const dueSoonOrderCount = countDueSoonOrders(activeOrdersQuery.data ?? []);
+  const deliveryChip = deliveryOrderCount > 0 ? `${deliveryOrderCount} 单配送中` : '暂无订单';
+  const dueSoonChip = dueSoonOrderCount > 0 ? `${dueSoonOrderCount} 本临近到期` : '暂无临期';
+  const streakChip = achievementsQuery.data?.streakLabel?.trim() || null;
+  const heroChips = hasRealLibraryService
+    ? [deliveryChip, dueSoonChip, streakChip]
+        .filter((item): item is string => Boolean(item))
+        .sort((left, right) => {
+          const leftScore = left.startsWith('暂无') ? 1 : 0;
+          const rightScore = right.startsWith('暂无') ? 1 : 0;
+          return leftScore - rightScore;
+        })
+    : [];
   const activeOrder = hasRealLibraryService ? activeOrdersQuery.data?.[0] : undefined;
   const recommendationCards = homeFeedQuery.data?.todayRecommendations ?? [];
   const booklistCards = homeFeedQuery.data?.systemBooklists ?? [];
@@ -417,13 +458,18 @@ export default function HomeRoute() {
       },
       ])
   );
+  const hasPersonalizedResponse = personalizedQuery.data !== undefined;
   const personalizedBooksSource =
-    personalizedQuery.data?.length ? personalizedQuery.data : feedData?.todayRecommendations ?? [];
+    personalizedQuery.data?.length
+      ? personalizedQuery.data
+      : hasPersonalizedResponse
+        ? feedData?.todayRecommendations ?? []
+        : [];
   const personalizedBooksWithFeedLocations = personalizedBooksSource.map((item) =>
     mergeRecommendationLocation(item, recommendationLocationById.get(item.id))
   );
   const missingPersonalizedLocationIds = personalizedBooksWithFeedLocations
-    .filter((item) => item.cabinetLabel === '位置待确认')
+    .filter((item) => isUnresolvedBookLocation(item.cabinetLabel))
     .map((item) => item.id);
   const personalizedBookDetails = useBookDetailQueries(hasRealLibraryService ? missingPersonalizedLocationIds : []);
   const personalizedDetailLocationById = new Map(
@@ -465,7 +511,7 @@ export default function HomeRoute() {
     hasRealLibraryService &&
     !homeRecommendationLinks.length &&
     !homeError &&
-    (Boolean(homeFeedQuery.isFetching) || Boolean(personalizedQuery.isFetching) || personalizedDetailsLoading);
+    ((!hasPersonalizedResponse && Boolean(personalizedQuery.isFetching)) || personalizedDetailsLoading);
   const showFeaturedCollectionsSkeleton =
     hasRealLibraryService &&
     !hasFeaturedCollections &&
@@ -497,7 +543,6 @@ export default function HomeRoute() {
         href: '/search' as const,
         label: '去找书',
       };
-
   const homeHeader = (
     <View
       style={{
@@ -531,34 +576,81 @@ export default function HomeRoute() {
   );
 
   return (
-    <PageShell headerContent={homeHeader} mode="discovery">
-      <View style={{ gap: theme.spacing.md }}>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm }}>
-          {homeHero.chips.map((chip, index) => {
-            const palette = chipPalettes[index % chipPalettes.length];
+    <>
+      {isIos ? (
+        <Stack.Screen
+          options={{
+            title: '',
+            unstable_headerLeftItems: () =>
+              showHomeHeaderChrome
+                ? [
+                    {
+                      element: (
+                        <View testID="home-header-inline-title-slot">
+                          <ToolbarInlineTitle title={homeHeaderTitle} />
+                        </View>
+                      ),
+                      hidesSharedBackground: true,
+                      type: 'custom' as const,
+                    },
+                  ]
+                : [],
+            unstable_headerRightItems: () =>
+              showHomeHeaderChrome
+                ? [
+                    {
+                      element: (
+                        <View testID="home-header-profile-slot">
+                          <ToolbarProfileAction onPress={openProfileSheet} />
+                        </View>
+                      ),
+                      hidesSharedBackground: true,
+                      type: 'custom' as const,
+                    },
+                  ]
+                : [],
+          }}
+        />
+      ) : (
+        <Stack.Screen
+          options={{
+            headerRight: () =>
+              showHomeHeaderChrome ? <ProfileSheetTriggerButton onPress={openProfileSheet} /> : null,
+            title: showHomeHeaderChrome ? homeHeaderTitle : '',
+          }}
+        />
+      )}
+      <PageShell mode="discovery" onScroll={handleHomeScroll}>
+        {homeHeader}
+        {heroChips.length > 0 ? (
+          <View style={{ gap: theme.spacing.md }}>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm }}>
+              {heroChips.map((chip, index) => {
+                const palette = chipPalettes[index % chipPalettes.length];
 
-            return (
-              <View
-                key={chip}
-                style={{
-                  backgroundColor: palette.backgroundColor,
-                  borderRadius: theme.radii.md,
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                }}>
-                <Text
-                  style={{
-                    color: palette.color,
-                    ...theme.typography.medium,
-                    fontSize: 12,
-                  }}>
-                  {chip}
-                </Text>
-              </View>
-            );
-          })}
-        </View>
-      </View>
+                return (
+                  <View
+                    key={chip}
+                    style={{
+                      backgroundColor: palette.backgroundColor,
+                      borderRadius: theme.radii.md,
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                    }}>
+                    <Text
+                      style={{
+                        color: palette.color,
+                        ...theme.typography.medium,
+                        fontSize: 12,
+                      }}>
+                      {chip}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
       <Animated.View entering={FadeInUp.delay(60).duration(480)}>
         <EditorialIllustration
           height={214}
@@ -750,6 +842,7 @@ export default function HomeRoute() {
           )}
         </View>
       ) : null}
-    </PageShell>
+      </PageShell>
+    </>
   );
 }

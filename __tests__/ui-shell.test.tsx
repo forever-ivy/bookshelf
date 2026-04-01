@@ -10,6 +10,7 @@ let mockLastHeaderSearchBarOptions: unknown;
 let mockCatalogPageQueries: Array<{ limit: number; offset: number; query: string }> = [];
 let mockExplicitPageQueries: Array<{ limit: number; offset: number; query: string }> = [];
 let mockRecommendationQueries: string[] = [];
+let mockRecommendationPageQueries: Array<{ limit: number; query: string }> = [];
 let mockCatalogSearchErrorQueries = new Set<string>();
 let mockRecommendationSearchErrorQueries = new Set<string>();
 let mockActiveOrdersLoading = false;
@@ -75,6 +76,10 @@ function mockCreatePaginatedMockItems(query: string, count: number, startId: num
     summary: `${query} 摘要 ${index + 1}`,
     title: `${query}结果 ${index + 1}`,
   }));
+}
+
+function mockCreateLoadingKey(query: string, marker: number) {
+  return `${query || '__empty__'}:${marker}`;
 }
 
 jest.mock('react-native-reanimated', () => {
@@ -172,8 +177,14 @@ jest.mock('expo-router', () => {
   StackScreen.Title = ({ children }: { children: React.ReactNode }) =>
     React.createElement(Text, null, children);
 
+  const Toolbar = ({ children }: { children?: React.ReactNode }) =>
+    React.createElement(View, null, children);
+  Toolbar.Button = () => null;
+  Toolbar.View = ({ children }: { children?: React.ReactNode }) => React.createElement(View, null, children);
+
   Stack.Screen = StackScreen;
   Stack.SearchBar = () => null;
+  Stack.Toolbar = Toolbar;
 
   return {
     Redirect: ({ href }: { href: string }) =>
@@ -192,6 +203,12 @@ jest.mock('expo-router', () => {
     }),
   };
 });
+
+jest.mock('@/providers/profile-sheet-provider', () => ({
+  useProfileSheet: () => ({
+    openProfileSheet: jest.fn(),
+  }),
+}));
 
 jest.mock('expo-router/unstable-native-tabs', () => {
   const React = require('react');
@@ -334,6 +351,14 @@ jest.mock('@/hooks/use-library-app-data', () => ({
       return { data: undefined, error: undefined, isFetching: false };
     }
 
+    if (mockCatalogLoadingQueries.has(mockCreateLoadingKey(normalizedQuery, offset))) {
+      return {
+        data: undefined,
+        error: undefined,
+        isFetching: true,
+      };
+    }
+
     if (mockCatalogSearchErrorQueries.has(normalizedQuery)) {
       return {
         data: undefined,
@@ -455,6 +480,14 @@ jest.mock('@/hooks/use-library-app-data', () => ({
 
     if (!enabled || normalizedQuery.trim().length === 0) {
       return { data: undefined, error: undefined, isFetching: false };
+    }
+
+    if (mockCatalogLoadingQueries.has(mockCreateLoadingKey(normalizedQuery, offset))) {
+      return {
+        data: undefined,
+        error: undefined,
+        isFetching: true,
+      };
     }
 
     if (mockCatalogSearchErrorQueries.has(normalizedQuery)) {
@@ -645,11 +678,25 @@ jest.mock('@/hooks/use-library-app-data', () => ({
   useRecommendationDashboardQuery: () => ({
     data: null,
   }),
-  useRecommendationSearchQuery: (query: unknown, enabled?: boolean) => {
+  useRecommendationSearchQuery: (
+    query: unknown,
+    enabled?: boolean,
+    options?: { limit?: number }
+  ) => {
     const normalizedQuery = typeof query === 'string' ? query : '';
+    const limit = options?.limit ?? 5;
     mockRecommendationQueries.push(normalizedQuery);
+    mockRecommendationPageQueries.push({ limit, query: normalizedQuery });
     if (!enabled) {
       return { data: undefined, error: undefined, isFetching: false };
+    }
+
+    if (mockRecommendationLoadingQueries.has(mockCreateLoadingKey(normalizedQuery, limit))) {
+      return {
+        data: undefined,
+        error: undefined,
+        isFetching: true,
+      };
     }
 
     if (mockRecommendationSearchErrorQueries.has(normalizedQuery)) {
@@ -660,29 +707,53 @@ jest.mock('@/hooks/use-library-app-data', () => ({
       };
     }
 
+    const discoveryRecommendations = [
+      {
+        availabilityLabel: '馆藏充足 · 可立即借阅',
+        author: 'Ian Goodfellow',
+        cabinetLabel: '主馆 2 楼',
+        coverTone: 'blue',
+        deliveryAvailable: false,
+        etaLabel: '到柜自取',
+        etaMinutes: null,
+        id: 2,
+        matchedFields: ['summary'],
+        recommendationReason: '如果你在做深度学习专题，它会更系统',
+        shelfLabel: '主馆 2 楼',
+        stockStatus: 'available',
+        summary: '推荐区结果',
+        tags: ['推荐'],
+        title: 'Deep Learning',
+      },
+      ...mockCreatePaginatedMockItems('推荐', 11, 9100),
+    ];
+
     return {
-      data: [
-        {
-          availabilityLabel: '馆藏充足 · 可立即借阅',
-          author: normalizedQuery === '安全' ? '安全治理课题组' : 'Ian Goodfellow',
-          cabinetLabel: '主馆 2 楼',
-          coverTone: 'blue',
-          deliveryAvailable: false,
-          etaLabel: '到柜自取',
-          etaMinutes: null,
-          id: normalizedQuery === '安全' ? 9001 : 2,
-          matchedFields: ['summary'],
-          recommendationReason:
-            normalizedQuery === '安全'
-              ? '从主题语义看，这本更贴近安全治理方向'
-              : '如果你在做深度学习专题，它会更系统',
-          shelfLabel: '主馆 2 楼',
-          stockStatus: 'available',
-          summary: '推荐区结果',
-          tags: ['推荐'],
-          title: normalizedQuery === '安全' ? '安全治理导论' : 'Deep Learning',
-        },
-      ],
+      data:
+        normalizedQuery.length === 0
+          ? discoveryRecommendations.slice(0, limit)
+          : [
+              {
+                availabilityLabel: '馆藏充足 · 可立即借阅',
+                author: normalizedQuery === '安全' ? '安全治理课题组' : 'Ian Goodfellow',
+                cabinetLabel: '主馆 2 楼',
+                coverTone: 'blue',
+                deliveryAvailable: false,
+                etaLabel: '到柜自取',
+                etaMinutes: null,
+                id: normalizedQuery === '安全' ? 9001 : 2,
+                matchedFields: ['summary'],
+                recommendationReason:
+                  normalizedQuery === '安全'
+                    ? '从主题语义看，这本更贴近安全治理方向'
+                    : '如果你在做深度学习专题，它会更系统',
+                shelfLabel: '主馆 2 楼',
+                stockStatus: 'available',
+                summary: '推荐区结果',
+                tags: ['推荐'],
+                title: normalizedQuery === '安全' ? '安全治理导论' : 'Deep Learning',
+              },
+            ],
       error: undefined,
       isFetching: false,
     };
@@ -703,7 +774,7 @@ jest.mock('@/lib/app/artwork', () => ({
   },
 }));
 
-import HomeRoute from '@/app/(tabs)/index';
+import HomeRoute from '@/app/(tabs)/(home)';
 import BorrowingRoute from '@/app/(tabs)/borrowing';
 import MeRoute from '@/app/(tabs)/me';
 import SearchRoute from '@/app/(tabs)/search';
@@ -743,8 +814,11 @@ describe('UI shell routes', () => {
     mockCatalogPageQueries = [];
     mockExplicitPageQueries = [];
     mockRecommendationQueries = [];
+    mockRecommendationPageQueries = [];
     mockCatalogSearchErrorQueries = new Set<string>();
     mockRecommendationSearchErrorQueries = new Set<string>();
+    mockCatalogLoadingQueries = new Set<string>();
+    mockRecommendationLoadingQueries = new Set<string>();
     mockKeyboardListeners.keyboardDidHide.clear();
     mockKeyboardListeners.keyboardDidShow.clear();
     mockKeyboardListeners.keyboardWillHide.clear();
@@ -782,8 +856,11 @@ describe('UI shell routes', () => {
     mockCatalogPageQueries = [];
     mockExplicitPageQueries = [];
     mockRecommendationQueries = [];
+    mockRecommendationPageQueries = [];
     mockCatalogSearchErrorQueries = new Set<string>();
     mockRecommendationSearchErrorQueries = new Set<string>();
+    mockCatalogLoadingQueries = new Set<string>();
+    mockRecommendationLoadingQueries = new Set<string>();
     act(() => {
       jest.runOnlyPendingTimers();
     });
@@ -797,12 +874,11 @@ describe('UI shell routes', () => {
     expect(screen.queryByTestId('page-shell-header-title')).toBeNull();
     expect(screen.getByText('下午好 🍃')).toBeTruthy();
     expect(screen.getByText('陈知行')).toBeTruthy();
-    expect(screen.queryByTestId('home-greeting-divider')).toBeNull();
+    expect(screen.getByTestId('home-greeting-header')).toBeTruthy();
     expect(
       StyleSheet.flatten(screen.getByTestId('home-greeting-label').props.style).fontSize
     ).toBeGreaterThan(StyleSheet.flatten(screen.getByTestId('home-greeting-name').props.style).fontSize);
     expect(StyleSheet.flatten(screen.getByTestId('home-greeting-name').props.style).marginLeft).toBeUndefined();
-    expect(screen.queryByText('今晚路径')).toBeNull();
     expect(screen.getByTestId('home-artwork')).toBeTruthy();
     expect(screen.queryByText('搜索书名、作者、更多信息')).toBeNull();
     expect(screen.queryByText('继续借阅')).toBeNull();
@@ -869,7 +945,7 @@ describe('UI shell routes', () => {
         placeholder: '搜索书名、作者、更多信息',
       })
     );
-    expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('找书');
+    expect(screen.queryByTestId('page-shell-header-title')).toBeNull();
     expect(screen.getByText('筛选')).toBeTruthy();
     expect(screen.getAllByText('全部结果')).toHaveLength(1);
     expect(screen.getAllByText('支持配送')).toHaveLength(1);
@@ -898,6 +974,7 @@ describe('UI shell routes', () => {
     expect(screen.getByTestId('search-results-list')).toBeTruthy();
     expect(screen.getAllByTestId('search-result-cell').length).toBeGreaterThan(0);
     expect(screen.queryByText('查看详情并借阅')).toBeNull();
+    expect(screen.getAllByTestId('search-result-action-chevron').length).toBeGreaterThan(0);
     expect(screen.queryByText('没看到想找的书？')).toBeNull();
     expect(screen.queryByTestId('search-fallback-artwork')).toBeNull();
     expect(screen.queryByTestId('search-feedback-trigger')).toBeNull();
@@ -947,6 +1024,46 @@ describe('UI shell routes', () => {
 
     expect(screen.getByText('为你推荐')).toBeTruthy();
     expect(screen.getByText('Deep Learning')).toBeTruthy();
+  });
+
+  it('loads more discovery recommendations when the search query is empty', () => {
+    renderWithProviders(<SearchRoute />);
+
+    expect(screen.getByText('为你推荐')).toBeTruthy();
+    expect(screen.getAllByTestId('search-result-cell')).toHaveLength(5);
+    expect(screen.queryByText('推荐结果 6')).toBeNull();
+    expect(mockRecommendationPageQueries).toContainEqual({
+      limit: 5,
+      query: '',
+    });
+
+    fireEvent.press(screen.getByText('加载更多结果'));
+
+    expect(mockRecommendationPageQueries).toContainEqual({
+      limit: 10,
+      query: '',
+    });
+    expect(screen.getAllByTestId('search-result-cell')).toHaveLength(10);
+    expect(screen.getByText('推荐结果 6')).toBeTruthy();
+  });
+
+  it('keeps visible discovery results mounted while loading more recommendations', () => {
+    renderWithProviders(<SearchRoute />);
+
+    expect(screen.getAllByTestId('search-result-cell')).toHaveLength(5);
+    mockRecommendationLoadingQueries.add(mockCreateLoadingKey('', 10));
+
+    fireEvent.press(screen.getByText('加载更多结果'));
+
+    expect(mockRecommendationPageQueries).toContainEqual({
+      limit: 10,
+      query: '',
+    });
+    expect(screen.getAllByTestId('search-result-cell')).toHaveLength(5);
+    expect(screen.getByText('Deep Learning')).toBeTruthy();
+    expect(screen.queryByText('加载更多结果')).toBeNull();
+    expect(screen.getByTestId('search-load-more-spinner')).toBeTruthy();
+    expect(screen.queryByTestId('search-result-skeleton-1')).toBeNull();
   });
 
   it('filters catalog results down to stocked books when 馆藏充足 is selected', () => {
@@ -1023,11 +1140,10 @@ describe('UI shell routes', () => {
         placeholder: '搜索想立刻借走的书',
       })
     );
-    expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('立即可借');
+    expect(screen.queryByTestId('page-shell-header-title')).toBeNull();
     expect(screen.getByTestId('native-search-bar')).toBeTruthy();
     expect(screen.getByPlaceholderText('搜索想立刻借走的书')).toBeTruthy();
     expect(screen.getAllByText('只看可借可送').length).toBeGreaterThan(0);
-    expect(screen.queryByTestId('secondary-back-button')).toBeNull();
   });
 
   it('accepts native-event payloads from the stack search bar without crashing', () => {
@@ -1047,7 +1163,7 @@ describe('UI shell routes', () => {
     });
 
     expect(mockBookSearchQueries.at(-1)).toBe('深度学习');
-    expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('找书');
+    expect(screen.queryByTestId('page-shell-header-title')).toBeNull();
   });
 
   it('accepts direct text payloads from the native stack search bar', () => {
@@ -1065,7 +1181,7 @@ describe('UI shell routes', () => {
     });
 
     expect(mockBookSearchQueries.at(-1)).toBe('统计学习');
-    expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('找书');
+    expect(screen.queryByTestId('page-shell-header-title')).toBeNull();
   });
 
   it('prefers committed native-event text over top-level composition text from the native search bar', () => {
@@ -1086,7 +1202,7 @@ describe('UI shell routes', () => {
     });
 
     expect(mockBookSearchQueries.at(-1)).toBe('安全');
-    expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('找书');
+    expect(screen.queryByTestId('page-shell-header-title')).toBeNull();
   });
 
   it('paginates a broad explicit search and loads more catalog results on demand', () => {
@@ -1121,6 +1237,36 @@ describe('UI shell routes', () => {
     });
     expect(screen.getAllByText(/安全结果 \d+/)).toHaveLength(40);
     expect(screen.queryByText('安全治理导论')).toBeNull();
+  });
+
+  it('keeps visible catalog results mounted while loading more explicit search results', () => {
+    renderWithProviders(<SearchRoute />);
+
+    act(() => {
+      const nativeSearchBar = screen.getByTestId('native-search-bar');
+      nativeSearchBar.props.onChangeText({
+        text: '安全',
+      });
+    });
+
+    act(() => {
+      jest.advanceTimersByTime(SEARCH_INPUT_DEBOUNCE_MS);
+    });
+
+    expect(screen.getAllByText(/安全结果 \d+/)).toHaveLength(20);
+    mockCatalogLoadingQueries.add(mockCreateLoadingKey('安全', 20));
+
+    fireEvent.press(screen.getByText('加载更多结果'));
+
+    expect(mockExplicitPageQueries).toContainEqual({
+      limit: 20,
+      offset: 20,
+      query: '安全',
+    });
+    expect(screen.getAllByText(/安全结果 \d+/)).toHaveLength(20);
+    expect(screen.queryByText('加载更多结果')).toBeNull();
+    expect(screen.getByTestId('search-load-more-spinner')).toBeTruthy();
+    expect(screen.queryByTestId('search-result-skeleton-1')).toBeNull();
   });
 
   it('keeps recommendation results visible when catalog search fails without showing the global search failure card', () => {
@@ -1208,23 +1354,15 @@ describe('UI shell routes', () => {
     expect(mockRecommendationQueries.some((entry) => entry === 'a' || entry === 'an')).toBe(false);
   });
 
-  it('hides the search title while the keyboard is visible and restores it afterward', () => {
-    const scheduleLayoutAnimationSpy = jest
-      .spyOn(Keyboard, 'scheduleLayoutAnimation')
-      .mockImplementation(() => {});
-
+  it('keeps the native search bar mounted while keyboard events fire', () => {
     renderWithProviders(<SearchRoute />);
 
-    expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('找书');
+    expect(screen.getByTestId('native-search-bar')).toBeTruthy();
 
     act(() => {
       emitKeyboardEvent('keyboardWillShow', { duration: 320 });
     });
 
-    expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('找书');
-    expect(scheduleLayoutAnimationSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ duration: 320 })
-    );
     expect(screen.getByTestId('native-search-bar')).toBeTruthy();
     expect(screen.getByTestId('search-results-list')).toBeTruthy();
 
@@ -1232,16 +1370,11 @@ describe('UI shell routes', () => {
       jest.advanceTimersByTime(320);
     });
 
-    expect(StyleSheet.flatten(screen.getByTestId('page-shell-header-title-slot').props.style).height).toBe(0);
-
     act(() => {
       emitKeyboardEvent('keyboardWillHide', { duration: 260 });
     });
 
-    expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('找书');
-    expect(StyleSheet.flatten(screen.getByTestId('page-shell-header-title-slot').props.style).height).toBe(36);
-
-    expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('找书');
+    expect(screen.getByTestId('native-search-bar')).toBeTruthy();
   });
 
   it('renders borrowing route sections', () => {
@@ -1260,7 +1393,6 @@ describe('UI shell routes', () => {
   it('renders the me route workspace entries', () => {
     renderWithProviders(<MeRoute />);
 
-    expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('我的');
     expect(screen.getByText('今日提醒')).toBeTruthy();
     expect(screen.getByText('打开个人中心')).toBeTruthy();
     expect(screen.getAllByText('收藏图书').length).toBeGreaterThan(0);
@@ -1275,7 +1407,7 @@ describe('UI shell routes', () => {
   it('renders the marker examples route with both highlight variants', () => {
     renderWithProviders(<MarkerExamplesRoute />);
 
-    expect(screen.getByText('文字高亮示例')).toBeTruthy();
+    expect(screen.getByText(/这里集中放当前项目里可直接复用的 marker 文本样式/)).toBeTruthy();
     expect(screen.getByText('块状高亮')).toBeTruthy();
     expect(screen.getByText('底部下划线')).toBeTruthy();
     expect(screen.getAllByText('highlight').length).toBeGreaterThan(0);
@@ -1286,7 +1418,6 @@ describe('UI shell routes', () => {
     expect(screen.getByText('绿色完成')).toBeTruthy();
     expect(screen.getAllByText('红色提醒').length).toBeGreaterThan(0);
     expect(screen.getByText('自定义下划线')).toBeTruthy();
-    expect(screen.queryByTestId('secondary-back-button')).toBeNull();
   });
 
   it('renders the profile route reading portrait sections', () => {
@@ -1296,7 +1427,6 @@ describe('UI shell routes', () => {
     expect(screen.getAllByText('阅读习惯').length).toBeGreaterThan(0);
     expect(screen.getByTestId('profile-artwork')).toBeTruthy();
     expect(screen.queryByTestId('illustration-profile')).toBeNull();
-    expect(screen.queryByTestId('secondary-back-button')).toBeNull();
   });
 
   it('renders three tabs in native and web layouts', () => {
@@ -1313,9 +1443,10 @@ describe('UI shell routes', () => {
     expect(screen.getByTestId('native-tabs').props.disableTransparentOnScrollEdge).toBe(true);
     expect(screen.getByTestId('native-tab-search').props.accessibilityLabel).toBe('search');
     expect(screen.queryByTestId('native-tab-me')).toBeNull();
+    expect(screen.getByTestId('native-tab-(home)')).toBeTruthy();
 
     renderWithProviders(<WebTabsLayout />);
-    expect(screen.getByTestId('web-tab-index')).toBeTruthy();
+    expect(screen.getByTestId('web-tab-(home)')).toBeTruthy();
     expect(screen.getByTestId('web-tab-search')).toBeTruthy();
     expect(screen.getByTestId('web-tab-borrowing')).toBeTruthy();
     expect(screen.queryByTestId('web-tab-me')).toBeNull();

@@ -1,22 +1,10 @@
 import React from 'react';
 import { Text, View } from 'react-native';
 
+import { BookCover } from '@/components/base/book-cover';
 import { SectionTitle } from '@/components/base/section-title';
 import { homeShelves } from '@/lib/app/mock-data';
 import { useAppTheme } from '@/hooks/use-app-theme';
-
-function toneColor(tone: string) {
-  switch (tone) {
-    case 'mint':
-      return '#B8E2CF';
-    case 'apricot':
-      return '#F4C8A8';
-    case 'lavender':
-      return '#D9D6FF';
-    default:
-      return '#DCE7FF';
-  }
-}
 
 export function TopicShelf() {
   const { theme } = useAppTheme();
@@ -42,29 +30,14 @@ export function TopicShelf() {
                 }}>
                 <View
                   style={{
-                    backgroundColor: toneColor(item.coverTone),
-                    borderRadius: theme.radii.lg,
-                    height: 104,
-                    justifyContent: 'space-between',
-                    overflow: 'hidden',
-                    padding: 12,
-                    width: 82,
+                    justifyContent: 'center',
                   }}>
-                  <View
-                    style={{
-                      backgroundColor: 'rgba(255,255,255,0.68)',
-                      borderRadius: theme.radii.sm,
-                      height: 8,
-                      width: '78%',
-                    }}
-                  />
-                  <View
-                    style={{
-                      backgroundColor: 'rgba(255,255,255,0.8)',
-                      borderRadius: theme.radii.sm,
-                      height: 26,
-                      width: 24,
-                    }}
+                  <BookCover
+                    borderRadius={theme.radii.lg}
+                    height={104}
+                    seed={item.title}
+                    tone={item.coverTone}
+                    width={82}
                   />
                 </View>
                 <View style={{ flex: 1, gap: theme.spacing.sm, justifyContent: 'center' }}>

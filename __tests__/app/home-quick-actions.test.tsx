@@ -9,6 +9,11 @@ let mockHasLibraryService = true;
 let mockActiveOrdersLoading = false;
 let mockHomeFeedLoading = false;
 let mockPersonalizedLoading = false;
+let mockActiveOrdersData: Array<{
+  mode: 'cabinet_pickup' | 'robot_delivery';
+  status: 'active' | 'dueSoon';
+  statusLabel: string;
+}> = [];
 
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaProvider: ({ children }: { children: React.ReactNode }) => children,
@@ -30,12 +35,34 @@ jest.mock('expo-router', () => {
   Link.Trigger = ({ children }: { children: React.ReactNode }) =>
     React.createElement(View, null, children);
 
+  const StackScreen = ({ children }: { children?: React.ReactNode }) =>
+    React.createElement(View, null, children);
+  StackScreen.Title = ({ children }: { children?: React.ReactNode }) =>
+    React.createElement(View, null, children);
+
+  const Toolbar = ({ children }: { children?: React.ReactNode }) =>
+    React.createElement(View, null, children);
+  Toolbar.Button = () => null;
+  Toolbar.View = ({ children }: { children?: React.ReactNode }) => React.createElement(View, null, children);
+
+  const Stack = {
+    Screen: StackScreen,
+    Toolbar,
+  };
+
   return {
     Link,
+    Stack,
     usePathname: () => '/',
     useRouter: () => mockRouter,
   };
 });
+
+jest.mock('@/providers/profile-sheet-provider', () => ({
+  useProfileSheet: () => ({
+    openProfileSheet: jest.fn(),
+  }),
+}));
 
 jest.mock('@/hooks/use-app-session', () => ({
   useAppSession: () => ({
@@ -69,14 +96,20 @@ jest.mock('@/lib/api/client', () => {
 });
 
 jest.mock('@/hooks/use-library-app-data', () => ({
+  useAchievementsQuery: () => ({
+    data: {
+      currentPoints: 860,
+      streakLabel: '连续学习 9 天',
+      summary: {
+        aiAssists: 14,
+        completedOrders: 7,
+        readingDays: 28,
+        totalBorrowedBooks: 28,
+      },
+    },
+  }),
   useActiveOrdersQuery: () => ({
-    data: mockActiveOrdersLoading
-      ? undefined
-      : [
-          {
-            statusLabel: '机器人配送中',
-          },
-        ],
+    data: mockActiveOrdersLoading ? undefined : mockActiveOrdersData,
     isFetching: mockActiveOrdersLoading,
   }),
   useBookDetailQueries: () => [],
@@ -118,7 +151,7 @@ jest.mock('@/hooks/use-library-app-data', () => ({
   }),
 }));
 
-import HomeRoute from '@/app/(tabs)/index';
+import HomeRoute from '@/app/(tabs)/(home)';
 
 describe('HomeRoute quick actions', () => {
   beforeEach(() => {
@@ -127,11 +160,26 @@ describe('HomeRoute quick actions', () => {
     mockActiveOrdersLoading = false;
     mockHomeFeedLoading = false;
     mockPersonalizedLoading = false;
+    mockActiveOrdersData = [
+      {
+        mode: 'robot_delivery',
+        status: 'active',
+        statusLabel: '机器人配送中',
+      },
+      {
+        mode: 'cabinet_pickup',
+        status: 'dueSoon',
+        statusLabel: '即将到期',
+      },
+    ];
   });
 
   it('does not render homepage quick actions or the search shortcut', () => {
     render(<HomeRoute />);
 
+    expect(screen.getByText('1 单配送中')).toBeTruthy();
+    expect(screen.getByText('1 本临近到期')).toBeTruthy();
+    expect(screen.getByText('连续学习 9 天')).toBeTruthy();
     expect(screen.queryByText('搜索书名、作者、更多信息')).toBeNull();
     expect(screen.queryByText('继续借阅')).toBeNull();
     expect(screen.queryByText('配送状态')).toBeNull();
@@ -154,5 +202,31 @@ describe('HomeRoute quick actions', () => {
     expect(screen.getByTestId('home-quick-start-skeleton')).toBeTruthy();
     expect(screen.getByTestId('home-recommendation-skeleton')).toBeTruthy();
     expect(screen.getByTestId('home-featured-skeleton')).toBeTruthy();
+  });
+
+  it('shows empty-state hero chips when there are no delivery or due-soon orders', () => {
+    mockActiveOrdersData = [];
+
+    render(<HomeRoute />);
+
+    expect(screen.getByText('暂无订单')).toBeTruthy();
+    expect(screen.getByText('暂无临期')).toBeTruthy();
+    expect(screen.getByText('连续学习 9 天')).toBeTruthy();
+  });
+
+  it('prioritizes real hero chip signals ahead of empty-state chips', () => {
+    mockActiveOrdersData = [
+      {
+        mode: 'cabinet_pickup',
+        status: 'dueSoon',
+        statusLabel: '即将到期',
+      },
+    ];
+
+    render(<HomeRoute />);
+
+    const chipTexts = screen.getAllByText(/(连续学习 9 天|1 本临近到期|暂无订单)/).map((node) => node.props.children);
+
+    expect(chipTexts).toEqual(['1 本临近到期', '连续学习 9 天', '暂无订单']);
   });
 });

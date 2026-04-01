@@ -57,10 +57,7 @@ export default function OrderDetailRoute() {
 
   return (
     <ProtectedRoute>
-      <PageShell
-        headerDescription={order ? `${order.book.title} · ${order.statusLabel}` : undefined}
-        headerTitle="借阅状态"
-        mode="workspace">
+      <PageShell mode="workspace">
         {orderQuery.isError ? (
           <StateMessageCard
             description={getLibraryErrorMessage(orderQuery.error, '订单详情暂时不可用，请检查 orders 接口。')}
@@ -76,6 +73,15 @@ export default function OrderDetailRoute() {
           <OrderDetailSkeleton />
         ) : order ? (
           <>
+            <Text
+              style={{
+                color: theme.colors.textMuted,
+                ...theme.typography.body,
+                fontSize: 14,
+                lineHeight: 21,
+              }}>
+              {`${order.book.title} · ${order.statusLabel}`}
+            </Text>
             <View
               style={{
                 backgroundColor: theme.colors.surface,

@@ -83,6 +83,26 @@ describe('catalog contract', () => {
     expect(result[0]).not.toHaveProperty('classificationCode');
   });
 
+  it('passes through a caller-provided recommendation page size instead of hard-coding five results', async () => {
+    (libraryRequest as jest.Mock).mockResolvedValue({
+      results: [],
+    });
+
+    await searchRecommendations('调度', 'reader-token', { limit: 10 });
+
+    expect(libraryRequest).toHaveBeenCalledWith(
+      '/api/v1/recommendation/search',
+      expect.objectContaining({
+        body: JSON.stringify({
+          limit: 10,
+          query: '调度',
+        }),
+        method: 'POST',
+        token: 'reader-token',
+      })
+    );
+  });
+
   it('uses the explicit search endpoint when the app requests a required query search', async () => {
     (libraryRequest as jest.Mock).mockResolvedValue({
       items: [
@@ -166,6 +186,12 @@ describe('catalog contract', () => {
         },
         {
           id: 59,
+          title: '设计中的设计',
+          author: null,
+          shelf_label: '主馆 4 楼人文社科区',
+        },
+        {
+          id: 60,
           title: '资本论',
           author: '马克思',
         },
@@ -181,7 +207,47 @@ describe('catalog contract', () => {
     );
     expect(result[1]).toEqual(
       expect.objectContaining({
+        author: '佚名',
+        cabinetLabel: '主馆 4 楼人文社科区',
+      })
+    );
+    expect(result[2]).toEqual(
+      expect.objectContaining({
         cabinetLabel: '位置待确认',
+      })
+    );
+  });
+
+  it('collapses delivery eta text into a generic 可送达 label for reader-facing cards', async () => {
+    (libraryRequest as jest.Mock).mockResolvedValue({
+      items: [
+        {
+          id: 61,
+          title: '配送策略设计',
+          author: '何川',
+          eta_minutes: 15,
+        },
+        {
+          id: 62,
+          title: '书柜系统',
+          author: '孟原',
+          eta_label: '明早可达',
+          delivery_available: true,
+        },
+      ],
+    });
+
+    const result = await listBooks(undefined, 'reader-token');
+
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        etaLabel: '可送达',
+        etaMinutes: 15,
+      })
+    );
+    expect(result[1]).toEqual(
+      expect.objectContaining({
+        etaLabel: '可送达',
       })
     );
   });

@@ -5,8 +5,6 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
-import { GlobalProfileSheetLayer } from '@/components/navigation/global-profile-sheet-layer';
-import { GlobalSecondaryBackLayer } from '@/components/navigation/global-secondary-back-layer';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { AppProviders } from '@/providers/app-providers';
 import { ProfileSheetProvider } from '@/providers/profile-sheet-provider';
@@ -24,32 +22,50 @@ export default function RootLayout() {
                 contentStyle: {
                   backgroundColor: theme.colors.background,
                 },
-                headerShown: false,
+                headerBackButtonDisplayMode: 'minimal',
+                headerBackTitleVisible: false,
+                headerShadowVisible: false,
+                headerStyle: {
+                  backgroundColor: theme.colors.backgroundWorkspace,
+                },
+                headerTintColor: theme.colors.text,
               }}>
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="login" options={{ presentation: 'card' }} />
-              <Stack.Screen name="register" options={{ presentation: 'card' }} />
-              <Stack.Screen name="onboarding/profile" options={{ presentation: 'card' }} />
-              <Stack.Screen name="onboarding/interests" options={{ presentation: 'card' }} />
-              <Stack.Screen name="books/[bookId]" options={{ presentation: 'card' }} />
-              <Stack.Screen name="borrow/[bookId]" options={{ presentation: 'card' }} />
-              <Stack.Screen name="orders/[orderId]" options={{ presentation: 'card' }} />
-              <Stack.Screen name="returns/[returnRequestId]" options={{ presentation: 'card' }} />
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen
+                name="login"
+                options={{ headerShown: false, presentation: 'card', title: '登录与身份绑定' }}
+              />
+              <Stack.Screen name="register" options={{ presentation: 'card', title: '创建账号' }} />
+              <Stack.Screen
+                name="onboarding/profile"
+                options={{ presentation: 'card', title: '完善借阅资料' }}
+              />
+              <Stack.Screen
+                name="onboarding/interests"
+                options={{ presentation: 'card', title: '选择借阅偏好' }}
+              />
+              <Stack.Screen name="books/[bookId]" options={{ presentation: 'card', title: '图书详情' }} />
+              <Stack.Screen name="borrow/[bookId]" options={{ presentation: 'card', title: '借阅下单' }} />
+              <Stack.Screen name="orders/[orderId]" options={{ presentation: 'card', title: '借阅状态' }} />
+              <Stack.Screen
+                name="returns/[returnRequestId]"
+                options={{ presentation: 'card', title: '归还请求详情' }}
+              />
               <Stack.Screen
                 name="profile"
                 options={{
                   presentation: 'card',
+                  title: '借阅偏好',
                 }}
               />
               <Stack.Screen
                 name="marker-examples"
                 options={{
                   presentation: 'card',
+                  title: '文字高亮示例',
                 }}
               />
             </Stack>
-            <GlobalSecondaryBackLayer />
-            <GlobalProfileSheetLayer />
           </ProfileSheetProvider>
           <StatusBar style="dark" />
         </AppProviders>

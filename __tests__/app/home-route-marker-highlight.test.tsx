@@ -37,7 +37,7 @@ jest.mock('react-native-safe-area-context', () => ({
 
 jest.mock('expo-router', () => {
   const React = require('react');
-  const { View } = require('react-native');
+  const { Text, View } = require('react-native');
 
   const Link = ({ children }: { children: React.ReactNode }) =>
     React.createElement(View, null, children);
@@ -45,8 +45,24 @@ jest.mock('expo-router', () => {
   Link.Trigger = ({ children }: { children: React.ReactNode }) =>
     React.createElement(View, null, children);
 
+  const StackScreen = ({ children }: { children?: React.ReactNode }) =>
+    React.createElement(View, null, children);
+  StackScreen.Title = ({ children }: { children?: React.ReactNode }) =>
+    React.createElement(Text, null, children);
+
+  const Toolbar = ({ children }: { children?: React.ReactNode }) =>
+    React.createElement(View, null, children);
+  Toolbar.Button = () => null;
+  Toolbar.View = ({ children }: { children?: React.ReactNode }) => React.createElement(View, null, children);
+
+  const Stack = {
+    Screen: StackScreen,
+    Toolbar,
+  };
+
   return {
     Link,
+    Stack,
     usePathname: () => '/',
     useRouter: () => ({
       back: jest.fn(),
@@ -54,6 +70,12 @@ jest.mock('expo-router', () => {
     }),
   };
 });
+
+jest.mock('@/providers/profile-sheet-provider', () => ({
+  useProfileSheet: () => ({
+    openProfileSheet: jest.fn(),
+  }),
+}));
 
 jest.mock('@/hooks/use-app-session', () => ({
   useAppSession: () => ({
@@ -87,6 +109,18 @@ jest.mock('@/lib/api/client', () => {
 });
 
 jest.mock('@/hooks/use-library-app-data', () => ({
+  useAchievementsQuery: () => ({
+    data: {
+      currentPoints: 860,
+      streakLabel: '连续学习 9 天',
+      summary: {
+        aiAssists: 14,
+        completedOrders: 7,
+        readingDays: 28,
+        totalBorrowedBooks: 28,
+      },
+    },
+  }),
   useActiveOrdersQuery: () => ({
     data: [
       {
@@ -114,7 +148,7 @@ jest.mock('@/hooks/use-library-app-data', () => ({
   }),
 }));
 
-import HomeRoute from '@/app/(tabs)/index';
+import HomeRoute from '@/app/(tabs)/(home)';
 
 describe('HomeRoute marker highlights', () => {
   beforeEach(() => {
@@ -133,10 +167,9 @@ describe('HomeRoute marker highlights', () => {
   it('renders quick-start tasks with icon chips and marker-highlighted detail lines', () => {
     render(<HomeRoute />);
 
+    expect(screen.getByTestId('home-greeting-header')).toBeTruthy();
     expect(screen.getByText('下午好 🍃')).toBeTruthy();
     expect(screen.getByText('陈知行')).toBeTruthy();
-    expect(screen.queryByTestId('home-greeting-divider')).toBeNull();
-    expect(screen.queryByText('今晚路径')).toBeNull();
     expect(screen.getByText('快速开始')).toBeTruthy();
     expect(screen.queryByText(/推荐解释：/)).toBeNull();
     expect(screen.getByText('继续阅读')).toBeTruthy();

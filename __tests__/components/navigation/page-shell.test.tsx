@@ -1,35 +1,9 @@
-import { act, render, screen } from '@testing-library/react-native';
+import { render, screen } from '@testing-library/react-native';
 import React from 'react';
-import { Animated, Keyboard, StyleSheet, Text } from 'react-native';
+import { ScrollView, StyleSheet, Text } from 'react-native';
 
+import { appTheme } from '@/constants/app-theme';
 import { PageShell } from '@/components/navigation/page-shell';
-
-const mockBack = jest.fn();
-let mockPathname = '/';
-const mockKeyboardListeners = {
-  keyboardDidHide: new Set<(payload?: { duration?: number }) => void>(),
-  keyboardDidShow: new Set<(payload?: { duration?: number }) => void>(),
-  keyboardWillHide: new Set<(payload?: { duration?: number }) => void>(),
-  keyboardWillShow: new Set<(payload?: { duration?: number }) => void>(),
-};
-
-function emitKeyboardEvent(
-  event: keyof typeof mockKeyboardListeners,
-  payload?: { duration?: number }
-) {
-  mockKeyboardListeners[event].forEach((listener) =>
-    listener({
-      duration: payload?.duration ?? 220,
-    } as never)
-  );
-}
-
-jest.mock('expo-router', () => ({
-  usePathname: () => mockPathname,
-  useRouter: () => ({
-    back: mockBack,
-  }),
-}));
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({
@@ -41,147 +15,53 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 describe('PageShell', () => {
-  beforeEach(() => {
-    jest.useFakeTimers();
-    mockBack.mockReset();
-    mockPathname = '/';
-    mockKeyboardListeners.keyboardDidHide.clear();
-    mockKeyboardListeners.keyboardDidShow.clear();
-    mockKeyboardListeners.keyboardWillHide.clear();
-    mockKeyboardListeners.keyboardWillShow.clear();
-    jest.spyOn(Keyboard, 'addListener').mockImplementation((event, listener) => {
-      if (
-        event === 'keyboardDidShow' ||
-        event === 'keyboardDidHide' ||
-        event === 'keyboardWillShow' ||
-        event === 'keyboardWillHide'
-      ) {
-        mockKeyboardListeners[event].add(listener as (payload?: { duration?: number }) => void);
-      }
-
-      return {
-        remove: () => {
-          if (
-            event === 'keyboardDidShow' ||
-            event === 'keyboardDidHide' ||
-            event === 'keyboardWillShow' ||
-            event === 'keyboardWillHide'
-          ) {
-            mockKeyboardListeners[event].delete(listener as (payload?: { duration?: number }) => void);
-          }
-        },
-      } as ReturnType<typeof Keyboard.addListener>;
-    });
-  });
-
-  afterEach(() => {
-    act(() => {
-      jest.runOnlyPendingTimers();
-    });
-    jest.useRealTimers();
-    jest.restoreAllMocks();
-  });
-
-  it('renders a shared large-title header with an optional back button', () => {
+  it('renders content without any built-in header chrome', () => {
     render(
-      <PageShell headerTitle="图书详情" showBackButton>
+      <PageShell>
         <Text>页面内容</Text>
       </PageShell>
     );
 
-    expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('图书详情');
-    expect(screen.getByTestId('secondary-back-button')).toBeTruthy();
     expect(screen.getByText('页面内容')).toBeTruthy();
-  });
-
-  it('pushes the title block down on secondary routes when the floating back button is showing', () => {
-    mockPathname = '/profile';
-
-    render(
-      <PageShell headerTitle="阅读画像" mode="workspace">
-        <Text>页面内容</Text>
-      </PageShell>
-    );
-
-    expect(StyleSheet.flatten(screen.getByTestId('page-shell-header').props.style).paddingTop).toBe(104);
-    expect(StyleSheet.flatten(screen.getByTestId('page-shell-header').props.style).gap).toBe(24);
-    expect(StyleSheet.flatten(screen.getByTestId('page-shell-header-copy').props.style).paddingLeft).toBe(0);
-  });
-
-  it('renders custom header content when provided', () => {
-    render(
-      <PageShell headerContent={<Text testID="custom-home-header">下午好 / 陈知行</Text>}>
-        <Text>页面内容</Text>
-      </PageShell>
-    );
-
-    expect(screen.getByTestId('custom-home-header')).toHaveTextContent('下午好 / 陈知行');
+    expect(screen.queryByTestId('page-shell-header')).toBeNull();
     expect(screen.queryByTestId('page-shell-header-title')).toBeNull();
-    expect(screen.getByText('页面内容')).toBeTruthy();
   });
 
-  it('keeps the title visible when keyboard events fire without the opt-in prop', () => {
-    render(
-      <PageShell headerTitle="找书">
-        <Text>页面内容</Text>
+  it('keeps keyboard-aware scrolling behavior as a pure container concern', () => {
+    const view = render(
+      <PageShell keyboardAware scrollEnabled={false} scrollViewResetKey="login">
+        <Text>登录内容</Text>
       </PageShell>
     );
+    const scrollView = view.UNSAFE_getByType(ScrollView);
 
-    act(() => {
-      emitKeyboardEvent('keyboardWillShow', { duration: 320 });
-    });
-
-    expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('找书');
+    expect(scrollView.props.automaticallyAdjustKeyboardInsets).toBe(true);
+    expect(scrollView.props.keyboardShouldPersistTaps).toBe('handled');
+    expect(scrollView.props.scrollEnabled).toBe(false);
   });
 
-  it('hides the title while the keyboard is visible when opted in', () => {
-    const timingSpy = jest.spyOn(Animated, 'timing');
-    const scheduleLayoutAnimationSpy = jest
-      .spyOn(Keyboard, 'scheduleLayoutAnimation')
-      .mockImplementation(() => {});
-
-    render(
-      <PageShell
-        headerTitle="找书"
-        hideHeaderTitleWhenKeyboardVisible
-        showBackButton>
-        <Text>页面内容</Text>
+  it('applies mode background colors and content insets without header offsets', () => {
+    const view = render(
+      <PageShell insetBottom={72} mode="workspace" padded={false}>
+        <Text>工作区内容</Text>
       </PageShell>
     );
+    const [rootView, scrollView] = view.UNSAFE_getAllByType(ScrollView)[0].parent?.parent
+      ? [view.UNSAFE_getAllByType(ScrollView)[0].parent?.parent, view.UNSAFE_getAllByType(ScrollView)[0]]
+      : [null, view.UNSAFE_getByType(ScrollView)];
 
-    expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('找书');
-
-    act(() => {
-      emitKeyboardEvent('keyboardWillShow', { duration: 320 });
-    });
-
-    expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('找书');
-    expect(scheduleLayoutAnimationSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ duration: 320 })
+    expect(rootView).not.toBeNull();
+    expect(StyleSheet.flatten(rootView!.props.style).backgroundColor).toBe(
+      appTheme.colors.backgroundWorkspace
     );
-    expect(timingSpy).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ duration: 320, toValue: 0, useNativeDriver: true })
+    expect(
+      StyleSheet.flatten(scrollView.props.contentContainerStyle)
+    ).toEqual(
+      expect.objectContaining({
+        paddingBottom: 80,
+        paddingHorizontal: 0,
+        paddingTop: appTheme.spacing.lg,
+      })
     );
-    expect(timingSpy).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ duration: 320, toValue: -8, useNativeDriver: true })
-    );
-
-    act(() => {
-      jest.advanceTimersByTime(320);
-    });
-
-    expect(StyleSheet.flatten(screen.getByTestId('page-shell-header-title-slot').props.style).height).toBe(0);
-    expect(screen.getByTestId('secondary-back-button')).toBeTruthy();
-
-    act(() => {
-      emitKeyboardEvent('keyboardWillHide', { duration: 260 });
-    });
-
-    expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('找书');
-    expect(StyleSheet.flatten(screen.getByTestId('page-shell-header-title-slot').props.style).height).toBe(36);
-
-    expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('找书');
   });
 });

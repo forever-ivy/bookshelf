@@ -34,7 +34,7 @@ export default function WebTabsLayout() {
           },
         }}>
         <Tabs.Screen
-          name="index"
+          name="(home)"
           options={{
             tabBarIcon: ({ color }) => <AppIcon color={color} name="home" />,
             title: '首页',

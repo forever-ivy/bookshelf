@@ -2,8 +2,11 @@ import { render, screen } from '@testing-library/react-native';
 import React from 'react';
 
 import RootLayout from '@/app/_layout';
+import { appTheme } from '@/constants/app-theme';
 
 let mockPathname = '/';
+let mockRecordedStackScreenOptions: Record<string, unknown> | undefined;
+let mockRecordedScreens: Array<{ name?: string; options?: Record<string, unknown> }> = [];
 
 jest.mock('react-native-reanimated', () => ({}));
 
@@ -11,10 +14,27 @@ jest.mock('expo-router', () => {
   const React = require('react');
   const { View } = require('react-native');
 
-  const Stack = ({ children }: { children: React.ReactNode }) =>
-    React.createElement(View, { testID: 'root-stack' }, children);
+  const Stack = ({
+    children,
+    screenOptions,
+  }: {
+    children: React.ReactNode;
+    screenOptions?: Record<string, unknown>;
+  }) => {
+    mockRecordedStackScreenOptions = screenOptions;
+    return React.createElement(View, { testID: 'root-stack' }, children);
+  };
 
-  Stack.Screen = () => null;
+  Stack.Screen = ({
+    name,
+    options,
+  }: {
+    name?: string;
+    options?: Record<string, unknown>;
+  }) => {
+    mockRecordedScreens.push({ name, options });
+    return null;
+  };
 
   return {
     Stack,
@@ -50,21 +70,48 @@ jest.mock('@/providers/app-providers', () => ({
 describe('RootLayout', () => {
   beforeEach(() => {
     mockPathname = '/';
+    mockRecordedStackScreenOptions = undefined;
+    mockRecordedScreens = [];
   });
 
-  it('does not show the global secondary back layer on primary routes', () => {
+  it('configures the root stack for native headers and keeps tabs as the headerless shell', () => {
     render(<RootLayout />);
 
     expect(screen.queryByTestId('secondary-back-layer')).toBeNull();
-    expect(screen.getByTestId('profile-sheet-layer')).toBeTruthy();
+    expect(screen.queryByTestId('profile-sheet-layer')).toBeNull();
+    expect(mockRecordedStackScreenOptions).toEqual(
+      expect.objectContaining({
+        headerBackButtonDisplayMode: 'minimal',
+        headerBackTitleVisible: false,
+        headerShadowVisible: false,
+        headerTintColor: appTheme.colors.text,
+      })
+    );
+    expect(mockRecordedScreens).toContainEqual(
+      expect.objectContaining({
+        name: '(tabs)',
+        options: expect.objectContaining({
+          headerShown: false,
+        }),
+      })
+    );
+    expect(mockRecordedScreens).toContainEqual(
+      expect.objectContaining({
+        name: 'login',
+        options: expect.objectContaining({
+          headerShown: false,
+          presentation: 'card',
+        }),
+      })
+    );
   });
 
-  it('shows the global secondary back layer on secondary routes', () => {
+  it('does not revive global overlay navigation layers on secondary routes', () => {
     mockPathname = '/books/42';
 
     render(<RootLayout />);
 
-    expect(screen.getByTestId('secondary-back-layer')).toBeTruthy();
     expect(screen.queryByTestId('profile-sheet-layer')).toBeNull();
+    expect(screen.queryByTestId('secondary-back-layer')).toBeNull();
   });
 });

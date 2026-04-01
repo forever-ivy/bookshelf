@@ -23,7 +23,7 @@ export default function SearchGroupLayout() {
       <Stack.Screen
         name="borrow-now"
         options={{
-          title: '',
+          title: '立即可借',
         }}
       />
     </Stack>

@@ -233,14 +233,14 @@ function normalizeReturnRequestSummary(raw: any): ReturnRequestSummary {
 function getMockBookForOrder(bookId: number) {
   return {
     id: bookId,
-    author: '未知作者',
+    author: '佚名',
     availabilityLabel: '馆藏充足 · 可立即借阅',
     cabinetLabel: '默认书柜',
     category: null,
     coverTone: 'blue' as const,
     coverUrl: null,
     deliveryAvailable: true,
-    etaLabel: '15 分钟可送达',
+    etaLabel: '可送达',
     etaMinutes: 15,
     matchedFields: ['title'],
     recommendationReason: null,

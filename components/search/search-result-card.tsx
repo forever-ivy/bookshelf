@@ -1,10 +1,14 @@
 import React from 'react';
-import type { Href } from 'expo-router';
-import { Text, View } from 'react-native';
+import { Link, type Href } from 'expo-router';
+import { Image } from 'expo-image';
+import { Pressable, Text, View, Platform } from 'react-native';
 
 import { AppIcon } from '@/components/base/app-icon';
+import { BookCover } from '@/components/base/book-cover';
 import { PillButton } from '@/components/base/pill-button';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import { resolveBookEtaDisplay } from '@/lib/book-delivery';
+import { resolveBookLocationDisplay } from '@/lib/book-location';
 
 type SearchResultCardProps = {
   href?: Href;
@@ -22,29 +26,61 @@ type SearchResultCardProps = {
   variant?: 'card' | 'list';
 };
 
-function resolveLocationText(location?: string | null) {
-  const normalized = location?.trim();
-
-  if (!normalized || normalized === '位置待确认' || normalized === '馆藏位置待确认' || normalized === '默认书柜') {
-    return '馆藏位置待确认';
+function resolveAvailabilityPalette(
+  theme: ReturnType<typeof useAppTheme>['theme'],
+  availability: string
+) {
+  if (availability.includes('可立即借阅')) {
+    return {
+      backgroundColor: theme.colors.availabilityReadySoft,
+      color: theme.colors.availabilityReady,
+    };
   }
 
-  return normalized;
+  if (availability.includes('自取')) {
+    return {
+      backgroundColor: theme.colors.availabilityPickupSoft,
+      color: theme.colors.availabilityPickup,
+    };
+  }
+
+  return {
+    backgroundColor: theme.colors.availabilityUnavailableSoft,
+    color: theme.colors.availabilityUnavailable,
+  };
 }
 
-function coverColor(tone: SearchResultCardProps['coverTone']) {
-  switch (tone) {
-    case 'mint':
-      return '#B8E2CF';
-    case 'apricot':
-      return '#F4C8A8';
-    case 'lavender':
-      return '#D9D6FF';
-    case 'coral':
-      return '#F6D0C9';
-    default:
-      return '#DCE7FF';
+function SearchResultChevron({ color }: { color: string }) {
+  if (Platform.OS === 'ios') {
+    return (
+      <Image
+        contentFit="contain"
+        source="sf:chevron.forward"
+        style={{
+          height: 17,
+          tintColor: color,
+          width: 10,
+        }}
+        testID="search-result-action-chevron"
+      />
+    );
   }
+
+  return (
+    <View testID="search-result-action-chevron">
+      <AppIcon color={color} name="chevronRight" size={18} strokeWidth={2} />
+    </View>
+  );
+}
+
+function resolveRecommendationText(reason?: string | null) {
+  const normalizedReason = reason?.trim();
+
+  if (!normalizedReason || normalizedReason.toLowerCase() === 'nan') {
+    return '猜你感兴趣';
+  }
+
+  return normalizedReason;
 }
 
 export function SearchResultCard({
@@ -63,15 +99,12 @@ export function SearchResultCard({
   variant = 'card',
 }: SearchResultCardProps) {
   const { theme } = useAppTheme();
-  const resolvedLocation = resolveLocationText(location);
-  const availabilityPalette =
-    availability.includes('可立即借阅')
-      ? { backgroundColor: theme.colors.successSoft, color: theme.colors.success }
-      : availability.includes('自取')
-        ? { backgroundColor: theme.colors.primarySoft, color: theme.colors.primaryStrong }
-        : { backgroundColor: theme.colors.warningSoft, color: theme.colors.warning };
+  const resolvedEta = resolveBookEtaDisplay(eta);
+  const resolvedLocation = resolveBookLocationDisplay(location);
+  const availabilityPalette = resolveAvailabilityPalette(theme, availability);
 
   if (variant === 'list') {
+    const recommendationText = resolveRecommendationText(reason);
     const radiusStyle =
       listPosition === 'single'
         ? {
@@ -88,8 +121,7 @@ export function SearchResultCard({
                 borderBottomRightRadius: theme.radii.xl,
               }
             : null;
-
-    return (
+    const listContent = (
       <View
         style={[
           {
@@ -97,127 +129,105 @@ export function SearchResultCard({
             borderTopColor: listPosition === 'first' || listPosition === 'single' ? 'transparent' : theme.colors.borderSoft,
             borderTopWidth: listPosition === 'first' || listPosition === 'single' ? 0 : 1,
             paddingHorizontal: theme.spacing.lg,
-            paddingVertical: theme.spacing.md,
+            paddingVertical: 16,
           },
           radiusStyle,
-        ]}
-        testID="search-result-cell">
-        <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
+        ]}>
           <View
             style={{
-              backgroundColor: coverColor(coverTone),
-              borderRadius: theme.radii.md,
-              height: 58,
-              justifyContent: 'space-between',
-              padding: 8,
-              width: 44,
+              alignItems: 'center',
+              flexDirection: 'row',
+              gap: 14,
             }}>
-            <View
-              style={{
-                backgroundColor: 'rgba(255,255,255,0.68)',
-                borderRadius: theme.radii.sm,
-                height: 6,
-                width: '72%',
-              }}
-            />
-            <View
-              style={{
-                backgroundColor: 'rgba(255,255,255,0.82)',
-                borderRadius: theme.radii.sm,
-                height: 16,
-                width: 16,
-              }}
+          <View
+            style={{
+              borderRadius: 14,
+              height: 68,
+              justifyContent: 'center',
+              width: 50,
+            }}
+            testID="search-result-cover-shell">
+            <BookCover
+              borderRadius={14}
+              height={68}
+              imageTestID="search-result-cover-image"
+              seed={title}
+              shellTestID="search-result-cover-icon-shell"
+              tone={coverTone}
+              width={50}
             />
           </View>
-          <View style={{ flex: 1, gap: 6 }}>
+          <View
+            style={{
+              flex: 1,
+              gap: 6,
+              minHeight: 58,
+              justifyContent: 'center',
+            }}>
+            <Text
+              numberOfLines={1}
+              style={{
+                color: theme.colors.text,
+                ...theme.typography.semiBold,
+                fontSize: 17,
+                lineHeight: 22,
+              }}>
+              {title}
+            </Text>
+            <Text
+              numberOfLines={2}
+              style={{
+                color: theme.colors.textSoft,
+                ...theme.typography.body,
+                fontSize: 12,
+                lineHeight: 17,
+                marginTop: 2,
+              }}>
+              {recommendationText}
+            </Text>
+          </View>
             <View
               style={{
-                alignItems: 'center',
-                flexDirection: 'row',
-                gap: theme.spacing.sm,
+                alignItems: 'flex-end',
+                justifyContent: 'center',
+                minHeight: 74,
               }}>
               <View
                 style={{
-                  alignSelf: 'flex-start',
-                  backgroundColor: availabilityPalette.backgroundColor,
-                  borderRadius: theme.radii.md,
-                  paddingHorizontal: 8,
-                  paddingVertical: 4,
-                }}>
-                <Text
-                  style={{
-                    color: availabilityPalette.color,
-                    ...theme.typography.medium,
-                    fontSize: 11,
-                  }}>
-                  {availability}
-                </Text>
-              </View>
-              <Text
-                numberOfLines={1}
-                style={{
-                  color: theme.colors.textSoft,
-                  ...theme.typography.medium,
-                  fontSize: 12,
-                  flex: 1,
-                }}>
-                {eta}
-              </Text>
-            </View>
-            <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
-              <View style={{ flex: 1, gap: 4 }}>
-                <Text
-                  numberOfLines={1}
-                  style={{
-                    color: theme.colors.text,
-                    ...theme.typography.semiBold,
-                    fontSize: 16,
-                    lineHeight: 20,
-                  }}>
-                  {title}
-                </Text>
-                <Text
-                  numberOfLines={1}
-                  style={{
-                    color: theme.colors.textMuted,
-                    ...theme.typography.body,
-                    fontSize: 13,
-                  }}>
-                  {author}
-                </Text>
-                <Text
-                  numberOfLines={1}
-                  style={{
-                    color: theme.colors.textSoft,
-                    ...theme.typography.body,
-                    fontSize: 12,
-                  }}>
-                  {resolvedLocation}
-                </Text>
-                {reason ? (
-                  <Text
-                    numberOfLines={2}
-                    style={{
-                      color: theme.colors.textSoft,
-                      ...theme.typography.body,
-                      fontSize: 12,
-                      lineHeight: 16,
-                    }}>
-                    可能适合你 · {reason}
-                  </Text>
-                ) : null}
-              </View>
-              <View
-                style={{
                   alignItems: 'center',
+                  height: 24,
                   justifyContent: 'center',
-                }}>
-                <AppIcon color={theme.colors.textSoft} name="chevronRight" size={16} strokeWidth={1.7} />
+                  width: 20,
+                }}
+                testID="search-result-action-shell">
+                <SearchResultChevron color={theme.colors.textMuted} />
               </View>
-            </View>
           </View>
         </View>
       </View>
+    );
+    const interactiveRow = (
+      <Pressable
+        accessibilityRole={href ? 'link' : 'button'}
+        onPress={onPress}
+        style={({ pressed }) => ({
+          opacity: pressed ? 0.94 : 1,
+        })}
+        testID="search-result-cell">
+        {listContent}
+      </Pressable>
+    );
+
+    if (href) {
+      return (
+        <Link asChild href={href}>
+          {interactiveRow}
+        </Link>
+      );
+    }
+
+    return (
+      interactiveRow
     );
   }
 
@@ -234,29 +244,9 @@ export function SearchResultCard({
       <View style={{ flexDirection: 'row', gap: theme.spacing.lg }}>
         <View
           style={{
-            backgroundColor: coverColor(coverTone),
-            borderRadius: theme.radii.md,
-            height: 92,
-            justifyContent: 'space-between',
-            padding: 10,
-            width: 68,
+            justifyContent: 'center',
           }}>
-          <View
-            style={{
-              backgroundColor: 'rgba(255,255,255,0.68)',
-              borderRadius: theme.radii.sm,
-              height: 8,
-              width: '74%',
-            }}
-          />
-          <View
-            style={{
-              backgroundColor: 'rgba(255,255,255,0.82)',
-              borderRadius: theme.radii.sm,
-              height: 24,
-              width: 22,
-            }}
-          />
+          <BookCover borderRadius={theme.radii.md} height={92} seed={title} tone={coverTone} width={68} />
         </View>
         <View style={{ flex: 1, gap: 8 }}>
           <View
@@ -338,7 +328,7 @@ export function SearchResultCard({
               ...theme.typography.semiBold,
               fontSize: 14,
             }}>
-            {eta}
+            {resolvedEta}
           </Text>
         </View>
       </View>

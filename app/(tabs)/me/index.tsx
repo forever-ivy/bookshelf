@@ -8,7 +8,7 @@ export default function MeRoute() {
   const router = useRouter();
 
   return (
-    <PageShell headerTitle="我的" mode="task">
+    <PageShell mode="task">
       <MeScreenContent onProfilePress={() => router.push('/profile')} />
     </PageShell>
   );

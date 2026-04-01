@@ -141,12 +141,21 @@ describe('recommendation contract', () => {
           title: '帝国主义论',
         },
         {
-          author: '列宁',
+          author: null,
           available_copies: 0,
           book_id: 21589,
           deliverable: false,
           explanation: '同主题补充阅读。',
+          shelf_label: '西区书库 B 架',
           title: '帝国主义论增订本',
+        },
+        {
+          author: '列宁',
+          available_copies: 0,
+          book_id: 21590,
+          deliverable: false,
+          explanation: '同主题补充阅读。',
+          title: '帝国主义论附录',
         },
       ],
     });
@@ -154,11 +163,95 @@ describe('recommendation contract', () => {
     const result = await getHomeFeed('reader-token');
 
     expect(result.todayRecommendations[0]).toMatchObject({
+      availabilityLabel: '可立即借阅',
       cabinetLabel: 'A058',
+      etaLabel: '可送达',
       shelfLabel: '东区主书柜',
     });
     expect(result.todayRecommendations[1]).toMatchObject({
+      author: '佚名',
+      availabilityLabel: '暂不可借',
+      cabinetLabel: '西区书库 B 架',
+      shelfLabel: '西区书库 B 架',
+    });
+    expect(result.todayRecommendations[2]).toMatchObject({
+      availabilityLabel: '暂不可借',
       cabinetLabel: '位置待确认',
+    });
+  });
+
+  it('distinguishes in-library pickup from truly unavailable recommendation results', async () => {
+    (libraryRequest as jest.Mock).mockResolvedValue({
+      focus_book: null,
+      history_books: [],
+      modules: {
+        collaborative: { error: null, ok: true, results: [], source_book: null },
+        hybrid: { error: null, ok: true, results: [], source_book: null },
+        similar: { error: null, ok: true, results: [], source_book: null },
+      },
+      personalized: [
+        {
+          author: '创想外语研发团队',
+          available_copies: 3,
+          book_id: 301,
+          deliverable: false,
+          title: '一个人也能学好英语',
+        },
+        {
+          author: '钟忠',
+          available_copies: 0,
+          book_id: 302,
+          deliverable: false,
+          title: '一个人战争',
+        },
+      ],
+      reader_id: 1,
+      suggested_queries: [],
+    });
+
+    const result = await getRecommendationDashboard('reader-token');
+
+    expect(result.personalized[0]).toMatchObject({
+      availabilityLabel: '可到柜自取',
+      etaLabel: '到柜自取',
+      stockStatus: 'available',
+    });
+    expect(result.personalized[1]).toMatchObject({
+      availabilityLabel: '暂不可借',
+      etaLabel: '到柜自取',
+      stockStatus: 'limited',
+    });
+  });
+
+  it('collapses delivery eta text into 可送达 for recommendation payloads', async () => {
+    (libraryRequest as jest.Mock).mockResolvedValue({
+      focus_book: null,
+      history_books: [],
+      modules: {
+        collaborative: { error: null, ok: true, results: [], source_book: null },
+        hybrid: { error: null, ok: true, results: [], source_book: null },
+        similar: { error: null, ok: true, results: [], source_book: null },
+      },
+      personalized: [
+        {
+          author: '周志华',
+          available_copies: 1,
+          book_id: 401,
+          deliverable: true,
+          eta_minutes: 12,
+          title: '机器学习',
+        },
+      ],
+      reader_id: 1,
+      suggested_queries: [],
+    });
+
+    const result = await getRecommendationDashboard('reader-token');
+
+    expect(result.personalized[0]).toMatchObject({
+      availabilityLabel: '可立即借阅',
+      etaLabel: '可送达',
+      etaMinutes: 12,
     });
   });
 });

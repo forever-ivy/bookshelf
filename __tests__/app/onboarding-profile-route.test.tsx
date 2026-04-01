@@ -45,7 +45,6 @@ describe('OnboardingProfileRoute', () => {
   it('explains the first onboarding step in product language', () => {
     render(<OnboardingProfileRoute />);
 
-    expect(screen.getByText('完善借阅资料')).toBeTruthy();
     expect(screen.getByText('第 1 步，共 2 步')).toBeTruthy();
     expect(screen.getByText(/填写学院、专业和年级后/)).toBeTruthy();
     expect(screen.getByText('保存并继续')).toBeTruthy();

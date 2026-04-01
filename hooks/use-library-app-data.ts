@@ -113,13 +113,18 @@ export function useExplicitBookSearchQuery(
   });
 }
 
-export function useRecommendationSearchQuery(query: string, enabled = true) {
+export function useRecommendationSearchQuery(
+  query: string,
+  enabled = true,
+  options: { limit?: number } = {}
+) {
   const { token } = useAppSession();
+  const limit = options.limit ?? 5;
 
   return useQuery({
     enabled,
-    queryFn: () => searchRecommendations(query, token),
-    queryKey: ['recommendation-search', query, token],
+    queryFn: () => searchRecommendations(query, token, { limit }),
+    queryKey: ['recommendation-search', query, limit, token],
   });
 }
 

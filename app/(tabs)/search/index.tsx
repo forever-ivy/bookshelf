@@ -1,10 +1,19 @@
 import { Stack } from 'expo-router';
 import React from 'react';
+import { Platform, View } from 'react-native';
 
+import { ProfileSheetTriggerButton } from '@/components/navigation/profile-sheet-trigger-button';
+import { ToolbarInlineTitle } from '@/components/navigation/toolbar-inline-title';
+import { ToolbarProfileAction } from '@/components/navigation/toolbar-profile-action';
 import { SearchScreen, resolveSearchText } from '@/components/search/search-screen';
+import { useHeaderChromeVisibility } from '@/hooks/use-header-chrome-visibility';
+import { useProfileSheet } from '@/providers/profile-sheet-provider';
 
 export default function SearchRoute() {
   const [query, setQuery] = React.useState('');
+  const { openProfileSheet } = useProfileSheet();
+  const { onScroll, showHeaderChrome } = useHeaderChromeVisibility();
+  const isIos = Platform.OS === 'ios';
   const handleSearchTextChange = React.useCallback((value: unknown) => {
     setQuery(resolveSearchText(value));
   }, []);
@@ -22,10 +31,50 @@ export default function SearchRoute() {
     <>
       <Stack.Screen
         options={{
+          ...(isIos
+            ? {
+                title: '',
+                unstable_headerLeftItems: () =>
+                  showHeaderChrome
+                    ? [
+                        {
+                          element: (
+                            <View testID="search-header-inline-title-slot">
+                              <ToolbarInlineTitle title="找书" />
+                            </View>
+                          ),
+                          hidesSharedBackground: true,
+                          type: 'custom' as const,
+                        },
+                      ]
+                    : [],
+                unstable_headerRightItems: () =>
+                  showHeaderChrome
+                    ? [
+                        {
+                          element: (
+                            <View testID="search-header-profile-slot">
+                              <ToolbarProfileAction onPress={openProfileSheet} />
+                            </View>
+                          ),
+                          hidesSharedBackground: true,
+                          type: 'custom' as const,
+                        },
+                      ]
+                    : [],
+              }
+            : null),
           headerSearchBarOptions,
+          ...(isIos
+            ? null
+            : {
+                headerRight: () =>
+                  showHeaderChrome ? <ProfileSheetTriggerButton onPress={openProfileSheet} /> : null,
+                title: showHeaderChrome ? '找书' : '',
+              }),
         }}
       />
-      <SearchScreen query={query} />
+      <SearchScreen onScroll={onScroll} query={query} />
     </>
   );
 }

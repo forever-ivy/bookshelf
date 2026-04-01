@@ -58,10 +58,16 @@ export default function OnboardingInterestsRoute() {
   };
 
   return (
-    <PageShell
-      headerDescription="选一些你常借的主题，之后找书、推荐借阅和专题书单会更贴近你。"
-      headerTitle="选择借阅偏好"
-      mode="workspace">
+    <PageShell mode="workspace">
+      <Text
+        style={{
+          color: theme.colors.textMuted,
+          ...theme.typography.body,
+          fontSize: 14,
+          lineHeight: 21,
+        }}>
+        选一些你常借的主题，之后找书、推荐借阅和专题书单会更贴近你。
+      </Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm }}>
         {interestTags.map((tag) => {
           const selected = selectedTags.includes(tag);

@@ -2,6 +2,7 @@ import React from 'react';
 import { Text, View } from 'react-native';
 import type { Href } from 'expo-router';
 
+import { BookCover } from '@/components/base/book-cover';
 import { PillButton } from '@/components/base/pill-button';
 import { DueStateChip } from '@/components/borrowing/due-state-chip';
 import { useAppTheme } from '@/hooks/use-app-theme';
@@ -17,21 +18,6 @@ type BorrowingCardProps = {
   status: 'active' | 'cancelled' | 'completed' | 'dueSoon' | 'overdue' | 'renewable';
   title: string;
 };
-
-function coverColor(tone: BorrowingCardProps['coverTone']) {
-  switch (tone) {
-    case 'mint':
-      return '#B8E2CF';
-    case 'apricot':
-      return '#F4C8A8';
-    case 'lavender':
-      return '#D9D6FF';
-    case 'coral':
-      return '#F6D0C9';
-    default:
-      return '#DCE7FF';
-  }
-}
 
 export function BorrowingCard({
   actionLabel,
@@ -59,29 +45,9 @@ export function BorrowingCard({
       }}>
       <View
           style={{
-            backgroundColor: coverColor(coverTone),
-            borderRadius: theme.radii.md,
-            height: 96,
-            justifyContent: 'space-between',
-            padding: 12,
-            width: 70,
+            justifyContent: 'center',
           }}>
-        <View
-          style={{
-            backgroundColor: 'rgba(255,255,255,0.72)',
-            borderRadius: theme.radii.sm,
-            height: 8,
-            width: '78%',
-          }}
-        />
-        <View
-          style={{
-            backgroundColor: 'rgba(255,255,255,0.82)',
-            borderRadius: theme.radii.sm,
-            height: 28,
-            width: 24,
-          }}
-        />
+        <BookCover borderRadius={theme.radii.md} height={96} seed={title} tone={coverTone} width={70} />
       </View>
         <View style={{ flex: 1, gap: theme.spacing.md }}>
           <View style={{ gap: 8 }}>

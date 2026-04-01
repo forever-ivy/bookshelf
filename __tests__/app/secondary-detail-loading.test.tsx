@@ -136,7 +136,6 @@ describe('secondary detail loading states', () => {
 
     render(<BorrowRoute />);
 
-    expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('借阅下单');
     expect(screen.getByTestId('borrow-route-skeleton')).toBeTruthy();
     expect(screen.queryByText('确认借阅')).toBeNull();
   });
@@ -147,7 +146,6 @@ describe('secondary detail loading states', () => {
 
     render(<OrderDetailRoute />);
 
-    expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('借阅状态');
     expect(screen.getByTestId('order-detail-skeleton')).toBeTruthy();
     expect(screen.queryByText('机器学习从零到一')).toBeNull();
   });
@@ -158,7 +156,6 @@ describe('secondary detail loading states', () => {
 
     render(<ReturnRequestDetailRoute />);
 
-    expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('归还请求详情');
     expect(screen.getByText('履约时间线')).toBeTruthy();
     expect(screen.getByTestId('return-detail-skeleton')).toBeTruthy();
     expect(screen.queryByText('归还请求 #301')).toBeNull();

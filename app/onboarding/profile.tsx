@@ -53,10 +53,16 @@ export default function OnboardingProfileRoute() {
   };
 
   return (
-    <PageShell
-      headerDescription="填写学院、专业和年级后，找书结果会更贴近你的课程与馆藏。"
-      headerTitle="完善借阅资料"
-      mode="workspace">
+    <PageShell mode="workspace">
+      <Text
+        style={{
+          color: theme.colors.textMuted,
+          ...theme.typography.body,
+          fontSize: 14,
+          lineHeight: 21,
+        }}>
+        填写学院、专业和年级后，找书结果会更贴近你的课程与馆藏。
+      </Text>
       <View
         style={{
           backgroundColor: theme.colors.surface,

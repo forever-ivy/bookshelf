@@ -1,7 +1,10 @@
 import React from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Platform,
   Pressable,
   ScrollView,
@@ -27,6 +30,7 @@ import { useAppTheme } from '@/hooks/use-app-theme';
 import type { BookCard } from '@/lib/api/types';
 import { getLibraryErrorMessage } from '@/lib/api/client';
 import { appArtwork } from '@/lib/app/artwork';
+import { resolveBookLocationDisplay } from '@/lib/book-location';
 
 const CATALOG_PAGE_SIZE = 20;
 const RECOMMENDATION_PREVIEW_LIMIT = 5;
@@ -44,7 +48,7 @@ function supportsDeliveryResult(item: {
   deliveryAvailable?: boolean | null;
   etaLabel?: string | null;
 }) {
-  return item.deliveryAvailable === true || Boolean(item.etaLabel?.includes('分钟可送达'));
+  return item.deliveryAvailable === true || Boolean(item.etaLabel?.includes('可送达'));
 }
 
 function isBorrowReadyResult(item: {
@@ -58,10 +62,6 @@ function isBorrowReadyResult(item: {
 
 function hasWantedSignal(item: { matchedFields?: string[] | null; recommendationReason?: string | null }) {
   return Boolean(item.recommendationReason?.trim()) || Boolean(item.matchedFields?.length);
-}
-
-function hasResolvedLocation(item: { cabinetLabel?: string | null }) {
-  return Boolean(item.cabinetLabel && item.cabinetLabel !== '位置待确认' && item.cabinetLabel !== '馆藏位置待确认');
 }
 
 function hasHealthyStock(item: { availabilityLabel?: string | null; stockStatus?: string | null }) {
@@ -103,9 +103,11 @@ export function resolveSearchText(value: unknown) {
 
 export function SearchScreen({
   borrowNowMode = false,
+  onScroll,
   query,
 }: {
   borrowNowMode?: boolean;
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
   query: string;
 }) {
   const normalizedQuery = query.trim();
@@ -116,7 +118,15 @@ export function SearchScreen({
   const querySourceKey = `${shouldUseExplicitSearch ? 'explicit' : 'catalog'}:${searchQuery}`;
   const lastQueryRef = React.useRef(querySourceKey);
   const [offset, setOffset] = React.useState(0);
+  const [recommendationLimit, setRecommendationLimit] = React.useState(RECOMMENDATION_PREVIEW_LIMIT);
   const [loadedCatalogState, setLoadedCatalogState] = React.useState<{
+    items: BookCard[];
+    key: string;
+  }>({
+    items: [],
+    key: querySourceKey,
+  });
+  const [loadedRecommendationState, setLoadedRecommendationState] = React.useState<{
     items: BookCard[];
     key: string;
   }>({
@@ -137,7 +147,10 @@ export function SearchScreen({
   });
   const recommendationSearchQuery = useRecommendationSearchQuery(
     searchQuery,
-    !borrowNowMode
+    !borrowNowMode,
+    {
+      limit: shouldShowDiscoveryRecommendations ? recommendationLimit : RECOMMENDATION_PREVIEW_LIMIT,
+    }
   );
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
@@ -186,6 +199,7 @@ export function SearchScreen({
     if (lastQueryRef.current !== querySourceKey) {
       lastQueryRef.current = querySourceKey;
       setOffset(0);
+      setRecommendationLimit(RECOMMENDATION_PREVIEW_LIMIT);
       setActiveFilter(borrowNowMode ? 'ready' : 'all');
     }
   }, [borrowNowMode, querySourceKey]);
@@ -210,6 +224,35 @@ export function SearchScreen({
   }, [activeCatalogQuery.data, effectiveOffset, querySourceKey]);
 
   React.useEffect(() => {
+    setLoadedRecommendationState((previous) =>
+      previous.key === querySourceKey
+        ? previous
+        : {
+            items: [],
+            key: querySourceKey,
+          }
+    );
+  }, [querySourceKey]);
+
+  React.useEffect(() => {
+    if (!recommendationSearchQuery.data) {
+      return;
+    }
+
+    setLoadedRecommendationState((previous) => {
+      const nextItems = dedupeBooks(recommendationSearchQuery.data);
+      if (previous.key === querySourceKey && haveSameBookIds(previous.items, nextItems)) {
+        return previous;
+      }
+
+      return {
+        items: nextItems,
+        key: querySourceKey,
+      };
+    });
+  }, [querySourceKey, recommendationSearchQuery.data]);
+
+  React.useEffect(() => {
     return () => {
       if (feedbackToastTimerRef.current) {
         clearTimeout(feedbackToastTimerRef.current);
@@ -228,18 +271,41 @@ export function SearchScreen({
     [loadedCatalogState, querySourceKey]
   );
   const recommendationCards = React.useMemo(
-    () =>
-      borrowNowMode
-        ? []
-        : dedupeBooks(recommendationSearchQuery.data ?? []).slice(0, RECOMMENDATION_PREVIEW_LIMIT),
-    [borrowNowMode, recommendationSearchQuery.data]
+    () => (borrowNowMode ? [] : loadedRecommendationState.key === querySourceKey ? loadedRecommendationState.items : []),
+    [borrowNowMode, loadedRecommendationState, querySourceKey]
   );
+  const hasDiscoveryRecommendationResponse =
+    recommendationSearchQuery.data !== undefined || recommendationCards.length > 0;
+  const isWaitingForDiscoveryRecommendations =
+    shouldShowDiscoveryRecommendations &&
+    !hasDiscoveryRecommendationResponse &&
+    Boolean(recommendationSearchQuery.isFetching);
+  const isWaitingForDiscoveryCatalogFallback =
+    shouldShowDiscoveryRecommendations &&
+    hasDiscoveryRecommendationResponse &&
+    recommendationCards.length === 0 &&
+    catalogCards.length === 0 &&
+    Boolean(activeCatalogQuery.isFetching);
+  const isLoadingMoreDiscoveryRecommendations =
+    shouldShowDiscoveryRecommendations &&
+    recommendationCards.length > 0 &&
+    recommendationLimit > recommendationCards.length &&
+    Boolean(recommendationSearchQuery.isFetching);
+  const isLoadingMoreCatalogResults =
+    !shouldShowDiscoveryRecommendations &&
+    catalogCards.length > 0 &&
+    effectiveOffset > 0 &&
+    Boolean(activeCatalogQuery.isFetching);
   const primaryCatalogCards = React.useMemo(
     () => (borrowNowMode ? catalogCards.filter(isBorrowReadyResult) : catalogCards),
     [borrowNowMode, catalogCards]
   );
   const visibleResultCards = React.useMemo(() => {
     if (shouldShowDiscoveryRecommendations) {
+      if (!hasDiscoveryRecommendationResponse) {
+        return [];
+      }
+
       return recommendationCards.length ? recommendationCards : catalogCards;
     }
 
@@ -254,6 +320,7 @@ export function SearchScreen({
     activeFilter,
     borrowNowMode,
     catalogCards,
+    hasDiscoveryRecommendationResponse,
     primaryCatalogCards,
     recommendationCards,
     shouldShowDiscoveryRecommendations,
@@ -272,14 +339,22 @@ export function SearchScreen({
     !activeCatalogQuery.isFetching &&
     !recommendationSearchQuery.isFetching &&
     visibleResultCards.length === 0;
-  const canLoadMore = Boolean(activeCatalogQuery.data?.hasMore) && !catalogError;
+  const canLoadMore =
+    shouldShowDiscoveryRecommendations && hasDiscoveryRecommendationResponse && recommendationCards.length > 0
+      ? recommendationCards.length >= recommendationLimit && !recommendationError
+      : Boolean(activeCatalogQuery.data?.hasMore) && !catalogError;
+  const isLoadingMoreResults =
+    isLoadingMoreDiscoveryRecommendations || isLoadingMoreCatalogResults;
+  const showLoadMoreControl = canLoadMore || isLoadingMoreResults;
   const shouldShowResultSkeleton =
     visibleResultCards.length === 0 &&
     !showGlobalError &&
     !showCatalogUnavailableNotice &&
     !showEmptyState &&
-    (Boolean(activeCatalogQuery.isFetching) || Boolean(recommendationSearchQuery.isFetching));
-  const searchTitle = borrowNowMode ? '立即可借' : '找书';
+    (isWaitingForDiscoveryRecommendations ||
+      isWaitingForDiscoveryCatalogFallback ||
+      (!shouldShowDiscoveryRecommendations &&
+        (Boolean(activeCatalogQuery.isFetching) || Boolean(recommendationSearchQuery.isFetching))));
   const emptyTitle = borrowNowMode ? '当前没有可立即借走的图书' : '这次没找到完全匹配的图书';
   const emptyDescription = borrowNowMode
     ? '可以换个关键词，或者稍后再看新的可借可送图书。'
@@ -322,7 +397,7 @@ export function SearchScreen({
                   ? 'last'
                   : 'middle'
           }
-          location={hasResolvedLocation(item) ? item.cabinetLabel : '馆藏位置待确认'}
+          location={resolveBookLocationDisplay(item.cabinetLabel)}
           reason={item.recommendationReason}
           summary={item.summary}
           title={item.title}
@@ -346,12 +421,7 @@ export function SearchScreen({
 
   return (
     <View style={{ flex: 1 }}>
-      <PageShell
-        headerTitle={searchTitle}
-        hideHeaderTitleWhenKeyboardVisible={!borrowNowMode}
-        insetBottom={shellInsetBottom}
-        mode="task"
-        showBackButton={false}>
+      <PageShell insetBottom={shellInsetBottom} mode="task" onScroll={onScroll}>
         {borrowNowMode ? (
           <View
             style={{
@@ -466,14 +536,58 @@ export function SearchScreen({
             {shouldShowResultSkeleton
               ? renderResultSkeletons(3)
               : renderResultCards(visibleResultCards, borrowNowMode ? '立即借这本' : '查看馆藏与借阅')}
-            {canLoadMore ? (
+            {showLoadMoreControl ? (
               <View
                 style={{
                   borderTopColor: theme.colors.borderSoft,
                   borderTopWidth: visibleResultCards.length > 0 ? 1 : 0,
                   padding: theme.spacing.lg,
                 }}>
-                <PillButton label="加载更多结果" onPress={() => setOffset((current) => current + CATALOG_PAGE_SIZE)} />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ busy: isLoadingMoreResults, disabled: isLoadingMoreResults }}
+                  disabled={isLoadingMoreResults}
+                  onPress={() => {
+                    if (shouldShowDiscoveryRecommendations && recommendationCards.length > 0) {
+                      setRecommendationLimit((current) => current + RECOMMENDATION_PREVIEW_LIMIT);
+                      return;
+                    }
+
+                    setOffset((current) => current + CATALOG_PAGE_SIZE);
+                  }}
+                  style={({ pressed }) => ({
+                    opacity: pressed && !isLoadingMoreResults ? 0.92 : 1,
+                  })}
+                  testID="search-load-more-button">
+                  <View
+                    style={{
+                      alignItems: 'center',
+                      backgroundColor: theme.colors.surface,
+                      borderColor: theme.colors.borderStrong,
+                      borderRadius: theme.radii.md,
+                      borderWidth: 1,
+                      justifyContent: 'center',
+                      minHeight: 42,
+                      paddingHorizontal: 14,
+                    }}>
+                    {isLoadingMoreResults ? (
+                      <ActivityIndicator
+                        color={theme.colors.primaryStrong}
+                        size="small"
+                        testID="search-load-more-spinner"
+                      />
+                    ) : (
+                      <Text
+                        style={{
+                          color: theme.colors.text,
+                          ...theme.typography.semiBold,
+                          fontSize: 14,
+                        }}>
+                        加载更多结果
+                      </Text>
+                    )}
+                  </View>
+                </Pressable>
               </View>
             ) : null}
             {showEmptyState ? (

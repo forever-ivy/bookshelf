@@ -1,9 +1,11 @@
 import { Stack } from 'expo-router';
+import { Platform } from 'react-native';
 
 import { useAppTheme } from '@/hooks/use-app-theme';
 
 export default function SearchLayout() {
   const { theme } = useAppTheme();
+  const isIos = Platform.OS === 'ios';
 
   return (
     <Stack
@@ -13,19 +15,24 @@ export default function SearchLayout() {
         },
         headerBackButtonDisplayMode: 'minimal',
         headerShown: true,
+        headerLargeStyle: isIos
+          ? {
+              backgroundColor: 'transparent',
+            }
+          : undefined,
         headerShadowVisible: false,
         headerStyle: {
-          backgroundColor: theme.colors.backgroundTask,
+          backgroundColor: isIos ? 'transparent' : theme.colors.backgroundTask,
         },
+        headerTitleStyle: isIos
+          ? {
+              color: 'transparent',
+            }
+          : undefined,
         headerTintColor: theme.colors.text,
-        headerTransparent: false,
+        headerTransparent: isIos,
       }}>
-      <Stack.Screen
-        name="index"
-        options={{
-          title: '',
-        }}
-      />
+      <Stack.Screen name="index" options={{ headerLargeTitleShadowVisible: false }} />
     </Stack>
   );
 }

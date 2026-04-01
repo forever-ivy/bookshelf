@@ -1,6 +1,6 @@
 import React from 'react';
-import { Text, View, Pressable } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Text, View, Pressable, Platform } from 'react-native';
+import { Stack, useRouter } from 'expo-router';
 
 import { EditorialIllustration } from '@/components/base/editorial-illustration';
 import {
@@ -14,6 +14,9 @@ import { BorrowingCard } from '@/components/borrowing/borrowing-card';
 import { BorrowingCardSkeleton } from '@/components/borrowing/borrowing-card-skeleton';
 import { BorrowingSummary } from '@/components/borrowing/borrowing-summary';
 import { PageShell } from '@/components/navigation/page-shell';
+import { ProfileSheetTriggerButton } from '@/components/navigation/profile-sheet-trigger-button';
+import { ToolbarInlineTitle } from '@/components/navigation/toolbar-inline-title';
+import { ToolbarProfileAction } from '@/components/navigation/toolbar-profile-action';
 import { getLibraryErrorMessage } from '@/lib/api/client';
 import { appArtwork } from '@/lib/app/artwork';
 import {
@@ -24,6 +27,8 @@ import {
   useReturnRequestsQuery,
 } from '@/hooks/use-library-app-data';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import { useHeaderChromeVisibility } from '@/hooks/use-header-chrome-visibility';
+import { useProfileSheet } from '@/providers/profile-sheet-provider';
 
 const statusFilters = [
   { label: '全部', value: null },
@@ -89,6 +94,9 @@ export default function BorrowingRoute() {
   const allOrdersQuery = useBorrowOrdersQuery();
   const router = useRouter();
   const { theme } = useAppTheme();
+  const { openProfileSheet } = useProfileSheet();
+  const { onScroll, showHeaderChrome } = useHeaderChromeVisibility();
+  const isIos = Platform.OS === 'ios';
   const borrowingError = ordersQuery.error ?? renewMutation.error ?? cancelMutation.error;
   const visibleOrders = ordersQuery.data ?? [];
   const activeOrders = visibleOrders.filter((item) =>
@@ -132,7 +140,51 @@ export default function BorrowingRoute() {
   ];
 
   return (
-    <PageShell headerTitle="借阅" insetBottom={112} mode="task">
+    <>
+      {isIos ? (
+        <Stack.Screen
+          options={{
+            title: '',
+            unstable_headerLeftItems: () =>
+              showHeaderChrome
+                ? [
+                    {
+                      element: (
+                        <View testID="borrowing-header-inline-title-slot">
+                          <ToolbarInlineTitle title="借阅" />
+                        </View>
+                      ),
+                      hidesSharedBackground: true,
+                      type: 'custom' as const,
+                    },
+                  ]
+                : [],
+            unstable_headerRightItems: () =>
+              showHeaderChrome
+                ? [
+                    {
+                      element: (
+                        <View testID="borrowing-header-profile-slot">
+                          <ToolbarProfileAction onPress={openProfileSheet} />
+                        </View>
+                      ),
+                      hidesSharedBackground: true,
+                      type: 'custom' as const,
+                    },
+                  ]
+                : [],
+          }}
+        />
+      ) : (
+        <Stack.Screen
+          options={{
+            headerRight: () =>
+              showHeaderChrome ? <ProfileSheetTriggerButton onPress={openProfileSheet} /> : null,
+            title: showHeaderChrome ? '借阅' : '',
+          }}
+        />
+      )}
+      <PageShell insetBottom={112} mode="task" onScroll={onScroll}>
       {isBorrowingLoading ? (
         <BorrowingSummarySkeleton />
       ) : (
@@ -425,6 +477,7 @@ export default function BorrowingRoute() {
           testID="borrowing-artwork"
         />
       </View>
-    </PageShell>
+      </PageShell>
+    </>
   );
 }

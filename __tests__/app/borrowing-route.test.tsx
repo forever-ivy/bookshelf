@@ -8,11 +8,33 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
 }));
 
-jest.mock('expo-router', () => ({
-  Link: ({ children }: { children: React.ReactNode }) => children,
-  usePathname: () => '/borrowing',
-  useRouter: () => ({
-    push: jest.fn(),
+jest.mock('expo-router', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+
+  const Screen = ({ children }: { children?: React.ReactNode }) => React.createElement(View, null, children);
+  Screen.Title = ({ children }: { children?: React.ReactNode }) => React.createElement(View, null, children);
+
+  const Toolbar = ({ children }: { children?: React.ReactNode }) => React.createElement(View, null, children);
+  Toolbar.Button = () => null;
+  Toolbar.View = ({ children }: { children?: React.ReactNode }) => React.createElement(View, null, children);
+
+  return {
+    Link: ({ children }: { children: React.ReactNode }) => children,
+    Stack: {
+      Screen,
+      Toolbar,
+    },
+    usePathname: () => '/borrowing',
+    useRouter: () => ({
+      push: jest.fn(),
+    }),
+  };
+});
+
+jest.mock('@/providers/profile-sheet-provider', () => ({
+  useProfileSheet: () => ({
+    openProfileSheet: jest.fn(),
   }),
 }));
 

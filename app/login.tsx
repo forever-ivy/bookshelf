@@ -340,18 +340,6 @@ export default function LoginRoute() {
                 创建新账号
               </Text>
             </Pressable>
-
-            <Text
-              style={{
-                color: 'rgba(31, 30, 27, 0.54)',
-                ...theme.typography.body,
-                fontSize: 12,
-                lineHeight: 18,
-                paddingHorizontal: theme.spacing.sm,
-                textAlign: 'center',
-              }}>
-              首次进入将自动完成身份绑定与兴趣配置
-            </Text>
           </View>
         </View>
       </View>

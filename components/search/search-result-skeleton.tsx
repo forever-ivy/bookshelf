@@ -47,23 +47,32 @@ export function SearchResultCardSkeleton({
                 ? 'transparent'
                 : theme.colors.borderSoft,
             borderTopWidth: listPosition === 'first' || listPosition === 'single' ? 0 : 1,
-            flexDirection: 'row',
-            gap: theme.spacing.md,
             paddingHorizontal: theme.spacing.lg,
-            paddingVertical: theme.spacing.md,
+            paddingVertical: 14,
           },
           radiusStyle,
         ]}
         testID={testID}>
-        <LoadingSkeletonBlock borderRadius={theme.radii.md} height={58} width={44} />
-        <View style={{ flex: 1, gap: 8 }}>
-          <View style={{ alignItems: 'center', flexDirection: 'row', gap: theme.spacing.sm }}>
-            <LoadingSkeletonBlock borderRadius={theme.radii.md} height={22} width={92} />
-            <LoadingSkeletonBlock height={12} width="38%" />
+        <View
+          style={{
+            alignItems: 'center',
+            flexDirection: 'row',
+            gap: 14,
+          }}>
+          <LoadingSkeletonBlock borderRadius={theme.radii.md} height={56} width={56} />
+          <View style={{ flex: 1, gap: 6 }}>
+            <View style={{ alignItems: 'center', flexDirection: 'row', gap: 8 }}>
+              <LoadingSkeletonBlock borderRadius={theme.radii.md} height={22} width={92} />
+              <LoadingSkeletonBlock height={12} width="34%" />
+            </View>
+            <LoadingSkeletonBlock height={18} width="56%" />
+            <LoadingSkeletonBlock height={14} width="38%" />
+            <LoadingSkeletonBlock height={12} width="28%" />
+            <LoadingSkeletonBlock height={12} width="64%" />
           </View>
-          <LoadingSkeletonText lineHeight={16} widths={['72%', '45%']} />
-          <LoadingSkeletonBlock height={12} width="32%" />
-          <LoadingSkeletonBlock height={12} width="62%" />
+          <View style={{ alignItems: 'flex-end', justifyContent: 'center' }}>
+            <LoadingSkeletonBlock borderRadius={theme.radii.pill} height={34} width={62} />
+          </View>
         </View>
       </View>
     );

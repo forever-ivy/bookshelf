@@ -72,7 +72,6 @@ describe('ProfileRoute', () => {
   it('uses reader-facing language for borrowing preferences', () => {
     render(<ProfileRoute />);
 
-    expect(screen.getByTestId('page-shell-header-title')).toHaveTextContent('借阅偏好');
     expect(screen.getByText('陈知行 · 借阅偏好')).toBeTruthy();
     expect(screen.getAllByText('阅读习惯').length).toBeGreaterThan(0);
     expect(screen.getByText('成就与积分')).toBeTruthy();
