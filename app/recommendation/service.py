@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+import logging
 
 from sqlalchemy.orm import Session
 
@@ -28,6 +29,9 @@ from app.recommendation.repository import (
     semantic_retrieve_candidates,
     vector_retrieve_candidates,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -150,18 +154,37 @@ class RecommendationService:
             recalled = recall_candidates(self.session)
             candidates = vector_retrieve_candidates(query, recalled, limit=max(limit, 10))
         candidates = apply_rules(candidates, self.session)
-        provider_reranked = self.provider.rerank(query, candidates)
+        provider_enabled = not isinstance(self.provider, NullLLMProvider)
+        provider_reranked = candidates
+        provider_rerank_succeeded = False
+        if provider_enabled:
+            try:
+                provider_reranked = self.provider.rerank(query, candidates)
+                provider_rerank_succeeded = True
+            except Exception:
+                logger.warning("Recommendation rerank failed; falling back to retrieval order.", exc_info=True)
         ranking = self.ml_reranker.rerank(
             mode="search",
             candidates=provider_reranked,
             reader_id=reader_id,
             history_book_ids=history_book_ids,
         )
-        provider_note = "fallback" if isinstance(self.provider, NullLLMProvider) else "provider"
         final_candidates = []
         for candidate in provider_reranked[:limit]:
-            candidate.provider_note = provider_note
-            candidate.explanation = self.provider.explain(query, candidate, context.__dict__)
+            explanation_used = False
+            if provider_enabled:
+                try:
+                    candidate.explanation = self.provider.explain(query, candidate, context.__dict__)
+                    explanation_used = True
+                except Exception:
+                    logger.warning(
+                        "Recommendation explanation failed for book_id=%s; using fallback explanation.",
+                        candidate.book_id,
+                        exc_info=True,
+                    )
+            candidate.provider_note = (
+                "provider" if provider_enabled and provider_rerank_succeeded and explanation_used else "fallback"
+            )
             final_candidates.append(candidate)
 
         results = [

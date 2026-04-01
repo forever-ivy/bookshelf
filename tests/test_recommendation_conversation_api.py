@@ -34,6 +34,17 @@ class FakeRecommendationProvider:
     def parse_book_from_ocr(self, ocr_texts: list[str]) -> dict:
         return {"title": ocr_texts[0] if ocr_texts else "未知书籍"}
 
+
+class TimeoutRecommendationProvider:
+    def rerank(self, query: str, candidates: list):
+        raise TimeoutError("provider rerank timed out")
+
+    def explain(self, query: str, candidate, context: dict) -> str:
+        raise TimeoutError("provider explain timed out")
+
+    def parse_book_from_ocr(self, ocr_texts: list[str]) -> dict:
+        return {"title": ocr_texts[0] if ocr_texts else "未知书籍"}
+
 class FakeConversationProvider:
     def chat(self, *, text: str, context: dict) -> str:
         messages = context.get("conversation_session", {}).get("messages", [])
@@ -155,6 +166,53 @@ def test_recommendation_route_uses_configured_llm_provider(client, monkeypatch):
     payload = response.json()
     assert payload["results"][0]["provider_note"] == "provider"
     assert payload["results"][0]["explanation"] == "cloud explanation"
+
+
+def test_recommendation_route_falls_back_when_llm_provider_times_out(client, monkeypatch):
+    from app.recommendation import router as recommendation_router
+
+    monkeypatch.setattr(recommendation_router, "build_llm_provider", lambda: TimeoutRecommendationProvider())
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        seed_rows(
+            conn,
+            [
+                ("INSERT INTO reader_accounts (username, password_hash) VALUES (?, ?)", ("reader-timeout", "hash")),
+                (
+                    "INSERT INTO reader_profiles (account_id, display_name, affiliation_type, college, major, grade_year) VALUES (?, ?, ?, ?, ?, ?)",
+                    (1, "Alice", "student", "CS", "AI", "2026"),
+                ),
+                (
+                    "INSERT INTO books (title, author, category, keywords, summary) VALUES (?, ?, ?, ?, ?)",
+                    ("第一本书", "Author A", "AI", "agent", "book one"),
+                ),
+                (
+                    "INSERT INTO books (title, author, category, keywords, summary) VALUES (?, ?, ?, ?, ?)",
+                    ("第二本书", "Author B", "AI", "reasoning", "book two"),
+                ),
+                (
+                    "INSERT INTO book_stock (book_id, cabinet_id, total_copies, available_copies, reserved_copies) VALUES (?, ?, ?, ?, ?)",
+                    (1, "cabinet-001", 1, 1, 0),
+                ),
+                (
+                    "INSERT INTO book_stock (book_id, cabinet_id, total_copies, available_copies, reserved_copies) VALUES (?, ?, ?, ?, ?)",
+                    (2, "cabinet-001", 1, 1, 0),
+                ),
+            ],
+        )
+
+    response = client.post(
+        "/api/v1/recommendation/search",
+        headers=reader_headers(),
+        json={"query": "AI 推荐"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["results"][0]["provider_note"] == "fallback"
+    assert payload["results"][0]["explanation"]
 
 
 def test_recommendation_route_returns_controlled_error_when_llm_is_misconfigured(client, monkeypatch):

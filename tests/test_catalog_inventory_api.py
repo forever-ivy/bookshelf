@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from sqlalchemy import event
+from sqlalchemy import select
 
 
 def seed_catalog_data(app):
@@ -50,6 +51,79 @@ def seed_catalog_data(app):
         )
         session.commit()
         return {"dune_id": dune.id, "principia_id": principia.id}
+    finally:
+        session.close()
+
+
+def seed_many_safety_books(app, count: int) -> list[int]:
+    from app.core.database import get_session_factory
+    from app.catalog.models import Book, BookCategory
+
+    session_factory = get_session_factory()
+    session = session_factory()
+    try:
+        safety_category = BookCategory(code="safety", name="环境科学、安全科学", description="安全相关图书")
+        session.add(safety_category)
+        session.flush()
+        books = [
+            Book(
+                title=f"安全工程案例 {index:04d}",
+                author=f"作者 {index:04d}",
+                category_id=safety_category.id,
+                category=safety_category.name,
+                keywords="安全,工程,治理",
+                summary="用于验证宽词搜索分页和大批量 payload 构建。",
+            )
+            for index in range(count)
+        ]
+        session.add_all(books)
+        session.commit()
+        return [book.id for book in books]
+    finally:
+        session.close()
+
+
+def seed_catalog_ranking_books(app) -> dict[str, int]:
+    from app.core.database import get_session_factory
+    from app.catalog.models import Book, BookCategory
+
+    session_factory = get_session_factory()
+    session = session_factory()
+    try:
+        safety_category = BookCategory(code="safety-rank", name="环境科学、安全科学", description="安全相关图书")
+        session.add(safety_category)
+        session.flush()
+        exact_match = Book(
+            title="安全",
+            author="丁学贤",
+            category_id=safety_category.id,
+            category=safety_category.name,
+            keywords="环境,治理",
+            summary="安全学基础教材。",
+        )
+        title_match = Book(
+            title="安全工程案例",
+            author="王岭",
+            category_id=safety_category.id,
+            category=safety_category.name,
+            keywords="工程,治理",
+            summary="案例分析。",
+        )
+        summary_match = Book(
+            title="地球社区可持续生活实用指南",
+            author="英若",
+            category_id=safety_category.id,
+            category="可持续发展",
+            keywords="社区,生活",
+            summary="从环境安全与社区治理角度介绍日常实践。",
+        )
+        session.add_all([exact_match, title_match, summary_match])
+        session.commit()
+        return {
+            "exact_match_id": exact_match.id,
+            "summary_match_id": summary_match.id,
+            "title_match_id": title_match.id,
+        }
     finally:
         session.close()
 
@@ -166,4 +240,75 @@ def test_books_list_avoids_n_plus_one_queries(client, app):
         event.remove(engine, "before_cursor_execute", before_cursor_execute)
 
     assert response.status_code == 200
-    assert len(statements) <= 3
+    assert len(statements) <= 4
+
+
+def test_explicit_books_search_is_paginated_for_broad_queries(client, app):
+    seed_many_safety_books(app, 35)
+
+    response = client.get("/api/v1/catalog/books/search", params={"query": "安全"})
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["query"] == "安全"
+    assert payload["limit"] == 20
+    assert payload["offset"] == 0
+    assert payload["total"] == 35
+    assert payload["has_more"] is True
+    assert len(payload["items"]) == 20
+
+    next_page = client.get(
+        "/api/v1/catalog/books/search",
+        params={"query": "安全", "limit": 20, "offset": 20},
+    )
+
+    assert next_page.status_code == 200
+    next_payload = next_page.json()
+    assert next_payload["total"] == 35
+    assert next_payload["has_more"] is False
+    assert len(next_payload["items"]) == 15
+
+
+def test_explicit_books_search_ranks_title_matches_ahead_of_summary_only_matches(client, app):
+    ids = seed_catalog_ranking_books(app)
+
+    response = client.get("/api/v1/catalog/books/search", params={"query": "安全"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    ranked_ids = [item["id"] for item in payload["items"][:3]]
+
+    assert ranked_ids[:2] == [ids["exact_match_id"], ids["title_match_id"]]
+    assert ranked_ids[2] == ids["summary_match_id"]
+
+
+def test_build_book_payloads_chunks_large_book_id_batches(client, app):
+    seed_many_safety_books(app, 1001)
+    from app.catalog.models import Book
+    from app.catalog.service import build_book_payloads
+    from app.core.database import get_engine, get_session_factory
+
+    session = get_session_factory()()
+    stock_queries: list[str] = []
+    slot_queries: list[str] = []
+
+    def before_cursor_execute(_conn, _cursor, statement, _params, _context, _many):
+        normalized = statement.lower()
+        if "from book_stock" in normalized:
+            stock_queries.append(statement)
+        if "from cabinet_slots" in normalized:
+            slot_queries.append(statement)
+
+    engine = get_engine()
+    event.listen(engine, "before_cursor_execute", before_cursor_execute)
+    try:
+        books = session.scalars(select(Book).order_by(Book.id.asc())).all()
+        payloads = build_book_payloads(session, books)
+    finally:
+        event.remove(engine, "before_cursor_execute", before_cursor_execute)
+        session.close()
+
+    assert len(payloads) == 1001
+    assert len(stock_queries) == 3
+    assert len(slot_queries) == 3

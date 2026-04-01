@@ -119,6 +119,58 @@ def test_semantic_search_endpoint_uses_query_embedding(client, monkeypatch):
     assert rows == [("我想找一本适合入门的机器学习书", "natural_language")]
 
 
+def test_search_endpoint_includes_author_and_slot_when_inventory_exists(client, monkeypatch):
+    from app.recommendation import router as recommendation_router
+
+    monkeypatch.setattr(
+        recommendation_router,
+        "resolve_embedding_provider",
+        lambda: FakeEmbeddingProvider(make_embedding((0, 1.0), (1, 0.0))),
+    )
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        seed_rows(
+            conn,
+            [
+                ("INSERT INTO reader_accounts (username, password_hash) VALUES (?, ?)", ("reader-slot", "hash")),
+                (
+                    "INSERT INTO reader_profiles (account_id, display_name, affiliation_type, college, major, grade_year) VALUES (?, ?, ?, ?, ?, ?)",
+                    (1, "Alice", "student", "CS", "AI", "2026"),
+                ),
+                (
+                    "INSERT INTO books (title, author, category, keywords, summary) VALUES (?, ?, ?, ?, ?)",
+                    ("一年有半", "日中江兆民", "哲学", "哲学,日本", "日本近代哲学代表作。"),
+                ),
+                (
+                    "INSERT INTO book_stock (book_id, cabinet_id, total_copies, available_copies, reserved_copies) VALUES (?, ?, ?, ?, ?)",
+                    (1, "cabinet-001", 1, 1, 0),
+                ),
+                (
+                    "INSERT INTO book_copies (book_id, cabinet_id, inventory_status) VALUES (?, ?, ?)",
+                    (1, "cabinet-001", "stored"),
+                ),
+                (
+                    "INSERT INTO cabinet_slots (cabinet_id, slot_code, status, current_copy_id) VALUES (?, ?, ?, ?)",
+                    ("cabinet-001", "D218", "occupied", 1),
+                ),
+            ],
+        )
+
+    response = client.post(
+        "/api/v1/recommendation/search",
+        headers=reader_headers(),
+        json={"query": "一年有半", "limit": 1},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["results"][0]["title"] == "一年有半"
+    assert payload["results"][0]["author"] == "日中江兆民"
+    assert payload["results"][0]["cabinet_label"] == "D218"
+
+
 def test_search_route_returns_controlled_error_when_embedding_provider_is_misconfigured(client, monkeypatch):
     monkeypatch.setenv("LIBRARY_LLM_PROVIDER", "null")
     monkeypatch.setenv("LIBRARY_EMBEDDING_PROVIDER", "openai-compatible")

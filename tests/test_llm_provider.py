@@ -127,3 +127,18 @@ def test_openai_compatible_provider_uses_sdk_client_for_ocr_and_explanation():
     assert explanation == "因为这本书和用户的查询高度相关。"
     assert len(client.chat.completions.calls) == 2
     assert client.chat.completions.calls[0]["model"] == "gpt-test"
+
+
+def test_openai_compatible_provider_passes_timeout_to_sdk_calls():
+    client = FakeClient()
+    provider = OpenAICompatibleLLMProvider(
+        api_key="test-key",
+        model="gpt-test",
+        base_url="https://example.com/v1",
+        client=client,
+        timeout_seconds=3.5,
+    )
+
+    provider.chat(text="帮我找书", context={})
+
+    assert client.chat.completions.calls[0]["timeout"] == 3.5

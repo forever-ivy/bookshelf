@@ -70,8 +70,10 @@ class OpenAICompatibleLLMProvider:
         model: str,
         base_url: str | None = None,
         client: Any | None = None,
+        timeout_seconds: float = 5.0,
     ) -> None:
         self.model = model
+        self.timeout_seconds = timeout_seconds
         self.client = client or self._build_client(api_key=api_key, base_url=base_url)
 
     def _build_client(self, *, api_key: str, base_url: str | None) -> Any:
@@ -106,6 +108,7 @@ class OpenAICompatibleLLMProvider:
             model=self.model,
             messages=messages,
             temperature=0,
+            timeout=self.timeout_seconds,
         )
         return self._extract_text(response)
 
@@ -263,5 +266,6 @@ def build_llm_provider() -> LLMProvider:
             api_key=settings.llm_api_key,
             model=settings.llm_model,
             base_url=settings.llm_base_url,
+            timeout_seconds=settings.llm_timeout_seconds,
         )
     return NullLLMProvider()

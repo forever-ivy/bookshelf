@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.admin.service import get_recommendation_studio_live_feed
 from app.catalog.models import Book
-from app.catalog.service import build_book_payload, get_book_by_id
+from app.catalog.service import build_book_payload, build_book_payloads, get_book_by_id
 from app.core.auth_context import require_reader
 from app.core.database import get_db
 from app.core.errors import ApiError
@@ -47,6 +47,42 @@ def resolve_embedding_provider():
 class SearchRequest(BaseModel):
     query: str
     limit: int = 5
+
+
+def _enrich_search_results(db: Session, results: list[dict]) -> list[dict]:
+    book_ids = [int(item["book_id"]) for item in results if item.get("book_id") is not None]
+    if not book_ids:
+        return results
+
+    books = list(db.scalars(select(Book).where(Book.id.in_(book_ids))).all())
+    payload_by_id = {
+        int(payload["id"]): payload
+        for payload in build_book_payloads(db, books)
+    }
+
+    enriched_results: list[dict] = []
+    for item in results:
+        payload = payload_by_id.get(int(item["book_id"]))
+        if payload is None:
+            enriched_results.append(item)
+            continue
+
+        enriched_results.append(
+            {
+                **item,
+                "author": payload.get("author"),
+                "category": payload.get("category"),
+                "summary": payload.get("summary"),
+                "cabinet_label": payload.get("cabinet_label"),
+                "shelf_label": payload.get("shelf_label"),
+                "cover_tone": payload.get("cover_tone"),
+                "cover_url": payload.get("cover_url"),
+                "tags": list(payload.get("tag_names") or payload.get("tags") or []),
+            }
+        )
+
+    return enriched_results
+
 
 def _popular_books(db: Session, *, limit: int) -> list[Book]:
     rows = db.execute(
@@ -156,9 +192,11 @@ def search(
         provider=resolve_llm_provider(),
         embedding_provider=resolve_embedding_provider(),
     )
+    search_payload = service.search(reader_id=identity.profile_id, query=payload.query, limit=payload.limit)
+    search_payload["results"] = _enrich_search_results(db, list(search_payload.get("results") or []))
     return {
         "ok": True,
-        **service.search(reader_id=identity.profile_id, query=payload.query, limit=payload.limit),
+        **search_payload,
     }
 
 

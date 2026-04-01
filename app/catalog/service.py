@@ -4,7 +4,7 @@ from collections import defaultdict
 from collections.abc import Iterable
 from itertools import chain
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.catalog.models import Book
@@ -13,6 +13,7 @@ from app.orders.models import BorrowOrder
 
 
 COVER_TONES = ("apricot", "blue", "coral", "lavender", "mint")
+CATALOG_PAYLOAD_CHUNK_SIZE = 500
 
 
 def _normalize(value: str | None) -> str:
@@ -29,23 +30,30 @@ def compute_delivery_available(available_copies: int, storage_slots: list[str]) 
     return available_copies > 0 and bool(storage_slots)
 
 
+def _chunk_book_ids(book_ids: list[int], chunk_size: int = CATALOG_PAYLOAD_CHUNK_SIZE) -> Iterable[list[int]]:
+    for start in range(0, len(book_ids), chunk_size):
+        yield book_ids[start : start + chunk_size]
+
+
 def _stock_map(session: Session, book_ids: list[int]) -> dict[int, list[BookStock]]:
-    rows = session.scalars(select(BookStock).where(BookStock.book_id.in_(book_ids))).all()
     grouped: dict[int, list[BookStock]] = defaultdict(list)
-    for row in rows:
-        grouped[row.book_id].append(row)
+    for chunk in _chunk_book_ids(book_ids):
+        rows = session.scalars(select(BookStock).where(BookStock.book_id.in_(chunk))).all()
+        for row in rows:
+            grouped[row.book_id].append(row)
     return grouped
 
 
 def _slot_map(session: Session, book_ids: list[int]) -> dict[int, list[CabinetSlot]]:
-    rows = session.execute(
-        select(CabinetSlot, BookCopy.book_id)
-        .join(BookCopy, CabinetSlot.current_copy_id == BookCopy.id)
-        .where(BookCopy.book_id.in_(book_ids))
-    ).all()
     grouped: dict[int, list[CabinetSlot]] = defaultdict(list)
-    for slot, book_id in rows:
-        grouped[book_id].append(slot)
+    for chunk in _chunk_book_ids(book_ids):
+        rows = session.execute(
+            select(CabinetSlot, BookCopy.book_id)
+            .join(BookCopy, CabinetSlot.current_copy_id == BookCopy.id)
+            .where(BookCopy.book_id.in_(chunk))
+        ).all()
+        for slot, book_id in rows:
+            grouped[book_id].append(slot)
     return grouped
 
 
@@ -103,22 +111,57 @@ def build_book_payloads(session: Session, books: list[Book]) -> list[dict]:
     return [_build_payload_from_maps(book, stocks_by_book, slots_by_book) for book in books]
 
 
-def search_books(session: Session, query: str | None = None) -> list[Book]:
+def search_books(
+    session: Session,
+    query: str | None = None,
+    *,
+    limit: int | None = None,
+    offset: int = 0,
+) -> tuple[list[Book], int]:
     stmt = select(Book)
+    count_stmt = select(func.count()).select_from(Book)
     clean_query = _normalize(query)
     if clean_query:
         pattern = f"%{clean_query}%"
-        stmt = stmt.where(
-            or_(
-                func.lower(Book.title).like(pattern),
-                func.lower(func.coalesce(Book.author, "")).like(pattern),
-                func.lower(func.coalesce(Book.category, "")).like(pattern),
-                func.lower(func.coalesce(Book.keywords, "")).like(pattern),
-                func.lower(func.coalesce(Book.summary, "")).like(pattern),
-            )
+        filters = or_(
+            func.lower(Book.title).like(pattern),
+            func.lower(func.coalesce(Book.author, "")).like(pattern),
+            func.lower(func.coalesce(Book.category, "")).like(pattern),
+            func.lower(func.coalesce(Book.keywords, "")).like(pattern),
+            func.lower(func.coalesce(Book.summary, "")).like(pattern),
         )
-    stmt = stmt.order_by(Book.title.asc(), Book.id.asc())
-    return list(session.scalars(stmt).all())
+        stmt = stmt.where(filters)
+        count_stmt = count_stmt.where(filters)
+        stmt = stmt.order_by(_catalog_book_search_rank_expr(clean_query).desc(), Book.title.asc(), Book.id.asc())
+    else:
+        stmt = stmt.order_by(Book.title.asc(), Book.id.asc())
+    if offset > 0:
+        stmt = stmt.offset(offset)
+    if limit is not None:
+        stmt = stmt.limit(limit)
+
+    total = int(session.scalar(count_stmt) or 0)
+    return list(session.scalars(stmt).all()), total
+
+
+def _catalog_book_search_rank_expr(clean_query: str):
+    title = func.lower(func.coalesce(Book.title, ""))
+    author = func.lower(func.coalesce(Book.author, ""))
+    category = func.lower(func.coalesce(Book.category, ""))
+    keywords = func.lower(func.coalesce(Book.keywords, ""))
+    summary = func.lower(func.coalesce(Book.summary, ""))
+    contains_pattern = f"%{clean_query}%"
+    prefix_pattern = f"{clean_query}%"
+
+    return (
+        case((title == clean_query, 120), else_=0)
+        + case((title.like(prefix_pattern), 80), else_=0)
+        + case((title.like(contains_pattern), 50), else_=0)
+        + case((keywords.like(contains_pattern), 30), else_=0)
+        + case((category.like(contains_pattern), 20), else_=0)
+        + case((author.like(contains_pattern), 18), else_=0)
+        + case((summary.like(contains_pattern), 6), else_=0)
+    )
 
 
 def get_book_by_id(session: Session, book_id: int) -> Book | None:

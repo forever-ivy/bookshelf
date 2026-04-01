@@ -20,21 +20,39 @@ router = APIRouter(prefix="/api/v1/catalog", tags=["catalog"])
 @router.get("/books")
 def list_books(
     query: str | None = Query(default=None, description="Search title, author, category, keywords, or summary"),
+    limit: int = Query(default=20, ge=1, le=50),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> dict:
-    books = search_books(db, query=query)
+    books, total = search_books(db, query=query, limit=limit, offset=offset)
     items = build_book_payloads(db, books)
-    return {"items": items, "total": len(items), "query": query}
+    return {
+        "items": items,
+        "total": total,
+        "query": query,
+        "limit": limit,
+        "offset": offset,
+        "has_more": offset + len(items) < total,
+    }
 
 
 @router.get("/books/search")
 def search_books_endpoint(
     query: str = Query(min_length=1),
+    limit: int = Query(default=20, ge=1, le=50),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> dict:
-    books = search_books(db, query=query)
+    books, total = search_books(db, query=query, limit=limit, offset=offset)
     items = build_book_payloads(db, books)
-    return {"items": items, "total": len(items), "query": query}
+    return {
+        "items": items,
+        "total": total,
+        "query": query,
+        "limit": limit,
+        "offset": offset,
+        "has_more": offset + len(items) < total,
+    }
 
 
 @router.get("/books/{book_id}")
