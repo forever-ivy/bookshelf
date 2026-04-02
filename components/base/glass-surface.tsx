@@ -27,7 +27,7 @@ export function GlassSurface({
   style,
   tintColor,
 }: GlassSurfaceProps) {
-  const { isDark, theme } = useAppTheme();
+  const { theme } = useAppTheme();
   const supportsGlassAPI =
     typeof isGlassEffectAPIAvailable === 'function' ? isGlassEffectAPIAvailable() : false;
   const supportsLiquidGlass =
@@ -49,7 +49,7 @@ export function GlassSurface({
   if (canUseLiquidGlass) {
     return (
       <GlassView
-        colorScheme={isDark ? 'dark' : 'light'}
+        colorScheme="light"
         glassEffectStyle={glassEffectStyle}
         isInteractive={interactive}
         style={surfaceStyle}
@@ -73,7 +73,7 @@ export function GlassSurface({
         style={[
           StyleSheet.absoluteFill,
           {
-            backgroundColor: tintColor ?? theme.colors.glassTint,
+            backgroundColor: tintColor ?? theme.colors.surface,
           },
         ]}
       />

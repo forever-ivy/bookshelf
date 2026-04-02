@@ -88,7 +88,7 @@ export function JourneyStageRail({ accentColor, stages }: JourneyStageRailProps)
                         ? theme.colors.primaryStrong
                         : theme.colors.surface,
                     borderColor: isCurrent
-                      ? theme.colors.surfaceTint
+                      ? 'rgba(255,255,255,0.6)'
                       : isDone
                         ? theme.colors.primaryStrong
                         : theme.colors.borderStrong,

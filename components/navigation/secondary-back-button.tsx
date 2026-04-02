@@ -59,7 +59,7 @@ export function SecondaryBackButton({
               justifyContent: 'center',
               width: 58,
             }}
-            tintColor={theme.colors.glassTint}>
+            tintColor="rgba(255,255,255,0.72)">
             <Pressable
               accessibilityLabel={label}
               accessibilityRole="button"

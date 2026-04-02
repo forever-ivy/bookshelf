@@ -166,7 +166,7 @@ export default function LoginRoute() {
             testID="login-hero-stage">
             <View
               style={{
-                backgroundColor: theme.colors.authDecorationSoft,
+                backgroundColor: 'rgba(237, 231, 222, 0.88)',
                 borderRadius: 120,
                 height: 170,
                 left: 0,
@@ -179,7 +179,7 @@ export default function LoginRoute() {
             />
             <View
               style={{
-                backgroundColor: theme.colors.authDecorationAccent,
+                backgroundColor: 'rgba(78, 99, 121, 0.10)',
                 borderRadius: 132,
                 height: 224,
                 opacity: heroDecorationOpacity,
@@ -191,8 +191,8 @@ export default function LoginRoute() {
             />
             <View
               style={{
-                backgroundColor: theme.colors.authDecorationGlass,
-                borderColor: theme.colors.authDecorationGlassBorder,
+                backgroundColor: 'rgba(255, 255, 255, 0.34)',
+                borderColor: 'rgba(78, 99, 121, 0.10)',
                 borderRadius: 999,
                 borderWidth: 1,
                 bottom: 40,
@@ -206,7 +206,7 @@ export default function LoginRoute() {
             />
             <View
               style={{
-                backgroundColor: theme.colors.glassTint,
+                backgroundColor: 'rgba(255, 255, 255, 0.16)',
                 borderRadius: 999,
                 bottom: 28,
                 height: 178,
@@ -246,7 +246,7 @@ export default function LoginRoute() {
             </Text>
             <Text
               style={{
-                color: theme.colors.textMuted,
+                color: 'rgba(31, 30, 27, 0.72)',
                 ...theme.typography.medium,
                 fontSize: subtitleFontSize,
                 letterSpacing: -0.8,
@@ -267,12 +267,12 @@ export default function LoginRoute() {
             <TextInput
               autoCapitalize="none"
               placeholder="请输入用户名"
-              placeholderTextColor={theme.colors.inputPlaceholder}
+              placeholderTextColor="rgba(31, 30, 27, 0.42)"
               onChangeText={setUsername}
               value={username}
               style={{
-                backgroundColor: theme.colors.inputBackground,
-                borderColor: theme.colors.inputBorder,
+                backgroundColor: 'rgba(255, 255, 255, 0.48)',
+                borderColor: 'rgba(31, 30, 27, 0.10)',
                 borderRadius: 28,
                 borderWidth: 1,
                 color: theme.colors.text,
@@ -286,12 +286,12 @@ export default function LoginRoute() {
               autoCapitalize="none"
               onChangeText={setPassword}
               placeholder="请输入密码"
-              placeholderTextColor={theme.colors.inputPlaceholder}
+              placeholderTextColor="rgba(31, 30, 27, 0.42)"
               secureTextEntry
               value={password}
               style={{
-                backgroundColor: theme.colors.inputBackground,
-                borderColor: theme.colors.inputBorder,
+                backgroundColor: 'rgba(255, 255, 255, 0.48)',
+                borderColor: 'rgba(31, 30, 27, 0.10)',
                 borderRadius: 28,
                 borderWidth: 1,
                 color: theme.colors.text,
@@ -310,17 +310,16 @@ export default function LoginRoute() {
                 transform: [{ scale: pressed ? 0.99 : 1 }],
               })}>
               <View
-                testID="login-submit-surface"
                 style={{
                   alignItems: 'center',
-                  backgroundColor: theme.colors.inverseSurface,
+                  backgroundColor: '#171614',
                   borderRadius: 28,
                   justifyContent: 'center',
                   minHeight: 58,
                 }}>
                 <Text
                   style={{
-                    color: theme.colors.inverseText,
+                    color: '#FFFFFF',
                     ...theme.typography.semiBold,
                     fontSize: 16,
                 }}>
@@ -364,7 +363,7 @@ function LoginBackgroundDecoration() {
       testID="login-background-decoration">
       <View
         style={{
-          backgroundColor: theme.colors.authDecorationSoft,
+          backgroundColor: 'rgba(237, 231, 222, 0.92)',
           borderRadius: 180,
           height: 280,
           left: -90,
@@ -375,7 +374,7 @@ function LoginBackgroundDecoration() {
       />
       <View
         style={{
-          backgroundColor: theme.colors.authDecorationAccent,
+          backgroundColor: 'rgba(78, 99, 121, 0.08)',
           borderRadius: 220,
           height: 360,
           position: 'absolute',
@@ -386,7 +385,7 @@ function LoginBackgroundDecoration() {
       />
       <View
         style={{
-          backgroundColor: theme.colors.authDecorationSupport,
+          backgroundColor: 'rgba(231, 236, 231, 0.62)',
           borderRadius: 220,
           height: 240,
           left: -70,
@@ -398,8 +397,8 @@ function LoginBackgroundDecoration() {
       />
       <View
         style={{
-          backgroundColor: theme.colors.authDecorationGlass,
-          borderColor: theme.colors.authDecorationGlassBorder,
+          backgroundColor: 'rgba(255, 255, 255, 0.34)',
+          borderColor: 'rgba(78, 99, 121, 0.06)',
           borderRadius: 999,
           borderWidth: 1,
           height: 320,
@@ -412,7 +411,7 @@ function LoginBackgroundDecoration() {
       />
       <View
         style={{
-          backgroundColor: theme.colors.glassTint,
+          backgroundColor: 'rgba(255, 255, 255, 0.18)',
           borderRadius: 999,
           bottom: 150,
           height: 180,
@@ -437,7 +436,7 @@ function LoginBackgroundDecoration() {
       />
       <View
         style={{
-          backgroundColor: theme.colors.authAccent,
+          backgroundColor: '#F1C232',
           borderRadius: 999,
           height: 18,
           opacity: 0.86,

@@ -102,10 +102,10 @@ export default function RegisterRoute() {
             autoCapitalize="none"
             onChangeText={setUsername}
             placeholder="请输入用户名"
-            placeholderTextColor={theme.colors.inputPlaceholder}
+            placeholderTextColor="rgba(31, 30, 27, 0.42)"
             style={{
-              backgroundColor: theme.colors.inputBackground,
-              borderColor: theme.colors.inputBorder,
+              backgroundColor: 'rgba(255, 255, 255, 0.48)',
+              borderColor: 'rgba(31, 30, 27, 0.10)',
               borderRadius: 28,
               borderWidth: 1,
               color: theme.colors.text,
@@ -120,10 +120,10 @@ export default function RegisterRoute() {
             autoCapitalize="words"
             onChangeText={setDisplayName}
             placeholder="请输入显示名称"
-            placeholderTextColor={theme.colors.inputPlaceholder}
+            placeholderTextColor="rgba(31, 30, 27, 0.42)"
             style={{
-              backgroundColor: theme.colors.inputBackground,
-              borderColor: theme.colors.inputBorder,
+              backgroundColor: 'rgba(255, 255, 255, 0.48)',
+              borderColor: 'rgba(31, 30, 27, 0.10)',
               borderRadius: 28,
               borderWidth: 1,
               color: theme.colors.text,
@@ -138,11 +138,11 @@ export default function RegisterRoute() {
             autoCapitalize="none"
             onChangeText={setPassword}
             placeholder="请输入密码"
-            placeholderTextColor={theme.colors.inputPlaceholder}
+            placeholderTextColor="rgba(31, 30, 27, 0.42)"
             secureTextEntry
             style={{
-              backgroundColor: theme.colors.inputBackground,
-              borderColor: theme.colors.inputBorder,
+              backgroundColor: 'rgba(255, 255, 255, 0.48)',
+              borderColor: 'rgba(31, 30, 27, 0.10)',
               borderRadius: 28,
               borderWidth: 1,
               color: theme.colors.text,
@@ -162,17 +162,16 @@ export default function RegisterRoute() {
               transform: [{ scale: pressed ? 0.99 : 1 }],
             })}>
             <View
-              testID="register-submit-surface"
               style={{
                 alignItems: 'center',
-                backgroundColor: theme.colors.inverseSurface,
+                backgroundColor: '#171614',
                 borderRadius: 28,
                 justifyContent: 'center',
                 minHeight: 58,
               }}>
               <Text
                 style={{
-                  color: theme.colors.inverseText,
+                  color: '#FFFFFF',
                   ...theme.typography.semiBold,
                   fontSize: 16,
                 }}>

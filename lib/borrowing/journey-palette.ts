@@ -8,19 +8,19 @@ export function getJourneyTonePalette(tone: JourneyTone, theme: AppTheme) {
       return {
         accent: theme.colors.availabilityReady,
         accentSoft: theme.colors.availabilityReadySoft,
-        border: theme.colors.availabilityReadyBorder,
+        border: 'rgba(31, 138, 67, 0.2)',
       };
     case 'warning':
       return {
         accent: theme.colors.warning,
         accentSoft: theme.colors.warningSoft,
-        border: theme.colors.warningBorder,
+        border: 'rgba(139, 100, 66, 0.16)',
       };
     case 'danger':
       return {
-        accent: theme.colors.danger,
-        accentSoft: theme.colors.dangerSoft,
-        border: theme.colors.dangerBorder,
+        accent: '#8C5D49',
+        accentSoft: '#F1E7E2',
+        border: 'rgba(140, 93, 73, 0.18)',
       };
     case 'muted':
       return {
@@ -32,7 +32,7 @@ export function getJourneyTonePalette(tone: JourneyTone, theme: AppTheme) {
       return {
         accent: theme.colors.primaryStrong,
         accentSoft: theme.colors.primarySoft,
-        border: theme.colors.primaryBorder,
+        border: 'rgba(78, 99, 121, 0.16)',
       };
   }
 }

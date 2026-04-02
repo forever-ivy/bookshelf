@@ -85,7 +85,7 @@ export function IllustrationScene({
         />
         <View
           style={{
-            backgroundColor: theme.colors.glassTint,
+            backgroundColor: 'rgba(255,253,249,0.72)',
             borderRadius: theme.radii.pill,
             height: isProfile ? 18 : 20,
             left: isProfile ? 18 : 20,
@@ -95,7 +95,7 @@ export function IllustrationScene({
           }}>
           <View
             style={{
-              backgroundColor: theme.colors.surfaceTint,
+              backgroundColor: 'rgba(255,253,249,0.9)',
               borderRadius: theme.radii.pill,
               bottom: 0,
               left: isProfile ? 80 : 94,

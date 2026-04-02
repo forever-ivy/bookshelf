@@ -3,7 +3,6 @@ import React from 'react';
 import { Keyboard, ScrollView, StyleSheet } from 'react-native';
 
 import LoginRoute from '@/app/login';
-import { appThemes } from '@/constants/app-theme';
 import { LibraryApiError } from '@/lib/api/client';
 import { toast } from 'sonner-native';
 
@@ -26,11 +25,6 @@ const mockSessionState = {
 };
 const mockSetSession = jest.fn();
 const mockMutateAsync = jest.fn();
-const mockUseAppTheme = jest.fn(() => ({
-  colorScheme: 'light' as const,
-  isDark: false,
-  theme: appThemes.light,
-}));
 const mockKeyboardListeners = {
   keyboardDidHide: new Set<(payload?: { duration?: number }) => void>(),
   keyboardDidShow: new Set<(payload?: { duration?: number }) => void>(),
@@ -82,10 +76,6 @@ jest.mock('@/hooks/use-app-session', () => ({
   }),
 }));
 
-jest.mock('@/hooks/use-app-theme', () => ({
-  useAppTheme: () => mockUseAppTheme(),
-}));
-
 jest.mock('@/hooks/use-library-app-data', () => ({
   useLoginMutation: () => ({
     isPending: false,
@@ -97,11 +87,6 @@ describe('LoginRoute', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     jest.clearAllMocks();
-    mockUseAppTheme.mockReturnValue({
-      colorScheme: 'light',
-      isDark: false,
-      theme: appThemes.light,
-    });
     mockSessionState.bootstrapStatus = 'ready';
     mockSessionState.onboarding = null;
     mockSessionState.token = null;
@@ -241,30 +226,5 @@ describe('LoginRoute', () => {
 
     expect(toast.error).toHaveBeenCalledWith('密码错误');
     expect(mockMutateAsync).not.toHaveBeenCalled();
-  });
-
-  it('uses dark-mode semantic colors for inputs and the primary submit button', () => {
-    mockUseAppTheme.mockReturnValue({
-      colorScheme: 'dark',
-      isDark: true,
-      theme: appThemes.dark,
-    });
-
-    render(<LoginRoute />);
-
-    expect(screen.getByPlaceholderText('请输入用户名')).toHaveProp(
-      'placeholderTextColor',
-      appThemes.dark.colors.inputPlaceholder
-    );
-    expect(screen.getByPlaceholderText('请输入用户名')).toHaveStyle({
-      backgroundColor: appThemes.dark.colors.inputBackground,
-      borderColor: appThemes.dark.colors.inputBorder,
-    });
-    expect(screen.getByTestId('login-submit-surface')).toHaveStyle({
-      backgroundColor: appThemes.dark.colors.inverseSurface,
-    });
-    expect(screen.getByText('继续登录')).toHaveStyle({
-      color: appThemes.dark.colors.inverseText,
-    });
   });
 });

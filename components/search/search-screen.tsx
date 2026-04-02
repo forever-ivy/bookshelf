@@ -559,7 +559,7 @@ export function SearchScreen({
         <Pressable
           onPress={closeFeedbackModal}
           style={{
-            backgroundColor: theme.colors.overlayScrim,
+            backgroundColor: 'rgba(26, 24, 21, 0.48)',
             flex: 1,
             padding: theme.spacing.lg,
           }}>
@@ -575,7 +575,7 @@ export function SearchScreen({
                 borderColor: theme.colors.borderSoft,
                 borderRadius: theme.radii.xl,
                 borderWidth: 1,
-                boxShadow: theme.shadows.float,
+                boxShadow: '0 18px 44px rgba(0, 0, 0, 0.24)',
                 gap: theme.spacing.lg,
                 padding: theme.spacing.xl,
               }}
@@ -623,10 +623,10 @@ export function SearchScreen({
                       }))
                     }
                     placeholder="请输入书名或关键词"
-                    placeholderTextColor={theme.colors.inputPlaceholder}
+                    placeholderTextColor="rgba(31, 30, 27, 0.42)"
                     style={{
-                      backgroundColor: theme.colors.inputBackground,
-                      borderColor: theme.colors.inputBorder,
+                      backgroundColor: 'rgba(255, 255, 255, 0.56)',
+                      borderColor: 'rgba(31, 30, 27, 0.10)',
                       borderRadius: 24,
                       borderWidth: 1,
                       color: theme.colors.text,
@@ -657,10 +657,10 @@ export function SearchScreen({
                       }))
                     }
                     placeholder="请输入作者、课程名或备注"
-                    placeholderTextColor={theme.colors.inputPlaceholder}
+                    placeholderTextColor="rgba(31, 30, 27, 0.42)"
                     style={{
-                      backgroundColor: theme.colors.inputBackground,
-                      borderColor: theme.colors.inputBorder,
+                      backgroundColor: 'rgba(255, 255, 255, 0.56)',
+                      borderColor: 'rgba(31, 30, 27, 0.10)',
                       borderRadius: 24,
                       borderWidth: 1,
                       color: theme.colors.text,
@@ -691,10 +691,10 @@ export function SearchScreen({
                       }))
                     }
                     placeholder="请输入补充说明（可选）"
-                    placeholderTextColor={theme.colors.inputPlaceholder}
+                    placeholderTextColor="rgba(31, 30, 27, 0.42)"
                     style={{
-                      backgroundColor: theme.colors.inputBackground,
-                      borderColor: theme.colors.inputBorder,
+                      backgroundColor: 'rgba(255, 255, 255, 0.56)',
+                      borderColor: 'rgba(31, 30, 27, 0.10)',
                       borderRadius: 24,
                       borderWidth: 1,
                       color: theme.colors.text,
