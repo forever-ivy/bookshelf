@@ -20,8 +20,8 @@ export function DueStateChip({ state }: { state: DueState }) {
       label: '已完成',
     },
     cancelled: {
-      backgroundColor: '#F4E9E7',
-      color: '#9B675C',
+      backgroundColor: theme.colors.dangerSoft,
+      color: theme.colors.danger,
       label: '已取消',
     },
     dueSoon: {
@@ -30,8 +30,8 @@ export function DueStateChip({ state }: { state: DueState }) {
       label: '即将到期',
     },
     overdue: {
-      backgroundColor: '#F1E7E2',
-      color: '#8C5D49',
+      backgroundColor: theme.colors.warningSoft,
+      color: theme.colors.warning,
       label: '已逾期',
     },
     renewable: {
@@ -43,6 +43,7 @@ export function DueStateChip({ state }: { state: DueState }) {
 
   return (
     <View
+      testID="due-state-chip"
       style={{
         alignSelf: 'flex-start',
         backgroundColor: palette.backgroundColor,

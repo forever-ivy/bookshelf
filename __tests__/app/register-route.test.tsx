@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 import React from 'react';
 
 import RegisterRoute from '@/app/register';
+import { appThemes } from '@/constants/app-theme';
 import { LibraryApiError } from '@/lib/api/client';
 import { toast } from 'sonner-native';
 
@@ -12,6 +13,11 @@ const mockRouter = {
 };
 const mockSetSession = jest.fn();
 const mockMutateAsync = jest.fn();
+const mockUseAppTheme = jest.fn(() => ({
+  colorScheme: 'light' as const,
+  isDark: false,
+  theme: appThemes.light,
+}));
 
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaProvider: ({ children }: { children: React.ReactNode }) => children,
@@ -37,6 +43,10 @@ jest.mock('@/hooks/use-app-session', () => ({
   }),
 }));
 
+jest.mock('@/hooks/use-app-theme', () => ({
+  useAppTheme: () => mockUseAppTheme(),
+}));
+
 jest.mock('@/hooks/use-library-app-data', () => ({
   useRegisterMutation: () => ({
     isPending: false,
@@ -47,6 +57,11 @@ jest.mock('@/hooks/use-library-app-data', () => ({
 describe('RegisterRoute', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUseAppTheme.mockReturnValue({
+      colorScheme: 'light',
+      isDark: false,
+      theme: appThemes.light,
+    });
   });
 
   it('renders the public registration form for new readers', () => {
@@ -81,5 +96,30 @@ describe('RegisterRoute', () => {
     expect(screen.queryByText('注册没有完成')).toBeNull();
     expect(mockSetSession).not.toHaveBeenCalled();
     expect(mockRouter.replace).not.toHaveBeenCalled();
+  });
+
+  it('uses dark-mode semantic colors for form inputs and the submit button', () => {
+    mockUseAppTheme.mockReturnValue({
+      colorScheme: 'dark',
+      isDark: true,
+      theme: appThemes.dark,
+    });
+
+    render(<RegisterRoute />);
+
+    expect(screen.getByPlaceholderText('请输入用户名')).toHaveProp(
+      'placeholderTextColor',
+      appThemes.dark.colors.inputPlaceholder
+    );
+    expect(screen.getByPlaceholderText('请输入用户名')).toHaveStyle({
+      backgroundColor: appThemes.dark.colors.inputBackground,
+      borderColor: appThemes.dark.colors.inputBorder,
+    });
+    expect(screen.getByTestId('register-submit-surface')).toHaveStyle({
+      backgroundColor: appThemes.dark.colors.inverseSurface,
+    });
+    expect(screen.getByText('注册并开始')).toHaveStyle({
+      color: appThemes.dark.colors.inverseText,
+    });
   });
 });

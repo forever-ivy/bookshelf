@@ -11,7 +11,7 @@ import { AppProviders } from '@/providers/app-providers';
 import { ProfileSheetProvider } from '@/providers/profile-sheet-provider';
 
 export default function RootLayout() {
-  const { theme } = useAppTheme();
+  const { isDark, theme } = useAppTheme();
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -26,7 +26,7 @@ export default function RootLayout() {
                 headerBackButtonDisplayMode: 'minimal',
                 headerShadowVisible: false,
                 headerStyle: {
-                  backgroundColor: theme.colors.backgroundWorkspace,
+                  backgroundColor: theme.colors.headerBackground,
                 },
                 headerTintColor: theme.colors.text,
               }}>
@@ -69,7 +69,7 @@ export default function RootLayout() {
               />
             </Stack>
           </ProfileSheetProvider>
-          <StatusBar style="dark" />
+          <StatusBar style={isDark ? 'light' : 'dark'} />
         </AppProviders>
         <Toaster position="top-center" />
       </SafeAreaProvider>

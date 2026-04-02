@@ -20,9 +20,9 @@ export function StateMessageCard({
   const palette =
     tone === 'danger'
       ? {
-          backgroundColor: '#F9ECE7',
-          borderColor: '#E6C9BC',
-          titleColor: '#8C5D49',
+          backgroundColor: theme.colors.dangerSoft,
+          borderColor: theme.colors.dangerBorder,
+          titleColor: theme.colors.danger,
         }
       : tone === 'info'
         ? {

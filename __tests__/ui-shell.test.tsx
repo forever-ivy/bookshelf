@@ -1471,8 +1471,9 @@ describe('UI shell routes', () => {
 
     expect(screen.getByText('今日提醒')).toBeTruthy();
     expect(screen.getByText('打开个人中心')).toBeTruthy();
-    expect(screen.getAllByText('收藏图书').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('书单').length).toBeGreaterThan(0);
+    expect(screen.getByText('账户概览')).toBeTruthy();
+    expect(screen.getByText('阅读成就')).toBeTruthy();
+    expect(screen.getByText('最近使用记录')).toBeTruthy();
     expect(screen.getByText('退出登录')).toBeTruthy();
 
     fireEvent.press(screen.getByText('退出登录'));
@@ -1511,11 +1512,25 @@ describe('UI shell routes', () => {
     expect(screen.getByText('找书')).toBeTruthy();
     expect(screen.getByText('借阅')).toBeTruthy();
     expect(screen.queryByText('我的')).toBeNull();
-    expect(screen.getByTestId('native-tabs').props.backgroundColor).toBeUndefined();
-    expect(screen.getByTestId('native-tabs').props.blurEffect).toBeUndefined();
-    expect(screen.getByTestId('native-tabs').props.iconColor).toBeUndefined();
-    expect(screen.getByTestId('native-tabs').props.labelStyle).toBeUndefined();
-    expect(screen.getByTestId('native-tabs').props.tintColor).toBeUndefined();
+    expect(screen.getByTestId('native-tabs').props.backgroundColor).toBe(appTheme.colors.tabBarBackground);
+    expect(screen.getByTestId('native-tabs').props.blurEffect).toBe('systemChromeMaterialLight');
+    expect(screen.getByTestId('native-tabs').props.iconColor).toEqual({
+      default: appTheme.colors.tabBarInactive,
+      selected: appTheme.colors.tabBarActive,
+    });
+    expect(screen.getByTestId('native-tabs').props.labelStyle).toEqual({
+      default: {
+        color: appTheme.colors.tabBarInactive,
+        fontSize: 12,
+        fontWeight: '600',
+      },
+      selected: {
+        color: appTheme.colors.tabBarActive,
+        fontSize: 12,
+        fontWeight: '600',
+      },
+    });
+    expect(screen.getByTestId('native-tabs').props.tintColor).toBe(appTheme.colors.tabBarActive);
     expect(screen.getByTestId('native-tabs').props.disableTransparentOnScrollEdge).toBe(true);
     expect(screen.getByTestId('native-tab-search').props.accessibilityLabel).toBe('search');
     expect(screen.queryByTestId('native-tab-me')).toBeNull();

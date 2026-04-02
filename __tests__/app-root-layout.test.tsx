@@ -2,11 +2,18 @@ import { render, screen } from '@testing-library/react-native';
 import React from 'react';
 
 import RootLayout from '@/app/_layout';
-import { appTheme } from '@/constants/app-theme';
+import { appThemes } from '@/constants/app-theme';
 
 let mockPathname = '/';
 let mockRecordedStackScreenOptions: Record<string, unknown> | undefined;
 let mockRecordedScreens: Array<{ name?: string; options?: Record<string, unknown> }> = [];
+let mockStatusBarProps: Record<string, unknown> | undefined;
+
+const mockUseAppTheme = jest.fn(() => ({
+  colorScheme: 'light' as const,
+  isDark: false,
+  theme: appThemes.light,
+}));
 
 jest.mock('react-native-reanimated', () => ({}));
 
@@ -46,7 +53,10 @@ jest.mock('expo-router', () => {
 });
 
 jest.mock('expo-status-bar', () => ({
-  StatusBar: () => null,
+  StatusBar: (props: Record<string, unknown>) => {
+    mockStatusBarProps = props;
+    return null;
+  },
 }));
 
 jest.mock('react-native-gesture-handler', () => ({
@@ -67,14 +77,30 @@ jest.mock('@/providers/app-providers', () => ({
   AppProviders: ({ children }: { children: React.ReactNode }) => children,
 }));
 
+jest.mock('@/hooks/use-app-theme', () => ({
+  useAppTheme: () => mockUseAppTheme(),
+}));
+
 describe('RootLayout', () => {
   beforeEach(() => {
     mockPathname = '/';
     mockRecordedStackScreenOptions = undefined;
     mockRecordedScreens = [];
+    mockStatusBarProps = undefined;
+    mockUseAppTheme.mockReturnValue({
+      colorScheme: 'light',
+      isDark: false,
+      theme: appThemes.light,
+    });
   });
 
   it('configures the root stack for native headers and keeps tabs as the headerless shell', () => {
+    mockUseAppTheme.mockReturnValue({
+      colorScheme: 'dark',
+      isDark: true,
+      theme: appThemes.dark,
+    });
+
     render(<RootLayout />);
 
     expect(screen.queryByTestId('secondary-back-layer')).toBeNull();
@@ -83,7 +109,22 @@ describe('RootLayout', () => {
       expect.objectContaining({
         headerBackButtonDisplayMode: 'minimal',
         headerShadowVisible: false,
-        headerTintColor: appTheme.colors.text,
+        headerTintColor: appThemes.dark.colors.text,
+      })
+    );
+    expect(mockRecordedStackScreenOptions).toEqual(
+      expect.objectContaining({
+        contentStyle: expect.objectContaining({
+          backgroundColor: appThemes.dark.colors.background,
+        }),
+        headerStyle: expect.objectContaining({
+          backgroundColor: appThemes.dark.colors.headerBackground,
+        }),
+      })
+    );
+    expect(mockStatusBarProps).toEqual(
+      expect.objectContaining({
+        style: 'light',
       })
     );
     expect(mockRecordedScreens).toContainEqual(
