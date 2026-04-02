@@ -9,7 +9,6 @@ import {
   View,
 } from 'react-native';
 
-import { appTheme } from '@/constants/app-theme';
 import {
   buildMarkerFillPaths,
   buildUnderlineMarkerPaths,
@@ -19,16 +18,9 @@ import {
   type MarkerHighlightVariant,
   type MarkerUnderlinePath,
 } from '@/components/base/marker-highlight-text.utils';
+import { useAppTheme } from '@/hooks/use-app-theme';
 
-const markerHighlightToneMap = {
-  blue: appTheme.colors.markerHighlightBlue,
-  green: appTheme.colors.markerHighlightGreen,
-  orange: appTheme.colors.markerHighlightOrange,
-  red: appTheme.colors.markerHighlightRed,
-  yellow: appTheme.colors.markerHighlightYellow,
-} as const;
-
-export type MarkerHighlightTone = keyof typeof markerHighlightToneMap;
+export type MarkerHighlightTone = 'blue' | 'green' | 'orange' | 'red' | 'yellow';
 
 type MarkerHighlightTextProps = {
   text: string;
@@ -129,7 +121,19 @@ export function MarkerHighlightText({
   markerIntensity = 'medium',
   numberOfLines,
 }: MarkerHighlightTextProps) {
+  const { theme } = useAppTheme();
   const parts = splitHighlightText(text, highlight);
+  const markerHighlightToneMap = useMemo(
+    () =>
+      ({
+        blue: theme.colors.markerHighlightBlue,
+        green: theme.colors.markerHighlightGreen,
+        orange: theme.colors.markerHighlightOrange,
+        red: theme.colors.markerHighlightRed,
+        yellow: theme.colors.markerHighlightYellow,
+      }) as const,
+    [theme]
+  );
   const resolvedHighlightColor =
     highlightColor ?? markerHighlightToneMap[highlightTone];
   const flattenedTextStyle = useMemo(

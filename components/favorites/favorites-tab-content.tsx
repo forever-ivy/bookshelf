@@ -248,7 +248,7 @@ export function FavoritesTabContent() {
         <Pressable
           onPress={closeCreateModal}
           style={{
-            backgroundColor: 'rgba(26, 24, 21, 0.48)',
+            backgroundColor: theme.colors.overlayScrim,
             flex: 1,
             padding: theme.spacing.lg,
           }}>
@@ -298,10 +298,10 @@ export function FavoritesTabContent() {
                       autoCapitalize="words"
                       onChangeText={setDraftTitle}
                       placeholder="请输入书单名称"
-                      placeholderTextColor="rgba(31, 30, 27, 0.42)"
+                      placeholderTextColor={theme.colors.inputPlaceholder}
                       style={{
-                        backgroundColor: theme.colors.surface,
-                        borderColor: theme.colors.borderStrong,
+                        backgroundColor: theme.colors.inputBackground,
+                        borderColor: theme.colors.inputBorder,
                         borderRadius: theme.radii.lg,
                         borderWidth: 1,
                         color: theme.colors.text,
@@ -327,10 +327,10 @@ export function FavoritesTabContent() {
                       multiline
                       onChangeText={setDraftDescription}
                       placeholder="请输入书单描述"
-                      placeholderTextColor="rgba(31, 30, 27, 0.42)"
+                      placeholderTextColor={theme.colors.inputPlaceholder}
                       style={{
-                        backgroundColor: theme.colors.surface,
-                        borderColor: theme.colors.borderStrong,
+                        backgroundColor: theme.colors.inputBackground,
+                        borderColor: theme.colors.inputBorder,
                         borderRadius: theme.radii.lg,
                         borderWidth: 1,
                         color: theme.colors.text,

@@ -1,10 +1,10 @@
 import { ThemeProvider } from '@react-navigation/core';
-import { DefaultTheme } from '@react-navigation/native';
+import { DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { QueryClientProvider } from '@tanstack/react-query';
 import * as SystemUI from 'expo-system-ui';
 import React from 'react';
 
-import { appTheme } from '@/constants/app-theme';
+import { useAppTheme } from '@/hooks/use-app-theme';
 import { getMe } from '@/lib/api';
 import { isLibraryAuthError } from '@/lib/api/client';
 import { createAppQueryClient } from '@/lib/app/query-client';
@@ -15,30 +15,34 @@ type AppProvidersProps = {
   children: React.ReactNode;
 };
 
-const APP_BACKGROUND_COLOR = appTheme.colors.background;
-const APP_NAVIGATION_THEME = {
-  ...DefaultTheme,
-  colors: {
-    ...DefaultTheme.colors,
-    background: appTheme.colors.background,
-    border: appTheme.colors.borderSoft,
-    card: appTheme.colors.background,
-    notification: appTheme.colors.warning,
-    primary: appTheme.colors.primaryStrong,
-    text: appTheme.colors.text,
-  },
-};
-
 export function AppProviders({ children }: AppProvidersProps) {
+  const { isDark, theme } = useAppTheme();
   const [queryClient] = React.useState(() => createAppQueryClient());
   const clearSession = useSessionStore((state) => state.clearSession);
   const hydrateStoredToken = useSessionStore((state) => state.hydrateStoredToken);
   const setBootstrapStatus = useSessionStore((state) => state.setBootstrapStatus);
   const setSession = useSessionStore((state) => state.setSession);
+  const navigationTheme = React.useMemo(() => {
+    const baseTheme = isDark ? DarkTheme : DefaultTheme;
+
+    return {
+      ...baseTheme,
+      colors: {
+        ...baseTheme.colors,
+        background: theme.colors.background,
+        border: theme.colors.borderSoft,
+        card: theme.colors.background,
+        notification: theme.colors.warning,
+        primary: theme.colors.primaryStrong,
+        text: theme.colors.text,
+      },
+      dark: isDark,
+    };
+  }, [isDark, theme]);
 
   React.useEffect(() => {
-    SystemUI.setBackgroundColorAsync(APP_BACKGROUND_COLOR).catch(() => null);
-  }, []);
+    SystemUI.setBackgroundColorAsync(theme.colors.background).catch(() => null);
+  }, [theme]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -85,7 +89,7 @@ export function AppProviders({ children }: AppProvidersProps) {
   }, [clearSession, hydrateStoredToken, setBootstrapStatus, setSession]);
 
   return (
-    <ThemeProvider value={APP_NAVIGATION_THEME}>
+    <ThemeProvider value={navigationTheme}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </ThemeProvider>
   );

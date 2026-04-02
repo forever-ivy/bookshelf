@@ -2,8 +2,18 @@ import { render, screen } from '@testing-library/react-native';
 import React from 'react';
 import { ScrollView, StyleSheet, Text } from 'react-native';
 
-import { appTheme } from '@/constants/app-theme';
+import { appThemes } from '@/constants/app-theme';
 import { PageShell } from '@/components/navigation/page-shell';
+
+const mockUseAppTheme = jest.fn(() => ({
+  colorScheme: 'light' as const,
+  isDark: false,
+  theme: appThemes.light,
+}));
+
+jest.mock('@/hooks/use-app-theme', () => ({
+  useAppTheme: () => mockUseAppTheme(),
+}));
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({
@@ -15,6 +25,14 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 describe('PageShell', () => {
+  beforeEach(() => {
+    mockUseAppTheme.mockReturnValue({
+      colorScheme: 'light',
+      isDark: false,
+      theme: appThemes.light,
+    });
+  });
+
   it('renders content without any built-in header chrome', () => {
     render(
       <PageShell>
@@ -41,6 +59,12 @@ describe('PageShell', () => {
   });
 
   it('applies mode background colors and content insets without header offsets', () => {
+    mockUseAppTheme.mockReturnValue({
+      colorScheme: 'dark',
+      isDark: true,
+      theme: appThemes.dark,
+    });
+
     const view = render(
       <PageShell insetBottom={72} mode="workspace" padded={false}>
         <Text>工作区内容</Text>
@@ -52,7 +76,7 @@ describe('PageShell', () => {
 
     expect(rootView).not.toBeNull();
     expect(StyleSheet.flatten(rootView!.props.style).backgroundColor).toBe(
-      appTheme.colors.backgroundWorkspace
+      appThemes.dark.colors.backgroundWorkspace
     );
     expect(
       StyleSheet.flatten(scrollView.props.contentContainerStyle)
@@ -60,7 +84,7 @@ describe('PageShell', () => {
       expect.objectContaining({
         paddingBottom: 80,
         paddingHorizontal: 0,
-        paddingTop: appTheme.spacing.lg,
+        paddingTop: appThemes.dark.spacing.lg,
       })
     );
   });
