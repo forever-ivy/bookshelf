@@ -80,6 +80,11 @@ export type BookCardPage = {
   total: number;
 };
 
+export type CatalogCategory = {
+  id: number | string;
+  name: string;
+};
+
 export type RecommendationFeed = {
   examZone: BookCard[];
   explanationCard: {
@@ -144,11 +149,13 @@ export type DeliveryStatusTimeline = Array<{
 export type BorrowOrderView = {
   actionableLabel: string;
   book: BookCard;
+  cancellable: boolean;
   dueDateLabel: string;
   id: number;
   mode: 'cabinet_pickup' | 'robot_delivery';
   note: string;
   renewable: boolean;
+  returnable: boolean;
   status: 'active' | 'cancelled' | 'completed' | 'dueSoon' | 'overdue' | 'renewable';
   statusLabel: string;
   timeline: DeliveryStatusTimeline;

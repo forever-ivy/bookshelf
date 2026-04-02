@@ -1,9 +1,8 @@
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { Image } from 'expo-image';
 
 import { useAppTheme } from '@/hooks/use-app-theme';
-import { useNotificationsQuery } from '@/hooks/use-library-app-data';
 
 export function ToolbarProfileAction({
   onPress,
@@ -13,9 +12,6 @@ export function ToolbarProfileAction({
   testID?: string;
 }) {
   const { theme } = useAppTheme();
-  const notificationsQuery = useNotificationsQuery();
-  const notificationCount = notificationsQuery.data?.length ?? 0;
-  const badgeLabel = notificationCount > 99 ? '99+' : String(notificationCount);
 
   return (
     <Pressable
@@ -47,34 +43,6 @@ export function ToolbarProfileAction({
           testID="toolbar-profile-action-icon"
           tintColor={theme.colors.systemBlue}
         />
-        {notificationCount > 0 ? (
-          <View
-            style={{
-              alignItems: 'center',
-              backgroundColor: '#FF3B30',
-              borderRadius: 10,
-              justifyContent: 'center',
-              minWidth: 20,
-              paddingHorizontal: 5,
-              position: 'absolute',
-              right: 2,
-              top: 0,
-            }}
-            testID="toolbar-profile-action-badge">
-            <Text
-              selectable
-              style={{
-                color: theme.colors.surface,
-                ...theme.typography.semiBold,
-                fontSize: 11,
-                fontVariant: ['tabular-nums'],
-                lineHeight: 15,
-              }}
-              testID="toolbar-profile-action-badge-label">
-              {badgeLabel}
-            </Text>
-          </View>
-        ) : null}
       </View>
     </Pressable>
   );

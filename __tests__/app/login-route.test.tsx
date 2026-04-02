@@ -4,6 +4,7 @@ import { Keyboard, ScrollView, StyleSheet } from 'react-native';
 
 import LoginRoute from '@/app/login';
 import { LibraryApiError } from '@/lib/api/client';
+import { toast } from 'sonner-native';
 
 const mockRouter = {
   back: jest.fn(),
@@ -199,11 +200,31 @@ describe('LoginRoute', () => {
     fireEvent.press(screen.getByText('继续登录'));
 
     await waitFor(() => {
-      expect(screen.getByText('登录没有完成')).toBeTruthy();
+      expect(toast.error).toHaveBeenCalledWith('账号或密码不正确，请重新输入后再试。');
     });
 
-    expect(screen.getByText('登录状态已失效，请重新登录。')).toBeTruthy();
+    expect(screen.queryByText('登录没有完成')).toBeNull();
     expect(mockSetSession).not.toHaveBeenCalled();
     expect(mockRouter.replace).not.toHaveBeenCalled();
+  });
+
+  it('uses precise toast copy when the username is missing', () => {
+    render(<LoginRoute />);
+
+    fireEvent.changeText(screen.getByPlaceholderText('请输入密码'), 'reader-pass');
+    fireEvent.press(screen.getByText('继续登录'));
+
+    expect(toast.error).toHaveBeenCalledWith('没账号');
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('uses precise toast copy when the password is missing', () => {
+    render(<LoginRoute />);
+
+    fireEvent.changeText(screen.getByPlaceholderText('请输入用户名'), 'reader.ai');
+    fireEvent.press(screen.getByText('继续登录'));
+
+    expect(toast.error).toHaveBeenCalledWith('密码错误');
+    expect(mockMutateAsync).not.toHaveBeenCalled();
   });
 });

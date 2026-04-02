@@ -1,13 +1,15 @@
 import { Redirect, useRouter } from 'expo-router';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { toast } from 'sonner-native';
 
+import { EditorialIllustration } from '@/components/base/editorial-illustration';
 import { PillButton } from '@/components/base/pill-button';
-import { StateMessageCard } from '@/components/base/state-message-card';
 import { PageShell } from '@/components/navigation/page-shell';
 import { useAppSession } from '@/hooks/use-app-session';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { useUpdateProfileMutation } from '@/hooks/use-library-app-data';
+import { appArtwork } from '@/lib/app/artwork';
 import { interestTags } from '@/lib/app/mock-data';
 import { getLibraryErrorMessage } from '@/lib/api/client';
 
@@ -17,7 +19,6 @@ export default function OnboardingInterestsRoute() {
   const router = useRouter();
   const updateProfileMutation = useUpdateProfileMutation();
   const [selectedTags, setSelectedTags] = React.useState<string[]>(profile?.interestTags ?? []);
-  const [submitError, setSubmitError] = React.useState<string | null>(null);
 
   if (bootstrapStatus !== 'ready') {
     return null;
@@ -36,15 +37,12 @@ export default function OnboardingInterestsRoute() {
   }
 
   const toggleTag = (tag: string) => {
-    setSubmitError(null);
     setSelectedTags((current) =>
       current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag]
     );
   };
 
   const handleContinue = async () => {
-    setSubmitError(null);
-
     try {
       await updateProfileMutation.mutateAsync({
         interestTags: selectedTags.length ? selectedTags : [...interestTags.slice(0, 3)],
@@ -53,21 +51,28 @@ export default function OnboardingInterestsRoute() {
 
       router.replace('/');
     } catch (error) {
-      setSubmitError(getLibraryErrorMessage(error, '兴趣标签保存失败，请确认登录状态和 readers 接口状态。'));
+      toast.error(getLibraryErrorMessage(error, '兴趣标签保存失败，请确认登录状态和 readers 接口状态。'));
     }
   };
 
   return (
     <PageShell mode="workspace">
-      <Text
-        style={{
-          color: theme.colors.textMuted,
-          ...theme.typography.body,
-          fontSize: 14,
-          lineHeight: 21,
-        }}>
-        选一些你常借的主题，之后找书、推荐借阅和专题书单会更贴近你。
-      </Text>
+      <View style={{ gap: theme.spacing.lg }}>
+        <Text
+          style={{
+            color: theme.colors.textMuted,
+            ...theme.typography.body,
+            fontSize: 14,
+            lineHeight: 21,
+          }}>
+          选一些你常借的主题，之后找书、推荐借阅和专题书单会更贴近你。
+        </Text>
+        <EditorialIllustration
+          height={184}
+          source={appArtwork.notionInterestSelectionFocused}
+          testID="onboarding-interest-artwork"
+        />
+      </View>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm }}>
         {interestTags.map((tag) => {
           const selected = selectedTags.includes(tag);
@@ -106,9 +111,6 @@ export default function OnboardingInterestsRoute() {
           gap: theme.spacing.md,
           padding: theme.spacing.xl,
         }}>
-        {submitError ? (
-          <StateMessageCard description={submitError} title="设置没有完成" tone="danger" />
-        ) : null}
         <Text style={{ color: theme.colors.primaryStrong, ...theme.typography.medium, fontSize: 13 }}>
           第 2 步，共 2 步
         </Text>

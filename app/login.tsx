@@ -2,13 +2,16 @@ import { Redirect, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import React from 'react';
 import { Keyboard, Platform, Pressable, Text, TextInput, View } from 'react-native';
+import { toast } from 'sonner-native';
 
-import { StateMessageCard } from '@/components/base/state-message-card';
 import { PageShell } from '@/components/navigation/page-shell';
 import { useAppSession } from '@/hooks/use-app-session';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { useLoginMutation } from '@/hooks/use-library-app-data';
-import { getLibraryErrorMessage } from '@/lib/api/client';
+import {
+  getAuthActionErrorMessage,
+  getLoginValidationErrorMessage,
+} from '@/lib/api/client';
 
 const loginHeroArtwork = require('../assets/illustrations/notion-style/login-cutout.png');
 
@@ -20,7 +23,6 @@ export default function LoginRoute() {
   const [isKeyboardVisible, setIsKeyboardVisible] = React.useState(false);
   const [scrollViewResetKey, setScrollViewResetKey] = React.useState(0);
   const [password, setPassword] = React.useState('');
-  const [submitError, setSubmitError] = React.useState<string | null>(null);
   const [username, setUsername] = React.useState('');
   const hasOpenedKeyboardRef = React.useRef(false);
 
@@ -90,7 +92,15 @@ export default function LoginRoute() {
   }
 
   const handleSubmit = async () => {
-    setSubmitError(null);
+    const validationError = getLoginValidationErrorMessage({
+      password,
+      username,
+    });
+
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
 
     try {
       const session = await loginMutation.mutateAsync({
@@ -114,7 +124,12 @@ export default function LoginRoute() {
             : '/'
       );
     } catch (error) {
-      setSubmitError(getLibraryErrorMessage(error, '登录失败，请检查用户名、密码和后端服务状态。'));
+      toast.error(
+        getAuthActionErrorMessage(error, {
+          action: 'login',
+          fallback: '登录失败，请检查用户名、密码和后端服务状态。',
+        })
+      );
     }
   };
 
@@ -249,18 +264,11 @@ export default function LoginRoute() {
               paddingBottom: formPaddingBottom,
               width: '100%',
             }}>
-            {submitError ? (
-              <StateMessageCard description={submitError} title="登录没有完成" tone="danger" />
-            ) : null}
-
             <TextInput
               autoCapitalize="none"
               placeholder="请输入用户名"
               placeholderTextColor="rgba(31, 30, 27, 0.42)"
-              onChangeText={(value) => {
-                setSubmitError(null);
-                setUsername(value);
-              }}
+              onChangeText={setUsername}
               value={username}
               style={{
                 backgroundColor: 'rgba(255, 255, 255, 0.48)',
@@ -276,10 +284,7 @@ export default function LoginRoute() {
 
             <TextInput
               autoCapitalize="none"
-              onChangeText={(value) => {
-                setSubmitError(null);
-                setPassword(value);
-              }}
+              onChangeText={setPassword}
               placeholder="请输入密码"
               placeholderTextColor="rgba(31, 30, 27, 0.42)"
               secureTextEntry

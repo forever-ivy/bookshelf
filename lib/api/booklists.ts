@@ -1,11 +1,10 @@
 import type { BooklistSummary } from '@/lib/api/types';
-import { createMockBooklist, listMockBooklists } from '@/lib/api/mock';
-import { libraryRequest } from '@/lib/api/client';
+import { LibraryApiError, libraryRequest } from '@/lib/api/client';
 import { normalizeBookCard } from '@/lib/api/catalog';
 
 export async function listBooklists(token?: string | null): Promise<{ customItems: BooklistSummary[]; systemItems: BooklistSummary[] }> {
   return libraryRequest('/api/v1/booklists', {
-    fallback: () => ({ customItems: listMockBooklists().filter((item) => item.source === 'custom'), systemItems: listMockBooklists().filter((item) => item.source === 'system') }),
+    fallback: throwServiceNotConfigured,
     method: 'GET',
     token,
   }).then((payload: any) => normalizeBooklists(payload, token));
@@ -21,48 +20,102 @@ export async function createBooklist(
       description: input.description,
       title: input.title,
     }),
-    fallback: async () => createMockBooklist(input.title, input.description ?? null, input.bookIds),
+    fallback: throwServiceNotConfigured,
     method: 'POST',
     token,
   }).then((payload: any) => normalizeBooklist(payload, token));
 }
 
 function normalizeBooklists(payload: any, token?: string | null) {
-  if (payload?.custom_items || payload?.system_items) {
+  const collectionPayload = payload?.data ?? payload;
+
+  if (collectionPayload?.custom_items || collectionPayload?.system_items || collectionPayload?.customItems || collectionPayload?.systemItems) {
     return {
-      customItems: (payload.custom_items ?? payload.customItems ?? []).map((item: any) => normalizeBooklist(item, token)),
-      systemItems: (payload.system_items ?? payload.systemItems ?? []).map((item: any) => normalizeBooklist(item, token)),
+      customItems: (collectionPayload.custom_items ?? collectionPayload.customItems ?? []).map((item: any) => normalizeBooklist(item, token)),
+      systemItems: (collectionPayload.system_items ?? collectionPayload.systemItems ?? []).map((item: any) => normalizeBooklist(item, token)),
     };
   }
 
-  const fallback = listMockBooklists();
-  return {
-    customItems: fallback.filter((item) => item.source === 'custom'),
-    systemItems: fallback.filter((item) => item.source === 'system'),
-  };
+  const flatItems = resolveFlatBooklistItems(collectionPayload);
+  if (flatItems) {
+    return {
+      customItems: flatItems.filter((item) => item.source === 'custom'),
+      systemItems: flatItems.filter((item) => item.source !== 'custom'),
+    };
+  }
+
+  throw invalidBooklistsPayload(payload);
+}
+
+function resolveFlatBooklistItems(payload: any, token?: string | null) {
+  const items = Array.isArray(payload?.items)
+    ? payload.items
+    : Array.isArray(payload)
+      ? payload
+      : null;
+
+  if (!items) {
+    return null;
+  }
+
+  return items.map((item: any) => normalizeBooklist(item, token));
 }
 
 function normalizeBooklist(raw: any, token?: string | null): BooklistSummary {
   void token;
   if (!raw) {
-    throw new Error('booklist_not_found');
+    throw invalidBooklistsPayload(raw);
   }
 
-  if (Array.isArray(raw.books) || Array.isArray(raw.items)) {
-    return {
-      books: (raw.books ?? raw.items).map(normalizeBookCard),
-      description: raw.description ?? null,
-      id: String(raw.id),
-      source: raw.source ?? (Array.isArray(raw.books) ? 'custom' : 'system'),
-      title: raw.title,
-    };
+  const id = raw.id ?? raw.slug ?? raw.code;
+  if (id === undefined || id === null) {
+    throw invalidBooklistsPayload(raw);
   }
+
+  const source = raw.source === 'custom' ? 'custom' : 'system';
+  const books = resolveBooklistBooks(raw);
 
   return {
-    books: [],
-    description: raw.description ?? null,
-    id: String(raw.id ?? raw.slug ?? raw.code),
-    source: raw.source ?? 'system',
+    books,
+    description: sanitizeBooklistDescription(raw.description),
+    id: String(id),
+    source,
     title: raw.title ?? '未命名书单',
   };
+}
+
+function resolveBooklistBooks(raw: any) {
+  const books = raw.books ?? raw.items ?? raw.book_items ?? raw.bookItems;
+  if (!Array.isArray(books)) {
+    return [];
+  }
+
+  return books.map(normalizeBookCard);
+}
+
+function sanitizeBooklistDescription(value: unknown) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const cleaned = value
+    .replace(/\s*\[reader_[^\]\n]*seed_[^\]\n]*\]\s*/gi, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return cleaned || null;
+}
+
+function invalidBooklistsPayload(details: unknown) {
+  return new LibraryApiError('booklists_invalid_payload', {
+    code: 'booklists_invalid_payload',
+    details,
+    status: 500,
+  });
+}
+
+function throwServiceNotConfigured(): never {
+  throw new LibraryApiError('library_service_not_configured', {
+    code: 'service_not_configured',
+  });
 }

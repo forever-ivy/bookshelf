@@ -3,7 +3,7 @@ jest.mock('@/lib/api/client', () => ({
 }));
 
 import { libraryRequest } from '@/lib/api/client';
-import { getBook, listBooks, listBooksPage, searchBooksExplicit } from '@/lib/api/catalog';
+import { getBook, listBooks, listBooksPage, listCatalogCategories, searchBooksExplicit } from '@/lib/api/catalog';
 import { searchRecommendations } from '@/lib/api/recommendation';
 
 describe('catalog contract', () => {
@@ -175,6 +175,52 @@ describe('catalog contract', () => {
     expect(result.items[0]).toEqual(expect.objectContaining({ id: 31, title: '安全工程案例' }));
   });
 
+  it('passes category filters through to the paginated catalog endpoint', async () => {
+    (libraryRequest as jest.Mock).mockResolvedValue({
+      items: [],
+      total: 0,
+      limit: 20,
+      offset: 0,
+      has_more: false,
+      query: '',
+    });
+
+    await listBooksPage(undefined, 'reader-token', { category: '人工智能', limit: 20, offset: 0 });
+
+    expect(libraryRequest).toHaveBeenCalledWith(
+      '/api/v1/catalog/books?category=%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD&limit=20&offset=0',
+      expect.objectContaining({
+        method: 'GET',
+        token: 'reader-token',
+      })
+    );
+  });
+
+  it('fetches reader-visible category chips from the dedicated catalog categories endpoint', async () => {
+    (libraryRequest as jest.Mock).mockResolvedValue({
+      items: [
+        { id: 3, name: '人工智能' },
+        { id: 5, name: '管理学' },
+      ],
+      total: 2,
+    });
+
+    const result = await listCatalogCategories('reader-token');
+
+    expect(libraryRequest).toHaveBeenCalledWith(
+      '/api/v1/catalog/categories',
+      expect.objectContaining({
+        method: 'GET',
+        token: 'reader-token',
+      })
+    );
+    expect(result).toEqual([
+      { id: 3, name: '人工智能' },
+      { id: 5, name: '管理学' },
+    ]);
+    expect(result[0]).not.toHaveProperty('code');
+  });
+
   it('uses location-oriented fallbacks instead of the fake default cabinet label', async () => {
     (libraryRequest as jest.Mock).mockResolvedValue({
       items: [
@@ -214,6 +260,38 @@ describe('catalog contract', () => {
     expect(result[2]).toEqual(
       expect.objectContaining({
         cabinetLabel: '位置待确认',
+      })
+    );
+  });
+
+  it('sanitizes NaN-like summaries before they reach reader-facing cards', async () => {
+    (libraryRequest as jest.Mock).mockResolvedValue({
+      items: [
+        {
+          id: 63,
+          title: '民族理论导论',
+          author: '李原',
+          summary: 'NaN',
+        },
+        {
+          id: 64,
+          title: '边疆社会研究',
+          author: '赵青',
+          summary: 'nan',
+        },
+      ],
+    });
+
+    const result = await listBooks(undefined, 'reader-token');
+
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        summary: '',
+      })
+    );
+    expect(result[1]).toEqual(
+      expect.objectContaining({
+        summary: '',
       })
     );
   });

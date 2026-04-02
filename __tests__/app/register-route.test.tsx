@@ -3,6 +3,7 @@ import React from 'react';
 
 import RegisterRoute from '@/app/register';
 import { LibraryApiError } from '@/lib/api/client';
+import { toast } from 'sonner-native';
 
 const mockRouter = {
   back: jest.fn(),
@@ -55,9 +56,10 @@ describe('RegisterRoute', () => {
     expect(screen.getByPlaceholderText('请输入显示名称')).toBeTruthy();
     expect(screen.getByPlaceholderText('请输入密码')).toBeTruthy();
     expect(screen.getByText('注册并开始')).toBeTruthy();
+    expect(screen.getByTestId('register-hero-illustration')).toBeTruthy();
   });
 
-  it('shows an inline auth error instead of throwing when registration is rejected', async () => {
+  it('shows a toast error instead of rendering an inline auth card when registration is rejected', async () => {
     mockMutateAsync.mockRejectedValueOnce(
       new LibraryApiError('http_401', {
         code: 'http_401',
@@ -73,10 +75,10 @@ describe('RegisterRoute', () => {
     fireEvent.press(screen.getByText('注册并开始'));
 
     await waitFor(() => {
-      expect(screen.getByText('注册没有完成')).toBeTruthy();
+      expect(toast.error).toHaveBeenCalledWith('注册信息暂时未通过校验，请检查后再试。');
     });
 
-    expect(screen.getByText('登录状态已失效，请重新登录。')).toBeTruthy();
+    expect(screen.queryByText('注册没有完成')).toBeNull();
     expect(mockSetSession).not.toHaveBeenCalled();
     expect(mockRouter.replace).not.toHaveBeenCalled();
   });

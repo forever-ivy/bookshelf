@@ -4,6 +4,7 @@ import React from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
+import { Toaster } from 'sonner-native';
 
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { AppProviders } from '@/providers/app-providers';
@@ -23,7 +24,6 @@ export default function RootLayout() {
                   backgroundColor: theme.colors.background,
                 },
                 headerBackButtonDisplayMode: 'minimal',
-                headerBackTitleVisible: false,
                 headerShadowVisible: false,
                 headerStyle: {
                   backgroundColor: theme.colors.backgroundWorkspace,
@@ -45,6 +45,8 @@ export default function RootLayout() {
                 options={{ presentation: 'card', title: '选择借阅偏好' }}
               />
               <Stack.Screen name="books/[bookId]" options={{ presentation: 'card', title: '图书详情' }} />
+              <Stack.Screen name="booklists/[booklistId]" options={{ presentation: 'card', title: '书单详情' }} />
+              <Stack.Screen name="favorites/index" options={{ presentation: 'card', title: '收藏图书' }} />
               <Stack.Screen name="borrow/[bookId]" options={{ presentation: 'card', title: '借阅下单' }} />
               <Stack.Screen name="orders/[orderId]" options={{ presentation: 'card', title: '借阅状态' }} />
               <Stack.Screen
@@ -69,6 +71,7 @@ export default function RootLayout() {
           </ProfileSheetProvider>
           <StatusBar style="dark" />
         </AppProviders>
+        <Toaster position="top-center" />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

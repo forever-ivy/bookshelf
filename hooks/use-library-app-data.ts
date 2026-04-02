@@ -10,6 +10,7 @@ import {
   getCollaborativeBooks,
   getHomeFeed,
   getHybridBooks,
+  listCatalogCategories,
   getMe,
   getOrder,
   getPersonalizedRecommendations,
@@ -76,40 +77,44 @@ export function useBookSearchQuery(query: string, enabled = true) {
 export function useCatalogBookSearchPageQuery(
   query: string,
   options: {
+    category?: string | null;
     enabled?: boolean;
     limit?: number;
     offset?: number;
   } = {}
 ) {
   const { token } = useAppSession();
+  const category = options.category ?? null;
   const enabled = options.enabled ?? true;
   const limit = options.limit ?? 20;
   const offset = options.offset ?? 0;
 
   return useQuery({
     enabled,
-    queryFn: () => listBooksPage(query, token, { limit, offset }),
-    queryKey: ['books', 'catalog-page', query, limit, offset, token],
+    queryFn: () => listBooksPage(query, token, { category, limit, offset }),
+    queryKey: ['books', 'catalog-page', query, category, limit, offset, token],
   });
 }
 
 export function useExplicitBookSearchQuery(
   query: string,
   options: {
+    category?: string | null;
     enabled?: boolean;
     limit?: number;
     offset?: number;
   } = {}
 ) {
   const { token } = useAppSession();
+  const category = options.category ?? null;
   const enabled = options.enabled ?? true;
   const limit = options.limit ?? 20;
   const offset = options.offset ?? 0;
 
   return useQuery({
     enabled: enabled && query.trim().length > 0,
-    queryFn: () => searchBooksExplicit(query, token, { limit, offset }),
-    queryKey: ['books', 'explicit-search', query, limit, offset, token],
+    queryFn: () => searchBooksExplicit(query, token, { category, limit, offset }),
+    queryKey: ['books', 'explicit-search', query, category, limit, offset, token],
   });
 }
 
@@ -260,12 +265,26 @@ export function useReturnRequestDetailQuery(returnRequestId: number) {
   });
 }
 
-export function useFavoritesQuery() {
+export function useCatalogCategoriesQuery() {
   const { token } = useAppSession();
 
   return useQuery({
-    queryFn: () => listFavorites(token),
-    queryKey: ['favorites', token],
+    queryFn: () => listCatalogCategories(token),
+    queryKey: ['catalog', 'categories', token],
+  });
+}
+
+export function useFavoritesQuery(
+  filters: {
+    category?: string | null;
+    query?: string;
+  } = {}
+) {
+  const { token } = useAppSession();
+
+  return useQuery({
+    queryFn: () => listFavorites(token, filters),
+    queryKey: ['favorites', filters.query ?? '', filters.category ?? null, token],
   });
 }
 
@@ -357,6 +376,8 @@ export function useCreateBorrowOrderMutation() {
     mutationFn: (input: Parameters<typeof createBorrowOrder>[0]) => createBorrowOrder(input, token),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['readers', 'orders'] });
+      queryClient.invalidateQueries({ queryKey: ['readers', 'overview'] });
     },
   });
 }
@@ -369,6 +390,8 @@ export function useRenewBorrowOrderMutation() {
     mutationFn: (orderId: number) => renewBorrowOrder(orderId, token),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['readers', 'orders'] });
+      queryClient.invalidateQueries({ queryKey: ['readers', 'overview'] });
     },
   });
 }
@@ -381,6 +404,7 @@ export function useCancelBorrowOrderMutation() {
     mutationFn: (orderId: number) => cancelBorrowOrder(orderId, token),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['readers', 'orders'] });
       queryClient.invalidateQueries({ queryKey: ['readers', 'overview'] });
     },
   });
@@ -394,6 +418,7 @@ export function useReturnRequestMutation() {
     mutationFn: (orderId: number) => createReturnRequest(orderId, token),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['readers', 'orders'] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
       queryClient.invalidateQueries({ queryKey: ['readers', 'overview'] });
     },

@@ -5,8 +5,11 @@ jest.mock('react-native-reanimated', () => {
   const { View } = require('react-native');
 
   const chain = {
+    damping: () => chain,
     delay: () => chain,
     duration: () => chain,
+    springify: () => chain,
+    stiffness: () => chain,
   };
 
   return {
@@ -16,6 +19,7 @@ jest.mock('react-native-reanimated', () => {
       inOut: (value: unknown) => value,
     },
     FadeInUp: chain,
+    LinearTransition: chain,
     useAnimatedStyle: (updater: () => Record<string, unknown>) => updater(),
     useSharedValue: (value: unknown) => ({ value }),
     withRepeat: (value: unknown) => value,
@@ -25,6 +29,36 @@ jest.mock('react-native-reanimated', () => {
       View: ({ children, ...props }: React.ComponentProps<typeof View>) =>
         React.createElement(View, props, children),
     },
+  };
+});
+
+jest.mock('react-native-gesture-handler', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+
+  return {
+    GestureHandlerRootView: ({
+      children,
+      ...props
+    }: {
+      children?: React.ReactNode;
+      [key: string]: unknown;
+    }) => React.createElement(View, props, children),
+    Swipeable: ({
+      children,
+      renderRightActions,
+      ...props
+    }: {
+      children?: React.ReactNode;
+      renderRightActions?: () => React.ReactNode;
+      [key: string]: unknown;
+    }) =>
+      React.createElement(
+        View,
+        props,
+        renderRightActions ? renderRightActions() : null,
+        children
+      ),
   };
 });
 
@@ -96,6 +130,15 @@ jest.mock('expo-glass-effect', () => {
     isLiquidGlassAvailable: jest.fn(() => true),
   };
 });
+
+jest.mock('sonner-native', () => ({
+  Toaster: () => null,
+  toast: {
+    dismiss: jest.fn(),
+    error: jest.fn(),
+    success: jest.fn(),
+  },
+}));
 
 jest.mock('@expo/ui/swift-ui', () => {
   const React = require('react');

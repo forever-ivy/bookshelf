@@ -12,75 +12,45 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { toast } from 'sonner-native';
 
 import { EditorialIllustration } from '@/components/base/editorial-illustration';
 import { PillButton } from '@/components/base/pill-button';
 import { SectionTitle } from '@/components/base/section-title';
 import { StateMessageCard } from '@/components/base/state-message-card';
 import { PageShell } from '@/components/navigation/page-shell';
+import { SearchFilterStrip } from '@/components/search/search-filter-strip';
 import { SearchResultCard } from '@/components/search/search-result-card';
 import { SearchResultCardSkeleton } from '@/components/search/search-result-skeleton';
 import {
+  useCatalogCategoriesQuery,
   useCatalogBookSearchPageQuery,
   useExplicitBookSearchQuery,
   useRecommendationSearchQuery,
 } from '@/hooks/use-library-app-data';
 import { useAppTheme } from '@/hooks/use-app-theme';
-import type { BookCard } from '@/lib/api/types';
+import type { BookCard, CatalogCategory } from '@/lib/api/types';
 import { getLibraryErrorMessage } from '@/lib/api/client';
 import { appArtwork } from '@/lib/app/artwork';
 import { resolveBookLocationDisplay } from '@/lib/book-location';
+import {
+  borrowNowSearchFilters,
+  isBorrowReadyResult,
+  type SearchFilter,
+} from '@/lib/search/book-filters';
 
 const CATALOG_PAGE_SIZE = 20;
 const RECOMMENDATION_PREVIEW_LIMIT = 5;
 const SEARCH_INPUT_DEBOUNCE_MS = 300;
-type SearchFilter = 'all' | 'delivery' | 'ready' | 'stocked' | 'wanted';
 
-function isImmediatelyBorrowableResult(item: {
-  availabilityLabel?: string | null;
-  stockStatus?: string | null;
-}) {
-  return item.stockStatus === 'available' || Boolean(item.availabilityLabel?.includes('可立即借阅'));
-}
-
-function supportsDeliveryResult(item: {
-  deliveryAvailable?: boolean | null;
-  etaLabel?: string | null;
-}) {
-  return item.deliveryAvailable === true || Boolean(item.etaLabel?.includes('可送达'));
-}
-
-function isBorrowReadyResult(item: {
-  availabilityLabel?: string | null;
-  deliveryAvailable?: boolean | null;
-  etaLabel?: string | null;
-  stockStatus?: string | null;
-}) {
-  return isImmediatelyBorrowableResult(item) && supportsDeliveryResult(item);
-}
-
-function hasWantedSignal(item: { matchedFields?: string[] | null; recommendationReason?: string | null }) {
-  return Boolean(item.recommendationReason?.trim()) || Boolean(item.matchedFields?.length);
-}
-
-function hasHealthyStock(item: { availabilityLabel?: string | null; stockStatus?: string | null }) {
-  return item.stockStatus === 'available' || Boolean(item.availabilityLabel?.includes('馆藏充足'));
-}
-
-function matchesSearchFilter(item: BookCard, filter: SearchFilter) {
-  switch (filter) {
-    case 'ready':
-      return isImmediatelyBorrowableResult(item);
-    case 'delivery':
-      return supportsDeliveryResult(item);
-    case 'stocked':
-      return hasHealthyStock(item);
-    case 'wanted':
-      return hasWantedSignal(item);
-    default:
-      return true;
-  }
+function buildCategoryFilters(categories: CatalogCategory[]) {
+  return [
+    { key: 'all' as const, label: '全部' },
+    ...categories.map((category) => ({
+      key: `category:${category.name}` as const,
+      label: category.name,
+    })),
+  ];
 }
 
 export function resolveSearchText(value: unknown) {
@@ -112,10 +82,17 @@ export function SearchScreen({
 }) {
   const normalizedQuery = query.trim();
   const searchQuery = useDebouncedSearchQuery(normalizedQuery, SEARCH_INPUT_DEBOUNCE_MS);
+  const categoriesQuery = useCatalogCategoriesQuery();
+  const [activeFilter, setActiveFilter] = React.useState<SearchFilter>(borrowNowMode ? 'ready' : 'all');
+  const selectedCategory = !borrowNowMode && activeFilter.startsWith('category:')
+    ? activeFilter.slice('category:'.length)
+    : null;
   const shouldShowDiscoveryRecommendations = !borrowNowMode && searchQuery.length === 0;
+  const activeCategoryForResults = shouldShowDiscoveryRecommendations ? null : selectedCategory;
   const shouldUseExplicitSearch = searchQuery.length > 0;
   const shouldUseCatalogPage = borrowNowMode || searchQuery.length === 0;
-  const querySourceKey = `${shouldUseExplicitSearch ? 'explicit' : 'catalog'}:${searchQuery}`;
+  const searchModeKey = `${shouldUseExplicitSearch ? 'explicit' : 'catalog'}:${searchQuery}`;
+  const querySourceKey = `${searchModeKey}:${activeCategoryForResults ?? '__all__'}`;
   const lastQueryRef = React.useRef(querySourceKey);
   const [offset, setOffset] = React.useState(0);
   const [recommendationLimit, setRecommendationLimit] = React.useState(RECOMMENDATION_PREVIEW_LIMIT);
@@ -133,14 +110,15 @@ export function SearchScreen({
     items: [],
     key: querySourceKey,
   });
-  const [activeFilter, setActiveFilter] = React.useState<SearchFilter>(borrowNowMode ? 'ready' : 'all');
   const effectiveOffset = lastQueryRef.current === querySourceKey ? offset : 0;
   const catalogPageQuery = useCatalogBookSearchPageQuery(searchQuery, {
+    category: activeCategoryForResults,
     enabled: shouldUseCatalogPage,
     limit: CATALOG_PAGE_SIZE,
     offset: effectiveOffset,
   });
   const explicitBookSearchQuery = useExplicitBookSearchQuery(searchQuery, {
+    category: activeCategoryForResults,
     enabled: shouldUseExplicitSearch,
     limit: CATALOG_PAGE_SIZE,
     offset: effectiveOffset,
@@ -153,7 +131,6 @@ export function SearchScreen({
     }
   );
   const { theme } = useAppTheme();
-  const insets = useSafeAreaInsets();
   const activeCatalogQuery = shouldUseExplicitSearch ? explicitBookSearchQuery : catalogPageQuery;
   const [feedbackForm, setFeedbackForm] = React.useState({
     authorOrContext: '',
@@ -161,8 +138,6 @@ export function SearchScreen({
     title: '',
   });
   const [feedbackModalVisible, setFeedbackModalVisible] = React.useState(false);
-  const [feedbackToastMessage, setFeedbackToastMessage] = React.useState<string | null>(null);
-  const feedbackToastTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const shouldShowFeedbackPrompt = !borrowNowMode && searchQuery.length > 0;
 
   const openFeedbackModal = React.useCallback(() => {
@@ -178,31 +153,45 @@ export function SearchScreen({
     setFeedbackModalVisible(false);
   }, []);
 
-  const showFeedbackToast = React.useCallback((message: string) => {
-    if (feedbackToastTimerRef.current) {
-      clearTimeout(feedbackToastTimerRef.current);
-    }
-
-    setFeedbackToastMessage(message);
-    feedbackToastTimerRef.current = setTimeout(() => {
-      setFeedbackToastMessage(null);
-      feedbackToastTimerRef.current = null;
-    }, 2200);
-  }, []);
-
   const handleFeedbackSubmit = React.useCallback(() => {
     setFeedbackModalVisible(false);
-    showFeedbackToast('已收到缺书反馈');
-  }, [showFeedbackToast]);
+    toast.success('已收到缺书反馈');
+  }, []);
+
+  const handleFilterPress = React.useCallback((filter: SearchFilter) => {
+    setActiveFilter(filter);
+  }, []);
 
   React.useEffect(() => {
-    if (lastQueryRef.current !== querySourceKey) {
-      lastQueryRef.current = querySourceKey;
-      setOffset(0);
-      setRecommendationLimit(RECOMMENDATION_PREVIEW_LIMIT);
-      setActiveFilter(borrowNowMode ? 'ready' : 'all');
+    if (lastQueryRef.current === querySourceKey) {
+      return;
     }
-  }, [borrowNowMode, querySourceKey]);
+
+    lastQueryRef.current = querySourceKey;
+    setOffset(0);
+    setRecommendationLimit(RECOMMENDATION_PREVIEW_LIMIT);
+  }, [querySourceKey]);
+
+  React.useEffect(() => {
+    setActiveFilter(borrowNowMode ? 'ready' : 'all');
+  }, [borrowNowMode]);
+
+  const filterChips = React.useMemo(
+    () => (borrowNowMode ? borrowNowSearchFilters : buildCategoryFilters(categoriesQuery.data ?? [])),
+    [borrowNowMode, categoriesQuery.data]
+  );
+
+  React.useEffect(() => {
+    if (borrowNowMode || activeFilter === 'all' || activeFilter === 'ready') {
+      return;
+    }
+
+    if (filterChips.some((filter) => filter.key === activeFilter)) {
+      return;
+    }
+
+    setActiveFilter('all');
+  }, [activeFilter, borrowNowMode, filterChips]);
 
   React.useEffect(() => {
     if (!activeCatalogQuery.data) {
@@ -252,20 +241,6 @@ export function SearchScreen({
     });
   }, [querySourceKey, recommendationSearchQuery.data]);
 
-  React.useEffect(() => {
-    return () => {
-      if (feedbackToastTimerRef.current) {
-        clearTimeout(feedbackToastTimerRef.current);
-      }
-    };
-  }, []);
-
-  const filterPalettes = [
-    { backgroundColor: theme.colors.successSoft, color: theme.colors.success },
-    { backgroundColor: theme.colors.primarySoft, color: theme.colors.primaryStrong },
-    { backgroundColor: theme.colors.accentLavender, color: theme.colors.knowledgeStrong },
-    { backgroundColor: theme.colors.warningSoft, color: theme.colors.warning },
-  ] as const;
   const catalogCards = React.useMemo(
     () => (loadedCatalogState.key === querySourceKey ? loadedCatalogState.items : []),
     [loadedCatalogState, querySourceKey]
@@ -310,14 +285,8 @@ export function SearchScreen({
     }
 
     const baseCards = primaryCatalogCards.length ? primaryCatalogCards : recommendationCards;
-
-    if (borrowNowMode) {
-      return baseCards;
-    }
-
-    return baseCards.filter((item) => matchesSearchFilter(item, activeFilter));
+    return baseCards;
   }, [
-    activeFilter,
     borrowNowMode,
     catalogCards,
     hasDiscoveryRecommendationResponse,
@@ -364,14 +333,6 @@ export function SearchScreen({
       : shouldShowDiscoveryRecommendations
         ? '为你推荐'
         : '馆藏结果';
-  const filterChips = borrowNowMode
-    ? [{ key: 'ready' as const, label: '只看可借可送' }]
-    : [
-        { key: 'all' as const, label: '全部结果' },
-        { key: 'delivery' as const, label: '支持配送' },
-        { key: 'wanted' as const, label: '猜你想要' },
-        { key: 'stocked' as const, label: '馆藏充足' },
-      ];
   const shellInsetBottom = 112;
   const catalogFallbackMessage = getLibraryErrorMessage(
     catalogError,
@@ -446,63 +407,12 @@ export function SearchScreen({
 
           <View style={{ gap: theme.spacing.lg }}>
             <SectionTitle title="筛选" />
-            <ScrollView
-              contentContainerStyle={{
-                alignItems: 'center',
-                gap: theme.spacing.sm,
-                paddingRight: theme.spacing.xs,
-              }}
-              directionalLockEnabled
-              horizontal
-              nestedScrollEnabled
-              overScrollMode="never"
-              showsHorizontalScrollIndicator={false}
-              testID="search-filter-strip">
-              {filterChips.map((filter, index) => {
-                const palette = filterPalettes[index % filterPalettes.length];
-                const isPrimaryChip = borrowNowMode && index === 0;
-                const isActive = activeFilter === filter.key;
-
-                return (
-                  <Pressable
-                    key={filter.label}
-                    accessibilityRole="button"
-                    onPress={() => setActiveFilter(filter.key)}
-                    style={({ pressed }) => ({ opacity: pressed ? 0.92 : 1 })}
-                    testID={`search-filter-chip-${filter.key}`}>
-                    <View
-                      style={{
-                        backgroundColor: isActive ? theme.colors.primarySoft : 'transparent',
-                        borderRadius: theme.radii.md + 2,
-                        padding: isActive ? 2 : 0,
-                      }}
-                      testID={`search-filter-chip-${filter.key}-shell`}>
-                      <View
-                        style={{
-                          backgroundColor:
-                            isPrimaryChip || isActive ? theme.colors.successSoft : palette.backgroundColor,
-                          borderColor: isActive ? theme.colors.primaryStrong : theme.colors.borderStrong,
-                          borderRadius: theme.radii.md,
-                          borderWidth: isActive ? 1.5 : 1,
-                          paddingHorizontal: 12,
-                          paddingVertical: 8,
-                        }}
-                        testID={`search-filter-chip-${filter.key}-surface`}>
-                        <Text
-                          style={{
-                            color: theme.colors.textMuted,
-                            ...theme.typography.medium,
-                            fontSize: 13,
-                          }}
-                          testID={`search-filter-chip-${filter.key}-label`}>
-                          {filter.label}
-                        </Text>
-                      </View>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+            <SearchFilterStrip
+              activeFilter={activeFilter}
+              filters={filterChips}
+              onPress={handleFilterPress}
+              primaryFilterKey={borrowNowMode ? 'ready' : undefined}
+            />
           </View>
 
         <View style={{ gap: theme.spacing.lg }}>
@@ -822,40 +732,6 @@ export function SearchScreen({
           </KeyboardAvoidingView>
         </Pressable>
       </Modal>
-
-      {feedbackToastMessage ? (
-        <View
-          pointerEvents="none"
-          style={{
-            bottom: insets.bottom + theme.spacing.lg,
-            left: theme.spacing.lg,
-            position: 'absolute',
-            right: theme.spacing.lg,
-          }}>
-          <View
-            style={{
-              alignItems: 'center',
-              alignSelf: 'center',
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.borderStrong,
-              borderRadius: theme.radii.xl,
-              borderWidth: 1,
-              boxShadow: '0 10px 24px rgba(0, 0, 0, 0.18)',
-              paddingHorizontal: theme.spacing.lg,
-              paddingVertical: theme.spacing.md,
-            }}
-            testID="missing-book-feedback-toast">
-            <Text
-              style={{
-                color: theme.colors.text,
-                ...theme.typography.medium,
-                fontSize: 13,
-              }}>
-              {feedbackToastMessage}
-            </Text>
-          </View>
-        </View>
-      ) : null}
     </View>
   );
 }

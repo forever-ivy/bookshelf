@@ -5,7 +5,6 @@ import { useAppTheme } from '@/hooks/use-app-theme';
 
 type BorrowingSummaryProps = {
   dueSoonCount?: number;
-  focus?: string;
   headline?: string;
   renewableCount?: number;
   totalCount?: number;
@@ -13,7 +12,6 @@ type BorrowingSummaryProps = {
 
 export function BorrowingSummary({
   dueSoonCount = 2,
-  focus = '时间简史 · 今天 21:00',
   headline = '借阅任务中心',
   renewableCount = 3,
   totalCount = 6,
@@ -47,7 +45,7 @@ export function BorrowingSummary({
       </View>
       <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
         {[
-          { label: '当前借阅', value: `${totalCount} 本` },
+          { label: '进行中借阅', value: `${totalCount} 本` },
           { label: '即将到期', value: `${dueSoonCount} 本` },
           { label: '可续借', value: `${renewableCount} 本` },
         ].map((item, index) => {
@@ -81,37 +79,8 @@ export function BorrowingSummary({
                 {item.label}
               </Text>
             </View>
-          );
+        );
         })}
-      </View>
-      <View
-        style={{
-          backgroundColor: theme.colors.warningSoft,
-          borderColor: theme.colors.borderSoft,
-          borderRadius: theme.radii.md,
-          borderWidth: 1,
-          gap: theme.spacing.sm,
-          padding: theme.spacing.md,
-        }}>
-        <Text
-          style={{
-            color: theme.colors.warning,
-            ...theme.typography.medium,
-            fontSize: 11,
-            letterSpacing: 0.2,
-            textTransform: 'uppercase',
-          }}>
-          今晚最该先处理
-        </Text>
-        <Text
-          style={{
-            color: theme.colors.text,
-            ...theme.typography.medium,
-            fontSize: 14,
-            lineHeight: 20,
-          }}>
-          {focus}
-        </Text>
       </View>
     </View>
   );

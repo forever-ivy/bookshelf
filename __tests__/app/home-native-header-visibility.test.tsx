@@ -263,7 +263,7 @@ describe('HomeRoute native header visibility', () => {
     expect(screen.getByTestId('home-header-inline-title-slot')).toBeTruthy();
     expect(screen.getByText('首页')).toBeTruthy();
     expect(screen.getByTestId('home-header-profile-slot')).toBeTruthy();
-    expect(screen.getByTestId('toolbar-profile-action-badge-label').props.children).toBe('2');
+    expect(screen.queryByTestId('toolbar-profile-action-badge-label')).toBeNull();
     expect(initialHeaderItems.leftItems).toEqual([
       expect.objectContaining({
         hidesSharedBackground: true,

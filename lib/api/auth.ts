@@ -67,6 +67,7 @@ export async function login(input: LoginInput): Promise<SessionPayload> {
     }),
     fallback: async () => mockLoginSession(input.username),
     method: 'POST',
+    retryOnAuthError: false,
   }).then((payload: any) =>
     normalizeSessionPayload(payload, {
       fallbackAccessToken: createMockSessionPayload().accessToken,
@@ -89,6 +90,7 @@ export async function registerReader(input: RegisterInput): Promise<SessionPaylo
     }),
     fallback: async () => mockRegisterSession(input.username, input.displayName),
     method: 'POST',
+    retryOnAuthError: false,
   }).then((payload: any) =>
     normalizeSessionPayload(payload, {
       fallbackAccessToken: createMockSessionPayload().accessToken,

@@ -1,9 +1,9 @@
 import { Redirect, useRouter } from 'expo-router';
 import React from 'react';
 import { Text, TextInput, View } from 'react-native';
+import { toast } from 'sonner-native';
 
 import { PillButton } from '@/components/base/pill-button';
-import { StateMessageCard } from '@/components/base/state-message-card';
 import { PageShell } from '@/components/navigation/page-shell';
 import { useAppSession } from '@/hooks/use-app-session';
 import { useAppTheme } from '@/hooks/use-app-theme';
@@ -19,7 +19,6 @@ export default function OnboardingProfileRoute() {
   const [major, setMajor] = React.useState(profile?.major ?? '人工智能');
   const [gradeYear, setGradeYear] = React.useState(profile?.gradeYear ?? '2023');
   const [displayName, setDisplayName] = React.useState(profile?.displayName ?? '陈知行');
-  const [submitError, setSubmitError] = React.useState<string | null>(null);
 
   if (bootstrapStatus !== 'ready') {
     return null;
@@ -34,8 +33,6 @@ export default function OnboardingProfileRoute() {
   }
 
   const handleContinue = async () => {
-    setSubmitError(null);
-
     try {
       const nextSession = await updateProfileMutation.mutateAsync({
         college,
@@ -48,7 +45,7 @@ export default function OnboardingProfileRoute() {
 
       router.replace(nextSession.onboarding.needsInterestSelection ? '/onboarding/interests' : '/');
     } catch (error) {
-      setSubmitError(getLibraryErrorMessage(error, '资料保存失败，请确认登录状态和 readers 接口状态。'));
+      toast.error(getLibraryErrorMessage(error, '资料保存失败，请确认登录状态和 readers 接口状态。'));
     }
   };
 
@@ -72,9 +69,6 @@ export default function OnboardingProfileRoute() {
           gap: theme.spacing.lg,
           padding: theme.spacing.xl,
         }}>
-        {submitError ? (
-          <StateMessageCard description={submitError} title="资料没有保存" tone="danger" />
-        ) : null}
         <Text style={{ color: theme.colors.primaryStrong, ...theme.typography.medium, fontSize: 13 }}>
           第 1 步，共 2 步
         </Text>
@@ -91,7 +85,6 @@ export default function OnboardingProfileRoute() {
             </Text>
             <TextInput
               onChangeText={(value) => {
-                setSubmitError(null);
                 (setter as (nextValue: string) => void)(value);
               }}
               placeholder={label as string}

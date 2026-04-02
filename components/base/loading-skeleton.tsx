@@ -11,12 +11,14 @@ import Animated, {
 
 import { useAppTheme } from '@/hooks/use-app-theme';
 
+export type SkeletonWidth = number | `${number}%`;
+
 type LoadingSkeletonBlockProps = {
   borderRadius?: number;
   height: number;
   style?: StyleProp<ViewStyle>;
   testID?: string;
-  width?: number | string;
+  width?: SkeletonWidth;
 };
 
 export function LoadingSkeletonBlock({
@@ -76,7 +78,7 @@ export function LoadingSkeletonText({
   gap?: number;
   lineHeight?: number;
   testIDPrefix?: string;
-  widths: (number | string)[];
+  widths: SkeletonWidth[];
 }) {
   return (
     <View style={{ gap }}>

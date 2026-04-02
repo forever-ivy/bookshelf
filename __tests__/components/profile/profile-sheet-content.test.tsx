@@ -23,11 +23,37 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('@/components/me/me-screen-content', () => ({
-  MeScreenContent: () => {
+  MeScreenContent: ({
+    onLogout,
+    onProfilePress,
+  }: {
+    onLogout?: () => void;
+    onProfilePress?: () => void;
+  }) => {
     const React = require('react');
-    const { Text } = require('react-native');
+    const { Pressable, Text, View } = require('react-native');
 
-    return React.createElement(Text, null, 'me-content');
+    return React.createElement(
+      View,
+      null,
+      React.createElement(Text, null, 'me-content'),
+      React.createElement(
+        Pressable,
+        {
+          onPress: onProfilePress,
+          testID: 'mock-profile-press',
+        },
+        React.createElement(Text, null, 'profile')
+      ),
+      React.createElement(
+        Pressable,
+        {
+          onPress: onLogout,
+          testID: 'mock-logout-press',
+        },
+        React.createElement(Text, null, 'logout')
+      )
+    );
   },
 }));
 
@@ -36,7 +62,7 @@ describe('ProfileSheetContent', () => {
     mockPush.mockReset();
   });
 
-  it('renders a system-style sheet surface with a dismiss action', () => {
+  it('renders a system-style sheet surface without an explicit close button', () => {
     const onDismiss = jest.fn();
 
     render(<ProfileSheetContent onDismiss={onDismiss} />);
@@ -52,10 +78,7 @@ describe('ProfileSheetContent', () => {
     expect(surfaceStyle.flex).toBe(1);
     expect(surfaceStyle.paddingBottom).toBe(24);
     expect(screen.getByTestId('profile-sheet-scroll-content')).toBeTruthy();
-
-    fireEvent.press(screen.getByTestId('profile-sheet-close-button'));
-
-    expect(onDismiss).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('profile-sheet-close-button')).toBeNull();
   });
 
   it('omits the React Native scroll container when native sheet scrolling is provided externally', () => {
@@ -67,5 +90,15 @@ describe('ProfileSheetContent', () => {
     expect(screen.queryByTestId('profile-sheet-scroll-content')).toBeNull();
     expect(screen.getByText('个人中心')).toBeTruthy();
     expect(screen.getByText('me-content')).toBeTruthy();
+  });
+
+  it('dismisses the sheet before logout leaves the sheet content onscreen', () => {
+    const onDismiss = jest.fn();
+
+    render(<ProfileSheetContent onDismiss={onDismiss} />);
+
+    fireEvent.press(screen.getByTestId('mock-logout-press'));
+
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 });

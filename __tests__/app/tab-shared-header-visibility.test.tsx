@@ -146,11 +146,38 @@ jest.mock('@/providers/profile-sheet-provider', () => ({
   }),
 }));
 
+jest.mock('@/lib/app/artwork', () => ({
+  appArtwork: {
+    notionBorrowSuccess: 1,
+    notionNoResults: 1,
+  },
+}));
+
 jest.mock('@/hooks/use-library-app-data', () => ({
   useBorrowOrdersQuery: () => ({
     data: [],
     error: null,
     isError: false,
+    isFetching: false,
+  }),
+  useMyOrdersQuery: () => ({
+    data: [],
+    isFetching: false,
+  }),
+  useMyOverviewQuery: () => ({
+    data: {
+      recentOrders: [],
+      recentReadingEvents: [],
+      stats: {
+        activeOrdersCount: 0,
+        lastActiveAt: '2026-04-01',
+        readingEventCount: 0,
+      },
+    },
+    isFetching: false,
+  }),
+  useOrderHistoryQuery: () => ({
+    data: [],
     isFetching: false,
   }),
   useCancelBorrowOrderMutation: () => ({
@@ -166,6 +193,13 @@ jest.mock('@/hooks/use-library-app-data', () => ({
   }),
   useReturnRequestsQuery: () => ({
     data: [],
+    isFetching: false,
+  }),
+  useCatalogCategoriesQuery: () => ({
+    data: [
+      { id: 1, name: '人工智能' },
+      { id: 2, name: '管理学' },
+    ],
     isFetching: false,
   }),
   useCatalogBookSearchPageQuery: () => ({
@@ -189,6 +223,7 @@ jest.mock('@/hooks/use-library-app-data', () => ({
       { body: '配送更新', id: 'note-1', kind: 'delivery', title: '配送更新' },
       { body: '推荐更新', id: 'note-2', kind: 'achievement', title: '推荐更新' },
     ],
+    isFetching: false,
   }),
   useRecommendationSearchQuery: () => ({
     data: [],
@@ -226,9 +261,9 @@ describe('shared tab header visibility', () => {
 
     expect(scrollView).toBeTruthy();
     expect(screen.getByTestId('borrowing-header-inline-title-slot')).toBeTruthy();
-    expect(screen.getByText('借阅')).toBeTruthy();
+    expect(screen.getAllByText('借阅').length).toBeGreaterThan(0);
     expect(screen.getByTestId('borrowing-header-profile-slot')).toBeTruthy();
-    expect(screen.getByTestId('toolbar-profile-action-badge-label').props.children).toBe('2');
+    expect(screen.queryByTestId('toolbar-profile-action-badge-label')).toBeNull();
     expect(initialHeaderItems.leftItems).toEqual([
       expect.objectContaining({
         hidesSharedBackground: true,
@@ -286,7 +321,7 @@ describe('shared tab header visibility', () => {
     expect(screen.getByTestId('search-header-inline-title-slot')).toBeTruthy();
     expect(screen.getByText('找书')).toBeTruthy();
     expect(screen.getByTestId('search-header-profile-slot')).toBeTruthy();
-    expect(screen.getByTestId('toolbar-profile-action-badge-label').props.children).toBe('2');
+    expect(screen.queryByTestId('toolbar-profile-action-badge-label')).toBeNull();
     expect(initialHeaderItems.leftItems).toEqual([
       expect.objectContaining({
         hidesSharedBackground: true,

@@ -15,8 +15,8 @@ export function DueStateChip({ state }: { state: DueState }) {
       label: '借阅中',
     },
     completed: {
-      backgroundColor: theme.colors.surfaceMuted,
-      color: theme.colors.textMuted,
+      backgroundColor: theme.colors.availabilityReadySoft,
+      color: theme.colors.availabilityReady,
       label: '已完成',
     },
     cancelled: {

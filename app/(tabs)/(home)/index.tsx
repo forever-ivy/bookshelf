@@ -472,19 +472,17 @@ export default function HomeRoute() {
     .filter((item) => isUnresolvedBookLocation(item.cabinetLabel))
     .map((item) => item.id);
   const personalizedBookDetails = useBookDetailQueries(hasRealLibraryService ? missingPersonalizedLocationIds : []);
+  const resolvedPersonalizedCatalogs = personalizedBookDetails.flatMap((query) =>
+    query.data?.catalog ? [query.data.catalog] : []
+  );
   const personalizedDetailLocationById = new Map(
-    personalizedBookDetails
-      .map((query) => query.data?.catalog)
-      .filter(
-        (catalog): catalog is { cabinetLabel: string; id: number; shelfLabel: string } => Boolean(catalog)
-      )
-      .map((catalog) => [
-        catalog.id,
-        {
-          cabinetLabel: catalog.cabinetLabel,
-          shelfLabel: catalog.shelfLabel,
-        },
-      ])
+    resolvedPersonalizedCatalogs.map((catalog) => [
+      catalog.id,
+      {
+        cabinetLabel: catalog.cabinetLabel,
+        shelfLabel: catalog.shelfLabel,
+      },
+    ])
   );
   const personalizedBooks = personalizedBooksWithFeedLocations.map((item) =>
     mergeRecommendationLocation(item, personalizedDetailLocationById.get(item.id))

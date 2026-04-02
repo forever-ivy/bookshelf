@@ -1,11 +1,13 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import { Text, View } from 'react-native';
+import { toast } from 'sonner-native';
 
 import {
   LoadingSkeletonBlock,
   LoadingSkeletonCard,
   LoadingSkeletonText,
+  type SkeletonWidth,
 } from '@/components/base/loading-skeleton';
 import { PillButton } from '@/components/base/pill-button';
 import { SectionTitle } from '@/components/base/section-title';
@@ -85,7 +87,7 @@ function BookDetailSectionSkeleton({
   lines,
   testID,
 }: {
-  lines: (number | string)[];
+  lines: SkeletonWidth[];
   testID?: string;
 }) {
   const { theme } = useAppTheme();
@@ -107,20 +109,21 @@ function BookRecommendationListSkeleton({ testID }: { testID?: string }) {
 }
 
 export default function BookDetailRoute() {
-  const params = useLocalSearchParams<{ bookId?: string }>();
+  const params = useLocalSearchParams<{ bookId?: string; minimal?: string }>();
   const bookId = Number(params.bookId);
+  const isMinimal = params.minimal === 'true';
   const { theme } = useAppTheme();
   const router = useRouter();
   const { openProfileSheet } = useProfileSheet();
   const detailQuery = useBookDetailQuery(bookId);
-  const collaborativeQuery = useCollaborativeBooksQuery(bookId);
+  const recBookId = isMinimal ? NaN : bookId;
+  const collaborativeQuery = useCollaborativeBooksQuery(recBookId);
   const favoritesQuery = useFavoritesQuery();
-  const hybridQuery = useHybridBooksQuery(bookId);
-  const similarQuery = useSimilarBooksQuery(bookId);
+  const hybridQuery = useHybridBooksQuery(recBookId);
+  const similarQuery = useSimilarBooksQuery(recBookId);
   const createBooklistMutation = useCreateBooklistMutation();
   const borrowMutation = useCreateBorrowOrderMutation();
   const favoriteMutation = useToggleFavoriteMutation();
-  const [actionError, setActionError] = React.useState<string | null>(null);
 
   if (!Number.isFinite(bookId)) {
     return null;
@@ -150,10 +153,6 @@ export default function BookDetailRoute() {
             title="图书详情联调失败"
             tone="danger"
           />
-        ) : null}
-
-        {actionError ? (
-          <StateMessageCard description={actionError} title="操作没有完成" tone="danger" />
         ) : null}
 
         {isDetailLoading ? <BookDetailHeroSkeleton /> : null}
@@ -236,7 +235,6 @@ export default function BookDetailRoute() {
                 label={borrowMutation.isPending ? '借阅中…' : '立即借阅'}
                 onPress={async () => {
                   try {
-                    setActionError(null);
                     const order = await borrowMutation.mutateAsync({
                       bookId: book.id,
                       deliveryTarget: '阅览室座位',
@@ -244,7 +242,7 @@ export default function BookDetailRoute() {
                     });
                     router.push(`/orders/${order.id}`);
                   } catch (error) {
-                    setActionError(getLibraryErrorMessage(error, '借阅下单失败，请稍后重试。'));
+                    toast.error(getLibraryErrorMessage(error, '借阅下单失败，请稍后重试。'));
                   }
                 }}
                 variant="accent"
@@ -260,10 +258,9 @@ export default function BookDetailRoute() {
               }
               onPress={async () => {
                 try {
-                  setActionError(null);
                   await favoriteMutation.mutateAsync(book.id);
                 } catch (error) {
-                  setActionError(getLibraryErrorMessage(error, '收藏状态更新失败，请稍后重试。'));
+                  toast.error(getLibraryErrorMessage(error, '收藏状态更新失败，请稍后重试。'));
                 }
               }}
               variant="soft"
@@ -286,7 +283,6 @@ export default function BookDetailRoute() {
             label={createBooklistMutation.isPending ? '加入中…' : '加入稍后阅读'}
             onPress={async () => {
               try {
-                setActionError(null);
                 await createBooklistMutation.mutateAsync({
                   bookIds: [book.id],
                   description: `来自《${book.title}》的待读标记`,
@@ -294,7 +290,7 @@ export default function BookDetailRoute() {
                 });
                 openProfileSheet();
               } catch (error) {
-                setActionError(getLibraryErrorMessage(error, '加入书单失败，请稍后重试。'));
+                toast.error(getLibraryErrorMessage(error, '加入书单失败，请稍后重试。'));
               }
             }}
             variant="soft"
@@ -399,104 +395,108 @@ export default function BookDetailRoute() {
         )}
       </View>
 
-      <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle title="借过这本的人也借了" />
-        {isCollaborativeLoading ? (
-          <BookRecommendationListSkeleton testID="book-detail-collaborative-skeleton" />
-        ) : (
+      {!isMinimal ? (
+        <>
           <View style={{ gap: theme.spacing.lg }}>
-            {collaborativeBooks.map((item) => (
-              <SearchResultCard
-                key={item.id}
-                availability={item.availabilityLabel}
-                author={item.author}
-                coverTone={item.coverTone}
-                eta={item.etaLabel}
-                href={`/books/${item.id}`}
-                location={item.cabinetLabel}
-                reason={item.recommendationReason}
-                title={item.title}
-              />
-            ))}
-            {!collaborativeBooks.length ? (
-              <StateMessageCard
-                description={
-                    collaborativeQuery.error
-                    ? getLibraryErrorMessage(collaborativeQuery.error, '这组延伸借阅暂时不可用。')
-                    : '等更多借阅记录积累后，这里会出现更贴近的延伸借阅。'
-                }
-                title="延伸借阅正在准备"
-              />
-            ) : null}
+            <SectionTitle title="借过这本的人也借了" />
+            {isCollaborativeLoading ? (
+              <BookRecommendationListSkeleton testID="book-detail-collaborative-skeleton" />
+            ) : (
+              <View style={{ gap: theme.spacing.lg }}>
+                {collaborativeBooks.map((item) => (
+                  <SearchResultCard
+                    key={item.id}
+                    availability={item.availabilityLabel}
+                    author={item.author}
+                    coverTone={item.coverTone}
+                    eta={item.etaLabel}
+                    href={`/books/${item.id}`}
+                    location={item.cabinetLabel}
+                    reason={item.recommendationReason}
+                    title={item.title}
+                  />
+                ))}
+                {!collaborativeBooks.length ? (
+                  <StateMessageCard
+                    description={
+                        collaborativeQuery.error
+                        ? getLibraryErrorMessage(collaborativeQuery.error, '这组延伸借阅暂时不可用。')
+                        : '等更多借阅记录积累后，这里会出现更贴近的延伸借阅。'
+                    }
+                    title="延伸借阅正在准备"
+                  />
+                ) : null}
+              </View>
+            )}
           </View>
-        )}
-      </View>
 
-      <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle title="同主题图书" />
-        {isSimilarLoading ? (
-          <BookRecommendationListSkeleton testID="book-detail-similar-skeleton" />
-        ) : (
           <View style={{ gap: theme.spacing.lg }}>
-            {similarBooks.map((item) => (
-              <SearchResultCard
-                key={item.id}
-                availability={item.availabilityLabel}
-                author={item.author}
-                coverTone={item.coverTone}
-                eta={item.etaLabel}
-                href={`/books/${item.id}`}
-                location={item.cabinetLabel}
-                reason={item.recommendationReason}
-                title={item.title}
-              />
-            ))}
-            {!similarBooks.length ? (
-              <StateMessageCard
-                description={
-                    similarQuery.error
-                    ? getLibraryErrorMessage(similarQuery.error, '同主题图书暂时不可用。')
-                    : '暂时还没有补充出更贴近的同主题图书。'
-                }
-                title="同主题图书暂时为空"
-              />
-            ) : null}
+            <SectionTitle title="同主题图书" />
+            {isSimilarLoading ? (
+              <BookRecommendationListSkeleton testID="book-detail-similar-skeleton" />
+            ) : (
+              <View style={{ gap: theme.spacing.lg }}>
+                {similarBooks.map((item) => (
+                  <SearchResultCard
+                    key={item.id}
+                    availability={item.availabilityLabel}
+                    author={item.author}
+                    coverTone={item.coverTone}
+                    eta={item.etaLabel}
+                    href={`/books/${item.id}`}
+                    location={item.cabinetLabel}
+                    reason={item.recommendationReason}
+                    title={item.title}
+                  />
+                ))}
+                {!similarBooks.length ? (
+                  <StateMessageCard
+                    description={
+                        similarQuery.error
+                        ? getLibraryErrorMessage(similarQuery.error, '同主题图书暂时不可用。')
+                        : '暂时还没有补充出更贴近的同主题图书。'
+                    }
+                    title="同主题图书暂时为空"
+                  />
+                ) : null}
+              </View>
+            )}
           </View>
-        )}
-      </View>
 
-      <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle title="你可能还想借" />
-        {isHybridLoading ? (
-          <BookRecommendationListSkeleton testID="book-detail-hybrid-skeleton" />
-        ) : (
           <View style={{ gap: theme.spacing.lg }}>
-            {hybridBooks.map((item) => (
-              <SearchResultCard
-                key={item.id}
-                availability={item.availabilityLabel}
-                author={item.author}
-                coverTone={item.coverTone}
-                eta={item.etaLabel}
-                href={`/books/${item.id}`}
-                location={item.cabinetLabel}
-                reason={item.recommendationReason}
-                title={item.title}
-              />
-            ))}
-            {!hybridBooks.length ? (
-              <StateMessageCard
-                description={
-                  hybridQuery.error
-                    ? getLibraryErrorMessage(hybridQuery.error, '补充推荐暂时不可用。')
-                    : '后续当馆藏和借阅线索更完整时，会继续补充适合你的图书。'
-                }
-                title="补充推荐正在准备"
-              />
-            ) : null}
+            <SectionTitle title="你可能还想借" />
+            {isHybridLoading ? (
+              <BookRecommendationListSkeleton testID="book-detail-hybrid-skeleton" />
+            ) : (
+              <View style={{ gap: theme.spacing.lg }}>
+                {hybridBooks.map((item) => (
+                  <SearchResultCard
+                    key={item.id}
+                    availability={item.availabilityLabel}
+                    author={item.author}
+                    coverTone={item.coverTone}
+                    eta={item.etaLabel}
+                    href={`/books/${item.id}`}
+                    location={item.cabinetLabel}
+                    reason={item.recommendationReason}
+                    title={item.title}
+                  />
+                ))}
+                {!hybridBooks.length ? (
+                  <StateMessageCard
+                    description={
+                      hybridQuery.error
+                        ? getLibraryErrorMessage(hybridQuery.error, '补充推荐暂时不可用。')
+                        : '后续当馆藏和借阅线索更完整时，会继续补充适合你的图书。'
+                    }
+                    title="补充推荐正在准备"
+                  />
+                ) : null}
+              </View>
+            )}
           </View>
-        )}
-      </View>
+        </>
+      ) : null}
       </PageShell>
     </ProtectedRoute>
   );

@@ -82,7 +82,6 @@ describe('RootLayout', () => {
     expect(mockRecordedStackScreenOptions).toEqual(
       expect.objectContaining({
         headerBackButtonDisplayMode: 'minimal',
-        headerBackTitleVisible: false,
         headerShadowVisible: false,
         headerTintColor: appTheme.colors.text,
       })
@@ -101,6 +100,15 @@ describe('RootLayout', () => {
         options: expect.objectContaining({
           headerShown: false,
           presentation: 'card',
+        }),
+      })
+    );
+    expect(mockRecordedScreens).toContainEqual(
+      expect.objectContaining({
+        name: 'favorites/index',
+        options: expect.objectContaining({
+          presentation: 'card',
+          title: '收藏图书',
         }),
       })
     );

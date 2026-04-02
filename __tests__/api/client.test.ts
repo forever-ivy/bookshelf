@@ -6,6 +6,7 @@ jest.mock('@/stores', () => ({
 
 import {
   LibraryApiError,
+  getAuthActionErrorMessage,
   getLibraryErrorMessage,
   isLibraryAuthError,
   libraryRequest,
@@ -134,6 +135,38 @@ describe('libraryRequest', () => {
     ).toBe('Bearer refreshed-token');
     expect(fallback).not.toHaveBeenCalled();
   });
+
+  it('preserves structured backend error codes from JSON responses', async () => {
+    process.env.EXPO_PUBLIC_LIBRARY_SERVICE_URL = 'http://localhost:8000';
+    global.fetch = jest.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            code: 'password_incorrect',
+            message: 'password_incorrect',
+          }),
+          {
+            headers: { 'Content-Type': 'application/json' },
+            status: 401,
+          }
+        )
+    ) as unknown as typeof fetch;
+
+    await expect(
+      libraryRequest('/api/v1/auth/login', {
+        body: JSON.stringify({
+          password: 'wrong-password',
+          username: 'reader.ai',
+        }),
+        fallback: () => ({ ok: true }),
+        method: 'POST',
+      })
+    ).rejects.toMatchObject({
+      code: 'password_incorrect',
+      name: 'LibraryApiError',
+      status: 401,
+    });
+  });
 });
 
 describe('library client helpers', () => {
@@ -145,5 +178,33 @@ describe('library client helpers', () => {
 
     expect(isLibraryAuthError(error)).toBe(true);
     expect(getLibraryErrorMessage(error)).toContain('登录状态已失效');
+  });
+
+  it('maps detailed login failures to precise auth copy', () => {
+    expect(
+      getAuthActionErrorMessage(
+        new LibraryApiError('user_not_found', {
+          code: 'user_not_found',
+          status: 401,
+        }),
+        {
+          action: 'login',
+          fallback: '登录失败',
+        }
+      )
+    ).toBe('没账号');
+
+    expect(
+      getAuthActionErrorMessage(
+        new LibraryApiError('password_incorrect', {
+          code: 'password_incorrect',
+          status: 401,
+        }),
+        {
+          action: 'login',
+          fallback: '登录失败',
+        }
+      )
+    ).toBe('密码错误');
   });
 });

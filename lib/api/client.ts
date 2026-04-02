@@ -2,12 +2,14 @@ import { readStoredRefreshToken, readStoredSessionToken, replaceStoredSessionTok
 
 export class LibraryApiError extends Error {
   code: string;
+  details?: unknown;
   status: number | null;
 
-  constructor(message: string, options: { code: string; status?: number | null }) {
+  constructor(message: string, options: { code: string; details?: unknown; status?: number | null }) {
     super(message);
     this.name = 'LibraryApiError';
     this.code = options.code;
+    this.details = options.details;
     this.status = options.status ?? null;
   }
 }
@@ -71,6 +73,20 @@ export function getAuthActionErrorMessage(
     return options.fallback;
   }
 
+  if (options.action === 'login') {
+    if (error.code === 'user_not_found') {
+      return '没账号';
+    }
+
+    if (
+      error.code === 'invalid_password' ||
+      error.code === 'password_incorrect' ||
+      error.code === 'wrong_password'
+    ) {
+      return '密码错误';
+    }
+  }
+
   if (error.status === 400) {
     return options.action === 'login'
       ? '请输入完整的账号和密码后再试。'
@@ -92,6 +108,61 @@ export function getAuthActionErrorMessage(
   }
 
   return options.fallback;
+}
+
+export function getLoginValidationErrorMessage(input: {
+  password: string;
+  username: string;
+}) {
+  if (!input.username.trim()) {
+    return '没账号';
+  }
+
+  if (!input.password.trim()) {
+    return '密码错误';
+  }
+
+  return null;
+}
+
+async function buildLibraryApiError(response: Response) {
+  let details: unknown;
+
+  try {
+    const contentType = response.headers.get('Content-Type') ?? '';
+
+    if (contentType.includes('application/json')) {
+      details = await response.json();
+    } else {
+      const text = await response.text();
+      details = text ? { message: text } : undefined;
+    }
+  } catch {
+    details = undefined;
+  }
+
+  const normalizedDetails =
+    details && typeof details === 'object' ? (details as Record<string, unknown>) : null;
+  const nestedError =
+    normalizedDetails?.error && typeof normalizedDetails.error === 'object'
+      ? (normalizedDetails.error as Record<string, unknown>)
+      : null;
+  const code =
+    (typeof normalizedDetails?.code === 'string' ? normalizedDetails.code : null) ??
+    (typeof normalizedDetails?.error_code === 'string' ? normalizedDetails.error_code : null) ??
+    (typeof nestedError?.code === 'string' ? nestedError.code : null) ??
+    `http_${response.status}`;
+  const message =
+    (typeof normalizedDetails?.message === 'string' ? normalizedDetails.message : null) ??
+    (typeof normalizedDetails?.detail === 'string' ? normalizedDetails.detail : null) ??
+    (typeof nestedError?.message === 'string' ? nestedError.message : null) ??
+    code;
+
+  return new LibraryApiError(message, {
+    code,
+    details,
+    status: response.status,
+  });
 }
 
 export async function libraryFetchJson<T>(
@@ -124,10 +195,7 @@ export async function libraryFetchJson<T>(
   }
 
   if (!response.ok) {
-    throw new LibraryApiError(`http_${response.status}`, {
-      code: `http_${response.status}`,
-      status: response.status,
-    });
+    throw await buildLibraryApiError(response);
   }
 
   return response.json() as Promise<T>;
@@ -163,10 +231,7 @@ async function refreshAccessToken() {
   }
 
   if (!response.ok) {
-    throw new LibraryApiError(`http_${response.status}`, {
-      code: `http_${response.status}`,
-      status: response.status,
-    });
+    throw await buildLibraryApiError(response);
   }
 
   const payload = (await response.json()) as {
@@ -199,6 +264,7 @@ export async function libraryRequest<T>(
     token?: string | null;
     fallback: () => T | Promise<T>;
     fallbackOnError?: boolean;
+    retryOnAuthError?: boolean;
   }
 ): Promise<T> {
   if (!hasLibraryService()) {
@@ -208,7 +274,7 @@ export async function libraryRequest<T>(
   try {
     return await libraryFetchJson<T>(path, options);
   } catch (error) {
-    if (isLibraryAuthError(error)) {
+    if (options.retryOnAuthError !== false && isLibraryAuthError(error)) {
       const refreshedToken = await refreshAccessToken();
       return libraryFetchJson<T>(path, {
         ...options,

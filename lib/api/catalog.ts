@@ -1,4 +1,4 @@
-import type { BookCard, BookCardPage, BookDetail } from '@/lib/api/types';
+import type { BookCard, BookCardPage, BookDetail, CatalogCategory } from '@/lib/api/types';
 import { getMockBook, getMockBookDetail, listMockBooks } from '@/lib/api/mock';
 import { libraryRequest } from '@/lib/api/client';
 import { resolveBookDeliveryAvailable, resolveBookEtaLabel } from '@/lib/book-delivery';
@@ -10,11 +10,11 @@ export async function listBooks(query?: string, token?: string | null): Promise<
 export async function listBooksPage(
   query: string | undefined,
   token?: string | null,
-  options: { limit?: number; offset?: number } = {}
+  options: { category?: string | null; limit?: number; offset?: number } = {}
 ): Promise<BookCardPage> {
   const limit = clampPageSize(options.limit);
   const offset = clampOffset(options.offset);
-  const search = buildSearchParams(query, limit, offset);
+  const search = buildSearchParams(query, limit, offset, options.category);
 
   return libraryRequest(`/api/v1/catalog/books${search}`, {
     fallback: () => createFallbackBookCardPage(query, limit, offset),
@@ -26,11 +26,11 @@ export async function listBooksPage(
 export async function searchBooksExplicit(
   query: string,
   token?: string | null,
-  options: { limit?: number; offset?: number } = {}
+  options: { category?: string | null; limit?: number; offset?: number } = {}
 ): Promise<BookCardPage> {
   const limit = clampPageSize(options.limit);
   const offset = clampOffset(options.offset);
-  const search = buildSearchParams(query, limit, offset);
+  const search = buildSearchParams(query, limit, offset, options.category);
 
   return libraryRequest(`/api/v1/catalog/books/search${search}`, {
     fallback: () => createFallbackBookCardPage(query, limit, offset),
@@ -53,6 +53,14 @@ export async function getRelatedBooks(bookId: number, token?: string | null): Pr
     method: 'GET',
     token,
   }).then((payload: any) => (Array.isArray(payload?.items) ? payload.items.map(normalizeBookCard) : []));
+}
+
+export async function listCatalogCategories(token?: string | null): Promise<CatalogCategory[]> {
+  return libraryRequest('/api/v1/catalog/categories', {
+    fallback: createFallbackCatalogCategories,
+    method: 'GET',
+    token,
+  }).then((payload: any) => normalizeCatalogCategories(payload));
 }
 
 export function normalizeBookCard(raw: any): BookCard {
@@ -84,7 +92,7 @@ export function normalizeBookCard(raw: any): BookCard {
     recommendationReason: raw.recommendationReason ?? raw.recommendation_reason ?? null,
     shelfLabel: raw.shelfLabel ?? raw.shelf_label ?? '主馆 2 楼',
     stockStatus: raw.stockStatus ?? raw.stock_status ?? 'available',
-    summary: raw.summary ?? '',
+    summary: resolveBookSummary(raw.summary),
     tags: raw.tags ?? raw.tag_names ?? [],
     title: raw.title ?? '未命名图书',
   };
@@ -130,6 +138,19 @@ function resolveBookAuthor(author: unknown) {
   return normalized;
 }
 
+function resolveBookSummary(summary: unknown) {
+  if (typeof summary !== 'string') {
+    return '';
+  }
+
+  const normalized = summary.trim();
+  if (!normalized || /^nan$/i.test(normalized)) {
+    return '';
+  }
+
+  return normalized;
+}
+
 function normalizeBookCardPage(
   raw: any,
   query: string | undefined,
@@ -164,6 +185,29 @@ function normalizeBookCardPage(
   };
 }
 
+function normalizeCatalogCategories(raw: any): CatalogCategory[] {
+  const items = Array.isArray(raw?.items) ? raw.items : Array.isArray(raw) ? raw : null;
+  if (!items) {
+    return createFallbackCatalogCategories();
+  }
+
+  return items.map(normalizeCatalogCategory);
+}
+
+function normalizeCatalogCategory(raw: any): CatalogCategory {
+  const name = typeof raw?.name === 'string' ? raw.name.trim() : '';
+  const id = raw?.id ?? name;
+
+  if (!name || (typeof id !== 'string' && typeof id !== 'number')) {
+    throw new Error('catalog_categories_invalid_payload');
+  }
+
+  return {
+    id,
+    name,
+  };
+}
+
 function createFallbackBookCardPage(
   query: string | undefined,
   limit: number,
@@ -182,10 +226,33 @@ function createFallbackBookCardPage(
   };
 }
 
-function buildSearchParams(query: string | undefined, limit: number, offset: number) {
+function createFallbackCatalogCategories(): CatalogCategory[] {
+  const names = Array.from(
+    new Set(
+      listMockBooks(undefined)
+        .map((book) => book.category?.trim() ?? '')
+        .filter(Boolean)
+    )
+  ).sort((left, right) => left.localeCompare(right, 'zh-Hans-CN'));
+
+  return names.map((name, index) => ({
+    id: `mock-category-${index + 1}`,
+    name,
+  }));
+}
+
+function buildSearchParams(
+  query: string | undefined,
+  limit: number,
+  offset: number,
+  category?: string | null
+) {
   const params = new URLSearchParams();
   if (query) {
     params.set('query', query);
+  }
+  if (category?.trim()) {
+    params.set('category', category.trim());
   }
   params.set('limit', String(limit));
   params.set('offset', String(offset));

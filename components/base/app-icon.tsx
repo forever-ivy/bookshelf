@@ -3,12 +3,14 @@ import {
   Bell,
   Bookmark,
   BookOpen,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CircleUserRound,
   Clock3,
   House,
   Package,
+  Plus,
   Search,
   Sparkles,
   Truck,
@@ -22,11 +24,13 @@ export type AppIconName =
   | 'bell'
   | 'bookmark'
   | 'borrowing'
+  | 'chevronDown'
   | 'chevronLeft'
   | 'chevronRight'
   | 'clock'
   | 'home'
   | 'package'
+  | 'plus'
   | 'profile'
   | 'search'
   | 'spark'
@@ -37,11 +41,13 @@ const iconByName: Record<AppIconName, LucideIcon> = {
   bell: Bell,
   bookmark: Bookmark,
   borrowing: BookOpen,
+  chevronDown: ChevronDown,
   chevronLeft: ChevronLeft,
   chevronRight: ChevronRight,
   clock: Clock3,
   home: House,
   package: Package,
+  plus: Plus,
   profile: CircleUserRound,
   search: Search,
   spark: Sparkles,

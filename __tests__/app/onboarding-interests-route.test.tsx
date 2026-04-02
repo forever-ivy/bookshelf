@@ -59,6 +59,7 @@ describe('OnboardingInterestsRoute', () => {
     expect(screen.getByText('第 2 步，共 2 步')).toBeTruthy();
     expect(screen.getByText(/找书、推荐借阅和专题书单会更贴近你/)).toBeTruthy();
     expect(screen.getByText('完成建档，进入首页')).toBeTruthy();
+    expect(screen.getByTestId('onboarding-interest-artwork')).toBeTruthy();
     expect(screen.queryByText(/首页、推荐和书单会更贴近你的学习节奏/)).toBeNull();
   });
 });

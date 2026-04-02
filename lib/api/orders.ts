@@ -161,13 +161,15 @@ export function normalizeOrder(raw: any): BorrowOrderView {
     throw new Error('order_not_found');
   }
 
+  const rawBook = raw.book ?? raw.borrow_order?.book ?? raw.borrowOrder?.book;
   const bookId = raw.book_id ?? raw.bookId ?? raw.borrow_order?.book_id ?? raw.borrowOrder?.book_id;
   const dueLabel = raw.dueDateLabel ?? raw.due_date_label ?? raw.due_at ?? raw.borrow_order?.due_at ?? '7 天后到期';
   const rawStatus = raw.status;
   const rawNote = raw.note ?? raw.failure_reason ?? raw.borrow_order?.failure_reason ?? '';
   return {
     actionableLabel: raw.actionableLabel ?? raw.actionable_label ?? '查看借阅',
-    book: raw.book ? normalizeBookCard(raw.book) : bookId ? getMockBookForOrder(bookId) : getMockBookForOrder(1),
+    book: rawBook ? normalizeBookCard(rawBook) : bookId ? getMockBookForOrder(bookId) : getMockBookForOrder(1),
+    cancellable: raw.cancellable ?? false,
     dueDateLabel: typeof dueLabel === 'string' ? dueLabel : '7 天后到期',
     id: raw.id ?? raw.borrow_order?.id ?? raw.borrowOrder?.id ?? Date.now(),
     mode: raw.mode ?? raw.order_mode ?? raw.borrow_order?.order_mode ?? 'robot_delivery',
@@ -176,6 +178,7 @@ export function normalizeOrder(raw: any): BorrowOrderView {
         ? readerFacingNoteByCode[rawNote] ?? rawNote
         : '',
     renewable: raw.renewable ?? raw.borrow_order?.renewable ?? false,
+    returnable: raw.returnable ?? false,
     status:
       rawStatus === 'cancelled'
         ? 'cancelled'

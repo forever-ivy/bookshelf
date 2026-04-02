@@ -136,11 +136,13 @@ const defaultOrders: BorrowOrderView[] = [
   {
     actionableLabel: '去续借',
     book: bookDeepLearning,
+    cancellable: false,
     dueDateLabel: '3 月 29 日',
     id: 101,
     mode: 'robot_delivery',
     note: '配套课程：人工智能导论 · 可先看第 1 章',
     renewable: true,
+    returnable: false,
     status: 'renewable',
     statusLabel: '可续借',
     timeline: [
@@ -152,11 +154,13 @@ const defaultOrders: BorrowOrderView[] = [
   {
     actionableLabel: '查看借阅',
     book: bookLearning,
+    cancellable: false,
     dueDateLabel: '4 月 2 日',
     id: 102,
     mode: 'cabinet_pickup',
     note: '课程导读 · 适合先看第 3 章',
     renewable: false,
+    returnable: false,
     status: 'active',
     statusLabel: '进行中',
     timeline: [
@@ -168,11 +172,13 @@ const defaultOrders: BorrowOrderView[] = [
   {
     actionableLabel: '处理归还',
     book: bookPsychology,
+    cancellable: false,
     dueDateLabel: '今天 21:00',
     id: 103,
     mode: 'robot_delivery',
     note: '如果今晚不再使用，可直接发起归还请求',
     renewable: false,
+    returnable: true,
     status: 'dueSoon',
     statusLabel: '临近到期',
     timeline: [{ completed: true, label: '已完成' }],
@@ -410,6 +416,7 @@ export function createMockBorrowOrder(
   const nextOrder: BorrowOrderView = {
     actionableLabel: '去续借',
     book,
+    cancellable: true,
     dueDateLabel: '7 天后到期',
     id: Date.now(),
     mode: options.mode ?? 'robot_delivery',
@@ -417,6 +424,7 @@ export function createMockBorrowOrder(
       ? `模拟下单成功，目标地点：${options.deliveryTarget}`
       : '模拟下单成功，页面已回填到本地状态。',
     renewable: true,
+    returnable: false,
     status: 'active',
     statusLabel: options.mode === 'cabinet_pickup' ? '待取书' : '已下单',
     timeline: [

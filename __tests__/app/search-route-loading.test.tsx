@@ -49,6 +49,13 @@ jest.mock('expo-router', () => {
 });
 
 jest.mock('@/hooks/use-library-app-data', () => ({
+  useCatalogCategoriesQuery: () => ({
+    data: [
+      { id: 1, name: '人工智能' },
+      { id: 2, name: '管理学' },
+    ],
+    isFetching: false,
+  }),
   useCatalogBookSearchPageQuery: () => ({
     data: mockCatalogData,
     error: null,

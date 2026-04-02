@@ -9,15 +9,10 @@ import { SectionTitle } from '@/components/base/section-title';
 import { StateMessageCard } from '@/components/base/state-message-card';
 import { CollectionPreview } from '@/components/me/collection-preview';
 import { ProfileSummaryCard } from '@/components/me/profile-summary-card';
-import { SearchResultCard } from '@/components/search/search-result-card';
-import { SearchResultCardSkeleton } from '@/components/search/search-result-skeleton';
 import { useAppSession } from '@/hooks/use-app-session';
 import {
   useAchievementsQuery,
-  useBooklistsQuery,
-  useFavoritesQuery,
   useMyOverviewQuery,
-  useNotificationsQuery,
 } from '@/hooks/use-library-app-data';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { getLibraryErrorMessage } from '@/lib/api/client';
@@ -105,32 +100,22 @@ function CollectionPreviewSkeleton() {
 }
 
 export function MeScreenContent({
+  onLogout,
   onProfilePress,
 }: {
+  onLogout?: () => void;
   onProfilePress?: () => void;
 }) {
   const { clearSession, profile } = useAppSession();
-  const booklistsQuery = useBooklistsQuery();
-  const favoritesQuery = useFavoritesQuery();
   const overviewQuery = useMyOverviewQuery();
-  const notificationsQuery = useNotificationsQuery();
   const achievementsQuery = useAchievementsQuery();
   const { theme } = useAppTheme();
-  const meError =
-    overviewQuery.error ??
-    booklistsQuery.error ??
-    favoritesQuery.error ??
-    notificationsQuery.error;
-  const totalBooklists =
-    (booklistsQuery.data?.customItems.length ?? 0) + (booklistsQuery.data?.systemItems.length ?? 0);
+  const meError = overviewQuery.error;
   const overview = overviewQuery.data;
   const activeOrders = overview?.recentOrders ?? [];
   const stats = overview?.stats;
   const achievements = achievementsQuery.data;
   const showOverviewSkeleton = !overviewQuery.data && Boolean(overviewQuery.isFetching);
-  const showFavoritesSkeleton = !favoritesQuery.data && Boolean(favoritesQuery.isFetching);
-  const showBooklistsSkeleton = !booklistsQuery.data && Boolean(booklistsQuery.isFetching);
-  const showNotificationsSkeleton = !notificationsQuery.data && Boolean(notificationsQuery.isFetching);
   const showAchievementsSkeleton = !achievements && Boolean(achievementsQuery.isFetching);
   const reminderCards = [
     {
@@ -142,7 +127,7 @@ export function MeScreenContent({
     {
       description: stats
         ? `累计借阅 ${stats.borrowHistoryCount} 本 · 最近找书 ${stats.searchCount} 次`
-        : '借阅记录、收藏和消息会在这里同步更新',
+        : '借阅记录、收藏和书单会在这里同步更新',
       title: stats?.lastActiveAt ? `最近活跃于 ${stats.lastActiveAt}` : '账户记录已同步',
     },
   ];
@@ -153,14 +138,14 @@ export function MeScreenContent({
       title: '当前借阅',
     },
     {
-      count: `${favoritesQuery.data?.length ?? 0} 本`,
-      detail: '你已经收藏的图书',
-      title: '收藏图书',
+      count: `${stats?.borrowHistoryCount ?? 0} 本`,
+      detail: '累计借阅与历史记录概览',
+      title: '借阅历史',
     },
     {
-      count: `${totalBooklists + (notificationsQuery.data?.length ?? 0)} 项`,
-      detail: `${totalBooklists} 组书单 · ${notificationsQuery.data?.length ?? 0} 条通知`,
-      title: '书单与通知',
+      count: `${stats?.searchCount ?? 0} 次`,
+      detail: '最近找书与浏览行为概览',
+      title: '找书记录',
     },
   ];
 
@@ -298,155 +283,10 @@ export function MeScreenContent({
         )}
       </View>
 
-      <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle title="收藏图书" />
-        <View style={{ gap: theme.spacing.lg }}>
-          {showFavoritesSkeleton
-            ? Array.from({ length: 2 }, (_, index) => (
-                <SearchResultCardSkeleton key={`me-favorite-skeleton-${index}`} testID={`me-favorite-skeleton-${index + 1}`} />
-              ))
-            : favoritesQuery.data?.map((item) => (
-                <SearchResultCard
-                  key={item.id}
-                  availability={item.book.availabilityLabel}
-                  author={item.book.author}
-                  coverTone={item.book.coverTone}
-                  eta={item.book.etaLabel}
-                  href={`/books/${item.book.id}`}
-                  location={item.book.cabinetLabel}
-                  reason={item.book.recommendationReason}
-                  summary={item.book.summary}
-                  title={item.book.title}
-                />
-              ))}
-          {favoritesQuery.data?.length === 0 && !favoritesQuery.isError && !showFavoritesSkeleton ? (
-            <StateMessageCard
-              description={'在详情页点一下「加入收藏」，常读和想读的书就会汇总到这里。'}
-              title="还没有收藏图书"
-            />
-          ) : null}
-        </View>
-      </View>
-
-      <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle title="书单" />
-        {showBooklistsSkeleton ? (
-          <View style={{ gap: theme.spacing.sm }} testID="me-booklists-skeleton">
-            {Array.from({ length: 2 }, (_, index) => (
-              <LoadingSkeletonCard key={`me-booklist-skeleton-${index}`}>
-                <LoadingSkeletonBlock height={16} width="36%" />
-                <LoadingSkeletonBlock height={12} width="72%" />
-                <LoadingSkeletonBlock height={12} width="24%" />
-              </LoadingSkeletonCard>
-            ))}
-          </View>
-        ) : (
-          <View style={{ gap: theme.spacing.sm }}>
-            {booklistsQuery.data?.systemItems.map((item) => (
-              <View
-                key={item.id}
-                style={{
-                  backgroundColor: theme.colors.surface,
-                  borderColor: theme.colors.borderStrong,
-                  borderRadius: theme.radii.lg,
-                  borderWidth: 1,
-                  gap: 8,
-                  padding: theme.spacing.lg,
-                }}>
-                <Text style={{ color: theme.colors.text, ...theme.typography.semiBold, fontSize: 15 }}>
-                  {item.title}
-                </Text>
-                <Text style={{ color: theme.colors.textMuted, ...theme.typography.body, fontSize: 13 }}>
-                  {item.description}
-                </Text>
-                <Text style={{ color: theme.colors.textSoft, ...theme.typography.body, fontSize: 12 }}>
-                  {item.books.length} 本图书
-                </Text>
-              </View>
-            ))}
-            {booklistsQuery.data?.customItems.map((item) => (
-              <View
-                key={item.id}
-                style={{
-                  backgroundColor: theme.colors.primarySoft,
-                  borderRadius: theme.radii.lg,
-                  gap: 8,
-                  padding: theme.spacing.lg,
-                }}>
-                <Text style={{ color: theme.colors.primaryStrong, ...theme.typography.semiBold, fontSize: 15 }}>
-                  {item.title}
-                </Text>
-                <Text style={{ color: theme.colors.primaryStrong, ...theme.typography.body, fontSize: 13 }}>
-                  {item.description}
-                </Text>
-                <Text style={{ color: theme.colors.primaryStrong, ...theme.typography.body, fontSize: 12 }}>
-                  {item.books.length} 本图书
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
-      </View>
-
-      <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle title="消息通知" />
-        {showNotificationsSkeleton ? (
-          <View style={{ gap: theme.spacing.md }} testID="me-notifications-skeleton">
-            {Array.from({ length: 2 }, (_, index) => (
-              <LoadingSkeletonCard key={`me-notification-skeleton-${index}`}>
-                <LoadingSkeletonBlock height={12} width="22%" />
-                <LoadingSkeletonBlock height={16} width="44%" />
-                <LoadingSkeletonBlock height={12} width="82%" />
-                <LoadingSkeletonBlock height={12} width="68%" />
-              </LoadingSkeletonCard>
-            ))}
-          </View>
-        ) : (
-          <View style={{ gap: theme.spacing.md }}>
-            {notificationsQuery.data?.map((item) => {
-              const kindLabel = (kind: string) => {
-                if (kind === 'delivery') return '配送提醒';
-                if (kind === 'borrowing') return '借阅提醒';
-                if (kind === 'achievement') return '成就更新';
-                return '系统通知';
-              };
-
-              return (
-                <View
-                  key={item.id}
-                  style={{
-                    backgroundColor: theme.colors.surface,
-                    borderColor: theme.colors.borderStrong,
-                    borderRadius: theme.radii.lg,
-                    borderWidth: 1,
-                    gap: 6,
-                    padding: theme.spacing.lg,
-                  }}>
-                  <Text style={{ color: theme.colors.primaryStrong, ...theme.typography.medium, fontSize: 12 }}>
-                    {kindLabel(item.kind)}
-                  </Text>
-                  <Text style={{ color: theme.colors.text, ...theme.typography.semiBold, fontSize: 15 }}>
-                    {item.title}
-                  </Text>
-                  <Text style={{ color: theme.colors.textMuted, ...theme.typography.body, fontSize: 13, lineHeight: 19 }}>
-                    {item.body}
-                  </Text>
-                </View>
-              );
-            })}
-            {notificationsQuery.data?.length === 0 && !notificationsQuery.isError ? (
-              <StateMessageCard
-                description="借阅状态、书单提醒和馆内通知会出现在这里。"
-                title="暂时没有新消息"
-              />
-            ) : null}
-          </View>
-        )}
-      </View>
-
       <Pressable
         accessibilityRole="button"
         onPress={() => {
+          onLogout?.();
           void clearSession();
         }}
         style={({ pressed }) => ({
