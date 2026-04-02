@@ -7,7 +7,7 @@ from itertools import chain
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.catalog.models import Book
+from app.catalog.models import Book, BookCategory
 from app.inventory.models import BookCopy, BookStock, CabinetSlot
 from app.orders.models import BorrowOrder
 
@@ -111,15 +111,59 @@ def build_book_payloads(session: Session, books: list[Book]) -> list[dict]:
     return [_build_payload_from_maps(book, stocks_by_book, slots_by_book) for book in books]
 
 
+def list_reader_categories(session: Session) -> list[dict]:
+    official_rows = session.execute(
+        select(BookCategory.id, BookCategory.name)
+        .join(Book, Book.category_id == BookCategory.id)
+        .where(BookCategory.status == "active")
+        .group_by(BookCategory.id, BookCategory.name)
+        .order_by(func.lower(BookCategory.name).asc(), BookCategory.id.asc())
+    ).all()
+
+    legacy_rows = session.scalars(
+        select(Book.category)
+        .where(Book.category_id.is_(None))
+        .where(func.trim(func.coalesce(Book.category, "")) != "")
+        .group_by(Book.category)
+        .order_by(func.lower(Book.category).asc(), Book.category.asc())
+    ).all()
+
+    items: list[dict] = []
+    seen_names: set[str] = set()
+
+    for category_id, name in official_rows:
+        normalized_name = _normalize(name)
+        if not normalized_name or normalized_name in seen_names:
+            continue
+        seen_names.add(normalized_name)
+        items.append({"id": category_id, "name": name})
+
+    for name in legacy_rows:
+        normalized_name = _normalize(name)
+        if not normalized_name or normalized_name in seen_names:
+            continue
+        seen_names.add(normalized_name)
+        items.append({"id": f"legacy:{normalized_name}", "name": name})
+
+    return items
+
+
 def search_books(
     session: Session,
     query: str | None = None,
     *,
+    category: str | None = None,
     limit: int | None = None,
     offset: int = 0,
 ) -> tuple[list[Book], int]:
     stmt = select(Book)
     count_stmt = select(func.count()).select_from(Book)
+    clean_category = (category or "").strip().lower()
+    if clean_category:
+        category_filter = func.lower(func.coalesce(Book.category, "")) == clean_category
+        stmt = stmt.where(category_filter)
+        count_stmt = count_stmt.where(category_filter)
+
     clean_query = _normalize(query)
     if clean_query:
         pattern = f"%{clean_query}%"

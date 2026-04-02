@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Body, Depends, status
+from fastapi import APIRouter, Body, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.auth_context import require_reader
@@ -20,10 +20,19 @@ def _require_profile_id(identity: AuthIdentity) -> int:
 
 @router.get("/books")
 def list_favorites_endpoint(
+    query: str | None = Query(default=None, description="Search title, author, category, keywords, or summary"),
+    category: str | None = Query(default=None, description="Filter favorites by exact category name"),
     identity: AuthIdentity = Depends(require_reader),
     session: Session = Depends(get_db),
 ):
-    return {"items": list_favorite_books(session, reader_id=_require_profile_id(identity))}
+    return {
+        "items": list_favorite_books(
+            session,
+            reader_id=_require_profile_id(identity),
+            query=query,
+            category=category,
+        )
+    }
 
 
 @router.post("/books", status_code=status.HTTP_201_CREATED)

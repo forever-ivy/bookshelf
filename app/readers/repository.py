@@ -169,7 +169,7 @@ def get_reader_orders(session: Session, reader_id: int) -> list[dict]:
         .where(BorrowOrder.reader_id == reader_id)
         .order_by(BorrowOrder.created_at.desc(), BorrowOrder.id.desc())
     ).scalars()
-    return [serialize_order(get_order_bundle(session, borrow_order_id)) for borrow_order_id in order_ids]
+    return [serialize_order(get_order_bundle(session, borrow_order_id), session=session) for borrow_order_id in order_ids]
 
 
 def get_reader_conversations(session: Session, reader_id: int) -> list[dict]:

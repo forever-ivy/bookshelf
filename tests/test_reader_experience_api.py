@@ -281,3 +281,46 @@ def test_reader_order_favorites_and_booklists_flow(client):
     assert len(payload["custom_items"]) == 1
     assert payload["custom_items"][0]["books"]
     assert payload["system_items"]
+
+
+def test_reader_favorites_support_server_side_query_and_category_filters(client):
+    state = seed_reader_experience_state()
+    headers = reader_headers(state["account_id"], state["profile_id"])
+
+    client.post(
+        "/api/v1/favorites/books",
+        headers=headers,
+        json={"book_id": state["favorite_book_id"]},
+    )
+    client.post(
+        "/api/v1/favorites/books",
+        headers=headers,
+        json={"book_id": state["secondary_book_id"]},
+    )
+
+    category_response = client.get(
+        "/api/v1/favorites/books",
+        headers=headers,
+        params={"category": "AI"},
+    )
+    assert category_response.status_code == 200
+    category_items = category_response.json()["items"]
+    assert [item["book"]["id"] for item in category_items] == [state["favorite_book_id"]]
+
+    query_response = client.get(
+        "/api/v1/favorites/books",
+        headers=headers,
+        params={"query": "概率"},
+    )
+    assert query_response.status_code == 200
+    query_items = query_response.json()["items"]
+    assert [item["book"]["id"] for item in query_items] == [state["secondary_book_id"]]
+
+    combined_response = client.get(
+        "/api/v1/favorites/books",
+        headers=headers,
+        params={"query": "推荐", "category": "AI"},
+    )
+    assert combined_response.status_code == 200
+    combined_items = combined_response.json()["items"]
+    assert [item["book"]["id"] for item in combined_items] == [state["favorite_book_id"]]

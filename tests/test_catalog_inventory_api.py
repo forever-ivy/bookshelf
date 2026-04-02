@@ -158,6 +158,16 @@ def test_books_endpoint_searches_title_author_category_and_keywords(client, app)
     assert [item["id"] for item in items] == [ids["principia_id"]]
 
 
+def test_books_endpoint_supports_exact_category_filtering(client, app):
+    ids = seed_catalog_data(app)
+
+    response = client.get("/api/v1/catalog/books", params={"category": "科幻文学"})
+
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert [item["id"] for item in items] == [ids["dune_id"]]
+
+
 def test_books_endpoint_exposes_official_category_without_classification_code(client, app):
     ids = seed_catalog_data(app)
 
@@ -168,6 +178,53 @@ def test_books_endpoint_exposes_official_category_without_classification_code(cl
     assert [item["id"] for item in items] == [ids["principia_id"]]
     assert items[0]["category"] == "物理学"
     assert "classification_code" not in items[0]
+
+
+def test_categories_endpoint_lists_active_reader_categories_without_admin_fields(client, app):
+    from app.catalog.models import Book, BookCategory
+    from app.core.database import get_session_factory
+
+    session = get_session_factory()()
+    try:
+        active_category = BookCategory(code="ai", name="人工智能", description="AI 相关图书", status="active")
+        disabled_category = BookCategory(code="legacy", name="旧分类", description="不再对读者展示", status="disabled")
+        empty_category = BookCategory(code="empty", name="空分类", description="没有图书", status="active")
+        session.add_all([active_category, disabled_category, empty_category])
+        session.flush()
+        session.add_all(
+            [
+                Book(
+                    title="机器学习导论",
+                    author="周志华",
+                    category_id=active_category.id,
+                    category=active_category.name,
+                    keywords="machine learning,ai",
+                    summary="适合课程导读。",
+                ),
+                Book(
+                    title="旧系统维护手册",
+                    author="历史作者",
+                    category_id=disabled_category.id,
+                    category=disabled_category.name,
+                    keywords="legacy",
+                    summary="用于验证禁用分类不会对读者暴露。",
+                ),
+            ]
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    response = client.get("/api/v1/catalog/categories")
+
+    assert response.status_code == 200
+    payload = response.json()
+    names = [item["name"] for item in payload["items"]]
+    assert "人工智能" in names
+    assert "旧分类" not in names
+    assert "空分类" not in names
+    assert "code" not in payload["items"][0]
+    assert payload["total"] == 1
 
 
 def test_book_detail_uses_inventory_projection_without_exposing_cabinet_semantics(client, app):
@@ -268,6 +325,20 @@ def test_explicit_books_search_is_paginated_for_broad_queries(client, app):
     assert next_payload["total"] == 35
     assert next_payload["has_more"] is False
     assert len(next_payload["items"]) == 15
+
+
+def test_explicit_books_search_respects_category_filter(client, app):
+    ids = seed_catalog_data(app)
+
+    response = client.get(
+        "/api/v1/catalog/books/search",
+        params={"query": "physics", "category": "科幻文学"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["items"] == []
+    assert payload["total"] == 0
 
 
 def test_explicit_books_search_ranks_title_matches_ahead_of_summary_only_matches(client, app):

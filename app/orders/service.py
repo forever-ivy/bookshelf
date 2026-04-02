@@ -448,11 +448,14 @@ def serialize_order(bundle: OrderBundle, *, session: Session | None = None) -> d
     )
     status = _reader_status(bundle)
     renewable = _is_order_renewable(bundle.borrow_order)
+    cancellable = _is_bundle_cancellable(bundle)
+    returnable = _is_bundle_returnable(session, bundle) if session is not None else False
     payload["borrow_order"]["renewable"] = renewable
     payload.update(
         {
             "actionableLabel": "去续借" if renewable else "查看借阅",
             "book": book_payload,
+            "cancellable": cancellable,
             "dueDateLabel": _reader_due_date_label(bundle.borrow_order),
             "mode": bundle.borrow_order.order_mode,
             "note": bundle.borrow_order.failure_reason
@@ -462,6 +465,7 @@ def serialize_order(bundle: OrderBundle, *, session: Session | None = None) -> d
                 else "订单状态由后端履约流转驱动。"
             ),
             "renewable": renewable,
+            "returnable": returnable,
             "status": status,
             "statusLabel": _reader_status_label(status),
             "timeline": _reader_timeline(bundle),
@@ -563,6 +567,17 @@ def _is_bundle_cancellable(bundle: OrderBundle) -> bool:
             and (bundle.robot_task is None or bundle.robot_task.status == "assigned")
         )
     return False
+
+
+def _is_bundle_returnable(session: Session, bundle: OrderBundle) -> bool:
+    if bundle.borrow_order.assigned_copy_id is None:
+        return False
+    copy = session.get(BookCopy, bundle.borrow_order.assigned_copy_id)
+    if copy is None or copy.inventory_status != "borrowed":
+        return False
+    if _find_open_return_request(session, borrow_order_id=bundle.borrow_order.id) is not None:
+        return False
+    return True
 
 
 def _find_open_return_request(session: Session, *, borrow_order_id: int) -> ReturnRequest | None:

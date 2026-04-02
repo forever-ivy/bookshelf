@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import timezone, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.admin.models import TopicBooklist, TopicBooklistItem
@@ -54,14 +54,57 @@ def _favorite_out(session: Session, favorite: FavoriteBook) -> dict:
     }
 
 
-def list_favorite_books(session: Session, *, reader_id: int) -> list[dict]:
+def _favorite_out_from_payload(favorite: FavoriteBook, book_payload: dict) -> dict:
+    return {
+        "id": favorite.id,
+        "book_id": favorite.book_id,
+        "created_at": _iso(favorite.created_at),
+        "book": book_payload,
+    }
+
+
+def _normalize_search_text(value: str | None) -> str:
+    return (value or "").strip().lower()
+
+
+def list_favorite_books(
+    session: Session,
+    *,
+    reader_id: int,
+    query: str | None = None,
+    category: str | None = None,
+) -> list[dict]:
     _require_profile(session, reader_id)
-    rows = session.scalars(
-        select(FavoriteBook)
+    stmt = (
+        select(FavoriteBook, Book)
+        .join(Book, FavoriteBook.book_id == Book.id)
         .where(FavoriteBook.reader_id == reader_id)
         .order_by(FavoriteBook.created_at.desc(), FavoriteBook.id.desc())
-    ).all()
-    return [_favorite_out(session, row) for row in rows]
+    )
+
+    clean_query = _normalize_search_text(query)
+    if clean_query:
+        pattern = f"%{clean_query}%"
+        stmt = stmt.where(
+            or_(
+                func.lower(Book.title).like(pattern),
+                func.lower(func.coalesce(Book.author, "")).like(pattern),
+                func.lower(func.coalesce(Book.category, "")).like(pattern),
+                func.lower(func.coalesce(Book.keywords, "")).like(pattern),
+                func.lower(func.coalesce(Book.summary, "")).like(pattern),
+            )
+        )
+
+    clean_category = (category or "").strip()
+    if clean_category:
+        stmt = stmt.where(func.lower(func.coalesce(Book.category, "")) == clean_category.lower())
+
+    rows = session.execute(stmt).all()
+    book_payloads = build_book_payloads(session, [book for _, book in rows])
+    return [
+        _favorite_out_from_payload(favorite, book_payload)
+        for (favorite, _book), book_payload in zip(rows, book_payloads, strict=False)
+    ]
 
 
 def add_favorite_book(session: Session, *, reader_id: int, book_id: int) -> dict:
