@@ -7,13 +7,17 @@ import { appArtwork } from '@/lib/app/artwork';
 import { profilePortrait } from '@/lib/app/mock-data';
 
 export function ReadingProfileHero({
-  headline = profilePortrait.headline,
+  headline = '借阅档案',
   keywords = profilePortrait.keywords,
   schedule = '晚间 19:00 - 22:00 最稳定',
+  summary = profilePortrait.subtitle,
+  title = '借阅偏好概览',
 }: {
   headline?: string;
   keywords?: readonly string[];
   schedule?: string;
+  summary?: string;
+  title?: string;
 }) {
   const { theme } = useAppTheme();
 
@@ -25,25 +29,61 @@ export function ReadingProfileHero({
         borderRadius: theme.radii.lg,
         borderWidth: 1,
       }}>
-      <View style={{ gap: theme.spacing.lg, padding: theme.spacing.xl }}>
-        <View style={{ gap: 4 }}>
+      <View style={{ gap: theme.spacing.xl, padding: theme.spacing.xl }}>
+        <View style={{ gap: theme.spacing.sm }}>
+          <Text
+            style={{
+              color: theme.colors.primaryStrong,
+              ...theme.typography.medium,
+              fontSize: 11,
+              letterSpacing: 0.8,
+            }}>
+            PROFILE
+          </Text>
           <Text
             style={{
               color: theme.colors.text,
               ...theme.typography.heading,
-              fontSize: 30,
-              letterSpacing: -0.6,
-              lineHeight: 36,
+              fontSize: 34,
+              letterSpacing: -0.8,
+              lineHeight: 40,
             }}>
             {headline}
           </Text>
+          <Text
+            style={{
+              color: theme.colors.text,
+              ...theme.typography.semiBold,
+              fontSize: 17,
+              lineHeight: 24,
+            }}>
+            {title}
+          </Text>
+          <Text
+            style={{
+              color: theme.colors.textMuted,
+              ...theme.typography.body,
+              fontSize: 14,
+              lineHeight: 22,
+              maxWidth: 280,
+            }}>
+            {summary}
+          </Text>
         </View>
-        <EditorialIllustration
-          height={168}
-          inset={false}
-          source={appArtwork.notionInterestSelection}
-          testID="profile-artwork"
-        />
+        <View
+          style={{
+            backgroundColor: theme.colors.backgroundStrong,
+            borderRadius: theme.radii.xl,
+            overflow: 'hidden',
+            padding: theme.spacing.sm,
+          }}>
+          <EditorialIllustration
+            height={168}
+            inset={false}
+            source={appArtwork.notionInterestSelection}
+            testID="profile-artwork"
+          />
+        </View>
         <View
           style={{
             borderTopColor: theme.colors.borderSoft,
@@ -54,7 +94,7 @@ export function ReadingProfileHero({
           }}>
           <View style={{ flex: 1, gap: 4 }}>
             <Text
-            style={{
+              style={{
                 color: theme.colors.textSoft,
                 ...theme.typography.medium,
                 fontSize: 12,
@@ -73,12 +113,12 @@ export function ReadingProfileHero({
           </View>
           <View style={{ flex: 1, gap: 4 }}>
             <Text
-            style={{
+              style={{
                 color: theme.colors.textSoft,
                 ...theme.typography.medium,
                 fontSize: 12,
               }}>
-              阅读习惯
+              近期节奏
             </Text>
             <Text
               style={{

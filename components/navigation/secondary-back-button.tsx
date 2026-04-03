@@ -11,6 +11,9 @@ import { useAppTheme } from '@/hooks/use-app-theme';
 type SecondaryBackButtonProps = {
   glassVisible?: boolean;
   label?: string;
+  onPress?: () => void;
+  testID?: string;
+  variant?: 'floating' | 'inline';
 };
 
 function supportsSwiftUiGlassButton() {
@@ -29,6 +32,9 @@ function supportsSwiftUiGlassButton() {
 export function SecondaryBackButton({
   glassVisible = true,
   label = '返回一级',
+  onPress,
+  testID = 'secondary-back-button',
+  variant = 'floating',
 }: SecondaryBackButtonProps) {
   const router = useRouter();
   const { theme } = useAppTheme();
@@ -37,6 +43,28 @@ export function SecondaryBackButton({
     []
   );
   const canUseSwiftButton = supportsSwiftUiGlassButton();
+  const handlePress = onPress ?? (() => router.back());
+
+  if (variant === 'inline') {
+    return (
+      <Pressable
+        accessibilityLabel={label}
+        accessibilityRole="button"
+        onPress={handlePress}
+        style={({ pressed }) => ({
+          alignItems: 'center',
+          borderRadius: theme.radii.pill,
+          height: 44,
+          justifyContent: 'center',
+          marginLeft: -8,
+          opacity: pressed ? 0.72 : 1,
+          width: 44,
+        })}
+        testID={testID}>
+        <AppIcon color={theme.colors.text} name="chevronLeft" size={22} strokeWidth={2.05} />
+      </Pressable>
+    );
+  }
 
   const sharedWrapperStyle = {
     alignSelf: 'flex-start' as const,
@@ -48,7 +76,7 @@ export function SecondaryBackButton({
       <View
         pointerEvents={glassVisible ? 'auto' : 'none'}
         style={sharedWrapperStyle}
-        testID="secondary-back-button">
+        testID={testID}>
         <View testID="secondary-back-button-fallback">
           <GlassSurface
             interactive
@@ -63,7 +91,7 @@ export function SecondaryBackButton({
             <Pressable
               accessibilityLabel={label}
               accessibilityRole="button"
-              onPress={() => router.back()}
+              onPress={handlePress}
               style={{
                 alignItems: 'center',
                 borderRadius: theme.radii.pill,
@@ -84,12 +112,12 @@ export function SecondaryBackButton({
     <View
       pointerEvents={glassVisible ? 'auto' : 'none'}
       style={sharedWrapperStyle}
-      testID="secondary-back-button">
+      testID={testID}>
       <Host matchContents style={{ alignSelf: 'flex-start' }} testID="secondary-back-button-host">
         <Button
           label={label}
           modifiers={buttonModifiers}
-          onPress={() => router.back()}
+          onPress={handlePress}
           systemImage="chevron.backward"
           testID="secondary-back-button-swift"
         />

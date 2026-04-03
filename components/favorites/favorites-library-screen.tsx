@@ -39,7 +39,13 @@ function buildFavoritesFilters(categories: CatalogCategory[]) {
   ];
 }
 
-export function FavoritesLibraryScreen({ query }: { query: string }) {
+export function FavoritesLibraryScreen({
+  pageTitle,
+  query,
+}: {
+  pageTitle?: string;
+  query: string;
+}) {
   const { theme } = useAppTheme();
   const [activeFilter, setActiveFilter] = React.useState<FavoritesFilterKey>('all');
   const normalizedQuery = query.trim();
@@ -75,7 +81,7 @@ export function FavoritesLibraryScreen({ query }: { query: string }) {
   }, [activeFilter, filters]);
 
   return (
-    <PageShell insetBottom={112} mode="task">
+    <PageShell insetBottom={112} mode="task" pageTitle={pageTitle}>
       <View style={{ gap: theme.spacing.lg }}>
         <SectionTitle title="筛选" />
         <SearchFilterStrip

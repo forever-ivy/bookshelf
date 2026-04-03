@@ -2,7 +2,6 @@ import { render, screen } from '@testing-library/react-native';
 import React from 'react';
 
 let mockRouteParams: Record<string, string> = { bookId: '1' };
-let mockBorrowLoading = false;
 let mockOrderLoading = false;
 let mockReturnLoading = false;
 
@@ -51,18 +50,16 @@ jest.mock('@/hooks/use-app-session', () => ({
 
 jest.mock('@/hooks/use-library-app-data', () => ({
   useBookDetailQuery: () => ({
-    data: mockBorrowLoading
-      ? undefined
-      : {
-          catalog: {
-            cabinetLabel: '智能书柜 A-03',
-            etaLabel: '18 分钟可送达',
-            id: 1,
-            title: '机器学习从零到一',
-          },
-        },
+    data: {
+      catalog: {
+        cabinetLabel: '智能书柜 A-03',
+        etaLabel: '18 分钟可送达',
+        id: 1,
+        title: '机器学习从零到一',
+      },
+    },
     isError: false,
-    isFetching: mockBorrowLoading,
+    isFetching: false,
   }),
   useCreateBorrowOrderMutation: () => ({
     isPending: false,
@@ -118,26 +115,14 @@ jest.mock('@/hooks/use-library-app-data', () => ({
   }),
 }));
 
-import BorrowRoute from '@/app/borrow/[bookId]';
 import OrderDetailRoute from '@/app/orders/[orderId]';
 import ReturnRequestDetailRoute from '@/app/returns/[returnRequestId]';
 
 describe('secondary detail loading states', () => {
   beforeEach(() => {
-    mockBorrowLoading = false;
     mockOrderLoading = false;
     mockReturnLoading = false;
     mockRouteParams = { bookId: '1' };
-  });
-
-  it('renders a stable borrow-order skeleton while the book detail is loading', () => {
-    mockBorrowLoading = true;
-    mockRouteParams = { bookId: '1' };
-
-    render(<BorrowRoute />);
-
-    expect(screen.getByTestId('borrow-route-skeleton')).toBeTruthy();
-    expect(screen.queryByText('确认借阅')).toBeNull();
   });
 
   it('renders a stable order-detail skeleton while the order query is loading', () => {

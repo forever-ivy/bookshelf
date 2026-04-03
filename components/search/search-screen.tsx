@@ -74,10 +74,12 @@ export function resolveSearchText(value: unknown) {
 export function SearchScreen({
   borrowNowMode = false,
   onScroll,
+  pageTitle,
   query,
 }: {
   borrowNowMode?: boolean;
   onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  pageTitle?: string;
   query: string;
 }) {
   const normalizedQuery = query.trim();
@@ -382,7 +384,7 @@ export function SearchScreen({
 
   return (
     <View style={{ flex: 1 }}>
-      <PageShell insetBottom={shellInsetBottom} mode="task" onScroll={onScroll}>
+      <PageShell insetBottom={shellInsetBottom} mode="task" onScroll={onScroll} pageTitle={pageTitle}>
         {borrowNowMode ? (
           <View
             style={{

@@ -65,6 +65,7 @@ describe('GlobalSecondaryBackLayer', () => {
     const { rerender } = render(<GlobalSecondaryBackLayer />);
 
     expect(screen.getByTestId('secondary-back-layer')).toBeTruthy();
+    expect(screen.queryByTestId('toolbar-header-row')).toBeNull();
     expect(screen.getByTestId('secondary-back-button')).toBeTruthy();
     expect(screen.getByTestId('secondary-back-layer').props.style.top).toBe(34);
 
@@ -88,11 +89,14 @@ describe('GlobalSecondaryBackLayer', () => {
     expect(mockBack).toHaveBeenCalledTimes(1);
   });
 
-  it('uses interactive liquid glass and animates the glass style during exit', () => {
+  it('falls back to the floating glass back button on untitled secondary routes', () => {
+    mockPathname = '/me';
+
     const { rerender } = render(<GlobalSecondaryBackLayer />);
 
     expect(screen.queryByTestId('secondary-back-ambient-blur')).toBeNull();
     expect(screen.queryByTestId('secondary-back-ambient-glass')).toBeNull();
+    expect(screen.queryByTestId('toolbar-header-row')).toBeNull();
     expect(screen.getByTestId('secondary-back-button-host')).toBeTruthy();
     expect(screen.getByTestId('secondary-back-button-swift')).toBeTruthy();
     expect(screen.getByText('chevron.backward')).toBeTruthy();
@@ -135,5 +139,13 @@ describe('GlobalSecondaryBackLayer', () => {
     expect(shouldShowSecondaryBackButton('/profile')).toBe(true);
     expect(shouldShowSecondaryBackButton('/books/42')).toBe(true);
     expect(shouldShowSecondaryBackButton('/onboarding/profile')).toBe(true);
+  });
+
+  it('does not render a secondary title inside the back layer', () => {
+    mockPathname = '/books/42';
+
+    render(<GlobalSecondaryBackLayer />);
+
+    expect(screen.queryByText('图书详情')).toBeNull();
   });
 });

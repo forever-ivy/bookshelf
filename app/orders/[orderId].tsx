@@ -69,7 +69,7 @@ export default function OrderDetailRoute() {
 
   return (
     <ProtectedRoute>
-      <PageShell mode="workspace">
+      <PageShell mode="workspace" pageTitle="借阅状态">
         {orderQuery.isError ? (
           <StateMessageCard
             description={getLibraryErrorMessage(orderQuery.error, '订单详情暂时不可用，请检查 orders 接口。')}

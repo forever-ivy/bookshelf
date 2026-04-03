@@ -5,6 +5,7 @@ import {
   type NativeSyntheticEvent,
   Platform,
   ScrollView,
+  Text,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,6 +20,7 @@ export function PageShell({
   mode = 'discovery',
   onScroll,
   padded = true,
+  pageTitle,
   scrollEnabled = true,
   scrollEventThrottle,
   scrollViewResetKey,
@@ -30,6 +32,7 @@ export function PageShell({
   mode?: 'discovery' | 'task' | 'workspace';
   onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
   padded?: boolean;
+  pageTitle?: string;
   scrollEnabled?: boolean;
   scrollEventThrottle?: number;
   scrollViewResetKey?: number | string;
@@ -67,6 +70,21 @@ export function PageShell({
       scrollEventThrottle={onScroll ? (scrollEventThrottle ?? 16) : undefined}
       showsVerticalScrollIndicator={false}
       {...scrollViewProps}>
+      {pageTitle ? (
+        <View style={{ gap: theme.spacing.sm }} testID="page-shell-page-title-container">
+          <Text
+            style={{
+              color: theme.colors.text,
+              ...theme.typography.heading,
+              fontSize: 32,
+              letterSpacing: -0.9,
+              lineHeight: 38,
+            }}
+            testID="page-shell-page-title">
+            {pageTitle}
+          </Text>
+        </View>
+      ) : null}
       {children}
     </ScrollView>
   );

@@ -56,7 +56,7 @@ export default function OnboardingInterestsRoute() {
   };
 
   return (
-    <PageShell mode="workspace">
+    <PageShell mode="workspace" pageTitle="选择借阅偏好">
       <View style={{ gap: theme.spacing.lg }}>
         <Text
           style={{

@@ -25,7 +25,7 @@ export default function BorrowNowSearchRoute() {
           headerSearchBarOptions,
         }}
       />
-      <SearchScreen borrowNowMode query={query} />
+      <SearchScreen borrowNowMode pageTitle="立即可借" query={query} />
     </>
   );
 }

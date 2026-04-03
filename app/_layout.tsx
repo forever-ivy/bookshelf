@@ -1,17 +1,28 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React from 'react';
+import { Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 import { Toaster } from 'sonner-native';
 
+import { SecondaryBackButton } from '@/components/navigation/secondary-back-button';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { AppProviders } from '@/providers/app-providers';
 import { ProfileSheetProvider } from '@/providers/profile-sheet-provider';
 
+function createSecondaryHeaderOptions() {
+  return {
+    headerLeft: () => <SecondaryBackButton testID="secondary-inline-back-button" variant="inline" />,
+    presentation: 'card' as const,
+    title: '',
+  };
+}
+
 export default function RootLayout() {
   const { theme } = useAppTheme();
+  const isIos = Platform.OS === 'ios';
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -26,47 +37,31 @@ export default function RootLayout() {
                 headerBackButtonDisplayMode: 'minimal',
                 headerShadowVisible: false,
                 headerStyle: {
-                  backgroundColor: theme.colors.backgroundWorkspace,
+                  backgroundColor: isIos ? 'transparent' : theme.colors.backgroundWorkspace,
                 },
+                headerTitleStyle: isIos
+                  ? {
+                      color: 'transparent',
+                    }
+                  : undefined,
                 headerTintColor: theme.colors.text,
+                headerTransparent: isIos,
               }}>
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
               <Stack.Screen
                 name="login"
                 options={{ headerShown: false, presentation: 'card', title: '登录与身份绑定' }}
               />
-              <Stack.Screen name="register" options={{ presentation: 'card', title: '创建账号' }} />
-              <Stack.Screen
-                name="onboarding/profile"
-                options={{ presentation: 'card', title: '完善借阅资料' }}
-              />
-              <Stack.Screen
-                name="onboarding/interests"
-                options={{ presentation: 'card', title: '选择借阅偏好' }}
-              />
-              <Stack.Screen name="books/[bookId]" options={{ presentation: 'card', title: '图书详情' }} />
-              <Stack.Screen name="booklists/[booklistId]" options={{ presentation: 'card', title: '书单详情' }} />
-              <Stack.Screen name="favorites/index" options={{ presentation: 'card', title: '收藏图书' }} />
-              <Stack.Screen name="borrow/[bookId]" options={{ presentation: 'card', title: '借阅下单' }} />
-              <Stack.Screen name="orders/[orderId]" options={{ presentation: 'card', title: '借阅状态' }} />
-              <Stack.Screen
-                name="returns/[returnRequestId]"
-                options={{ presentation: 'card', title: '归还请求详情' }}
-              />
-              <Stack.Screen
-                name="profile"
-                options={{
-                  presentation: 'card',
-                  title: '借阅偏好',
-                }}
-              />
-              <Stack.Screen
-                name="marker-examples"
-                options={{
-                  presentation: 'card',
-                  title: '文字高亮示例',
-                }}
-              />
+              <Stack.Screen name="register" options={createSecondaryHeaderOptions()} />
+              <Stack.Screen name="onboarding/profile" options={createSecondaryHeaderOptions()} />
+              <Stack.Screen name="onboarding/interests" options={createSecondaryHeaderOptions()} />
+              <Stack.Screen name="books/[bookId]" options={createSecondaryHeaderOptions()} />
+              <Stack.Screen name="booklists/[booklistId]" options={createSecondaryHeaderOptions()} />
+              <Stack.Screen name="favorites/index" options={createSecondaryHeaderOptions()} />
+              <Stack.Screen name="orders/[orderId]" options={createSecondaryHeaderOptions()} />
+              <Stack.Screen name="returns/[returnRequestId]" options={createSecondaryHeaderOptions()} />
+              <Stack.Screen name="profile" options={createSecondaryHeaderOptions()} />
+              <Stack.Screen name="marker-examples" options={createSecondaryHeaderOptions()} />
             </Stack>
           </ProfileSheetProvider>
           <StatusBar style="dark" />

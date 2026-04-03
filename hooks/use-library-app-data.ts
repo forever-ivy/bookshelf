@@ -2,6 +2,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 
 import {
   cancelBorrowOrder,
+  addBookToBooklist,
   createBooklist,
   createBorrowOrder,
   createReturnRequest,
@@ -443,6 +444,18 @@ export function useCreateBooklistMutation() {
 
   return useMutation({
     mutationFn: (input: Parameters<typeof createBooklist>[0]) => createBooklist(input, token),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['booklists'] });
+    },
+  });
+}
+
+export function useAddBookToBooklistMutation() {
+  const queryClient = useQueryClient();
+  const { token } = useAppSession();
+
+  return useMutation({
+    mutationFn: (input: Parameters<typeof addBookToBooklist>[0]) => addBookToBooklist(input, token),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['booklists'] });
     },

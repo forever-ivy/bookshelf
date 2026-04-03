@@ -36,7 +36,7 @@ jest.mock('@/lib/api/mock', () => ({
 
 import { libraryRequest } from '@/lib/api/client';
 import { createMockBooklist, listMockBooklists } from '@/lib/api/mock';
-import { createBooklist, listBooklists } from '@/lib/api/booklists';
+import { addBookToBooklist, createBooklist, listBooklists, removeBookFromBooklist } from '@/lib/api/booklists';
 
 describe('booklists contract', () => {
   beforeEach(() => {
@@ -104,5 +104,32 @@ describe('booklists contract', () => {
         title: '近期想借的纸书',
       })
     );
+  });
+
+  it('keeps add/remove-booklist-book actions on the real API path', async () => {
+    (libraryRequest as jest.Mock)
+      .mockRejectedValueOnce({
+        code: 'http_500',
+        name: 'LibraryApiError',
+        status: 500,
+      })
+      .mockRejectedValueOnce({
+        code: 'http_500',
+        name: 'LibraryApiError',
+        status: 500,
+      });
+
+    await expect(addBookToBooklist({ bookId: 7, booklistId: 'watch-later' }, 'reader-token')).rejects.toMatchObject({
+      code: 'http_500',
+      name: 'LibraryApiError',
+      status: 500,
+    });
+    await expect(removeBookFromBooklist({ bookId: 7, booklistId: 'watch-later' }, 'reader-token')).rejects.toMatchObject({
+      code: 'http_500',
+      name: 'LibraryApiError',
+      status: 500,
+    });
+
+    expect(createMockBooklist).not.toHaveBeenCalled();
   });
 });

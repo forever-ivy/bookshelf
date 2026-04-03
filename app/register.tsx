@@ -72,7 +72,7 @@ export default function RegisterRoute() {
   };
 
   return (
-    <PageShell mode="workspace">
+    <PageShell mode="workspace" pageTitle="创建账号">
       <View style={{ gap: theme.spacing.xl }}>
         <EditorialIllustration
           height={176}

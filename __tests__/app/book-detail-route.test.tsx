@@ -1,16 +1,25 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import React from 'react';
 
 let mockDetailLoading = false;
 let mockCollaborativeLoading = false;
 let mockSimilarLoading = false;
 let mockHybridLoading = false;
+let mockSearchParams: Record<string, string | undefined> = { bookId: '1' };
 
 const mockRouter = {
   back: jest.fn(),
   push: jest.fn(),
 };
 const mockOpenProfileSheet = jest.fn();
+const mockBorrowMutateAsync = jest.fn(async () => ({ id: 101 }));
+const mockAddBookToBooklistMutateAsync = jest.fn(async () => ({
+  books: [],
+  description: '准备晚点读',
+  id: 'watch-later',
+  source: 'custom',
+  title: '稍后再看',
+}));
 
 const mockCreateBooklistMutation = {
   isPending: false,
@@ -21,6 +30,25 @@ const mockCreateBooklistMutation = {
     source: 'custom',
     title: '稍后阅读',
   })),
+};
+const mockBooklistsQueryData = {
+  customItems: [
+    {
+      books: [],
+      description: '准备晚点读',
+      id: 'watch-later',
+      source: 'custom' as const,
+      title: '稍后再看',
+    },
+    {
+      books: [],
+      description: '算法课补充',
+      id: 'algorithms',
+      source: 'custom' as const,
+      title: '算法复习',
+    },
+  ],
+  systemItems: [],
 };
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -61,9 +89,13 @@ jest.mock('expo-router', () => {
 
   const Link = ({ children }: { children: React.ReactNode }) =>
     React.createElement(View, null, children);
-  Link.Preview = () => null;
-  Link.Trigger = ({ children }: { children: React.ReactNode }) =>
+  const LinkPreview = () => null;
+  LinkPreview.displayName = 'LinkPreview';
+  const LinkTrigger = ({ children }: { children: React.ReactNode }) =>
     React.createElement(View, null, children);
+  LinkTrigger.displayName = 'LinkTrigger';
+  Link.Preview = LinkPreview;
+  Link.Trigger = LinkTrigger;
 
   return {
     Link,
@@ -72,7 +104,7 @@ jest.mock('expo-router', () => {
         href,
         testID: 'route-redirect',
       }),
-    useLocalSearchParams: () => ({ bookId: '1' }),
+    useLocalSearchParams: () => mockSearchParams,
     usePathname: () => '/books/1',
     useRouter: () => mockRouter,
   };
@@ -181,10 +213,19 @@ jest.mock('@/hooks/use-library-app-data', () => ({
         },
     isFetching: mockDetailLoading,
   }),
+  useBooklistsQuery: () => ({
+    data: mockBooklistsQueryData,
+    error: null,
+    isFetching: false,
+  }),
+  useAddBookToBooklistMutation: () => ({
+    isPending: false,
+    mutateAsync: mockAddBookToBooklistMutateAsync,
+  }),
   useCreateBooklistMutation: () => mockCreateBooklistMutation,
   useCreateBorrowOrderMutation: () => ({
     isPending: false,
-    mutateAsync: jest.fn(async () => ({ id: 101 })),
+    mutateAsync: mockBorrowMutateAsync,
   }),
   useCollaborativeBooksQuery: () => ({
     data: mockCollaborativeLoading
@@ -292,70 +333,141 @@ describe('BookDetailRoute', () => {
     mockCollaborativeLoading = false;
     mockSimilarLoading = false;
     mockHybridLoading = false;
+    mockSearchParams = { bookId: '1' };
   });
 
-  it('prioritizes borrowing decisions and keeps recommendation language user-facing', () => {
+  it('uses a single detail skeleton with discovery grouped in the lower half', () => {
     render(<BookDetailRoute />);
 
-    expect(screen.getByText('馆藏与借阅')).toBeTruthy();
-    expect(screen.getByText('智能书柜 A-03')).toBeTruthy();
+    expect(screen.getByText('图书详情')).toBeTruthy();
+    expect(screen.queryByText('先看清这本书，再决定要不要借。')).toBeNull();
+    expect(screen.getByText('借阅决策')).toBeTruthy();
+    expect(screen.getByText('主馆 2 楼 · 智能书柜 A-03')).toBeTruthy();
     expect(screen.getAllByText('可送达').length).toBeGreaterThan(0);
-    expect(screen.getByText('为什么可能适合你')).toBeTruthy();
+    expect(screen.getByText('内容信息')).toBeTruthy();
+    expect(screen.queryByText('目录')).toBeNull();
+    expect(screen.getByText('延伸发现')).toBeTruthy();
+    expect(screen.getByText('推荐给你')).toBeTruthy();
     expect(screen.getByText('与你本周的课程和 AI 学习记录最相关')).toBeTruthy();
     expect(screen.getByText('借过这本的人也借了')).toBeTruthy();
     expect(screen.getByText('Deep Learning')).toBeTruthy();
-    expect(screen.getByText('同主题图书')).toBeTruthy();
+    expect(screen.getByText('同主题延伸')).toBeTruthy();
     expect(screen.getByText('心理学入门')).toBeTruthy();
     expect(screen.getByText('你可能还想借')).toBeTruthy();
     expect(screen.getByText('统计学习方法')).toBeTruthy();
+    expect(screen.getAllByTestId('book-detail-discovery-chevron').length).toBe(3);
     expect(screen.getByText('已收藏')).toBeTruthy();
-    expect(screen.getByText('加入稍后阅读')).toBeTruthy();
-    expect(screen.queryByText('推荐理由')).toBeNull();
-    expect(screen.queryByText('综合推荐')).toBeNull();
+    expect(screen.getByText('加入书单')).toBeTruthy();
+    expect(screen.queryByTestId('book-detail-request-delivery')).toBeNull();
+    expect(screen.queryByTestId('book-detail-pickup-borrow')).toBeNull();
+    expect(screen.queryByText('为什么可能适合你')).toBeNull();
+    expect(screen.queryByText('同主题图书')).toBeNull();
     expect(screen.queryByText('默认书柜')).toBeNull();
     expect(screen.queryByText('馆藏位置待确认')).toBeNull();
-    expect(screen.getAllByText('书库').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('book-detail-cover-shell').props.style).not.toMatchObject({
+      backgroundColor: expect.anything(),
+    });
   });
 
-  it('adds the book into a later-reading list and opens the profile sheet', async () => {
+  it('opens the booklist picker and adds the book into the existing watch-later list', async () => {
     render(<BookDetailRoute />);
 
-    fireEvent.press(screen.getByText('加入稍后阅读'));
+    fireEvent.press(screen.getByText('加入书单'));
 
-    expect(mockCreateBooklistMutation.mutateAsync).toHaveBeenCalledWith({
-      bookIds: [1],
-      description: '来自《机器学习从零到一》的待读标记',
-      title: '稍后阅读',
-    });
+    expect(screen.getByTestId('book-detail-booklist-modal')).toBeTruthy();
+    expect(screen.getByText('稍后再看')).toBeTruthy();
+    expect(screen.getByText('算法复习')).toBeTruthy();
+
+    fireEvent.press(screen.getByTestId('book-detail-booklist-option-watch-later'));
+
     await waitFor(() => {
-      expect(mockOpenProfileSheet).toHaveBeenCalledTimes(1);
+      expect(mockAddBookToBooklistMutateAsync).toHaveBeenCalledWith({
+        bookId: 1,
+        booklistId: 'watch-later',
+      });
     });
+    expect(mockCreateBooklistMutation.mutateAsync).not.toHaveBeenCalled();
+    expect(mockOpenProfileSheet).not.toHaveBeenCalled();
     expect(mockRouter.push).not.toHaveBeenCalled();
   });
 
-  it('keeps detail sections mounted with skeletons while loading', () => {
-    mockDetailLoading = true;
-    mockCollaborativeLoading = true;
-    mockSimilarLoading = true;
-    mockHybridLoading = true;
-
+  it('creates a new custom booklist from the picker and seeds it with the current book', async () => {
     render(<BookDetailRoute />);
 
-    expect(screen.getByText('为什么可能适合你')).toBeTruthy();
-    expect(screen.getByText('目录')).toBeTruthy();
-    expect(screen.getByText('借过这本的人也借了')).toBeTruthy();
-    expect(screen.getByText('同主题图书')).toBeTruthy();
-    expect(screen.getByText('你可能还想借')).toBeTruthy();
-    expect(screen.getByTestId('book-detail-primary-skeleton')).toBeTruthy();
-    expect(screen.getByTestId('book-detail-recommendation-skeleton')).toBeTruthy();
-    expect(screen.getByTestId('book-detail-contents-skeleton')).toBeTruthy();
-    expect(screen.getByTestId('book-detail-collaborative-skeleton')).toBeTruthy();
-    expect(screen.getByTestId('book-detail-similar-skeleton')).toBeTruthy();
-    expect(screen.getByTestId('book-detail-hybrid-skeleton')).toBeTruthy();
-    expect(screen.queryByText('机器学习从零到一')).toBeNull();
+    fireEvent.press(screen.getByText('加入书单'));
+    fireEvent.press(screen.getByTestId('book-detail-booklist-create-trigger'));
+    fireEvent.changeText(screen.getByTestId('book-detail-booklist-title-input'), '课程论文');
+    fireEvent.changeText(screen.getByTestId('book-detail-booklist-description-input'), '下周继续看');
+    fireEvent.press(screen.getByTestId('book-detail-booklist-submit'));
+
+    await waitFor(() => {
+      expect(mockCreateBooklistMutation.mutateAsync).toHaveBeenCalledWith({
+        bookIds: [1],
+        description: '下周继续看',
+        title: '课程论文',
+      });
+    });
+    expect(mockAddBookToBooklistMutateAsync).not.toHaveBeenCalled();
   });
 
-  it('keeps detail sections mounted with skeletons while loading', () => {
+  it('opens a borrow modal, supports switching tabs, and submits the selected borrow mode', async () => {
+    render(<BookDetailRoute />);
+
+    fireEvent.press(screen.getByTestId('book-detail-open-borrow-modal'));
+
+    expect(screen.getByTestId('book-detail-borrow-modal')).toBeTruthy();
+    expect(screen.queryByTestId('book-detail-borrow-close')).toBeNull();
+    expect(screen.getByTestId('book-detail-borrow-tab-robot_delivery')).toBeTruthy();
+    expect(screen.getByTestId('book-detail-borrow-tab-cabinet_pickup')).toBeTruthy();
+
+    fireEvent.press(screen.getByTestId('book-detail-borrow-tab-cabinet_pickup'));
+    fireEvent.changeText(screen.getByTestId('book-detail-borrow-target-input'), '主馆 1 楼书柜');
+    fireEvent.press(screen.getByTestId('book-detail-borrow-confirm'));
+
+    await waitFor(() => {
+      expect(mockBorrowMutateAsync).toHaveBeenCalledWith({
+        bookId: 1,
+        deliveryTarget: '主馆 1 楼书柜',
+        mode: 'cabinet_pickup',
+      });
+    });
+    expect(mockRouter.push).toHaveBeenCalledWith('/orders/101');
+  });
+
+  it('closes the borrow modal when the sheet is dragged downward past the dismiss threshold', () => {
+    render(<BookDetailRoute />);
+
+    fireEvent.press(screen.getByTestId('book-detail-open-borrow-modal'));
+
+    const modalSheet = screen.getByTestId('book-detail-borrow-modal');
+
+    act(() => {
+      expect(
+        modalSheet.props.onMoveShouldSetResponder?.({}, { dx: 0, dy: 24, moveY: 160, y0: 136 })
+      ).toBe(true);
+      modalSheet.props.onResponderGrant?.({}, { dx: 0, dy: 0, moveY: 136, vx: 0, vy: 0, x0: 0, y0: 136 });
+      modalSheet.props.onResponderMove?.({}, { dx: 0, dy: 148, moveY: 284, vx: 0, vy: 1.3, x0: 0, y0: 136 });
+      modalSheet.props.onResponderRelease?.({}, { dx: 0, dy: 148, moveY: 284, vx: 0, vy: 1.3, x0: 0, y0: 136 });
+    });
+
+    expect(screen.queryByTestId('book-detail-borrow-modal')).toBeNull();
+  });
+
+  it('hides discovery modules on the minimal detail variant', () => {
+    mockSearchParams = { bookId: '1', minimal: 'true' };
+
+    render(<BookDetailRoute />);
+
+    expect(screen.getByText('借阅决策')).toBeTruthy();
+    expect(screen.getByText('内容信息')).toBeTruthy();
+    expect(screen.queryByText('延伸发现')).toBeNull();
+    expect(screen.queryByText('推荐给你')).toBeNull();
+    expect(screen.queryByText('借过这本的人也借了')).toBeNull();
+    expect(screen.queryByText('同主题延伸')).toBeNull();
+    expect(screen.queryByText('你可能还想借')).toBeNull();
+  });
+
+  it('keeps the unified sections mounted with skeletons while loading', () => {
     mockDetailLoading = true;
     mockCollaborativeLoading = true;
     mockSimilarLoading = true;
@@ -363,17 +475,12 @@ describe('BookDetailRoute', () => {
 
     render(<BookDetailRoute />);
 
-    expect(screen.getByText('为什么可能适合你')).toBeTruthy();
-    expect(screen.getByText('目录')).toBeTruthy();
-    expect(screen.getByText('借过这本的人也借了')).toBeTruthy();
-    expect(screen.getByText('同主题图书')).toBeTruthy();
-    expect(screen.getByText('你可能还想借')).toBeTruthy();
+    expect(screen.getByText('借阅决策')).toBeTruthy();
+    expect(screen.getByText('内容信息')).toBeTruthy();
+    expect(screen.getByText('延伸发现')).toBeTruthy();
     expect(screen.getByTestId('book-detail-primary-skeleton')).toBeTruthy();
-    expect(screen.getByTestId('book-detail-recommendation-skeleton')).toBeTruthy();
-    expect(screen.getByTestId('book-detail-contents-skeleton')).toBeTruthy();
-    expect(screen.getByTestId('book-detail-collaborative-skeleton')).toBeTruthy();
-    expect(screen.getByTestId('book-detail-similar-skeleton')).toBeTruthy();
-    expect(screen.getByTestId('book-detail-hybrid-skeleton')).toBeTruthy();
+    expect(screen.getByTestId('book-detail-content-skeleton')).toBeTruthy();
+    expect(screen.getByTestId('book-detail-discovery-skeleton')).toBeTruthy();
     expect(screen.queryByText('机器学习从零到一')).toBeNull();
   });
 });

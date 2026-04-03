@@ -24,7 +24,7 @@ export default function FavoritesRoute() {
         }}
       />
       <ProtectedRoute>
-        <FavoritesLibraryScreen query={query} />
+        <FavoritesLibraryScreen pageTitle="收藏图书" query={query} />
       </ProtectedRoute>
     </>
   );

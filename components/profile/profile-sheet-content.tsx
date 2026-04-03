@@ -27,13 +27,23 @@ export function ProfileSheetContent({
         }}>
         <Text
           style={{
+            color: theme.colors.primaryStrong,
+            ...theme.typography.medium,
+            fontSize: 11,
+            letterSpacing: 0.8,
+            textAlign: 'center',
+          }}>
+          PROFILE
+        </Text>
+        <Text
+          style={{
             color: theme.colors.text,
             ...theme.typography.heading,
             fontSize: 32,
             letterSpacing: -0.9,
             textAlign: 'center',
           }}>
-          个人中心
+          账户
         </Text>
         <Text
           style={{
@@ -43,7 +53,7 @@ export function ProfileSheetContent({
             lineHeight: 22,
             textAlign: 'center',
           }}>
-          管理你的借阅资料、收藏、书单和提醒。
+          查看资料、借阅记录与常用入口。
         </Text>
       </View>
 

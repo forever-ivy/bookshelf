@@ -26,6 +26,34 @@ export async function createBooklist(
   }).then((payload: any) => normalizeBooklist(payload, token));
 }
 
+export async function addBookToBooklist(
+  input: { bookId: number; booklistId: number | string },
+  token?: string | null
+): Promise<BooklistSummary> {
+  return libraryRequest(`/api/v1/booklists/${input.booklistId}/books`, {
+    body: JSON.stringify({
+      book_id: input.bookId,
+    }),
+    fallback: throwServiceNotConfigured,
+    method: 'POST',
+    token,
+  }).then((payload: any) => normalizeBooklist(payload, token));
+}
+
+export async function removeBookFromBooklist(
+  input: { bookId: number; booklistId: number | string },
+  token?: string | null
+): Promise<BooklistSummary> {
+  return libraryRequest(`/api/v1/booklists/${input.booklistId}/books`, {
+    body: JSON.stringify({
+      book_id: input.bookId,
+    }),
+    fallback: throwServiceNotConfigured,
+    method: 'DELETE',
+    token,
+  }).then((payload: any) => normalizeBooklist(payload, token));
+}
+
 function normalizeBooklists(payload: any, token?: string | null) {
   const collectionPayload = payload?.data ?? payload;
 

@@ -56,7 +56,9 @@ describe('search stack layouts', () => {
     expect(screen.getByTestId('mock-stack')).toBeTruthy();
     expect(recordedScreenOptions).toEqual(
       expect.objectContaining({
-        headerTransparent: false,
+        headerTitleStyle:
+          Platform.OS === 'ios' ? expect.objectContaining({ color: 'transparent' }) : undefined,
+        headerTransparent: Platform.OS === 'ios',
         headerShown: true,
       })
     );
@@ -64,7 +66,8 @@ describe('search stack layouts', () => {
       expect.objectContaining({
         name: 'borrow-now',
         options: expect.objectContaining({
-          title: '立即可借',
+          headerLeft: expect.any(Function),
+          title: '',
         }),
       })
     );

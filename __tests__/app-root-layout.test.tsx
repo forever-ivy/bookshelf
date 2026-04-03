@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react-native';
 import React from 'react';
+import { Platform } from 'react-native';
 
 import RootLayout from '@/app/_layout';
 import { appTheme } from '@/constants/app-theme';
@@ -83,7 +84,10 @@ describe('RootLayout', () => {
       expect.objectContaining({
         headerBackButtonDisplayMode: 'minimal',
         headerShadowVisible: false,
+        headerTitleStyle:
+          Platform.OS === 'ios' ? expect.objectContaining({ color: 'transparent' }) : undefined,
         headerTintColor: appTheme.colors.text,
+        headerTransparent: Platform.OS === 'ios',
       })
     );
     expect(mockRecordedScreens).toContainEqual(
@@ -108,7 +112,7 @@ describe('RootLayout', () => {
         name: 'favorites/index',
         options: expect.objectContaining({
           presentation: 'card',
-          title: '收藏图书',
+          title: '',
         }),
       })
     );
@@ -121,5 +125,28 @@ describe('RootLayout', () => {
 
     expect(screen.queryByTestId('profile-sheet-layer')).toBeNull();
     expect(screen.queryByTestId('secondary-back-layer')).toBeNull();
+  });
+
+  it('keeps the book detail native header back-only so the page title can live in content', () => {
+    render(<RootLayout />);
+
+    const detailScreen = mockRecordedScreens.find((screenEntry) => screenEntry.name === 'books/[bookId]');
+
+    expect(detailScreen).toBeTruthy();
+    expect(detailScreen?.options).toEqual(
+      expect.objectContaining({
+        presentation: 'card',
+        title: '',
+      })
+    );
+
+    const headerLeft = detailScreen?.options?.headerLeft as (() => React.ReactNode) | undefined;
+
+    expect(headerLeft).toBeTruthy();
+
+    render(<>{headerLeft?.()}</>);
+
+    expect(screen.getByTestId('secondary-inline-back-button')).toBeTruthy();
+    expect(screen.queryByText('图书详情')).toBeNull();
   });
 });

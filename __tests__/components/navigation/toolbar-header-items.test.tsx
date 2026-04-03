@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react-native';
 import React from 'react';
 
+import { ToolbarHeaderRow } from '@/components/navigation/toolbar-header-row';
 import { ToolbarInlineTitle } from '@/components/navigation/toolbar-inline-title';
 import { ToolbarProfileAction } from '@/components/navigation/toolbar-profile-action';
 import { appTheme } from '@/constants/app-theme';
@@ -31,6 +32,17 @@ jest.mock('expo-image', () => {
 });
 
 describe('toolbar header items', () => {
+  it('renders a shared header row that can add a back button for secondary pages', () => {
+    render(<ToolbarHeaderRow showBackButton title="图书详情" />);
+
+    expect(screen.getByTestId('toolbar-header-row')).toBeTruthy();
+    expect(screen.getByTestId('toolbar-header-row-back-button')).toBeTruthy();
+    expect(screen.getByText('图书详情')).toHaveStyle({
+      fontSize: 30,
+      lineHeight: 36,
+    });
+  });
+
   it('renders an app-store-sized inline title for the left header slot', () => {
     render(<ToolbarInlineTitle title="首页" />);
 

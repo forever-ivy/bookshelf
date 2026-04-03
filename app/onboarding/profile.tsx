@@ -50,7 +50,7 @@ export default function OnboardingProfileRoute() {
   };
 
   return (
-    <PageShell mode="workspace">
+    <PageShell mode="workspace" pageTitle="完善借阅资料">
       <Text
         style={{
           color: theme.colors.textMuted,

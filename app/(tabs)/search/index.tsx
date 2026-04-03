@@ -3,7 +3,7 @@ import React from 'react';
 import { Platform, View } from 'react-native';
 
 import { ProfileSheetTriggerButton } from '@/components/navigation/profile-sheet-trigger-button';
-import { ToolbarInlineTitle } from '@/components/navigation/toolbar-inline-title';
+import { ToolbarHeaderRow } from '@/components/navigation/toolbar-header-row';
 import { ToolbarProfileAction } from '@/components/navigation/toolbar-profile-action';
 import { SearchScreen, resolveSearchText } from '@/components/search/search-screen';
 import { useHeaderChromeVisibility } from '@/hooks/use-header-chrome-visibility';
@@ -40,7 +40,7 @@ export default function SearchRoute() {
                         {
                           element: (
                             <View testID="search-header-inline-title-slot">
-                              <ToolbarInlineTitle title="找书" />
+                              <ToolbarHeaderRow title="找书" />
                             </View>
                           ),
                           hidesSharedBackground: true,

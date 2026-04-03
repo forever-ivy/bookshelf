@@ -17,7 +17,7 @@ import { BorrowingSummarySkeleton } from '@/components/borrowing/borrowing-summa
 import { DynamicFeedSkeleton } from '@/components/borrowing/dynamic-feed-skeleton';
 import { PageShell } from '@/components/navigation/page-shell';
 import { ProfileSheetTriggerButton } from '@/components/navigation/profile-sheet-trigger-button';
-import { ToolbarInlineTitle } from '@/components/navigation/toolbar-inline-title';
+import { ToolbarHeaderRow } from '@/components/navigation/toolbar-header-row';
 import { ToolbarProfileAction } from '@/components/navigation/toolbar-profile-action';
 import { getLibraryErrorMessage } from '@/lib/api/client';
 import type { NotificationItem } from '@/lib/api/types';
@@ -246,7 +246,7 @@ export default function BorrowingRoute() {
                     {
                       element: (
                         <View testID="borrowing-header-inline-title-slot">
-                          <ToolbarInlineTitle title="借阅" />
+                          <ToolbarHeaderRow title="借阅" />
                         </View>
                       ),
                       hidesSharedBackground: true,

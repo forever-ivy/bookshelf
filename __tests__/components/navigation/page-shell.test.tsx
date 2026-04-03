@@ -15,6 +15,20 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 describe('PageShell', () => {
+  it('renders an optional page title at the top-left of the page content', () => {
+    render(
+      <PageShell pageTitle="借阅偏好">
+        <Text>页面内容</Text>
+      </PageShell>
+    );
+
+    expect(screen.getByTestId('page-shell-page-title')).toBeTruthy();
+    expect(screen.getByText('借阅偏好')).toHaveStyle({
+      fontSize: 32,
+      lineHeight: 38,
+    });
+  });
+
   it('renders content without any built-in header chrome', () => {
     render(
       <PageShell>

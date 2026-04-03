@@ -19,7 +19,7 @@ import { SectionTitle } from '@/components/base/section-title';
 import { StateMessageCard } from '@/components/base/state-message-card';
 import { PageShell } from '@/components/navigation/page-shell';
 import { ProfileSheetTriggerButton } from '@/components/navigation/profile-sheet-trigger-button';
-import { ToolbarInlineTitle } from '@/components/navigation/toolbar-inline-title';
+import { ToolbarHeaderRow } from '@/components/navigation/toolbar-header-row';
 import { ToolbarProfileAction } from '@/components/navigation/toolbar-profile-action';
 import { useAppSession } from '@/hooks/use-app-session';
 import { useHeaderChromeVisibility } from '@/hooks/use-header-chrome-visibility';
@@ -585,7 +585,7 @@ export default function HomeRoute() {
                     {
                       element: (
                         <View testID="home-header-inline-title-slot">
-                          <ToolbarInlineTitle title={homeHeaderTitle} />
+                          <ToolbarHeaderRow title={homeHeaderTitle} />
                         </View>
                       ),
                       hidesSharedBackground: true,

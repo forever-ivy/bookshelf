@@ -94,7 +94,7 @@ export default function MarkerExamplesRoute() {
   const { theme } = useAppTheme();
 
   return (
-    <PageShell insetBottom={96} mode="workspace">
+    <PageShell insetBottom={96} mode="workspace" pageTitle="文字高亮示例">
       <Text
         style={{
           color: theme.colors.textMuted,

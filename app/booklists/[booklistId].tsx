@@ -51,7 +51,7 @@ export default function BooklistDetailRoute() {
 
   return (
     <ProtectedRoute>
-      <PageShell mode="workspace">
+      <PageShell mode="workspace" pageTitle="书单详情">
         {showSkeleton ? <BooklistDetailSkeleton /> : null}
 
         {booklistsQuery.isError ? (

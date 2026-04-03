@@ -265,7 +265,7 @@ export const interestTags = [
 
 export const achievementStrip = [
   { label: '累计借阅', value: '28 本' },
-  { label: 'AI 总结', value: '14 次' },
-  { label: '本月学习', value: '7 天' },
-  { label: '当前积分', value: '860' },
+  { label: 'AI 辅助', value: '14 次' },
+  { label: '活跃天数', value: '7 天' },
+  { label: '积分', value: '860' },
 ] as const;

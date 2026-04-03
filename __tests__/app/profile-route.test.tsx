@@ -72,9 +72,12 @@ describe('ProfileRoute', () => {
   it('uses reader-facing language for borrowing preferences', () => {
     render(<ProfileRoute />);
 
-    expect(screen.getByText('陈知行 · 借阅偏好')).toBeTruthy();
-    expect(screen.getAllByText('阅读习惯').length).toBeGreaterThan(0);
-    expect(screen.getByText('成就与积分')).toBeTruthy();
+    expect(screen.getByText('陈知行')).toBeTruthy();
+    expect(screen.getByText('借阅偏好概览')).toBeTruthy();
+    expect(screen.getAllByText('近期节奏').length).toBeGreaterThan(0);
+    expect(screen.getByText('本月概览')).toBeTruthy();
+    expect(screen.getAllByText('借阅记录').length).toBeGreaterThan(0);
+    expect(screen.queryByText('陈知行 · 借阅偏好')).toBeNull();
     expect(screen.queryByText('阅读画像')).toBeNull();
     expect(screen.queryByText('学习偏好线索')).toBeNull();
     expect(screen.queryByText('陈知行 · 阅读与学习画像')).toBeNull();
@@ -85,8 +88,8 @@ describe('ProfileRoute', () => {
 
     render(<ProfileRoute />);
 
-    expect(screen.getByText('成就与积分')).toBeTruthy();
-    expect(screen.getByText('近期借阅节奏')).toBeTruthy();
+    expect(screen.getByText('本月概览')).toBeTruthy();
+    expect(screen.getAllByText('借阅记录').length).toBeGreaterThan(0);
     expect(screen.getByTestId('profile-achievement-skeleton')).toBeTruthy();
     expect(screen.queryByText('240')).toBeNull();
   });
