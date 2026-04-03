@@ -220,6 +220,28 @@ def test_reader_home_feed_related_notifications_and_achievements(client):
     assert achievements["current_points"] > 0
 
 
+def test_reader_can_dismiss_notifications_persistently(client):
+    state = seed_reader_experience_state()
+    headers = reader_headers(state["account_id"], state["profile_id"])
+    notification_id = f"due-{state['active_order_id']}"
+
+    initial_response = client.get("/api/v1/notifications", headers=headers)
+    assert initial_response.status_code == 200
+    assert any(item["id"] == notification_id for item in initial_response.json()["items"])
+
+    dismiss_response = client.post(
+        "/api/v1/notifications/dismissals",
+        headers=headers,
+        json={"notification_id": notification_id},
+    )
+    assert dismiss_response.status_code == 200
+    assert dismiss_response.json() == {"notification_id": notification_id, "ok": True}
+
+    refreshed_response = client.get("/api/v1/notifications", headers=headers)
+    assert refreshed_response.status_code == 200
+    assert all(item["id"] != notification_id for item in refreshed_response.json()["items"])
+
+
 def test_reader_order_favorites_and_booklists_flow(client):
     state = seed_reader_experience_state()
     headers = reader_headers(state["account_id"], state["profile_id"])
@@ -281,6 +303,78 @@ def test_reader_order_favorites_and_booklists_flow(client):
     assert len(payload["custom_items"]) == 1
     assert payload["custom_items"][0]["books"]
     assert payload["system_items"]
+
+
+def test_reader_booklists_support_unique_watch_later_and_book_membership_updates(client):
+    state = seed_reader_experience_state()
+    headers = reader_headers(state["account_id"], state["profile_id"])
+
+    create_watch_later_response = client.post(
+        "/api/v1/booklists",
+        headers=headers,
+        json={
+            "title": "稍后再看",
+            "description": "准备晚点读。",
+            "book_ids": [state["favorite_book_id"]],
+        },
+    )
+    assert create_watch_later_response.status_code == 201
+    watch_later_payload = create_watch_later_response.json()
+    assert watch_later_payload["title"] == "稍后再看"
+    assert [item["id"] for item in watch_later_payload["books"]] == [state["favorite_book_id"]]
+
+    duplicate_watch_later_response = client.post(
+        "/api/v1/booklists",
+        headers=headers,
+        json={
+            "title": "稍后再看",
+            "description": "重复创建不应生成第二个。",
+            "book_ids": [state["secondary_book_id"]],
+        },
+    )
+    assert duplicate_watch_later_response.status_code == 201
+    duplicate_watch_later_payload = duplicate_watch_later_response.json()
+    assert duplicate_watch_later_payload["id"] == watch_later_payload["id"]
+    assert [item["id"] for item in duplicate_watch_later_payload["books"]] == [
+        state["favorite_book_id"],
+        state["secondary_book_id"],
+    ]
+
+    add_book_response = client.post(
+        f"/api/v1/booklists/{watch_later_payload['id']}/books",
+        headers=headers,
+        json={"book_id": state["source_book_id"]},
+    )
+    assert add_book_response.status_code == 200
+    added_payload = add_book_response.json()
+    assert [item["id"] for item in added_payload["books"]] == [
+        state["favorite_book_id"],
+        state["secondary_book_id"],
+        state["source_book_id"],
+    ]
+
+    remove_book_response = client.request(
+        "DELETE",
+        f"/api/v1/booklists/{watch_later_payload['id']}/books",
+        headers=headers,
+        json={"book_id": state["secondary_book_id"]},
+    )
+    assert remove_book_response.status_code == 200
+    removed_payload = remove_book_response.json()
+    assert [item["id"] for item in removed_payload["books"]] == [
+        state["favorite_book_id"],
+        state["source_book_id"],
+    ]
+
+    list_booklists_response = client.get("/api/v1/booklists", headers=headers)
+    assert list_booklists_response.status_code == 200
+    payload = list_booklists_response.json()
+    assert len(payload["custom_items"]) == 1
+    assert payload["custom_items"][0]["title"] == "稍后再看"
+    assert [item["id"] for item in payload["custom_items"][0]["books"]] == [
+        state["favorite_book_id"],
+        state["source_book_id"],
+    ]
 
 
 def test_reader_favorites_support_server_side_query_and_category_filters(client):

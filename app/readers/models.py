@@ -73,3 +73,15 @@ class ReaderBooklistItem(Base):
     book_id: Mapped[int] = mapped_column(ForeignKey("books.id"), index=True)
     rank_position: Mapped[int] = mapped_column(default=1)
     created_at: Mapped[datetime | None] = mapped_column(default=utc_now, nullable=True)
+
+
+class DismissedNotification(Base):
+    __tablename__ = "dismissed_notifications"
+    __table_args__ = (
+        UniqueConstraint("reader_id", "notification_id", name="uq_dismissed_notification_reader_item"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    reader_id: Mapped[int] = mapped_column(ForeignKey("reader_profiles.id"), index=True)
+    notification_id: Mapped[str] = mapped_column(String(128), index=True)
+    created_at: Mapped[datetime | None] = mapped_column(default=utc_now, nullable=True)

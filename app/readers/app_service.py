@@ -11,11 +11,18 @@ from app.catalog.service import build_book_payload, build_book_payloads
 from app.core.errors import ApiError
 from app.db.base import utc_now
 from app.orders.models import BorrowOrder, DeliveryOrder, ReturnRequest
-from app.readers.models import FavoriteBook, ReaderBooklist, ReaderBooklistItem, ReaderProfile
+from app.readers.models import (
+    DismissedNotification,
+    FavoriteBook,
+    ReaderBooklist,
+    ReaderBooklistItem,
+    ReaderProfile,
+)
 from app.recommendation.models import RecommendationLog
 
 
 FINAL_READER_ORDER_STATUSES = {"completed", "cancelled", "returned"}
+WATCH_LATER_BOOKLIST_TITLE = "稍后再看"
 
 
 def _iso(value) -> str | None:
@@ -65,6 +72,13 @@ def _favorite_out_from_payload(favorite: FavoriteBook, book_payload: dict) -> di
 
 def _normalize_search_text(value: str | None) -> str:
     return (value or "").strip().lower()
+
+
+def _normalize_notification_id(value: str | None) -> str:
+    notification_id = (value or "").strip()
+    if not notification_id:
+        raise ApiError(400, "notification_id_required", "Notification id is required")
+    return notification_id
 
 
 def list_favorite_books(
@@ -142,6 +156,49 @@ def _booklist_books(session: Session, *, book_ids: list[int]) -> list[dict]:
     return build_book_payloads(session, books)
 
 
+def _require_reader_booklist(session: Session, *, reader_id: int, booklist_id: int) -> ReaderBooklist:
+    booklist = session.scalar(
+        select(ReaderBooklist).where(ReaderBooklist.id == booklist_id, ReaderBooklist.reader_id == reader_id)
+    )
+    if booklist is None:
+        raise ApiError(404, "reader_booklist_not_found", "Reader booklist not found")
+    return booklist
+
+
+def _validate_book_ids(session: Session, *, book_ids: list[int]) -> list[int]:
+    if not book_ids:
+        return []
+    found_ids = set(session.scalars(select(Book.id).where(Book.id.in_(book_ids))).all())
+    if found_ids != set(book_ids):
+        raise ApiError(404, "reader_booklist_book_not_found", "One or more books were not found")
+    return book_ids
+
+
+def _append_books_to_booklist(session: Session, *, booklist: ReaderBooklist, book_ids: list[int]) -> None:
+    valid_book_ids = _validate_book_ids(session, book_ids=book_ids)
+    if not valid_book_ids:
+        return
+
+    existing_book_ids = list(
+        session.scalars(
+            select(ReaderBooklistItem.book_id)
+            .where(ReaderBooklistItem.booklist_id == booklist.id)
+            .order_by(ReaderBooklistItem.rank_position.asc(), ReaderBooklistItem.id.asc())
+        )
+    )
+    if not existing_book_ids:
+        next_rank = 1
+    else:
+        next_rank = len(existing_book_ids) + 1
+    existing_book_id_set = set(existing_book_ids)
+
+    for book_id in valid_book_ids:
+        if book_id in existing_book_id_set:
+            continue
+        session.add(ReaderBooklistItem(booklist_id=booklist.id, book_id=book_id, rank_position=next_rank))
+        next_rank += 1
+
+
 def _custom_booklist_out(session: Session, booklist: ReaderBooklist) -> dict:
     book_ids = list(
         session.scalars(
@@ -212,15 +269,63 @@ def create_reader_booklist(
     clean_title = (title or "").strip()
     if not clean_title:
         raise ApiError(400, "reader_booklist_invalid", "Booklist title is required")
-    if book_ids:
-        found_ids = set(session.scalars(select(Book.id).where(Book.id.in_(book_ids))).all())
-        if found_ids != set(book_ids):
-            raise ApiError(404, "reader_booklist_book_not_found", "One or more books were not found")
+
+    existing_watch_later = None
+    if clean_title == WATCH_LATER_BOOKLIST_TITLE:
+        existing_watch_later = session.scalar(
+            select(ReaderBooklist)
+            .where(ReaderBooklist.reader_id == reader_id, ReaderBooklist.title == WATCH_LATER_BOOKLIST_TITLE)
+            .order_by(ReaderBooklist.id.asc())
+        )
+    if existing_watch_later is not None:
+        if not existing_watch_later.description and description:
+            existing_watch_later.description = description
+        _append_books_to_booklist(session, booklist=existing_watch_later, book_ids=book_ids)
+        session.commit()
+        session.refresh(existing_watch_later)
+        return _custom_booklist_out(session, existing_watch_later)
+
+    _validate_book_ids(session, book_ids=book_ids)
     booklist = ReaderBooklist(reader_id=reader_id, title=clean_title, description=description)
     session.add(booklist)
     session.flush()
-    for index, book_id in enumerate(book_ids, start=1):
-        session.add(ReaderBooklistItem(booklist_id=booklist.id, book_id=book_id, rank_position=index))
+    _append_books_to_booklist(session, booklist=booklist, book_ids=book_ids)
+    session.commit()
+    session.refresh(booklist)
+    return _custom_booklist_out(session, booklist)
+
+
+def add_book_to_reader_booklist(session: Session, *, reader_id: int, booklist_id: int, book_id: int) -> dict:
+    _require_profile(session, reader_id)
+    booklist = _require_reader_booklist(session, reader_id=reader_id, booklist_id=booklist_id)
+    _append_books_to_booklist(session, booklist=booklist, book_ids=[book_id])
+    session.commit()
+    session.refresh(booklist)
+    return _custom_booklist_out(session, booklist)
+
+
+def remove_book_from_reader_booklist(session: Session, *, reader_id: int, booklist_id: int, book_id: int) -> dict:
+    _require_profile(session, reader_id)
+    booklist = _require_reader_booklist(session, reader_id=reader_id, booklist_id=booklist_id)
+    item = session.scalar(
+        select(ReaderBooklistItem).where(
+            ReaderBooklistItem.booklist_id == booklist.id,
+            ReaderBooklistItem.book_id == book_id,
+        )
+    )
+    if item is not None:
+        session.delete(item)
+        remaining_items = session.scalars(
+            select(ReaderBooklistItem)
+            .where(ReaderBooklistItem.booklist_id == booklist.id)
+            .order_by(ReaderBooklistItem.rank_position.asc(), ReaderBooklistItem.id.asc())
+        ).all()
+        for index, remaining_item in enumerate(remaining_items, start=1):
+            remaining_item.rank_position = index
+        session.commit()
+        session.refresh(booklist)
+        return _custom_booklist_out(session, booklist)
+
     session.commit()
     session.refresh(booklist)
     return _custom_booklist_out(session, booklist)
@@ -299,7 +404,47 @@ def list_reader_notifications(session: Session, *, reader_id: int, limit: int = 
             }
         )
 
-    return items[:limit]
+    items = items[:limit]
+    dismissed_rows = session.scalars(
+        select(DismissedNotification).where(DismissedNotification.reader_id == reader_id)
+    ).all()
+    if not dismissed_rows:
+        return items
+
+    live_ids = {str(item["id"]) for item in items}
+    stale_rows = [row for row in dismissed_rows if row.notification_id not in live_ids]
+    if stale_rows:
+        for row in stale_rows:
+            session.delete(row)
+        session.commit()
+        dismissed_rows = [row for row in dismissed_rows if row.notification_id in live_ids]
+
+    dismissed_ids = {row.notification_id for row in dismissed_rows}
+    if not dismissed_ids:
+        return items
+
+    return [item for item in items if str(item["id"]) not in dismissed_ids]
+
+
+def dismiss_reader_notification(session: Session, *, reader_id: int, notification_id: str) -> dict:
+    _require_profile(session, reader_id)
+    normalized_notification_id = _normalize_notification_id(notification_id)
+    existing = session.scalar(
+        select(DismissedNotification).where(
+            DismissedNotification.reader_id == reader_id,
+            DismissedNotification.notification_id == normalized_notification_id,
+        )
+    )
+    if existing is None:
+        session.add(
+            DismissedNotification(
+                reader_id=reader_id,
+                notification_id=normalized_notification_id,
+            )
+        )
+        session.commit()
+
+    return {"notification_id": normalized_notification_id, "ok": True}
 
 
 def get_reader_achievement_summary(session: Session, *, reader_id: int) -> dict:
