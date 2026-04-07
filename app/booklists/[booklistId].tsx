@@ -1,7 +1,9 @@
 import { useLocalSearchParams } from 'expo-router';
 import React from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import { toast } from 'sonner-native';
 
+import { AppIcon } from '@/components/base/app-icon';
 import { EditorialIllustration } from '@/components/base/editorial-illustration';
 import {
   LoadingSkeletonBlock,
@@ -13,9 +15,10 @@ import { StateMessageCard } from '@/components/base/state-message-card';
 import { SearchResultCard } from '@/components/search/search-result-card';
 import { PageShell } from '@/components/navigation/page-shell';
 import { ProtectedRoute } from '@/components/navigation/protected-route';
-import { useBooklistsQuery } from '@/hooks/use-library-app-data';
+import { useBooklistsQuery, useRemoveBookFromBooklistMutation } from '@/hooks/use-library-app-data';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { appArtwork } from '@/lib/app/artwork';
+import { getLibraryErrorMessage } from '@/lib/api/client';
 
 function BooklistDetailSkeleton() {
   const { theme } = useAppTheme();
@@ -39,6 +42,7 @@ export default function BooklistDetailRoute() {
   const params = useLocalSearchParams<{ booklistId: string }>();
   const booklistId = String(params.booklistId ?? '');
   const booklistsQuery = useBooklistsQuery();
+  const removeBookMutation = useRemoveBookFromBooklistMutation();
   const { theme } = useAppTheme();
 
   const allBooklists = React.useMemo(
@@ -48,6 +52,7 @@ export default function BooklistDetailRoute() {
   const booklist = allBooklists.find((item) => item.id === booklistId) ?? null;
   const showSkeleton = !booklistsQuery.data && Boolean(booklistsQuery.isFetching);
   const showBooklistEmptyState = Boolean(booklist && booklist.books.length === 0);
+  const isEditableBooklist = booklist?.source === 'custom';
 
   return (
     <ProtectedRoute>
@@ -141,18 +146,62 @@ export default function BooklistDetailRoute() {
               ) : (
                 <View style={{ gap: theme.spacing.lg }}>
                   {booklist.books.map((item) => (
-                    <SearchResultCard
-                      key={item.id}
-                      availability={item.availabilityLabel}
-                      author={item.author}
-                      coverTone={item.coverTone}
-                      eta={item.etaLabel}
-                      href={`/books/${item.id}`}
-                      location={item.cabinetLabel}
-                      reason={item.recommendationReason}
-                      summary={item.summary}
-                      title={item.title}
-                    />
+                    <View key={item.id} style={{ gap: theme.spacing.sm }}>
+                      <SearchResultCard
+                        availability={item.availabilityLabel}
+                        author={item.author}
+                        coverTone={item.coverTone}
+                        eta={item.etaLabel}
+                        href={`/books/${item.id}`}
+                        location={item.cabinetLabel}
+                        reason={item.recommendationReason}
+                        summary={item.summary}
+                        title={item.title}
+                      />
+                      {isEditableBooklist ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={async () => {
+                            try {
+                              await removeBookMutation.mutateAsync({
+                                bookId: item.id,
+                                booklistId,
+                              });
+                              toast.success('已从书单移除');
+                            } catch (error) {
+                              toast.error(getLibraryErrorMessage(error, '移出书单失败，请稍后重试。'));
+                            }
+                          }}
+                          style={({ pressed }) => ({
+                            alignSelf: 'flex-end',
+                            opacity: pressed ? 0.92 : 1,
+                          })}
+                          testID={`booklist-remove-book-${item.id}`}>
+                          <View
+                            style={{
+                              alignItems: 'center',
+                              backgroundColor: theme.colors.surface,
+                              borderColor: theme.colors.borderStrong,
+                              borderRadius: theme.radii.pill,
+                              borderWidth: 1,
+                              flexDirection: 'row',
+                              gap: 8,
+                              paddingHorizontal: 12,
+                              paddingVertical: 8,
+                            }}>
+                            <AppIcon color={theme.colors.text} name="minus" size={16} />
+                            <Text
+                              style={{
+                                color: theme.colors.text,
+                                ...theme.typography.medium,
+                                fontSize: 13,
+                              }}>
+                              移出书单
+                            </Text>
+                          </View>
+                        </Pressable>
+                      ) : null}
+                    </View>
                   ))}
                 </View>
               )}

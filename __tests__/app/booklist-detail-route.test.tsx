@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import React from 'react';
 
 const mockRouter = {
@@ -6,6 +6,13 @@ const mockRouter = {
   push: jest.fn(),
 };
 let mockBooklistId = 'ai-intro';
+const mockRemoveBookFromBooklistMutateAsync = jest.fn(async () => ({
+  books: [],
+  description: '整理课程节奏',
+  id: 'custom-reading',
+  source: 'custom',
+  title: '我的书单',
+}));
 let mockBooklistsData = {
   customItems: [],
   systemItems: [
@@ -77,12 +84,17 @@ jest.mock('@/hooks/use-library-app-data', () => ({
     isError: false,
     isFetching: false,
   }),
+  useRemoveBookFromBooklistMutation: () => ({
+    isPending: false,
+    mutateAsync: mockRemoveBookFromBooklistMutateAsync,
+  }),
 }));
 
 import BooklistDetailRoute from '@/app/booklists/[booklistId]';
 
 describe('BooklistDetailRoute', () => {
   beforeEach(() => {
+    mockRemoveBookFromBooklistMutateAsync.mockClear();
     mockBooklistId = 'ai-intro';
     mockBooklistsData = {
       customItems: [],
@@ -174,5 +186,51 @@ describe('BooklistDetailRoute', () => {
     expect(screen.getByText('我的 AI 书单')).toBeTruthy();
     expect(screen.getByText('书单暂时还是空的')).toBeTruthy();
     expect(screen.getByTestId('booklist-empty-artwork')).toBeTruthy();
+  });
+
+  it('lets readers remove a book from a custom booklist on the detail page', async () => {
+    mockBooklistId = 'custom-reading';
+    mockBooklistsData = {
+      customItems: [
+        {
+          books: [
+            {
+              author: '周志华',
+              availabilityLabel: '馆藏充足 · 可立即借阅',
+              cabinetLabel: '智能书柜 A-03',
+              category: '人工智能',
+              coverTone: 'lavender',
+              deliveryAvailable: true,
+              etaLabel: '可送达',
+              etaMinutes: 18,
+              id: 1,
+              matchedFields: [],
+              recommendationReason: null,
+              shelfLabel: '主馆 2 楼',
+              stockStatus: 'available',
+              summary: '适合课程导读和期末复习的入门书。',
+              tags: ['人工智能'],
+              title: '机器学习从零到一',
+            },
+          ],
+          description: '整理课程节奏',
+          id: 'custom-reading',
+          source: 'custom',
+          title: '我的书单',
+        },
+      ],
+      systemItems: [],
+    };
+
+    render(<BooklistDetailRoute />);
+
+    fireEvent.press(screen.getByTestId('booklist-remove-book-1'));
+
+    await waitFor(() => {
+      expect(mockRemoveBookFromBooklistMutateAsync).toHaveBeenCalledWith({
+        bookId: 1,
+        booklistId: 'custom-reading',
+      });
+    });
   });
 });

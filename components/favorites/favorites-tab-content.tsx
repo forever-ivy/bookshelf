@@ -25,6 +25,7 @@ import { getLibraryErrorMessage } from '@/lib/api/client';
 import {
   useBooklistsQuery,
   useCreateBooklistMutation,
+  useDeleteBooklistMutation,
   useFavoritesQuery,
 } from '@/hooks/use-library-app-data';
 import { useAppTheme } from '@/hooks/use-app-theme';
@@ -59,16 +60,19 @@ export function FavoritesTabContent() {
   const favoritesQuery = useFavoritesQuery();
   const booklistsQuery = useBooklistsQuery();
   const createBooklistMutation = useCreateBooklistMutation();
+  const deleteBooklistMutation = useDeleteBooklistMutation();
   const { theme } = useAppTheme();
   const router = useRouter();
   const [booklistsExpanded, setBooklistsExpanded] = React.useState(false);
   const [createModalVisible, setCreateModalVisible] = React.useState(false);
+  const [deleteModalVisible, setDeleteModalVisible] = React.useState(false);
   const [draftTitle, setDraftTitle] = React.useState('');
   const [draftDescription, setDraftDescription] = React.useState('');
   const showFavoritesSkeleton = !favoritesQuery.data && Boolean(favoritesQuery.isFetching);
   const showBooklistsSkeleton = !booklistsQuery.data && Boolean(booklistsQuery.isFetching);
   const previewFavorites = favoritesQuery.data?.slice(0, 2) ?? [];
   const customBooklists = booklistsQuery.data?.customItems ?? [];
+  const deletableBooklists = customBooklists.filter((item) => item.title.trim() !== '稍后再看');
   const hasMoreBooklists = customBooklists.length > 3;
   const visibleCustomBooklists = booklistsExpanded ? customBooklists : customBooklists.slice(0, 3);
 
@@ -98,6 +102,27 @@ export function FavoritesTabContent() {
       toast.error(getLibraryErrorMessage(error, '创建书单失败，请稍后重试。'));
     }
   }, [closeCreateModal, createBooklistMutation, draftDescription, draftTitle]);
+
+  const closeDeleteModal = React.useCallback(() => {
+    setDeleteModalVisible(false);
+  }, []);
+
+  const handleDeleteBooklist = React.useCallback(
+    async (booklistId: string) => {
+      if (deleteBooklistMutation.isPending) {
+        return;
+      }
+
+      try {
+        await deleteBooklistMutation.mutateAsync(booklistId);
+        closeDeleteModal();
+        toast.success('书单已删除');
+      } catch (error) {
+        toast.error(getLibraryErrorMessage(error, '删除书单失败，请稍后重试。'));
+      }
+    },
+    [closeDeleteModal, deleteBooklistMutation]
+  );
 
   return (
     <>
@@ -131,28 +156,52 @@ export function FavoritesTabContent() {
               }}>
               我的书单
             </Text>
-            <Pressable
-              accessibilityLabel="新建书单"
-              accessibilityRole="button"
-              onPress={() => setCreateModalVisible(true)}
-              style={({ pressed }) => ({
-                opacity: pressed ? 0.92 : 1,
-              })}
-              testID="favorites-booklists-create">
-              <View
-                style={{
-                  alignItems: 'center',
-                  backgroundColor: theme.colors.primarySoft,
-                  borderColor: theme.colors.primaryStrong,
-                  borderRadius: theme.radii.pill,
-                  borderWidth: 1,
-                  height: 38,
-                  justifyContent: 'center',
-                  width: 38,
-                }}>
-                <AppIcon color={theme.colors.primaryStrong} name="plus" size={18} />
-              </View>
-            </Pressable>
+            <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+              <Pressable
+                accessibilityLabel="删除书单"
+                accessibilityRole="button"
+                onPress={() => setDeleteModalVisible(true)}
+                style={({ pressed }) => ({
+                  opacity: pressed ? 0.92 : 1,
+                })}
+                testID="favorites-booklists-delete">
+                <View
+                  style={{
+                    alignItems: 'center',
+                    backgroundColor: theme.colors.surface,
+                    borderColor: theme.colors.borderStrong,
+                    borderRadius: theme.radii.pill,
+                    borderWidth: 1,
+                    height: 38,
+                    justifyContent: 'center',
+                    width: 38,
+                  }}>
+                  <AppIcon color={theme.colors.text} name="minus" size={18} />
+                </View>
+              </Pressable>
+              <Pressable
+                accessibilityLabel="新建书单"
+                accessibilityRole="button"
+                onPress={() => setCreateModalVisible(true)}
+                style={({ pressed }) => ({
+                  opacity: pressed ? 0.92 : 1,
+                })}
+                testID="favorites-booklists-create">
+                <View
+                  style={{
+                    alignItems: 'center',
+                    backgroundColor: theme.colors.primarySoft,
+                    borderColor: theme.colors.primaryStrong,
+                    borderRadius: theme.radii.pill,
+                    borderWidth: 1,
+                    height: 38,
+                    justifyContent: 'center',
+                    width: 38,
+                  }}>
+                  <AppIcon color={theme.colors.primaryStrong} name="plus" size={18} />
+                </View>
+              </Pressable>
+            </View>
           </View>
 
           {showBooklistsSkeleton ? (
@@ -364,6 +413,115 @@ export function FavoritesTabContent() {
                     </View>
                   </View>
                 </ScrollView>
+              </View>
+            </Pressable>
+          </KeyboardAvoidingView>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={closeDeleteModal}
+        transparent
+        visible={deleteModalVisible}>
+        <Pressable
+          onPress={closeDeleteModal}
+          style={{
+            backgroundColor: 'rgba(26, 24, 21, 0.48)',
+            flex: 1,
+            padding: theme.spacing.lg,
+          }}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{
+              flex: 1,
+              justifyContent: 'center',
+            }}>
+            <Pressable>
+              <View
+                style={{
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.borderSoft,
+                  borderRadius: theme.radii.xl,
+                  borderWidth: 1,
+                  gap: theme.spacing.lg,
+                  padding: theme.spacing.xl,
+                }}
+                testID="favorites-booklists-delete-modal">
+                <View style={{ gap: theme.spacing.xs }}>
+                  <Text
+                    style={{
+                      color: theme.colors.text,
+                      ...theme.typography.heading,
+                      fontSize: 22,
+                      letterSpacing: -0.4,
+                    }}>
+                    删除书单
+                  </Text>
+                  <Text
+                    style={{
+                      color: theme.colors.textMuted,
+                      ...theme.typography.body,
+                      fontSize: 13,
+                      lineHeight: 19,
+                    }}>
+                    稍后再看会保留，其余自建书单可直接删除。
+                  </Text>
+                </View>
+
+                {deletableBooklists.length > 0 ? (
+                  <View style={{ gap: theme.spacing.md }}>
+                    {deletableBooklists.map((item) => (
+                      <Pressable
+                        key={item.id}
+                        onPress={() => handleDeleteBooklist(item.id)}
+                        style={({ pressed }) => ({
+                          opacity: pressed ? 0.92 : 1,
+                        })}
+                        testID={`favorites-booklist-delete-${item.id}`}>
+                        <View
+                          style={{
+                            backgroundColor: theme.colors.surface,
+                            borderColor: theme.colors.borderStrong,
+                            borderRadius: theme.radii.lg,
+                            borderWidth: 1,
+                            flexDirection: 'row',
+                            justifyContent: 'space-between',
+                            gap: theme.spacing.md,
+                            padding: theme.spacing.lg,
+                          }}>
+                          <View style={{ flex: 1, gap: 6 }}>
+                            <Text
+                              style={{
+                                color: theme.colors.text,
+                                ...theme.typography.semiBold,
+                                fontSize: 16,
+                              }}>
+                              {item.title}
+                            </Text>
+                            <Text
+                              style={{
+                                color: theme.colors.textMuted,
+                                ...theme.typography.body,
+                                fontSize: 13,
+                                lineHeight: 19,
+                              }}>
+                              {item.description?.trim() || `${item.books.length} 本图书`}
+                            </Text>
+                          </View>
+                          <View style={{ justifyContent: 'center' }}>
+                            <AppIcon color={theme.colors.text} name="minus" size={18} />
+                          </View>
+                        </View>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : (
+                  <StateMessageCard
+                    description="当前没有可删除的自建书单。"
+                    title="还没有可删书单"
+                  />
+                )}
               </View>
             </Pressable>
           </KeyboardAvoidingView>

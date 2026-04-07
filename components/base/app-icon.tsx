@@ -9,6 +9,7 @@ import {
   CircleUserRound,
   Clock3,
   House,
+  Minus,
   Package,
   Plus,
   Search,
@@ -29,6 +30,7 @@ export type AppIconName =
   | 'chevronRight'
   | 'clock'
   | 'home'
+  | 'minus'
   | 'package'
   | 'plus'
   | 'profile'
@@ -46,6 +48,7 @@ const iconByName: Record<AppIconName, LucideIcon> = {
   chevronRight: ChevronRight,
   clock: Clock3,
   home: House,
+  minus: Minus,
   package: Package,
   plus: Plus,
   profile: CircleUserRound,

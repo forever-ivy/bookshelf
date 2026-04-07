@@ -1,11 +1,13 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
-  cancelBorrowOrder,
   addBookToBooklist,
+  cancelBorrowOrder,
   createBooklist,
   createBorrowOrder,
   createReturnRequest,
+  deleteBooklist,
+  dismissNotification,
   getAchievements,
   getBook,
   getCollaborativeBooks,
@@ -32,6 +34,7 @@ import {
   login,
   searchBooksExplicit,
   registerReader,
+  removeBookFromBooklist,
   renewBorrowOrder,
   searchRecommendations,
   toggleFavorite,
@@ -325,6 +328,18 @@ export function useNotificationsQuery() {
   });
 }
 
+export function useDismissNotificationMutation() {
+  const queryClient = useQueryClient();
+  const { token } = useAppSession();
+
+  return useMutation({
+    mutationFn: (notificationId: string) => dismissNotification(notificationId, token),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
+}
+
 export function useAchievementsQuery() {
   const { token } = useAppSession();
 
@@ -456,6 +471,30 @@ export function useAddBookToBooklistMutation() {
 
   return useMutation({
     mutationFn: (input: Parameters<typeof addBookToBooklist>[0]) => addBookToBooklist(input, token),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['booklists'] });
+    },
+  });
+}
+
+export function useRemoveBookFromBooklistMutation() {
+  const queryClient = useQueryClient();
+  const { token } = useAppSession();
+
+  return useMutation({
+    mutationFn: (input: Parameters<typeof removeBookFromBooklist>[0]) => removeBookFromBooklist(input, token),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['booklists'] });
+    },
+  });
+}
+
+export function useDeleteBooklistMutation() {
+  const queryClient = useQueryClient();
+  const { token } = useAppSession();
+
+  return useMutation({
+    mutationFn: (booklistId: number | string) => deleteBooklist(booklistId, token),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['booklists'] });
     },

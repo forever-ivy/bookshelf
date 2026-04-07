@@ -1,5 +1,4 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import * as SecureStore from 'expo-secure-store';
 import React from 'react';
 import { ScrollView } from 'react-native';
 import { toast } from 'sonner-native';
@@ -8,10 +7,13 @@ let mockBorrowingLoading = false;
 let mockDynamicLoading = false;
 let mockFavoritesLoading = false;
 let mockBooklistsLoading = false;
-let mockSecureStorage: Record<string, string | null> = {};
 const mockRouter = {
   push: jest.fn(),
 };
+const mockDismissNotificationMutateAsync = jest.fn(async (notificationId: string) => {
+  mockNotifications = mockNotifications.filter((item) => item.id !== notificationId);
+  return { notificationId, ok: true };
+});
 let mockNotifications = [
   {
     body: '机器人已从主馆出发，预计 10 分钟后送达。',
@@ -258,6 +260,10 @@ jest.mock('@/hooks/use-library-app-data', () => ({
     data: mockDynamicLoading ? undefined : mockNotifications,
     isFetching: mockDynamicLoading,
   }),
+  useDismissNotificationMutation: () => ({
+    isPending: false,
+    mutateAsync: mockDismissNotificationMutateAsync,
+  }),
   useFavoritesQuery: () => ({
     data: mockFavoritesLoading
       ? undefined
@@ -396,19 +402,12 @@ import BorrowingRoute from '@/app/(tabs)/borrowing';
 
 describe('BorrowingRoute', () => {
   beforeEach(() => {
-    mockSecureStorage = {};
-    jest.mocked(SecureStore.getItemAsync).mockImplementation(async (key) => mockSecureStorage[key] ?? null);
-    jest.mocked(SecureStore.setItemAsync).mockImplementation(async (key, value) => {
-      mockSecureStorage[key] = value;
-    });
-    jest.mocked(SecureStore.deleteItemAsync).mockImplementation(async (key) => {
-      delete mockSecureStorage[key];
-    });
     mockBorrowingLoading = false;
     mockDynamicLoading = false;
     mockFavoritesLoading = false;
     mockBooklistsLoading = false;
     mockRouter.push.mockReset();
+    mockDismissNotificationMutateAsync.mockClear();
     mockNotifications = [
       {
         body: '机器人已从主馆出发，预计 10 分钟后送达。',
@@ -573,6 +572,7 @@ describe('BorrowingRoute', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('notification-card-note-1')).toBeNull();
     });
+    expect(mockDismissNotificationMutateAsync).toHaveBeenCalledWith('note-1');
     expect(screen.getByText('3 条待处理')).toBeTruthy();
 
     jest.useRealTimers();
@@ -593,9 +593,7 @@ describe('BorrowingRoute', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('notification-card-note-1')).toBeNull();
     });
-    await waitFor(() => {
-      expect(Object.values(mockSecureStorage).some((value) => value?.includes('note-1'))).toBe(true);
-    });
+    expect(mockDismissNotificationMutateAsync).toHaveBeenCalledWith('note-1');
 
     jest.useRealTimers();
     view.unmount();

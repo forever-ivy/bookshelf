@@ -1029,14 +1029,22 @@ export default function BookDetailRoute() {
               />
               <Animated.View
                 onMoveShouldSetResponder={(_, gestureState) =>
-                  gestureState.dy > 12 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx)
+                  isBorrowModalOpen &&
+                  gestureState.dy > 10 &&
+                  Math.abs(gestureState.dy) > Math.abs(gestureState.dx)
                 }
                 onResponderGrant={() => {
-                  borrowSheetDragOffset.stopAnimation();
-                  borrowSheetDragOffset.setValue(0);
+                  borrowSheetTranslateY.stopAnimation((value) => {
+                    borrowSheetGestureStart.current = value;
+                  });
                 }}
                 onResponderMove={(_, gestureState) => {
-                  borrowSheetDragOffset.setValue(Math.max(0, gestureState.dy));
+                  borrowSheetTranslateY.setValue(
+                    Math.max(
+                      0,
+                      Math.min(BORROW_SHEET_HIDDEN_OFFSET, borrowSheetGestureStart.current + gestureState.dy)
+                    )
+                  );
                 }}
                 onResponderRelease={(_, gestureState) => {
                   handleBorrowSheetRelease(gestureState.dy, gestureState.vy);
@@ -1051,9 +1059,24 @@ export default function BookDetailRoute() {
                   gap: theme.spacing.lg,
                   padding: theme.spacing.xl,
                   paddingBottom: theme.spacing.xl * 1.4,
-                  transform: [{ translateY: Animated.add(borrowSheetTranslateY, borrowSheetDragOffset) }],
+                  transform: [{ translateY: borrowSheetTranslateY }],
                 }}
                 testID="book-detail-borrow-modal">
+                <View
+                  style={{
+                    alignItems: 'center',
+                    marginTop: -4,
+                  }}>
+                  <View
+                    style={{
+                      backgroundColor: theme.colors.borderStrong,
+                      borderRadius: theme.radii.pill,
+                      height: 5,
+                      opacity: 0.72,
+                      width: 44,
+                    }}
+                  />
+                </View>
                 <View
                   style={{
                     gap: 6,

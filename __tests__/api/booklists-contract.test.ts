@@ -36,7 +36,7 @@ jest.mock('@/lib/api/mock', () => ({
 
 import { libraryRequest } from '@/lib/api/client';
 import { createMockBooklist, listMockBooklists } from '@/lib/api/mock';
-import { addBookToBooklist, createBooklist, listBooklists, removeBookFromBooklist } from '@/lib/api/booklists';
+import { addBookToBooklist, createBooklist, deleteBooklist, listBooklists, removeBookFromBooklist } from '@/lib/api/booklists';
 
 describe('booklists contract', () => {
   beforeEach(() => {
@@ -128,6 +128,22 @@ describe('booklists contract', () => {
       code: 'http_500',
       name: 'LibraryApiError',
       status: 500,
+    });
+
+    expect(createMockBooklist).not.toHaveBeenCalled();
+  });
+
+  it('keeps delete-booklist on the real API path', async () => {
+    (libraryRequest as jest.Mock).mockRejectedValueOnce({
+      code: 'http_409',
+      name: 'LibraryApiError',
+      status: 409,
+    });
+
+    await expect(deleteBooklist('custom-1', 'reader-token')).rejects.toMatchObject({
+      code: 'http_409',
+      name: 'LibraryApiError',
+      status: 409,
     });
 
     expect(createMockBooklist).not.toHaveBeenCalled();

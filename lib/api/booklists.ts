@@ -54,6 +54,20 @@ export async function removeBookFromBooklist(
   }).then((payload: any) => normalizeBooklist(payload, token));
 }
 
+export async function deleteBooklist(
+  booklistId: number | string,
+  token?: string | null
+): Promise<{ ok: boolean }> {
+  return libraryRequest(`/api/v1/booklists/${booklistId}`, {
+    fallback: throwServiceNotConfigured,
+    method: 'DELETE',
+    token,
+  }).then((payload: any) => {
+    const resolvedPayload = payload?.data ?? payload;
+    return { ok: resolvedPayload?.ok !== false };
+  });
+}
+
 function normalizeBooklists(payload: any, token?: string | null) {
   const collectionPayload = payload?.data ?? payload;
 

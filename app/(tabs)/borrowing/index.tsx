@@ -27,16 +27,10 @@ import { borrowingTabs, statusFilters, type BorrowingTabKey } from '@/lib/borrow
 import { useActivityTimeline } from '@/hooks/use-activity-timeline';
 import { useBorrowingActions } from '@/hooks/use-borrowing-actions';
 import { useBorrowingOrders } from '@/hooks/use-borrowing-orders';
-import { useAppSession } from '@/hooks/use-app-session';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { useHeaderChromeVisibility } from '@/hooks/use-header-chrome-visibility';
-import { useNotificationsQuery } from '@/hooks/use-library-app-data';
+import { useDismissNotificationMutation, useNotificationsQuery } from '@/hooks/use-library-app-data';
 import { useProfileSheet } from '@/providers/profile-sheet-provider';
-import {
-  getDismissedNotificationsStorageKey,
-  readDismissedNotificationIds,
-  writeDismissedNotificationIds,
-} from '@/stores';
 
 function getNotificationKindLabel(kind: NotificationItem['kind']) {
   if (kind === 'delivery') return '配送提醒';
@@ -48,8 +42,7 @@ function getNotificationKindLabel(kind: NotificationItem['kind']) {
 export default function BorrowingRoute() {
   const [activeTab, setActiveTab] = React.useState<BorrowingTabKey>('borrowing');
   const [expandedGroups, setExpandedGroups] = React.useState<Set<string>>(new Set());
-  const [dismissedNotificationIds, setDismissedNotificationIds] = React.useState<Set<string>>(new Set());
-  const { identity } = useAppSession();
+  const [optimisticDismissedNotificationIds, setOptimisticDismissedNotificationIds] = React.useState<Set<string>>(new Set());
   const { theme } = useAppTheme();
   const { openProfileSheet } = useProfileSheet();
   const { onScroll, showHeaderChrome } = useHeaderChromeVisibility();
@@ -58,24 +51,20 @@ export default function BorrowingRoute() {
   const borrowing = useBorrowingOrders();
   const actions = useBorrowingActions();
   const notificationsQuery = useNotificationsQuery();
+  const dismissNotificationMutation = useDismissNotificationMutation();
   const timeline = useActivityTimeline({
     allActiveOrders: borrowing.allActiveOrders,
     canonicalOrders: borrowing.canonicalOrders,
   });
   const previousNotificationIds = React.useRef<Set<string>>(new Set());
   const hasHydratedNotifications = React.useRef(false);
-  const hasHydratedDismissedNotifications = React.useRef(false);
   const notificationDismissProgress = React.useRef<Record<string, Animated.Value>>({});
-  const notificationStorageKey = React.useMemo(
-    () => getDismissedNotificationsStorageKey(identity?.accountId),
-    [identity?.accountId]
-  );
 
   const borrowingError = borrowing.borrowingError;
   const notifications = notificationsQuery.data ?? [];
   const visibleNotifications = React.useMemo(
-    () => notifications.filter((item) => !dismissedNotificationIds.has(item.id)),
-    [dismissedNotificationIds, notifications]
+    () => notifications.filter((item) => !optimisticDismissedNotificationIds.has(item.id)),
+    [notifications, optimisticDismissedNotificationIds]
   );
   const isDynamicLoading =
     timeline.isDynamicLoading || (!notificationsQuery.data && Boolean(notificationsQuery.isFetching));
@@ -145,47 +134,37 @@ export default function BorrowingRoute() {
           LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         }
 
-        setDismissedNotificationIds((prev) => {
+        setOptimisticDismissedNotificationIds((prev) => {
           if (prev.has(id)) {
             return prev;
           }
 
           const next = new Set(prev);
           next.add(id);
-          void writeDismissedNotificationIds(notificationStorageKey, next);
           return next;
+        });
+
+        void dismissNotificationMutation.mutateAsync(id).catch((error) => {
+          if (Platform.OS !== 'web') {
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+          }
+
+          progress.setValue(1);
+          setOptimisticDismissedNotificationIds((prev) => {
+            if (!prev.has(id)) {
+              return prev;
+            }
+
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
+          toast.error(getLibraryErrorMessage(error, '清除提醒失败，请稍后重试。'));
         });
       });
     },
-    [getNotificationProgress, notificationStorageKey]
+    [dismissNotificationMutation, getNotificationProgress]
   );
-
-  React.useEffect(() => {
-    let isCancelled = false;
-    hasHydratedDismissedNotifications.current = false;
-    setDismissedNotificationIds(new Set());
-
-    void readDismissedNotificationIds(notificationStorageKey).then((ids) => {
-      if (isCancelled) {
-        return;
-      }
-
-      setDismissedNotificationIds((prev) => new Set([...prev, ...ids]));
-      hasHydratedDismissedNotifications.current = true;
-    });
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [notificationStorageKey]);
-
-  React.useEffect(() => {
-    if (!hasHydratedDismissedNotifications.current) {
-      return;
-    }
-
-    void writeDismissedNotificationIds(notificationStorageKey, dismissedNotificationIds);
-  }, [dismissedNotificationIds, notificationStorageKey]);
 
   React.useEffect(() => {
     if (!notificationsQuery.data?.length) {
@@ -210,7 +189,7 @@ export default function BorrowingRoute() {
   React.useEffect(() => {
     const liveIds = new Set(notifications.map((item) => item.id));
 
-    setDismissedNotificationIds((prev) => {
+    setOptimisticDismissedNotificationIds((prev) => {
       let changed = false;
       const next = new Set<string>();
 
@@ -228,11 +207,11 @@ export default function BorrowingRoute() {
     });
 
     notifications.forEach((item) => {
-      if (!dismissedNotificationIds.has(item.id) && notificationDismissProgress.current[item.id]) {
+      if (!optimisticDismissedNotificationIds.has(item.id) && notificationDismissProgress.current[item.id]) {
         notificationDismissProgress.current[item.id].setValue(1);
       }
     });
-  }, [dismissedNotificationIds, notifications]);
+  }, [notifications, optimisticDismissedNotificationIds]);
 
   return (
     <>
