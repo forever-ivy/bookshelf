@@ -331,6 +331,21 @@ def remove_book_from_reader_booklist(session: Session, *, reader_id: int, bookli
     return _custom_booklist_out(session, booklist)
 
 
+def delete_reader_booklist(session: Session, *, reader_id: int, booklist_id: int) -> None:
+    _require_profile(session, reader_id)
+    booklist = _require_reader_booklist(session, reader_id=reader_id, booklist_id=booklist_id)
+    if booklist.title == WATCH_LATER_BOOKLIST_TITLE:
+        raise ApiError(403, "reader_booklist_protected", "Watch later booklist cannot be deleted")
+
+    items = session.scalars(
+        select(ReaderBooklistItem).where(ReaderBooklistItem.booklist_id == booklist.id)
+    ).all()
+    for item in items:
+        session.delete(item)
+    session.delete(booklist)
+    session.commit()
+
+
 def list_reader_notifications(session: Session, *, reader_id: int, limit: int = 8) -> list[dict]:
     _require_profile(session, reader_id)
     now = utc_now()

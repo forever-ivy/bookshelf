@@ -377,6 +377,48 @@ def test_reader_booklists_support_unique_watch_later_and_book_membership_updates
     ]
 
 
+def test_reader_booklists_support_deleting_custom_booklists_but_not_watch_later(client):
+    state = seed_reader_experience_state()
+    headers = reader_headers(state["account_id"], state["profile_id"])
+
+    watch_later_response = client.post(
+        "/api/v1/booklists",
+        headers=headers,
+        json={
+            "title": "稍后再看",
+            "description": "默认待读。",
+            "book_ids": [state["favorite_book_id"]],
+        },
+    )
+    assert watch_later_response.status_code == 201
+    watch_later_payload = watch_later_response.json()
+
+    custom_response = client.post(
+        "/api/v1/booklists",
+        headers=headers,
+        json={
+            "title": "毕业设计",
+            "description": "论文相关。",
+            "book_ids": [state["secondary_book_id"]],
+        },
+    )
+    assert custom_response.status_code == 201
+    custom_payload = custom_response.json()
+
+    delete_custom_response = client.delete(f"/api/v1/booklists/{custom_payload['id']}", headers=headers)
+    assert delete_custom_response.status_code == 200
+    assert delete_custom_response.json() == {"ok": True}
+
+    list_booklists_response = client.get("/api/v1/booklists", headers=headers)
+    assert list_booklists_response.status_code == 200
+    remaining_custom_items = list_booklists_response.json()["custom_items"]
+    assert [item["title"] for item in remaining_custom_items] == ["稍后再看"]
+
+    delete_watch_later_response = client.delete(f"/api/v1/booklists/{watch_later_payload['id']}", headers=headers)
+    assert delete_watch_later_response.status_code == 403
+    assert delete_watch_later_response.json()["error"]["code"] == "reader_booklist_protected"
+
+
 def test_reader_favorites_support_server_side_query_and_category_filters(client):
     state = seed_reader_experience_state()
     headers = reader_headers(state["account_id"], state["profile_id"])

@@ -10,6 +10,7 @@ from app.core.security import AuthIdentity
 from app.readers.app_service import (
     add_book_to_reader_booklist,
     create_reader_booklist,
+    delete_reader_booklist,
     list_reader_booklists,
     remove_book_from_reader_booklist,
 )
@@ -74,3 +75,17 @@ def remove_book_from_booklist_endpoint(
         booklist_id=booklist_id,
         book_id=int(payload["book_id"]),
     )
+
+
+@router.delete("/{booklist_id}")
+def delete_booklist_endpoint(
+    booklist_id: int,
+    identity: AuthIdentity = Depends(require_reader),
+    session: Session = Depends(get_db),
+):
+    delete_reader_booklist(
+        session,
+        reader_id=_require_profile_id(identity),
+        booklist_id=booklist_id,
+    )
+    return {"ok": True}
