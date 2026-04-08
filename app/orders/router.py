@@ -49,7 +49,7 @@ async def create_borrow_order_endpoint(
         reader_profile_id=int(identity.profile_id or 0),
         book_id=int(payload["book_id"]),
         order_mode=str(payload.get("order_mode") or "robot_delivery"),
-        delivery_target=str(payload.get("delivery_target") or "Library Pickup"),
+        delivery_target=payload.get("delivery_target"),
     )
     return serialize_order(bundle, session=session)
 

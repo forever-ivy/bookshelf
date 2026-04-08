@@ -96,6 +96,13 @@ def _event_payload(
     robot_unit: RobotUnit | None = None,
     note: str | None = None,
 ) -> dict:
+    fulfillment_phase = _derive_fulfillment_phase_from_state(
+        order_mode=borrow_order.order_mode,
+        borrow_status=borrow_order.status,
+        delivery_status=delivery_order.status if delivery_order is not None else None,
+        task_status=robot_task.status if robot_task is not None else None,
+        robot_status=robot_unit.status if robot_unit is not None else None,
+    )
     payload = {
         "event_type": event_type,
         "borrow_order_id": borrow_order.id,
@@ -108,10 +115,39 @@ def _event_payload(
         "task_status": robot_task.status if robot_task is not None else None,
         "robot_status": robot_unit.status if robot_unit is not None else None,
         "delivery_target": delivery_order.delivery_target if delivery_order is not None else None,
+        "fulfillment_phase": fulfillment_phase,
     }
     if note is not None:
         payload["note"] = note
     return payload
+
+
+def _derive_fulfillment_phase_from_state(
+    *,
+    order_mode: str,
+    borrow_status: str,
+    delivery_status: str | None,
+    task_status: str | None,
+    robot_status: str | None,
+) -> str:
+    if borrow_status in {"completed", "returned"}:
+        return "completed"
+
+    if borrow_status == "delivered" or delivery_status == "delivered":
+        return "delivered"
+
+    if order_mode == "cabinet_pickup":
+        return "pickup_pending"
+
+    if (
+        borrow_status == "delivering"
+        or delivery_status == "delivering"
+        or task_status in {"carrying", "arriving"}
+        or robot_status in {"carrying", "arriving"}
+    ):
+        return "in_transit"
+
+    return "dispatch_started"
 
 
 def _record_robot_event(
@@ -355,7 +391,15 @@ def _reader_timeline(bundle: OrderBundle) -> list[dict]:
 
 
 def serialize_order(bundle: OrderBundle, *, session: Session | None = None) -> dict:
+    fulfillment_phase = _derive_fulfillment_phase_from_state(
+        order_mode=bundle.borrow_order.order_mode,
+        borrow_status=bundle.borrow_order.status,
+        delivery_status=bundle.delivery_order.status if bundle.delivery_order is not None else None,
+        task_status=bundle.robot_task.status if bundle.robot_task is not None else None,
+        robot_status=bundle.robot_unit.status if bundle.robot_unit is not None else None,
+    )
     payload = {
+        "fulfillment_phase": fulfillment_phase,
         "borrow_order": {
             "id": bundle.borrow_order.id,
             "reader_id": bundle.borrow_order.reader_id,
@@ -779,7 +823,7 @@ def create_borrow_order(
     reader_profile_id: int,
     book_id: int,
     order_mode: str,
-    delivery_target: str,
+    delivery_target: str | None,
 ) -> OrderBundle:
     profile = session.get(ReaderProfile, reader_profile_id)
     if profile is None:
@@ -791,6 +835,10 @@ def create_borrow_order(
     normalized_order_mode = order_mode or "robot_delivery"
     if normalized_order_mode not in ORDER_MODES:
         raise ApiError(400, "invalid_order_mode", f"Unsupported order mode: {normalized_order_mode}")
+
+    normalized_delivery_target = (delivery_target or "").strip()
+    if normalized_order_mode == "robot_delivery" and not normalized_delivery_target:
+        raise ApiError(400, "delivery_target_required", "Delivery target is required for robot delivery")
 
     allocated_copy = _allocate_copy_for_order(session, book_id=book.id, order_mode=normalized_order_mode)
 
@@ -812,7 +860,7 @@ def create_borrow_order(
     if normalized_order_mode == "robot_delivery":
         delivery_order = DeliveryOrder(
             borrow_order_id=borrow_order.id,
-            delivery_target=delivery_target,
+            delivery_target=normalized_delivery_target,
             eta_minutes=15,
             status="awaiting_pick",
         )

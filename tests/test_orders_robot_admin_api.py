@@ -144,6 +144,7 @@ def test_reader_borrow_order_creates_delivery_and_task(client):
     assert response.status_code == 201
     payload = response.json()
     assert payload["borrow_order"]["status"] == "created"
+    assert payload["fulfillment_phase"] == "dispatch_started"
     assert payload["delivery_order"]["status"] == "awaiting_pick"
     assert payload["robot_task"]["status"] == "assigned"
     assert payload["robot_unit"]["status"] == "assigned"
@@ -156,6 +157,7 @@ def test_reader_borrow_order_creates_delivery_and_task(client):
     assert admin_response.status_code == 200
     detail = admin_response.json()
     assert detail["borrow_order"]["status"] == "created"
+    assert detail["fulfillment_phase"] == "dispatch_started"
     assert detail["delivery_order"]["delivery_target"] == "Reading Hall Seat A7"
     assert detail["robot_task"]["status"] == "assigned"
 
@@ -185,6 +187,7 @@ def test_reader_borrow_order_creates_delivery_and_task(client):
     events = events_response.json()["items"]
     assert events[0]["event_type"] == "order_created"
     assert events[0]["metadata"]["borrow_status"] == "created"
+    assert events[0]["metadata"]["fulfillment_phase"] == "dispatch_started"
 
     session = get_session_factory()()
     try:
@@ -216,6 +219,7 @@ def test_cabinet_pickup_order_does_not_create_delivery_task(client):
     assert response.status_code == 201
     payload = response.json()
     assert payload["borrow_order"]["order_mode"] == "cabinet_pickup"
+    assert payload["fulfillment_phase"] == "pickup_pending"
     assert payload["delivery_order"] is None
     assert payload["robot_task"] is None
     assert payload["robot_unit"] is None
@@ -237,6 +241,24 @@ def test_cabinet_pickup_order_does_not_create_delivery_task(client):
         assert stock.reserved_copies == 1
     finally:
         session.close()
+
+
+def test_robot_delivery_requires_a_non_empty_delivery_target(client):
+    clear_broker_history()
+    state = seed_state()
+
+    response = client.post(
+        "/api/v1/orders/borrow-orders",
+        headers=reader_headers(state["profile"].id),
+        json={
+            "book_id": state["book"].id,
+            "delivery_target": "   ",
+            "order_mode": "robot_delivery",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "delivery_target_required"
 
 def test_robot_auto_progress_worker_completes_delivery(client):
     clear_broker_history()
