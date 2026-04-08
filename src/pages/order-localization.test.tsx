@@ -161,12 +161,28 @@ describe('order localization', () => {
 
     expect(await screen.findByRole('heading', { name: '订单' })).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: '订单状态筛选' })).toHaveTextContent('全部')
+    expect(screen.getByRole('combobox', { name: '优先级筛选' })).toHaveTextContent('全部')
+    expect(screen.getByRole('combobox', { name: '人工跟进筛选' })).toHaveTextContent('全部')
     await user.click(screen.getByRole('combobox', { name: '订单状态筛选' }))
     expect(await screen.findByRole('option', { name: '已创建' })).toHaveTextContent('已创建')
     expect(screen.getByRole('option', { name: '书柜取书中' })).toHaveTextContent('书柜取书中')
     expect(screen.getByRole('option', { name: '配送中' })).toHaveTextContent('配送中')
     await user.click(screen.getByRole('option', { name: '配送中' }))
     expect(screen.getByRole('combobox', { name: '订单状态筛选' })).toHaveTextContent('配送中')
+
+    await user.click(screen.getByRole('combobox', { name: '优先级筛选' }))
+    expect(await screen.findByRole('option', { name: '普通' })).toHaveTextContent('普通')
+    expect(screen.getByRole('option', { name: '优先' })).toHaveTextContent('优先')
+    expect(screen.getByRole('option', { name: '加急' })).toHaveTextContent('加急')
+    await user.click(screen.getByRole('option', { name: '优先' }))
+    expect(screen.getByRole('combobox', { name: '优先级筛选' })).toHaveTextContent('优先')
+
+    await user.click(screen.getByRole('combobox', { name: '人工跟进筛选' }))
+    expect(await screen.findByRole('option', { name: '转人工处理' })).toHaveTextContent('转人工处理')
+    expect(screen.getByRole('option', { name: '继续跟进' })).toHaveTextContent('继续跟进')
+    expect(screen.getByRole('option', { name: '已处理' })).toHaveTextContent('已处理')
+    await user.click(screen.getByRole('option', { name: '转人工处理' }))
+    expect(screen.getByRole('combobox', { name: '人工跟进筛选' })).toHaveTextContent('转人工处理')
 
     await user.click(await screen.findByRole('button', { name: '查看详情' }))
 

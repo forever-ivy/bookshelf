@@ -428,7 +428,9 @@ export type RobotEvent = {
   robot_id: number
   task_id?: number | null
   event_type: string
-  metadata: Record<string, unknown>
+  metadata: Record<string, unknown> & {
+    fulfillment_phase?: string | null
+  }
   created_at?: string | null
 }
 
@@ -438,6 +440,7 @@ export type OrderBundle = {
   robot_task?: RobotTask | null
   robot_unit?: RobotUnit | null
   robot?: RobotUnit | null
+  fulfillment_phase?: string | null
 }
 
 export type AdminReturnRequest = {

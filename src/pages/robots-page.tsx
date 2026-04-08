@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAdminEventsStream } from '@/hooks/use-admin-events-stream'
 import { getAdminEvents, getAdminRobots, getAdminTasks, reassignAdminTask } from '@/lib/api/admin'
-import { formatStatusLabel } from '@/lib/display-labels'
+import { formatFulfillmentPhaseLabel, formatStatusLabel } from '@/lib/display-labels'
 import { getAdminPageHero } from '@/lib/page-hero'
 import { patchSearchParams, readOptionalSearchParam, useOptionalSearchParams } from '@/lib/search-params'
 import type { RobotEvent, RobotTask, RobotUnit } from '@/types/domain'
@@ -331,6 +331,11 @@ export function RobotsPage() {
                         ? `说明：${String(event.metadata.reason)}`
                         : '还没有更多说明'}
                   </p>
+                  {event.metadata?.fulfillment_phase ? (
+                    <p className="mt-2 text-sm font-medium text-[var(--foreground)]">
+                      {formatFulfillmentPhaseLabel(String(event.metadata.fulfillment_phase))}
+                    </p>
+                  ) : null}
                 </div>
               ))}
             </div>

@@ -65,6 +65,14 @@ const INTERVENTION_STATUS_LABELS: Record<string, string> = {
   resolved: '已处理',
 }
 
+const FULFILLMENT_PHASE_LABELS: Record<string, string> = {
+  dispatch_started: '机器人发出',
+  in_transit: '配送中',
+  pickup_pending: '待取书',
+  delivered: '已送达',
+  completed: '已完成',
+}
+
 const PERMISSION_LABELS: Record<string, string> = {
   'dashboard.view': '首页',
   'books.manage': '图书管理',
@@ -108,6 +116,10 @@ export function formatPriorityLabel(priority?: string | null) {
 
 export function formatInterventionStatusLabel(status?: string | null) {
   return formatLabel(status, INTERVENTION_STATUS_LABELS)
+}
+
+export function formatFulfillmentPhaseLabel(phase?: string | null) {
+  return formatLabel(phase, FULFILLMENT_PHASE_LABELS)
 }
 
 export function formatPermissionLabel(permission?: string | null) {

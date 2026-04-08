@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "mcp__zread__get_repo_structure",
+      "Bash(gh api:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(find /Users/Code/bookshelf/bookshelf/app -name *.tsx -o -name *.ts)",
+      "Bash(find /Users/Code/bookshelf/bookshelf/lib/api -name *.ts -o -name *.tsx)",
+      "Bash(find /Users/Code/bookshelf/bookshelf -maxdepth 1 -name *.json -o -name *.config.* -o -name *.ts)"
+    ]
+  }
+}

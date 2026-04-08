@@ -35,6 +35,7 @@ import {
   retryAdminOrder,
 } from '@/lib/api/admin'
 import {
+  formatFulfillmentPhaseLabel,
   formatInterventionStatusLabel,
   formatOrderModeLabel,
   formatPriorityLabel,
@@ -298,6 +299,15 @@ export function OrderDetailPage() {
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <SummaryBlock label="借阅状态" value={<StatusBadge status={bundle.borrow_order.status} />} />
+          <SummaryBlock
+            label="运营摘要"
+            value={
+              <span className="text-base font-semibold text-[var(--foreground)]">
+                {formatFulfillmentPhaseLabel(bundle.fulfillment_phase)}
+              </span>
+            }
+            meta="给运营侧看的当前配送进展。"
+          />
           <SummaryBlock
             label="配送状态"
             value={<StatusBadge status={bundle.delivery_order?.status ?? 'none'} />}

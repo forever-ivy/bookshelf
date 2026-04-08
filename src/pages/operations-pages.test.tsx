@@ -91,6 +91,7 @@ describe('operations pages', () => {
           battery_level: 64,
           heartbeat_at: '2026-03-22T10:15:00Z',
         },
+        fulfillment_phase: 'dispatch_started',
         robot: {
           id: 1,
           code: 'robot-1',
@@ -147,6 +148,7 @@ describe('operations pages', () => {
         battery_level: 64,
         heartbeat_at: '2026-03-22T10:15:00Z',
       },
+      fulfillment_phase: 'dispatch_started',
       robot: {
         id: 1,
         code: 'robot-1',
@@ -235,7 +237,7 @@ describe('operations pages', () => {
         robot_id: 1,
         task_id: 32,
         event_type: 'order_created',
-        metadata: { delivery_target: '东区自习室 A7' },
+        metadata: { delivery_target: '东区自习室 A7', fulfillment_phase: 'dispatch_started' },
         created_at: '2026-03-22T10:00:00Z',
       },
     ])
@@ -265,6 +267,60 @@ describe('operations pages', () => {
     expect(within(quickDetail).getByText('东区自习室 A7')).toBeInTheDocument()
     expect(within(quickDetail).getByRole('link', { name: '打开完整页面' })).toHaveAttribute('href', '/orders/12')
   }, 10000)
+
+  it('shows the operator fulfillment summary on the orders surfaces', async () => {
+    render(
+      <TestProviders>
+        <MemoryRouter>
+          <OrdersPage />
+        </MemoryRouter>
+      </TestProviders>,
+    )
+
+    expect(await screen.findByText('机器人发出')).toBeInTheDocument()
+
+    render(
+      <TestProviders>
+        <MemoryRouter initialEntries={['/orders/12']}>
+          <Routes>
+            <Route path="/orders/:orderId" element={<OrderDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </TestProviders>,
+    )
+
+    expect(await screen.findAllByText('机器人发出')).not.toHaveLength(0)
+  }, 10000)
+
+  it('keeps the orders toolbar wrapping and shows localized created times', async () => {
+    render(
+      <TestProviders>
+        <MemoryRouter>
+          <OrdersPage />
+        </MemoryRouter>
+      </TestProviders>,
+    )
+
+    expect(await screen.findByRole('heading', { name: '订单' })).toBeInTheDocument()
+
+    const toolbar = screen.getByTestId('orders-toolbar')
+    const filterGrid = screen.getByTestId('orders-toolbar-filter-grid')
+    expect(toolbar).toHaveClass('w-full')
+    expect(toolbar).toHaveClass('xl:max-w-[38rem]')
+    expect(toolbar).toHaveClass('xl:ml-auto')
+    expect(filterGrid).toHaveClass('xl:grid-cols-3')
+    expect(filterGrid).toHaveClass('xl:justify-items-end')
+    expect(within(filterGrid).getByText('状态')).toBeInTheDocument()
+    expect(within(filterGrid).getByText('优先级')).toBeInTheDocument()
+    expect(within(filterGrid).getByText('人工跟进')).toBeInTheDocument()
+    expect(within(filterGrid).getByRole('combobox', { name: '订单状态筛选' })).toBeInTheDocument()
+    expect(within(filterGrid).getByRole('combobox', { name: '优先级筛选' })).toBeInTheDocument()
+    expect(within(filterGrid).getByRole('combobox', { name: '人工跟进筛选' })).toBeInTheDocument()
+    expect(screen.queryByDisplayValue(/订单总数：/)).not.toBeInTheDocument()
+    expect(screen.queryByDisplayValue(/高优先级：/)).not.toBeInTheDocument()
+    expect(screen.queryByDisplayValue(/人工跟进：/)).not.toBeInTheDocument()
+    expect(await screen.findByText('2026/03/22 17:00')).toBeInTheDocument()
+  })
 
   it('paginates orders and resets back to the first page when filters change', async () => {
     const user = userEvent.setup()
@@ -309,8 +365,7 @@ describe('operations pages', () => {
       })
     })
 
-    const priorityFilterGroup = screen.getByRole('group', { name: '优先级筛选' })
-    await user.click(within(priorityFilterGroup).getByRole('radio', { name: '优先' }))
+    await chooseSelectOption(user, '优先级筛选', '优先')
     await waitFor(() => {
       expect(adminApi.getAdminOrders).toHaveBeenLastCalledWith({
         page: 1,
@@ -320,10 +375,9 @@ describe('operations pages', () => {
         interventionStatus: undefined,
       })
     })
-    expect(within(priorityFilterGroup).getByRole('radio', { name: '优先' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('combobox', { name: '优先级筛选' })).toHaveTextContent('优先')
 
-    const interventionFilterGroup = screen.getByRole('group', { name: '人工跟进筛选' })
-    await user.click(within(interventionFilterGroup).getByRole('radio', { name: '转人工处理' }))
+    await chooseSelectOption(user, '人工跟进筛选', '转人工处理')
     await waitFor(() => {
       expect(adminApi.getAdminOrders).toHaveBeenLastCalledWith({
         page: 1,
@@ -333,7 +387,7 @@ describe('operations pages', () => {
         interventionStatus: 'manual_review',
       })
     })
-    expect(within(interventionFilterGroup).getByRole('radio', { name: '转人工处理' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('combobox', { name: '人工跟进筛选' })).toHaveTextContent('转人工处理')
   })
 
   it('hydrates order filters from the URL and filters robot views locally', async () => {
@@ -455,5 +509,15 @@ describe('operations pages', () => {
       robot_id: 2,
       reason: '原机器人电量过低',
     })
+  })
+
+  it('shows the operator fulfillment summary on the robots event feed', async () => {
+    render(
+      <TestProviders>
+        <RobotsPage />
+      </TestProviders>,
+    )
+
+    expect(await screen.findByText('机器人发出')).toBeInTheDocument()
   })
 })

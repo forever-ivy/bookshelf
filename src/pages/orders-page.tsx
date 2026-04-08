@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createColumnHelper, type ColumnDef } from '@tanstack/react-table'
 import { Link } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 
 import {
   filledPrimaryActionButtonClassName,
@@ -23,13 +24,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { useAdminEventsStream } from '@/hooks/use-admin-events-stream'
 import { getAdminOrder, getAdminOrders, interveneAdminOrder, prioritizeAdminOrder, retryAdminOrder } from '@/lib/api/admin'
 import {
+  formatFulfillmentPhaseLabel,
   formatInterventionStatusLabel,
   formatOrderModeLabel,
   formatPriorityLabel,
@@ -44,6 +45,35 @@ const columnHelper = createColumnHelper<OrderBundle>()
 const pageHero = getAdminPageHero('orders')
 type ActiveQuickDialog = 'detail' | 'priority' | 'intervention' | 'retry' | null
 const ORDERS_PAGE_SIZE = 20
+const toolbarSelectTriggerClassName = 'h-8 w-[7.5rem] rounded-lg bg-[var(--surface-container-low)] px-3 text-[13px] font-medium text-[var(--foreground)] border-0 shadow-none focus:ring-0'
+
+const ORDER_RELEVANT_EVENT_TYPES = new Set(['order_created'])
+const ORDER_RELEVANT_PHASES = new Set(['dispatch_started', 'in_transit', 'pickup_pending', 'delivered'])
+
+function isOrderRelevantEvent(eventType: string, phase: string | null): boolean {
+  return ORDER_RELEVANT_EVENT_TYPES.has(eventType)
+    || (phase !== null && ORDER_RELEVANT_PHASES.has(phase))
+}
+
+const TOAST_MESSAGES: Record<string, string> = {
+  order_created: '新的送书订单已创建',
+  dispatch_started: '机器人已出发配送',
+  in_transit: '订单配送中',
+  pickup_pending: '订单待取书',
+  delivered: '订单已送达',
+}
+
+function showOrderEventToast(eventType: string, phase: string | null, deliveryTarget: string | null) {
+  const key = phase && ORDER_RELEVANT_PHASES.has(phase) ? phase : eventType
+  const message = TOAST_MESSAGES[key]
+  if (!message) return
+  const suffix = deliveryTarget ? ` → ${deliveryTarget}` : ''
+  if (key === 'delivered') {
+    toast.success(`${message}${suffix}`)
+  } else {
+    toast.info(`${message}${suffix}`)
+  }
+}
 
 function snapshotValue(value?: string | number | null) {
   if (value === null || value === undefined || value === '') {
@@ -54,6 +84,33 @@ function snapshotValue(value?: string | number | null) {
 
 export function OrdersPage() {
   const queryClient = useQueryClient()
+  const invalidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useAdminEventsStream({
+    enabled: true,
+    onEvent: (event) => {
+      const eventType = String(event.event_type ?? '')
+      const meta = (event as { metadata?: Record<string, unknown> }).metadata
+      const phase = meta?.fulfillment_phase ? String(meta.fulfillment_phase) : null
+
+      if (!isOrderRelevantEvent(eventType, phase)) return
+
+      const target = meta?.delivery_target
+      showOrderEventToast(eventType, phase, target ? String(target) : null)
+
+      if (invalidateTimerRef.current) clearTimeout(invalidateTimerRef.current)
+      invalidateTimerRef.current = setTimeout(() => {
+        void queryClient.invalidateQueries({ queryKey: ['admin', 'orders'] })
+      }, 2_000)
+    },
+  })
+
+  useEffect(() => {
+    return () => {
+      if (invalidateTimerRef.current) clearTimeout(invalidateTimerRef.current)
+    }
+  }, [])
+
   const [searchParams, setSearchParams] = useOptionalSearchParams()
   const statusFilter = readOptionalSearchParam(searchParams, 'status') ?? 'all'
   const priorityFilter = readOptionalSearchParam(searchParams, 'priority') ?? 'all'
@@ -154,6 +211,28 @@ export function OrdersPage() {
     setActiveQuickDialog(selectedOrderId ? 'detail' : null)
   }
 
+  const statusFilterOptions = [
+    ['all', '全部'],
+    ['created', formatStatusLabel('created')],
+    ['awaiting_pick', formatStatusLabel('awaiting_pick')],
+    ['picked_from_cabinet', formatStatusLabel('picked_from_cabinet')],
+    ['delivering', formatStatusLabel('delivering')],
+    ['delivered', formatStatusLabel('delivered')],
+    ['completed', formatStatusLabel('completed')],
+  ] as const
+  const priorityFilterOptions = [
+    ['all', '全部'],
+    ['normal', formatPriorityLabel('normal')],
+    ['high', formatPriorityLabel('high')],
+    ['urgent', formatPriorityLabel('urgent')],
+  ] as const
+  const interventionFilterOptions = [
+    ['all', '全部'],
+    ['manual_review', formatInterventionStatusLabel('manual_review')],
+    ['escalated', formatInterventionStatusLabel('escalated')],
+    ['resolved', formatInterventionStatusLabel('resolved')],
+  ] as const
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const columns: Array<ColumnDef<OrderBundle, any>> = [
     columnHelper.accessor((row) => row.borrow_order.id, {
@@ -170,6 +249,11 @@ export function OrdersPage() {
       id: 'status',
       header: '状态',
       cell: (info) => <StatusBadge status={info.getValue()} />,
+    }),
+    columnHelper.accessor((row) => row.fulfillment_phase ?? null, {
+      id: 'fulfillment_phase',
+      header: '运营摘要',
+      cell: (info) => formatFulfillmentPhaseLabel(info.getValue()),
     }),
     columnHelper.accessor((row) => row.borrow_order.priority ?? 'normal', {
       id: 'priority',
@@ -230,86 +314,63 @@ export function OrdersPage() {
       />
       <WorkspacePanel
         title="订单列表"
-        description="把状态、优先级、人工跟进和重试次数放在一起看。"
         action={
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <Input readOnly value={`订单总数：${filteredTotal}`} className="sm:w-56" />
-            <Input readOnly value={`高优先级：${urgentCount}`} className="sm:w-40" />
-            <Input readOnly value={`人工跟进：${interventionCount}`} className="sm:w-40" />
-            <Select
-              value={statusFilter}
-              onValueChange={(value) => {
-                updateFilters({
-                  status: value === 'all' ? undefined : value,
-                })
-              }}
-            >
-              <SelectTrigger aria-label="订单状态筛选" className="sm:w-[10rem]">
-                <SelectValue placeholder="全部" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部</SelectItem>
-                <SelectItem value="created">{formatStatusLabel('created')}</SelectItem>
-                <SelectItem value="awaiting_pick">{formatStatusLabel('awaiting_pick')}</SelectItem>
-                <SelectItem value="picked_from_cabinet">{formatStatusLabel('picked_from_cabinet')}</SelectItem>
-                <SelectItem value="delivering">{formatStatusLabel('delivering')}</SelectItem>
-                <SelectItem value="delivered">{formatStatusLabel('delivered')}</SelectItem>
-                <SelectItem value="completed">{formatStatusLabel('completed')}</SelectItem>
-              </SelectContent>
-            </Select>
-            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-2 py-2">
-              <span className="px-2 text-xs font-medium text-[var(--muted-foreground)]">优先级</span>
-              <ToggleGroup
-                type="single"
-                value={priorityFilter}
-                aria-label="优先级筛选"
-                onValueChange={(value) => {
-                  if (!value) {
-                    return
-                  }
-                  updateFilters({
-                    priority: value === 'all' ? undefined : value,
-                  })
-                }}
-              >
-                {[
-                  ['all', '全部'],
-                  ['normal', formatPriorityLabel('normal')],
-                  ['high', formatPriorityLabel('high')],
-                  ['urgent', formatPriorityLabel('urgent')],
-                ].map(([value, label]) => (
-                  <ToggleGroupItem key={value} value={value}>
-                    {label}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[rgba(193,198,214,0.32)] bg-white/80 px-2 py-2">
-              <span className="px-2 text-xs font-medium text-[var(--muted-foreground)]">人工跟进</span>
-              <ToggleGroup
-                type="single"
-                value={interventionFilter}
-                aria-label="人工跟进筛选"
-                onValueChange={(value) => {
-                  if (!value) {
-                    return
-                  }
-                  updateFilters({
-                    intervention_status: value === 'all' ? undefined : value,
-                  })
-                }}
-              >
-                {[
-                  ['all', '全部'],
-                  ['manual_review', formatInterventionStatusLabel('manual_review')],
-                  ['escalated', formatInterventionStatusLabel('escalated')],
-                  ['resolved', formatInterventionStatusLabel('resolved')],
-                ].map(([value, label]) => (
-                  <ToggleGroupItem key={value} value={value}>
-                    {label}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
+          <div className="w-full xl:ml-auto xl:max-w-[38rem]" data-testid="orders-toolbar">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 xl:justify-items-end" data-testid="orders-toolbar-filter-grid">
+              <div className="space-y-1">
+                <span className="text-xs text-[var(--muted-foreground)]">状态</span>
+                <Select
+                  value={statusFilter}
+                  onValueChange={(value) => {
+                    updateFilters({ status: value === 'all' ? undefined : value })
+                  }}
+                >
+                  <SelectTrigger aria-label="订单状态筛选" className={toolbarSelectTriggerClassName}>
+                    <SelectValue placeholder="全部" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {statusFilterOptions.map(([value, label]) => (
+                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <span className="text-xs text-[var(--muted-foreground)]">优先级</span>
+                <Select
+                  value={priorityFilter}
+                  onValueChange={(value) => {
+                    updateFilters({ priority: value === 'all' ? undefined : value })
+                  }}
+                >
+                  <SelectTrigger aria-label="优先级筛选" className={toolbarSelectTriggerClassName}>
+                    <SelectValue placeholder="全部" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {priorityFilterOptions.map(([value, label]) => (
+                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <span className="text-xs text-[var(--muted-foreground)]">人工跟进</span>
+                <Select
+                  value={interventionFilter}
+                  onValueChange={(value) => {
+                    updateFilters({ intervention_status: value === 'all' ? undefined : value })
+                  }}
+                >
+                  <SelectTrigger aria-label="人工跟进筛选" className={toolbarSelectTriggerClassName}>
+                    <SelectValue placeholder="全部" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {interventionFilterOptions.map(([value, label]) => (
+                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
         }
@@ -382,6 +443,7 @@ export function OrdersPage() {
                 <div className="rounded-[1.5rem] border border-[var(--line-subtle)] bg-[var(--surface-bright)] p-5">
                   <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">处理情况</p>
                   <div className="mt-3 space-y-2 text-sm text-[var(--muted-foreground)]">
+                    <p>运营摘要：{formatFulfillmentPhaseLabel(detailBundle.fulfillment_phase)}</p>
                     <p>优先级：{formatPriorityLabel(detailBundle.borrow_order.priority ?? detailBundle.delivery_order?.priority)}</p>
                     <p>人工跟进：{formatInterventionStatusLabel(detailBundle.borrow_order.intervention_status)}</p>
                     <p>重试次数：{snapshotValue(detailBundle.borrow_order.attempt_count ?? 0)}</p>
