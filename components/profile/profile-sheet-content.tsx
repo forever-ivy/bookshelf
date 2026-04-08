@@ -22,38 +22,18 @@ export function ProfileSheetContent({
       <View
         style={{
           alignItems: 'center',
-          gap: theme.spacing.sm,
+          gap: theme.spacing.xs,
           paddingHorizontal: theme.spacing.xxxl + theme.spacing.md,
         }}>
         <Text
           style={{
-            color: theme.colors.primaryStrong,
-            ...theme.typography.medium,
-            fontSize: 11,
-            letterSpacing: 0.8,
-            textAlign: 'center',
-          }}>
-          PROFILE
-        </Text>
-        <Text
-          style={{
             color: theme.colors.text,
             ...theme.typography.heading,
-            fontSize: 32,
-            letterSpacing: -0.9,
+            fontSize: 28,
+            letterSpacing: -0.6,
             textAlign: 'center',
           }}>
-          账户
-        </Text>
-        <Text
-          style={{
-            color: theme.colors.textMuted,
-            ...theme.typography.body,
-            fontSize: 14,
-            lineHeight: 22,
-            textAlign: 'center',
-          }}>
-          查看资料、借阅记录与常用入口。
+          个人中心
         </Text>
       </View>
 

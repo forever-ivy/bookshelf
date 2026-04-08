@@ -327,6 +327,10 @@ jest.mock('@/hooks/use-library-app-data', () => ({
     isPending: false,
     mutateAsync: jest.fn(),
   }),
+  useDeleteBooklistMutation: () => ({
+    isPending: false,
+    mutateAsync: jest.fn(),
+  }),
   useOrderHistoryQuery: () => ({
     data: mockDynamicLoading
       ? undefined
@@ -626,6 +630,23 @@ describe('BorrowingRoute', () => {
     fireEvent.press(screen.getByTestId('borrowing-tab-dynamic'));
 
     expect(toast.success).toHaveBeenCalledWith('收到 1 条新提醒');
+  });
+
+  it('does not re-toast when the same reminders are refetched with different ids', () => {
+    const view = render(<BorrowingRoute />);
+
+    fireEvent.press(screen.getByTestId('borrowing-tab-dynamic'));
+    (toast.success as jest.Mock).mockClear();
+
+    mockNotifications = mockNotifications.map((item, index) => ({
+      ...item,
+      id: `refetched-${index + 1}`,
+    }));
+
+    view.rerender(<BorrowingRoute />);
+    fireEvent.press(screen.getByTestId('borrowing-tab-dynamic'));
+
+    expect(toast.success).not.toHaveBeenCalled();
   });
 
   it('keeps the selected single-row filter chip active', () => {

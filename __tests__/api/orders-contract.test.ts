@@ -1,5 +1,6 @@
 import {
   cancelBorrowOrder,
+  createBorrowOrder,
   getOrder,
   getReturnRequest,
   listBorrowOrders,
@@ -142,5 +143,81 @@ describe('orders contract', () => {
     );
     expect(result.status).toBe('cancelled');
     expect(result.statusLabel).toBe('已取消');
+  });
+
+  it('normalizes nested service order bundles and exposes the fulfillment phase', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      json: async () => ({
+        book: {
+          author: '程墨',
+          id: 502,
+          title: '服务设计',
+        },
+        borrow_order: {
+          due_at: '4 月 8 日',
+          id: 502,
+          order_mode: 'robot_delivery',
+          renewable: false,
+          status: 'created',
+        },
+        delivery_order: {
+          delivery_target: '阅览室 A-12',
+          status: 'awaiting_pick',
+        },
+        fulfillment_phase: 'dispatch_started',
+        robot_task: {
+          status: 'assigned',
+        },
+        robot_unit: {
+          status: 'assigned',
+        },
+      }),
+      ok: true,
+    });
+
+    const result = await getOrder(502, 'reader-token');
+
+    expect(result).toMatchObject({
+      dueDateLabel: '4 月 8 日',
+      fulfillmentPhase: 'dispatch_started',
+      id: 502,
+      mode: 'robot_delivery',
+      status: 'active',
+      statusLabel: '正在配送',
+    });
+  });
+
+  it('posts the reader provided delivery target without falling back to a default seat', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      json: async () => ({
+        book: {
+          author: '程墨',
+          id: 601,
+          title: '服务设计',
+        },
+        borrow_order: {
+          id: 601,
+          order_mode: 'robot_delivery',
+          status: 'created',
+        },
+        fulfillment_phase: 'dispatch_started',
+      }),
+      ok: true,
+    });
+
+    await createBorrowOrder(
+      {
+        bookId: 601,
+        deliveryTarget: '阅览室 B-07',
+        mode: 'robot_delivery',
+      },
+      'reader-token'
+    );
+
+    expect(JSON.parse(String((global.fetch as jest.Mock).mock.calls[0]?.[1]?.body))).toEqual({
+      book_id: 601,
+      delivery_target: '阅览室 B-07',
+      order_mode: 'robot_delivery',
+    });
   });
 });

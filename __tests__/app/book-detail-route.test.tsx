@@ -6,6 +6,129 @@ let mockCollaborativeLoading = false;
 let mockSimilarLoading = false;
 let mockHybridLoading = false;
 let mockSearchParams: Record<string, string | undefined> = { bookId: '1' };
+let mockActiveOrdersData: Array<Record<string, unknown>> = [];
+let mockCollaborativeBooksData = [
+  {
+    author: 'Ian Goodfellow',
+    availabilityLabel: '馆藏充足 · 可立即借阅',
+    cabinetLabel: '主馆 2 楼',
+    coverTone: 'blue',
+    deliveryAvailable: false,
+    etaLabel: '到柜自取',
+    etaMinutes: null,
+    id: 2,
+    matchedFields: ['title'],
+    recommendationReason: '如果你在做深度学习专题，它会更系统',
+    shelfLabel: '主馆 2 楼',
+    stockStatus: 'limited',
+    summary: '适合继续拓展模型与训练方法。',
+    tags: ['深度学习'],
+    title: 'Deep Learning',
+  },
+];
+let mockSimilarBooksData = [
+  {
+    author: '格致',
+    availabilityLabel: '馆藏充足 · 可立即借阅',
+    cabinetLabel: '默认书柜',
+    coverTone: 'mint',
+    deliveryAvailable: true,
+    etaLabel: '明早可达',
+    etaMinutes: 480,
+    id: 3,
+    matchedFields: ['title'],
+    recommendationReason: '偏兴趣阅读，适合碎片时间浏览',
+    shelfLabel: '主馆 2 楼',
+    stockStatus: 'available',
+    summary: '适合兴趣阅读和跨学科补充。',
+    tags: ['心理学'],
+    title: '心理学入门',
+  },
+];
+let mockHybridBooksData = [
+  {
+    author: '李航',
+    availabilityLabel: '馆藏充足 · 可立即借阅',
+    cabinetLabel: '智能书柜 B-02',
+    coverTone: 'coral',
+    deliveryAvailable: true,
+    etaLabel: '12 分钟可送达',
+    etaMinutes: 12,
+    id: 4,
+    matchedFields: ['title'],
+    recommendationReason: '综合你的课程与借阅轨迹生成',
+    shelfLabel: '主馆 3 楼',
+    stockStatus: 'available',
+    summary: '适合进一步补齐统计学习方法。',
+    tags: ['统计学习'],
+    title: '统计学习方法',
+  },
+];
+
+function createMockBookDetailData() {
+  return {
+    catalog: {
+      author: '周志华',
+      availabilityLabel: '馆藏充足 · 可立即借阅',
+      cabinetLabel: '智能书柜 A-03',
+      contents: ['第 1 章 概述', '第 2 章 核心概念'],
+      coverTone: 'lavender',
+      deliveryAvailable: true,
+      etaLabel: '18 分钟可送达',
+      etaMinutes: 18,
+      id: 1,
+      locationNote: '主馆 2 楼 · 智能书柜 A-03',
+      matchedFields: ['title'],
+      recommendationReason: '与你本周的课程和 AI 学习记录最相关',
+      shelfLabel: '主馆 2 楼',
+      stockStatus: 'available',
+      summary: '适合课程导读和期末复习的入门书。',
+      tags: ['人工智能', '课程配套'],
+      title: '机器学习从零到一',
+    },
+    peopleAlsoBorrowed: [
+      {
+        author: 'Ian Goodfellow',
+        availabilityLabel: '馆藏充足 · 可立即借阅',
+        cabinetLabel: '主馆 2 楼',
+        coverTone: 'blue',
+        deliveryAvailable: false,
+        etaLabel: '到柜自取',
+        etaMinutes: null,
+        id: 2,
+        matchedFields: ['title'],
+        recommendationReason: '如果你在做深度学习专题，它会更系统',
+        shelfLabel: '主馆 2 楼',
+        stockStatus: 'limited',
+        summary: '适合继续拓展模型与训练方法。',
+        tags: ['深度学习'],
+        title: 'Deep Learning',
+      },
+    ],
+    recommendationReason: '与你本周的课程和 AI 学习记录最相关',
+    relatedBooks: [
+      {
+        author: '格致',
+        availabilityLabel: '馆藏充足 · 可立即借阅',
+        cabinetLabel: '默认书柜',
+        coverTone: 'mint',
+        deliveryAvailable: true,
+        etaLabel: '明早可达',
+        etaMinutes: 480,
+        id: 3,
+        matchedFields: ['title'],
+        recommendationReason: '偏兴趣阅读，适合碎片时间浏览',
+        shelfLabel: '主馆 2 楼',
+        stockStatus: 'available',
+        summary: '适合兴趣阅读和跨学科补充。',
+        tags: ['心理学'],
+        title: '心理学入门',
+      },
+    ],
+  };
+}
+
+let mockBookDetailData = createMockBookDetailData();
 
 const mockRouter = {
   back: jest.fn(),
@@ -148,69 +271,13 @@ jest.mock('@/hooks/use-app-session', () => ({
 }));
 
 jest.mock('@/hooks/use-library-app-data', () => ({
+  useActiveOrdersQuery: () => ({
+    data: mockActiveOrdersData,
+    error: null,
+    isFetching: false,
+  }),
   useBookDetailQuery: () => ({
-    data: mockDetailLoading
-      ? undefined
-      : {
-          catalog: {
-            author: '周志华',
-            availabilityLabel: '馆藏充足 · 可立即借阅',
-            cabinetLabel: '智能书柜 A-03',
-            contents: ['第 1 章 概述', '第 2 章 核心概念'],
-            coverTone: 'lavender',
-            deliveryAvailable: true,
-            etaLabel: '18 分钟可送达',
-            etaMinutes: 18,
-            id: 1,
-            locationNote: '主馆 2 楼 · 智能书柜 A-03',
-            matchedFields: ['title'],
-            recommendationReason: '与你本周的课程和 AI 学习记录最相关',
-            shelfLabel: '主馆 2 楼',
-            stockStatus: 'available',
-            summary: '适合课程导读和期末复习的入门书。',
-            tags: ['人工智能', '课程配套'],
-            title: '机器学习从零到一',
-          },
-          peopleAlsoBorrowed: [
-            {
-              author: 'Ian Goodfellow',
-              availabilityLabel: '馆藏充足 · 可立即借阅',
-              cabinetLabel: '主馆 2 楼',
-              coverTone: 'blue',
-              deliveryAvailable: false,
-              etaLabel: '到柜自取',
-              etaMinutes: null,
-              id: 2,
-              matchedFields: ['title'],
-              recommendationReason: '如果你在做深度学习专题，它会更系统',
-              shelfLabel: '主馆 2 楼',
-              stockStatus: 'limited',
-              summary: '适合继续拓展模型与训练方法。',
-              tags: ['深度学习'],
-              title: 'Deep Learning',
-            },
-          ],
-          recommendationReason: '与你本周的课程和 AI 学习记录最相关',
-          relatedBooks: [
-            {
-              author: '格致',
-              availabilityLabel: '馆藏充足 · 可立即借阅',
-              cabinetLabel: '默认书柜',
-              coverTone: 'mint',
-              deliveryAvailable: true,
-              etaLabel: '明早可达',
-              etaMinutes: 480,
-              id: 3,
-              matchedFields: ['title'],
-              recommendationReason: '偏兴趣阅读，适合碎片时间浏览',
-              shelfLabel: '主馆 2 楼',
-              stockStatus: 'available',
-              summary: '适合兴趣阅读和跨学科补充。',
-              tags: ['心理学'],
-              title: '心理学入门',
-            },
-          ],
-        },
+    data: mockDetailLoading ? undefined : mockBookDetailData,
     isFetching: mockDetailLoading,
   }),
   useBooklistsQuery: () => ({
@@ -228,27 +295,7 @@ jest.mock('@/hooks/use-library-app-data', () => ({
     mutateAsync: mockBorrowMutateAsync,
   }),
   useCollaborativeBooksQuery: () => ({
-    data: mockCollaborativeLoading
-      ? undefined
-      : [
-      {
-        author: 'Ian Goodfellow',
-        availabilityLabel: '馆藏充足 · 可立即借阅',
-        cabinetLabel: '主馆 2 楼',
-        coverTone: 'blue',
-        deliveryAvailable: false,
-        etaLabel: '到柜自取',
-        etaMinutes: null,
-        id: 2,
-        matchedFields: ['title'],
-        recommendationReason: '如果你在做深度学习专题，它会更系统',
-        shelfLabel: '主馆 2 楼',
-        stockStatus: 'limited',
-        summary: '适合继续拓展模型与训练方法。',
-        tags: ['深度学习'],
-        title: 'Deep Learning',
-      },
-    ],
+    data: mockCollaborativeLoading ? undefined : mockCollaborativeBooksData,
     error: null,
     isFetching: mockCollaborativeLoading,
   }),
@@ -261,52 +308,12 @@ jest.mock('@/hooks/use-library-app-data', () => ({
     ],
   }),
   useHybridBooksQuery: () => ({
-    data: mockHybridLoading
-      ? undefined
-      : [
-      {
-        author: '李航',
-        availabilityLabel: '馆藏充足 · 可立即借阅',
-        cabinetLabel: '智能书柜 B-02',
-        coverTone: 'coral',
-        deliveryAvailable: true,
-        etaLabel: '12 分钟可送达',
-        etaMinutes: 12,
-        id: 4,
-        matchedFields: ['title'],
-        recommendationReason: '综合你的课程与借阅轨迹生成',
-        shelfLabel: '主馆 3 楼',
-        stockStatus: 'available',
-        summary: '适合进一步补齐统计学习方法。',
-        tags: ['统计学习'],
-        title: '统计学习方法',
-      },
-    ],
+    data: mockHybridLoading ? undefined : mockHybridBooksData,
     error: null,
     isFetching: mockHybridLoading,
   }),
   useSimilarBooksQuery: () => ({
-    data: mockSimilarLoading
-      ? undefined
-      : [
-      {
-        author: '格致',
-        availabilityLabel: '馆藏充足 · 可立即借阅',
-        cabinetLabel: '默认书柜',
-        coverTone: 'mint',
-        deliveryAvailable: true,
-        etaLabel: '明早可达',
-        etaMinutes: 480,
-        id: 3,
-        matchedFields: ['title'],
-        recommendationReason: '偏兴趣阅读，适合碎片时间浏览',
-        shelfLabel: '主馆 2 楼',
-        stockStatus: 'available',
-        summary: '适合兴趣阅读和跨学科补充。',
-        tags: ['心理学'],
-        title: '心理学入门',
-      },
-    ],
+    data: mockSimilarLoading ? undefined : mockSimilarBooksData,
     error: null,
     isFetching: mockSimilarLoading,
   }),
@@ -324,15 +331,76 @@ jest.mock('@/providers/profile-sheet-provider', () => ({
   }),
 }));
 
+import { toast } from 'sonner-native';
 import BookDetailRoute from '@/app/books/[bookId]';
+import { appTheme } from '@/constants/app-theme';
 
 describe('BookDetailRoute', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockActiveOrdersData = [];
     mockDetailLoading = false;
     mockCollaborativeLoading = false;
     mockSimilarLoading = false;
     mockHybridLoading = false;
+    mockCollaborativeBooksData = [
+      {
+        author: 'Ian Goodfellow',
+        availabilityLabel: '馆藏充足 · 可立即借阅',
+        cabinetLabel: '主馆 2 楼',
+        coverTone: 'blue',
+        deliveryAvailable: false,
+        etaLabel: '到柜自取',
+        etaMinutes: null,
+        id: 2,
+        matchedFields: ['title'],
+        recommendationReason: '如果你在做深度学习专题，它会更系统',
+        shelfLabel: '主馆 2 楼',
+        stockStatus: 'limited',
+        summary: '适合继续拓展模型与训练方法。',
+        tags: ['深度学习'],
+        title: 'Deep Learning',
+      },
+    ];
+    mockSimilarBooksData = [
+      {
+        author: '格致',
+        availabilityLabel: '馆藏充足 · 可立即借阅',
+        cabinetLabel: '默认书柜',
+        coverTone: 'mint',
+        deliveryAvailable: true,
+        etaLabel: '明早可达',
+        etaMinutes: 480,
+        id: 3,
+        matchedFields: ['title'],
+        recommendationReason: '偏兴趣阅读，适合碎片时间浏览',
+        shelfLabel: '主馆 2 楼',
+        stockStatus: 'available',
+        summary: '适合兴趣阅读和跨学科补充。',
+        tags: ['心理学'],
+        title: '心理学入门',
+      },
+    ];
+    mockHybridBooksData = [
+      {
+        author: '李航',
+        availabilityLabel: '馆藏充足 · 可立即借阅',
+        cabinetLabel: '智能书柜 B-02',
+        coverTone: 'coral',
+        deliveryAvailable: true,
+        etaLabel: '12 分钟可送达',
+        etaMinutes: 12,
+        id: 4,
+        matchedFields: ['title'],
+        recommendationReason: '综合你的课程与借阅轨迹生成',
+        shelfLabel: '主馆 3 楼',
+        stockStatus: 'available',
+        summary: '适合进一步补齐统计学习方法。',
+        tags: ['统计学习'],
+        title: '统计学习方法',
+      },
+    ];
+    mockBookDetailData = createMockBookDetailData();
     mockSearchParams = { bookId: '1' };
   });
 
@@ -367,6 +435,111 @@ describe('BookDetailRoute', () => {
     expect(screen.getByTestId('book-detail-cover-shell').props.style).not.toMatchObject({
       backgroundColor: expect.anything(),
     });
+  });
+
+  it('uses a concise availability label and gives the decision buttons a clear visual hierarchy', () => {
+    render(<BookDetailRoute />);
+
+    const decisionActions = screen.getByTestId('book-detail-decision-actions');
+    const primaryRow = screen.getByTestId('book-detail-decision-primary-row');
+    const secondaryRow = screen.getByTestId('book-detail-decision-secondary-row');
+    const borrowSlot = screen.getByTestId('book-detail-decision-borrow-slot');
+    const favoriteSlot = screen.getByTestId('book-detail-decision-favorite-slot');
+    const primaryBorrowSurface = screen.getByTestId('book-detail-decision-borrow-surface');
+    const favoriteSurface = screen.getByTestId('book-detail-decision-favorite-surface');
+    const booklistSurface = screen.getByTestId('book-detail-decision-booklist-surface');
+
+    expect(screen.getByText('可立即借阅')).toBeTruthy();
+    expect(decisionActions.props.style).toEqual(
+      expect.objectContaining({
+        width: '100%',
+      })
+    );
+    expect(primaryRow.props.style).toEqual(
+      expect.objectContaining({
+        width: '100%',
+      })
+    );
+    expect(secondaryRow.props.style).toEqual(
+      expect.objectContaining({
+        width: '100%',
+      })
+    );
+    expect(borrowSlot.props.style).toEqual(
+      expect.objectContaining({
+        minHeight: 52,
+      })
+    );
+    expect(favoriteSlot.props.style).toEqual(
+      expect.objectContaining({
+        minHeight: 52,
+      })
+    );
+    expect(primaryBorrowSurface.props.style).toEqual(
+      expect.objectContaining({
+        backgroundColor: appTheme.colors.primaryStrong,
+        borderColor: appTheme.colors.primaryStrong,
+        boxShadow: appTheme.shadows.float,
+        height: undefined,
+      })
+    );
+    expect(favoriteSurface.props.style).toEqual(
+      expect.objectContaining({
+        backgroundColor: appTheme.colors.surfaceTint,
+        height: undefined,
+      })
+    );
+    expect(booklistSurface.props.style).toEqual(
+      expect.objectContaining({
+        backgroundColor: appTheme.colors.surface,
+        height: undefined,
+      })
+    );
+  });
+
+  it('shows the current book as in transit when there is an active robot delivery order', () => {
+    mockActiveOrdersData = [
+      {
+        book: { id: 1 },
+        dueDateLabel: '7 天后到期',
+        fulfillmentPhase: 'dispatch_started',
+        id: 77,
+        mode: 'robot_delivery',
+        status: 'active',
+        statusLabel: '正在配送',
+        timeline: [{ completed: true, label: '下单成功' }],
+      },
+    ];
+
+    render(<BookDetailRoute />);
+
+    expect(screen.getAllByText('正在配送').length).toBeGreaterThan(0);
+    expect(screen.getByText('查看配送')).toBeTruthy();
+
+    fireEvent.press(screen.getByTestId('book-detail-open-borrow-modal'));
+
+    expect(mockRouter.push).toHaveBeenCalledWith('/orders/77');
+    expect(screen.queryByTestId('book-detail-borrow-modal')).toBeNull();
+  });
+
+  it('shows the current book as borrowed when there is an active delivered order', () => {
+    mockActiveOrdersData = [
+      {
+        book: { id: 1 },
+        dueDateLabel: '7 天后到期',
+        fulfillmentPhase: 'delivered',
+        id: 78,
+        mode: 'robot_delivery',
+        status: 'active',
+        statusLabel: '已送达',
+        timeline: [{ completed: true, label: '已送达' }],
+      },
+    ];
+
+    render(<BookDetailRoute />);
+
+    expect(screen.getAllByText('已借阅').length).toBeGreaterThan(0);
+    expect(screen.getByText('查看借阅')).toBeTruthy();
   });
 
   it('opens the booklist picker and adds the book into the existing watch-later list', async () => {
@@ -419,6 +592,8 @@ describe('BookDetailRoute', () => {
     expect(screen.queryByTestId('book-detail-borrow-close')).toBeNull();
     expect(screen.getByTestId('book-detail-borrow-tab-robot_delivery')).toBeTruthy();
     expect(screen.getByTestId('book-detail-borrow-tab-cabinet_pickup')).toBeTruthy();
+    expect(screen.getByTestId('book-detail-borrow-target-input').props.placeholder).toBe('请输入阅览室座位号');
+    expect(screen.getByTestId('book-detail-borrow-target-input').props.value).toBe('');
 
     fireEvent.press(screen.getByTestId('book-detail-borrow-tab-cabinet_pickup'));
     fireEvent.changeText(screen.getByTestId('book-detail-borrow-target-input'), '主馆 1 楼书柜');
@@ -434,23 +609,104 @@ describe('BookDetailRoute', () => {
     expect(mockRouter.push).toHaveBeenCalledWith('/orders/101');
   });
 
-  it('closes the borrow modal when the sheet is dragged downward past the dismiss threshold', () => {
+  it('requires a seat number before submitting robot delivery', async () => {
+    render(<BookDetailRoute />);
+
+    fireEvent.press(screen.getByTestId('book-detail-open-borrow-modal'));
+    fireEvent.press(screen.getByTestId('book-detail-borrow-confirm'));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('请先输入座位号。');
+    });
+    expect(mockBorrowMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('blocks borrowing when the current book is unavailable', () => {
+    mockBookDetailData = {
+      ...createMockBookDetailData(),
+      catalog: {
+        ...createMockBookDetailData().catalog,
+        availabilityLabel: '暂不可借',
+        deliveryAvailable: false,
+        etaLabel: '到柜自取',
+        etaMinutes: null,
+        stockStatus: 'out_of_stock',
+      },
+    };
+
+    render(<BookDetailRoute />);
+
+    fireEvent.press(screen.getByTestId('book-detail-open-borrow-modal'));
+
+    expect(screen.queryByTestId('book-detail-borrow-modal')).toBeNull();
+    expect(toast.error).toHaveBeenCalledWith('这本书当前暂不可借，请换一本或稍后再试。');
+  });
+
+  it('sanitizes malformed discovery cards instead of crashing the page', () => {
+    mockBookDetailData = {
+      ...createMockBookDetailData(),
+      peopleAlsoBorrowed: [],
+      relatedBooks: [],
+    };
+    mockCollaborativeBooksData = [
+      {
+        author: { name: 'not-a-string' },
+        availabilityLabel: '馆藏充足 · 可立即借阅',
+        cabinetLabel: { zone: 'A-01' },
+        coverTone: 'unknown-tone',
+        deliveryAvailable: true,
+        etaLabel: { label: 'soon' },
+        etaMinutes: null,
+        id: undefined,
+        matchedFields: [],
+        recommendationReason: { detail: 'not-a-string' },
+        shelfLabel: null,
+        stockStatus: 'available',
+        summary: '摘要',
+        tags: [],
+        title: { text: '坏数据' },
+      },
+    ] as any;
+
+    render(<BookDetailRoute />);
+
+    expect(screen.getByText('借过这本的人也借了')).toBeTruthy();
+    expect(screen.getByText('未命名图书')).toBeTruthy();
+    expect(screen.getByText('猜你感兴趣')).toBeTruthy();
+    expect(screen.getByText('佚名')).toBeTruthy();
+  });
+
+  it('renders the borrow modal as a centered dialog instead of a bottom sheet', () => {
+    render(<BookDetailRoute />);
+
+    fireEvent.press(screen.getByTestId('book-detail-open-borrow-modal'));
+
+    const modalSheet = screen.getByTestId('book-detail-borrow-modal');
+    const modalActions = screen.getByTestId('book-detail-borrow-actions');
+    expect(modalSheet.props.onMoveShouldSetResponder).toBeUndefined();
+    expect(modalSheet.props.onResponderGrant).toBeUndefined();
+    expect(modalSheet.props.style).toEqual(
+      expect.objectContaining({
+        alignSelf: 'center',
+        width: '100%',
+      })
+    );
+    expect(modalActions.props.style).toEqual(
+      expect.objectContaining({
+        alignSelf: 'center',
+        width: '100%',
+      })
+    );
+  });
+
+  it('shows the borrow modal content without an internal height cap', () => {
     render(<BookDetailRoute />);
 
     fireEvent.press(screen.getByTestId('book-detail-open-borrow-modal'));
 
     const modalSheet = screen.getByTestId('book-detail-borrow-modal');
 
-    act(() => {
-      expect(
-        modalSheet.props.onMoveShouldSetResponder?.({}, { dx: 0, dy: 24, moveY: 160, y0: 136 })
-      ).toBe(true);
-      modalSheet.props.onResponderGrant?.({}, { dx: 0, dy: 0, moveY: 136, vx: 0, vy: 0, x0: 0, y0: 136 });
-      modalSheet.props.onResponderMove?.({}, { dx: 0, dy: 148, moveY: 284, vx: 0, vy: 1.3, x0: 0, y0: 136 });
-      modalSheet.props.onResponderRelease?.({}, { dx: 0, dy: 148, moveY: 284, vx: 0, vy: 1.3, x0: 0, y0: 136 });
-    });
-
-    expect(screen.queryByTestId('book-detail-borrow-modal')).toBeNull();
+    expect(modalSheet.props.style.maxHeight).toBeUndefined();
   });
 
   it('hides discovery modules on the minimal detail variant', () => {

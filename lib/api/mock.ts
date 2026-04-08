@@ -138,6 +138,7 @@ const defaultOrders: BorrowOrderView[] = [
     book: bookDeepLearning,
     cancellable: false,
     dueDateLabel: '3 月 29 日',
+    fulfillmentPhase: 'delivered',
     id: 101,
     mode: 'robot_delivery',
     note: '配套课程：人工智能导论 · 可先看第 1 章',
@@ -156,6 +157,7 @@ const defaultOrders: BorrowOrderView[] = [
     book: bookLearning,
     cancellable: false,
     dueDateLabel: '4 月 2 日',
+    fulfillmentPhase: 'pickup_pending',
     id: 102,
     mode: 'cabinet_pickup',
     note: '课程导读 · 适合先看第 3 章',
@@ -174,6 +176,7 @@ const defaultOrders: BorrowOrderView[] = [
     book: bookPsychology,
     cancellable: false,
     dueDateLabel: '今天 21:00',
+    fulfillmentPhase: 'completed',
     id: 103,
     mode: 'robot_delivery',
     note: '如果今晚不再使用，可直接发起归还请求',
@@ -418,6 +421,7 @@ export function createMockBorrowOrder(
     book,
     cancellable: true,
     dueDateLabel: '7 天后到期',
+    fulfillmentPhase: options.mode === 'cabinet_pickup' ? 'pickup_pending' : 'dispatch_started',
     id: Date.now(),
     mode: options.mode ?? 'robot_delivery',
     note: options.deliveryTarget
@@ -426,7 +430,7 @@ export function createMockBorrowOrder(
     renewable: true,
     returnable: false,
     status: 'active',
-    statusLabel: options.mode === 'cabinet_pickup' ? '待取书' : '已下单',
+    statusLabel: options.mode === 'cabinet_pickup' ? '待取书' : '正在配送',
     timeline: [
       { completed: true, label: '待取书' },
       ...(options.mode === 'cabinet_pickup'

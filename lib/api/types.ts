@@ -151,6 +151,7 @@ export type BorrowOrderView = {
   book: BookCard;
   cancellable: boolean;
   dueDateLabel: string;
+  fulfillmentPhase?: 'dispatch_started' | 'in_transit' | 'pickup_pending' | 'delivered' | 'completed' | null;
   id: number;
   mode: 'cabinet_pickup' | 'robot_delivery';
   note: string;

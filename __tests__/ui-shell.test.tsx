@@ -668,6 +668,11 @@ jest.mock('@/hooks/use-library-app-data', () => ({
       { body: '你的 AI 入门书单已更新 2 本新推荐。', id: 'note-2', kind: 'achievement', title: '推荐更新' },
     ],
   }),
+  useDismissNotificationMutation: () => ({
+    isPending: false,
+    mutate: jest.fn(),
+    mutateAsync: jest.fn(),
+  }),
   useMyOverviewQuery: () => ({
     data: {
       profile: null,
@@ -1471,8 +1476,8 @@ describe('UI shell routes', () => {
 
     expect(screen.getByText('今日提醒')).toBeTruthy();
     expect(screen.getByText('打开个人中心')).toBeTruthy();
-    expect(screen.getAllByText('收藏图书').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('书单').length).toBeGreaterThan(0);
+    expect(screen.getByText('阅读偏好')).toBeTruthy();
+    expect(screen.getByText('数据概览')).toBeTruthy();
     expect(screen.getByText('退出登录')).toBeTruthy();
 
     fireEvent.press(screen.getByText('退出登录'));
@@ -1499,8 +1504,10 @@ describe('UI shell routes', () => {
   it('renders the profile route reading portrait sections', () => {
     renderWithProviders(<ProfileRoute />);
 
-    expect(screen.getByText('陈知行 · 借阅偏好')).toBeTruthy();
-    expect(screen.getAllByText('阅读习惯').length).toBeGreaterThan(0);
+    expect(screen.getByText('陈知行')).toBeTruthy();
+    expect(screen.getByText('借阅偏好')).toBeTruthy();
+    expect(screen.getAllByText('近期节奏').length).toBeGreaterThan(0);
+    expect(screen.queryByText('最近借阅、主题偏好与阅读节奏，一页查看。')).toBeNull();
     expect(screen.getByTestId('profile-artwork')).toBeTruthy();
     expect(screen.queryByTestId('illustration-profile')).toBeNull();
   });

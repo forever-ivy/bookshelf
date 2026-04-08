@@ -207,4 +207,26 @@ describe('library client helpers', () => {
       )
     ).toBe('密码错误');
   });
+
+  it('maps borrow-order specific backend errors to reader-friendly copy', () => {
+    expect(
+      getLibraryErrorMessage(
+        new LibraryApiError('book_unavailable', {
+          code: 'book_unavailable',
+          status: 409,
+        }),
+        '借阅失败'
+      )
+    ).toBe('这本书当前暂不可借，请换一本或稍后再试。');
+
+    expect(
+      getLibraryErrorMessage(
+        new LibraryApiError('delivery_target_required', {
+          code: 'delivery_target_required',
+          status: 400,
+        }),
+        '借阅失败'
+      )
+    ).toBe('请先输入座位号。');
+  });
 });

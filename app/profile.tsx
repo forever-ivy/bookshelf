@@ -16,6 +16,24 @@ import { useAchievementsQuery } from '@/hooks/use-library-app-data';
 import { achievementStrip, interestTags, profilePortrait } from '@/lib/app/mock-data';
 import { useAppTheme } from '@/hooks/use-app-theme';
 
+function compactReadingSummary(value: string | null | undefined) {
+  if (!value) {
+    return '先看框架';
+  }
+
+  const normalized = value.replace(/[。！]/g, '').trim();
+  return normalized.length > 12 ? `${normalized.slice(0, 12)}…` : normalized;
+}
+
+function compactStreakValue(value: string | null | undefined) {
+  if (!value) {
+    return '连续中';
+  }
+
+  const dayMatch = value.match(/(\d+)\s*天/);
+  return dayMatch ? `${dayMatch[1]} 天` : value;
+}
+
 function AchievementStripSkeleton() {
   const { theme } = useAppTheme();
 
@@ -58,14 +76,14 @@ export default function ProfileRoute() {
       ]
     : achievementStrip;
   const dynamicSignals = [
-    `阅读方式：${profile?.readingProfileSummary || '先看框架，再进入重点内容。'}`,
+    `偏好：${compactReadingSummary(profile?.readingProfileSummary)}`,
     `常借主题：${(profile?.interestTags ?? interestTags).join('、')}`,
-    `账户身份：${profile?.affiliationType === 'student' ? '学生用户' : profile?.affiliationType ?? '学生用户'}`,
+    `身份：${profile?.affiliationType === 'student' ? '学生用户' : profile?.affiliationType ?? '学生用户'}`,
   ];
   const dynamicRhythm = [
-    achievementsQuery.data ? `完成 ${achievementsQuery.data.summary.completedOrders} 次借阅` : profilePortrait.rhythm[0],
-    achievementsQuery.data ? `本月活跃 ${achievementsQuery.data.summary.readingDays} 天` : profilePortrait.rhythm[1],
-    achievementsQuery.data?.streakLabel ?? profilePortrait.rhythm[2],
+    achievementsQuery.data ? `借阅 ${achievementsQuery.data.summary.completedOrders} 次` : profilePortrait.rhythm[0],
+    achievementsQuery.data ? `活跃 ${achievementsQuery.data.summary.readingDays} 天` : profilePortrait.rhythm[1],
+    compactStreakValue(achievementsQuery.data?.streakLabel ?? profilePortrait.rhythm[2]),
   ];
   const showAchievementSkeleton = !achievementsQuery.data && Boolean(achievementsQuery.isFetching);
 
@@ -75,27 +93,27 @@ export default function ProfileRoute() {
         <ReadingProfileHero
           headline={profile?.displayName ?? '借阅档案'}
           keywords={(profile?.interestTags?.length ? profile.interestTags : profilePortrait.keywords).slice(0, 3)}
-          schedule={profile?.readingProfileSummary ?? '晚间 19:00 - 22:00 最稳定'}
-          summary="最近借阅、主题偏好与阅读节奏，一页查看。"
-          title="借阅偏好概览"
+          schedule={achievementsQuery.data ? `${achievementsQuery.data.summary.readingDays} 天活跃` : '晚间稳定'}
+          summary="借阅与偏好"
+          title="借阅偏好"
         />
 
         <View style={{ gap: theme.spacing.lg }}>
-          <SectionTitle description="优先展示当前最相关的阅读主题。" title="关注主题" />
+          <SectionTitle title="关注主题" />
           <View style={sectionCardStyle}>
             <InterestTagCloud tags={profile?.interestTags ?? interestTags} />
           </View>
         </View>
 
         <View style={{ gap: theme.spacing.lg }}>
-          <SectionTitle description="作为推荐与找书排序的参考。" title="阅读方向" />
+          <SectionTitle title="阅读方向" />
           <View style={sectionCardStyle}>
             <InterestTagCloud tags={profilePortrait.keywords} />
           </View>
         </View>
 
         <View style={{ gap: theme.spacing.lg }}>
-          <SectionTitle description="保持简洁，只保留最有用的三条信息。" title="近期节奏" />
+          <SectionTitle title="近期节奏" />
           <View
             style={{
               gap: theme.spacing.md,
@@ -133,7 +151,7 @@ export default function ProfileRoute() {
         </View>
 
         <View style={{ gap: theme.spacing.lg }}>
-          <SectionTitle description="本月关键数据集中展示。" title="本月概览" />
+          <SectionTitle title="本月概览" />
           {showAchievementSkeleton ? <AchievementStripSkeleton /> : <AchievementStrip items={dynamicAchievementStrip} />}
         </View>
 

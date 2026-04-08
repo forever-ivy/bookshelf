@@ -1,7 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import {
-  Animated,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -30,6 +29,7 @@ import { SearchResultCardSkeleton } from '@/components/search/search-result-skel
 import { useAppTheme } from '@/hooks/use-app-theme';
 import {
   useAddBookToBooklistMutation,
+  useActiveOrdersQuery,
   useBookDetailQuery,
   useBooklistsQuery,
   useCollaborativeBooksQuery,
@@ -41,7 +41,7 @@ import {
   useToggleFavoriteMutation,
 } from '@/hooks/use-library-app-data';
 import { getLibraryErrorMessage } from '@/lib/api/client';
-import type { BookCard } from '@/lib/api/types';
+import type { BookCard, BorrowOrderView } from '@/lib/api/types';
 import { resolveBookEtaDisplay } from '@/lib/book-delivery';
 import { resolveBookLocationDisplay } from '@/lib/book-location';
 
@@ -50,9 +50,151 @@ const BORROW_MODE_OPTIONS = [
   { description: '保留在书柜，之后到柜取走。', label: '自取', value: 'cabinet_pickup' as const },
 ] as const;
 
-const BORROW_SHEET_HIDDEN_OFFSET = 480;
-const BORROW_SHEET_DISMISS_DISTANCE = 120;
-const BORROW_SHEET_DISMISS_VELOCITY = 1.05;
+const DISCOVERY_COVER_TONES: ReadonlySet<BookCard['coverTone']> = new Set([
+  'apricot',
+  'blue',
+  'coral',
+  'lavender',
+  'mint',
+]);
+
+function resolveDiscoveryText(value: unknown, fallback: string) {
+  if (typeof value !== 'string') {
+    return fallback;
+  }
+
+  const normalized = value.trim();
+  return normalized || fallback;
+}
+
+function resolveOptionalDiscoveryText(value: unknown) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim();
+  return normalized || null;
+}
+
+function resolveDiscoveryStringList(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function sanitizeDiscoveryBook(raw: unknown): BookCard | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const record = raw as Record<string, unknown>;
+  const rawId = record.id ?? record.bookId ?? record.book_id;
+  const id = typeof rawId === 'number' && Number.isFinite(rawId) ? rawId : 0;
+  const rawCoverTone = record.coverTone ?? record.cover_tone;
+  const coverTone =
+    typeof rawCoverTone === 'string' && DISCOVERY_COVER_TONES.has(rawCoverTone as BookCard['coverTone'])
+      ? (rawCoverTone as BookCard['coverTone'])
+      : 'blue';
+
+  return {
+    id,
+    author: resolveDiscoveryText(record.author, '佚名'),
+    availabilityLabel: resolveDiscoveryText(
+      record.availabilityLabel ?? record.availability_label,
+      '馆藏信息待确认'
+    ),
+    cabinetLabel: resolveDiscoveryText(
+      record.cabinetLabel ?? record.cabinet_label ?? record.locationNote ?? record.location_note,
+      '位置待确认'
+    ),
+    category: resolveOptionalDiscoveryText(record.category),
+    coverTone,
+    coverUrl: resolveOptionalDiscoveryText(record.coverUrl ?? record.cover_url),
+    deliveryAvailable: Boolean(record.deliveryAvailable ?? record.delivery_available),
+    etaLabel: resolveDiscoveryText(record.etaLabel ?? record.eta_label, '到柜自取'),
+    etaMinutes:
+      typeof (record.etaMinutes ?? record.eta_minutes) === 'number' &&
+      Number.isFinite(record.etaMinutes ?? record.eta_minutes)
+        ? Number(record.etaMinutes ?? record.eta_minutes)
+        : null,
+    matchedFields: resolveDiscoveryStringList(record.matchedFields ?? record.matched_fields),
+    recommendationReason: resolveOptionalDiscoveryText(
+      record.recommendationReason ?? record.recommendation_reason
+    ),
+    shelfLabel: resolveDiscoveryText(record.shelfLabel ?? record.shelf_label, '主馆 2 楼'),
+    stockStatus: resolveDiscoveryText(record.stockStatus ?? record.stock_status, 'available'),
+    summary: resolveDiscoveryText(record.summary, ''),
+    tags: resolveDiscoveryStringList(record.tags ?? record.tag_names),
+    title: resolveDiscoveryText(record.title, '未命名图书'),
+  };
+}
+
+function sanitizeDiscoveryBooks(books: unknown) {
+  if (!Array.isArray(books)) {
+    return [];
+  }
+
+  return books.map(sanitizeDiscoveryBook).filter((item): item is BookCard => item !== null);
+}
+
+function resolveDecisionAvailabilityLabel(value?: string | null) {
+  const normalized = value?.trim();
+
+  if (!normalized) {
+    return '状态暂不可用';
+  }
+
+  if (normalized.includes('可立即借阅')) {
+    return '可立即借阅';
+  }
+
+  return normalized;
+}
+
+function findActiveOrderForBook(orders: BorrowOrderView[] | undefined, bookId: number) {
+  if (!orders?.length) {
+    return null;
+  }
+
+  return (
+    [...orders]
+      .filter((order) => order.book.id === bookId && order.status !== 'cancelled' && order.status !== 'completed')
+      .sort((left, right) => right.id - left.id)[0] ?? null
+  );
+}
+
+function resolveBookDecisionState(activeOrder: BorrowOrderView | null) {
+  if (!activeOrder) {
+    return null;
+  }
+
+  if (activeOrder.fulfillmentPhase === 'dispatch_started' || activeOrder.fulfillmentPhase === 'in_transit') {
+    return {
+      actionLabel: '查看配送',
+      availabilityLabel: '正在配送',
+      icon: 'truck' as const,
+    };
+  }
+
+  if (activeOrder.fulfillmentPhase === 'pickup_pending') {
+    return {
+      actionLabel: '查看借阅',
+      availabilityLabel: '待取书',
+      icon: 'package' as const,
+    };
+  }
+
+  return {
+    actionLabel: '查看借阅',
+    availabilityLabel: '已借阅',
+    icon: 'borrowing' as const,
+  };
+}
 
 function BookDetailSurface({
   children,
@@ -258,12 +400,14 @@ function DiscoveryItem({
   onPress: () => void;
 }) {
   const { theme } = useAppTheme();
-  const recommendationText = book.recommendationReason?.trim() || '猜你感兴趣';
+  const recommendationText = resolveDiscoveryText(book.recommendationReason, '猜你感兴趣');
+  const authorLabel = resolveDiscoveryText(book.author, '佚名');
 
   return (
     <Pressable
       accessibilityRole="button"
-      onPress={onPress}
+      disabled={book.id <= 0}
+      onPress={book.id > 0 ? onPress : undefined}
       style={({ pressed }) => ({
         borderTopColor: isFirst ? 'transparent' : theme.colors.borderSoft,
         borderTopWidth: isFirst ? 0 : 1,
@@ -308,7 +452,7 @@ function DiscoveryItem({
               ...theme.typography.medium,
               fontSize: 12,
             }}>
-            {book.author}
+            {authorLabel}
           </Text>
           <Text
             numberOfLines={1}
@@ -374,6 +518,7 @@ export default function BookDetailRoute() {
   const router = useRouter();
   const detailQuery = useBookDetailQuery(bookId);
   const recBookId = isMinimal ? NaN : bookId;
+  const activeOrdersQuery = useActiveOrdersQuery();
   const booklistsQuery = useBooklistsQuery();
   const collaborativeQuery = useCollaborativeBooksQuery(recBookId);
   const favoritesQuery = useFavoritesQuery();
@@ -384,135 +529,56 @@ export default function BookDetailRoute() {
   const borrowMutation = useCreateBorrowOrderMutation();
   const favoriteMutation = useToggleFavoriteMutation();
   const [isBorrowModalMounted, setIsBorrowModalMounted] = React.useState(false);
-  const [isBorrowModalOpen, setIsBorrowModalOpen] = React.useState(false);
   const [isBooklistModalVisible, setIsBooklistModalVisible] = React.useState(false);
   const [isBooklistCreateMode, setIsBooklistCreateMode] = React.useState(false);
   const [draftBooklistTitle, setDraftBooklistTitle] = React.useState('');
   const [draftBooklistDescription, setDraftBooklistDescription] = React.useState('');
   const [borrowMode, setBorrowMode] = React.useState<'cabinet_pickup' | 'robot_delivery'>('robot_delivery');
-  const [deliveryTarget, setDeliveryTarget] = React.useState('阅览室座位');
+  const [deliveryTarget, setDeliveryTarget] = React.useState('');
   const [pickupTarget, setPickupTarget] = React.useState('主馆 1 楼书柜');
-  const borrowSheetTranslateY = React.useRef(new Animated.Value(BORROW_SHEET_HIDDEN_OFFSET)).current;
-  const borrowSheetGestureStart = React.useRef(0);
-  const borrowSheetDismissVelocity = React.useRef(BORROW_SHEET_DISMISS_VELOCITY);
-
-  const borrowBackdropOpacity = React.useMemo(
-    () =>
-      borrowSheetTranslateY.interpolate({
-        extrapolate: 'clamp',
-        inputRange: [0, BORROW_SHEET_HIDDEN_OFFSET],
-        outputRange: [1, 0],
-      }),
-    [borrowSheetTranslateY]
-  );
-
-  const animateBorrowSheetTo = React.useCallback(
-    (toValue: number, velocity = 0, onComplete?: () => void) => {
-      Animated.spring(borrowSheetTranslateY, {
-        damping: 28,
-        mass: 0.92,
-        overshootClamping: true,
-        stiffness: 260,
-        toValue,
-        useNativeDriver: true,
-        velocity,
-      }).start(({ finished }) => {
-        if (!finished) {
-          return;
-        }
-
-        borrowSheetGestureStart.current = 0;
-        onComplete?.();
-      });
-    },
-    [borrowSheetTranslateY]
-  );
-
-  React.useEffect(() => {
-    if (!isBorrowModalMounted || process.env.NODE_ENV === 'test') {
-      return;
-    }
-
-    if (isBorrowModalOpen) {
-      borrowSheetTranslateY.stopAnimation();
-      borrowSheetTranslateY.setValue(BORROW_SHEET_HIDDEN_OFFSET);
-      animateBorrowSheetTo(0);
-
-      return;
-    }
-
-    borrowSheetTranslateY.stopAnimation();
-    animateBorrowSheetTo(BORROW_SHEET_HIDDEN_OFFSET, borrowSheetDismissVelocity.current, () => {
-      setIsBorrowModalMounted(false);
-      borrowSheetTranslateY.setValue(BORROW_SHEET_HIDDEN_OFFSET);
-    });
-  }, [animateBorrowSheetTo, borrowSheetTranslateY, isBorrowModalMounted, isBorrowModalOpen]);
+  const book = detailQuery.data?.catalog;
+  const activeOrderForBook = findActiveOrderForBook(activeOrdersQuery.data, bookId);
+  const activeOrderDecisionState = resolveBookDecisionState(activeOrderForBook);
 
   const openBorrowModal = () => {
-    if (process.env.NODE_ENV === 'test') {
-      borrowSheetTranslateY.setValue(0);
-      setIsBorrowModalMounted(true);
-      setIsBorrowModalOpen(true);
+    if (activeOrderForBook) {
+      router.push(`/orders/${activeOrderForBook.id}`);
       return;
     }
 
-    borrowSheetDismissVelocity.current = BORROW_SHEET_DISMISS_VELOCITY;
+    if (!(book && (book.stockStatus === 'available' || book.availabilityLabel.includes('可立即借阅')))) {
+      toast.error('这本书当前暂不可借，请换一本或稍后再试。');
+      return;
+    }
+
     setIsBorrowModalMounted(true);
-    setIsBorrowModalOpen(true);
   };
 
-  const closeBorrowModal = (velocity = BORROW_SHEET_DISMISS_VELOCITY) => {
-    if (process.env.NODE_ENV === 'test') {
-      borrowSheetTranslateY.setValue(BORROW_SHEET_HIDDEN_OFFSET);
-      setIsBorrowModalOpen(false);
-      setIsBorrowModalMounted(false);
-      return;
-    }
-
-    borrowSheetDismissVelocity.current = velocity;
-    setIsBorrowModalOpen(false);
-  };
-
-  const handleBorrowSheetRelease = (dy: number, vy: number) => {
-    const nextTranslateY = Math.max(
-      0,
-      Math.min(BORROW_SHEET_HIDDEN_OFFSET, borrowSheetGestureStart.current + dy)
-    );
-    const shouldDismiss =
-      nextTranslateY >= BORROW_SHEET_DISMISS_DISTANCE || vy >= BORROW_SHEET_DISMISS_VELOCITY;
-
-    borrowSheetTranslateY.setValue(nextTranslateY);
-
-    if (shouldDismiss) {
-      closeBorrowModal(Math.max(vy, BORROW_SHEET_DISMISS_VELOCITY));
-      return;
-    }
-
-    if (process.env.NODE_ENV === 'test') {
-      borrowSheetTranslateY.setValue(0);
-      borrowSheetGestureStart.current = 0;
-      return;
-    }
-
-    animateBorrowSheetTo(0, Math.max(vy, 0));
+  const closeBorrowModal = () => {
+    setIsBorrowModalMounted(false);
   };
 
   if (!Number.isFinite(bookId)) {
     return null;
   }
 
-  const book = detailQuery.data?.catalog;
   const isFavorite = Boolean(favoritesQuery.data?.some((item) => item.book.id === bookId));
   const detailError = detailQuery.error ?? favoritesQuery.error;
   const collaborativeBooks =
-    collaborativeQuery.data?.length ? collaborativeQuery.data : detailQuery.data?.peopleAlsoBorrowed ?? [];
+    sanitizeDiscoveryBooks(
+      collaborativeQuery.data?.length ? collaborativeQuery.data : detailQuery.data?.peopleAlsoBorrowed ?? []
+    );
   const customBooklists = booklistsQuery.data?.customItems ?? [];
   const watchLaterBooklist = customBooklists.find((item) => item.title.trim() === '稍后再看') ?? null;
   const visibleCustomBooklists = customBooklists.filter((item) => item.id !== watchLaterBooklist?.id);
-  const similarBooks = similarQuery.data?.length ? similarQuery.data : detailQuery.data?.relatedBooks ?? [];
-  const hybridBooks = hybridQuery.data ?? [];
+  const similarBooks = sanitizeDiscoveryBooks(
+    similarQuery.data?.length ? similarQuery.data : detailQuery.data?.relatedBooks ?? []
+  );
+  const hybridBooks = sanitizeDiscoveryBooks(hybridQuery.data ?? []);
   const locationNote = resolveBookLocationDisplay(book?.locationNote ?? book?.cabinetLabel);
-  const availabilityLabel = book?.availabilityLabel ?? '状态暂不可用';
+  const availabilityLabel = activeOrderDecisionState?.availabilityLabel ?? book?.availabilityLabel ?? '状态暂不可用';
+  const decisionAvailabilityLabel =
+    activeOrderDecisionState?.availabilityLabel ?? resolveDecisionAvailabilityLabel(book?.availabilityLabel);
   const etaLabel = book ? resolveBookEtaDisplay(book.etaLabel) : '到手时间待确认';
   const activeBorrowTarget = borrowMode === 'robot_delivery' ? deliveryTarget : pickupTarget;
   const isDetailLoading = !detailError && !detailQuery.data && Boolean(detailQuery.isFetching);
@@ -529,6 +595,9 @@ export default function BookDetailRoute() {
   ].filter((group) => group.books.length > 0);
   const hasDiscoveryContent = Boolean(detailQuery.data?.recommendationReason) || discoveryGroups.length > 0;
   const isBooklistActionPending = createBooklistMutation.isPending || addBookToBooklistMutation.isPending;
+  const primaryBorrowActionLabel =
+    activeOrderDecisionState?.actionLabel ?? (borrowMutation.isPending ? '借阅中…' : '立即借阅');
+  const primaryBorrowActionIcon = activeOrderDecisionState?.icon ?? 'borrowing';
 
   const closeBooklistModal = () => {
     setIsBooklistModalVisible(false);
@@ -664,37 +733,69 @@ export default function BookDetailRoute() {
               <BookDetailSurface muted>
                 <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
                   <DecisionMetric label="馆藏位置" value={resolveBookLocationDisplay(book.cabinetLabel)} />
-                  <DecisionMetric label="可借状态" value={availabilityLabel} />
+                  <DecisionMetric label="可借状态" value={decisionAvailabilityLabel} />
                   <DecisionMetric label="最快到手" value={etaLabel} />
                 </View>
-                <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
-                  <PillButton
-                    href={undefined}
-                    label={borrowMutation.isPending ? '借阅中…' : '立即借阅'}
-                    onPress={openBorrowModal}
-                    testID="book-detail-open-borrow-modal"
-                    variant="accent"
-                  />
-                  <PillButton
-                    href={undefined}
-                    label={favoriteMutation.isPending ? '收藏中…' : isFavorite ? '已收藏' : '加入收藏'}
-                    onPress={async () => {
-                      try {
-                        await favoriteMutation.mutateAsync(book.id);
-                      } catch (error) {
-                        toast.error(getLibraryErrorMessage(error, '收藏状态更新失败，请稍后重试。'));
-                      }
+                <View
+                  style={{
+                    alignSelf: 'center',
+                    gap: theme.spacing.md,
+                    width: '100%',
+                  }}
+                  testID="book-detail-decision-actions">
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      gap: theme.spacing.md,
+                      width: '100%',
                     }}
-                    variant="soft"
-                  />
+                    testID="book-detail-decision-primary-row">
+                    <View style={{ flex: 1, minHeight: 52 }} testID="book-detail-decision-borrow-slot">
+                      <PillButton
+                        fullWidth
+                        href={undefined}
+                        icon={primaryBorrowActionIcon}
+                        label={primaryBorrowActionLabel}
+                        onPress={openBorrowModal}
+                        size="hero"
+                        surfaceTestID="book-detail-decision-borrow-surface"
+                        testID="book-detail-open-borrow-modal"
+                        variant="prominent"
+                      />
+                    </View>
+                    <View style={{ flex: 1, minHeight: 52 }} testID="book-detail-decision-favorite-slot">
+                      <PillButton
+                        fullWidth
+                        href={undefined}
+                        icon="bookmark"
+                        label={favoriteMutation.isPending ? '收藏中…' : isFavorite ? '已收藏' : '加入收藏'}
+                        onPress={async () => {
+                          try {
+                            await favoriteMutation.mutateAsync(book.id);
+                          } catch (error) {
+                            toast.error(getLibraryErrorMessage(error, '收藏状态更新失败，请稍后重试。'));
+                          }
+                        }}
+                        size="hero"
+                        surfaceTestID="book-detail-decision-favorite-surface"
+                        variant="glass"
+                      />
+                    </View>
+                  </View>
+                  <View style={{ width: '100%' }} testID="book-detail-decision-secondary-row">
+                    <PillButton
+                      fullWidth
+                      href={undefined}
+                      icon="plus"
+                      label={isBooklistActionPending ? '处理中…' : '加入书单'}
+                      onPress={() => setIsBooklistModalVisible(true)}
+                      size="hero"
+                      surfaceTestID="book-detail-decision-booklist-surface"
+                      testID="book-detail-open-booklist-modal"
+                      variant="soft"
+                    />
+                  </View>
                 </View>
-                <PillButton
-                  href={undefined}
-                  label={isBooklistActionPending ? '处理中…' : '加入书单'}
-                  onPress={() => setIsBooklistModalVisible(true)}
-                  testID="book-detail-open-booklist-modal"
-                  variant="soft"
-                />
               </BookDetailSurface>
             </View>
           </BookDetailSurface>
@@ -1000,212 +1101,210 @@ export default function BookDetailRoute() {
 
         {book ? (
           <Modal
-            animationType="none"
-            hardwareAccelerated
+            animationType="fade"
             onRequestClose={closeBorrowModal}
             transparent
             visible={isBorrowModalMounted}>
-            <View
+            <Pressable
+              onPress={closeBorrowModal}
               style={{
+                backgroundColor: 'rgba(23, 22, 20, 0.22)',
                 flex: 1,
-                justifyContent: 'flex-end',
-              }}>
-              <Animated.View
-                pointerEvents="none"
+                padding: theme.spacing.lg,
+              }}
+              testID="book-detail-borrow-backdrop">
+              <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                 style={{
-                  backgroundColor: 'rgba(23, 22, 20, 0.22)',
-                  bottom: 0,
-                  left: 0,
-                  opacity: borrowBackdropOpacity,
-                  position: 'absolute',
-                  right: 0,
-                  top: 0,
-                }}
-              />
-              <Pressable
-                onPress={closeBorrowModal}
-                style={{ flex: 1 }}
-                testID="book-detail-borrow-backdrop"
-              />
-              <Animated.View
-                onMoveShouldSetResponder={(_, gestureState) =>
-                  isBorrowModalOpen &&
-                  gestureState.dy > 10 &&
-                  Math.abs(gestureState.dy) > Math.abs(gestureState.dx)
-                }
-                onResponderGrant={() => {
-                  borrowSheetTranslateY.stopAnimation((value) => {
-                    borrowSheetGestureStart.current = value;
-                  });
-                }}
-                onResponderMove={(_, gestureState) => {
-                  borrowSheetTranslateY.setValue(
-                    Math.max(
-                      0,
-                      Math.min(BORROW_SHEET_HIDDEN_OFFSET, borrowSheetGestureStart.current + gestureState.dy)
-                    )
-                  );
-                }}
-                onResponderRelease={(_, gestureState) => {
-                  handleBorrowSheetRelease(gestureState.dy, gestureState.vy);
-                }}
-                onResponderTerminate={(_, gestureState) => {
-                  handleBorrowSheetRelease(gestureState.dy, gestureState.vy);
-                }}
-                style={{
-                  backgroundColor: theme.colors.backgroundWorkspace,
-                  borderTopLeftRadius: theme.radii.xl,
-                  borderTopRightRadius: theme.radii.xl,
-                  gap: theme.spacing.lg,
-                  padding: theme.spacing.xl,
-                  paddingBottom: theme.spacing.xl * 1.4,
-                  transform: [{ translateY: borrowSheetTranslateY }],
-                }}
-                testID="book-detail-borrow-modal">
-                <View
-                  style={{
-                    alignItems: 'center',
-                    marginTop: -4,
-                  }}>
+                  flex: 1,
+                  justifyContent: 'center',
+                }}>
+                <Pressable>
                   <View
                     style={{
-                      backgroundColor: theme.colors.borderStrong,
-                      borderRadius: theme.radii.pill,
-                      height: 5,
-                      opacity: 0.72,
-                      width: 44,
+                      alignSelf: 'center',
+                      backgroundColor: theme.colors.backgroundWorkspace,
+                      borderColor: theme.colors.borderSoft,
+                      borderRadius: theme.radii.xl,
+                      borderWidth: 1,
+                      gap: theme.spacing.lg,
+                      maxWidth: 560,
+                      padding: theme.spacing.xl,
+                      paddingBottom: theme.spacing.xl * 1.2,
+                      width: '100%',
                     }}
-                  />
-                </View>
-                <View
-                  style={{
-                    gap: 6,
-                  }}>
-                  <View style={{ gap: 6 }}>
-                    <Text
+                    testID="book-detail-borrow-modal">
+                    <View
                       style={{
-                        color: theme.colors.text,
-                        ...theme.typography.heading,
-                        fontSize: 24,
-                      }}>
-                      选择借阅方式
-                    </Text>
-                    <Text
-                      style={{
-                        color: theme.colors.textMuted,
-                        ...theme.typography.body,
-                        fontSize: 13,
-                        lineHeight: 19,
-                      }}>
-                      {book.title}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
-                  {BORROW_MODE_OPTIONS.map((item) => {
-                    const isActive = borrowMode === item.value;
-
-                    return (
-                      <Pressable
-                        key={item.value}
-                        onPress={() => setBorrowMode(item.value)}
+                        gap: theme.spacing.lg,
+                        paddingBottom: theme.spacing.sm,
+                      }}
+                    >
+                      <View
                         style={{
-                          backgroundColor: isActive ? theme.colors.primarySoft : theme.colors.surface,
-                          borderColor: isActive ? theme.colors.primaryStrong : theme.colors.borderStrong,
+                          gap: 6,
+                        }}>
+                        <View style={{ gap: 6 }}>
+                          <Text
+                            style={{
+                              color: theme.colors.text,
+                              ...theme.typography.heading,
+                              fontSize: 24,
+                            }}>
+                            选择借阅方式
+                          </Text>
+                          <Text
+                            style={{
+                              color: theme.colors.textMuted,
+                              ...theme.typography.body,
+                              fontSize: 13,
+                              lineHeight: 19,
+                            }}>
+                            {book.title}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
+                        {BORROW_MODE_OPTIONS.map((item) => {
+                          const isActive = borrowMode === item.value;
+
+                          return (
+                            <Pressable
+                              key={item.value}
+                              onPress={() => setBorrowMode(item.value)}
+                              style={{
+                                backgroundColor: isActive ? theme.colors.primarySoft : theme.colors.surface,
+                                borderColor: isActive ? theme.colors.primaryStrong : theme.colors.borderStrong,
+                                borderRadius: theme.radii.lg,
+                                borderWidth: 1,
+                                flex: 1,
+                                gap: theme.spacing.sm,
+                                padding: theme.spacing.lg,
+                              }}
+                              testID={`book-detail-borrow-tab-${item.value}`}>
+                              <Text
+                                style={{
+                                  color: isActive ? theme.colors.primaryStrong : theme.colors.text,
+                                  ...theme.typography.semiBold,
+                                  fontSize: 16,
+                                }}>
+                                {item.label}
+                              </Text>
+                              <Text
+                                style={{
+                                  color: theme.colors.textMuted,
+                                  ...theme.typography.body,
+                                  fontSize: 12,
+                                  lineHeight: 18,
+                                }}>
+                                {item.description}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+
+                      <View style={{ gap: 8 }}>
+                        <Text style={{ color: theme.colors.textSoft, ...theme.typography.medium, fontSize: 12 }}>
+                          {borrowMode === 'robot_delivery' ? '座位号' : '取书地点'}
+                        </Text>
+                        <TextInput
+                          onChangeText={borrowMode === 'robot_delivery' ? setDeliveryTarget : setPickupTarget}
+                          placeholder={borrowMode === 'robot_delivery' ? '请输入阅览室座位号' : '例如：主馆 1 楼书柜'}
+                          style={{
+                            backgroundColor: theme.colors.surface,
+                            borderColor: theme.colors.borderStrong,
+                            borderRadius: theme.radii.md,
+                            borderWidth: 1,
+                            color: theme.colors.text,
+                            minHeight: 52,
+                            paddingHorizontal: 14,
+                          }}
+                          testID="book-detail-borrow-target-input"
+                          value={activeBorrowTarget}
+                        />
+                      </View>
+
+                      <View
+                        style={{
+                          backgroundColor: theme.colors.warningSoft,
+                          borderRadius: theme.radii.md,
+                          padding: theme.spacing.md,
+                        }}>
+                        <Text style={{ color: theme.colors.warning, ...theme.typography.medium, fontSize: 13 }}>
+                          {borrowMode === 'robot_delivery'
+                            ? `预计等待时间 · ${etaLabel}`
+                            : '取书方式 · 到柜自取'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View
+                      style={{
+                        alignSelf: 'center',
+                        borderTopColor: theme.colors.borderSoft,
+                        borderTopWidth: 1,
+                        marginTop: theme.spacing.sm,
+                        paddingTop: theme.spacing.lg,
+                        width: '100%',
+                      }}
+                      testID="book-detail-borrow-actions">
+                      <View
+                        style={{
+                          alignSelf: 'center',
+                          backgroundColor: theme.colors.surfaceMuted,
+                          borderColor: theme.colors.borderSoft,
                           borderRadius: theme.radii.lg,
                           borderWidth: 1,
-                          flex: 1,
+                          flexDirection: 'row',
                           gap: theme.spacing.sm,
-                          padding: theme.spacing.lg,
-                        }}
-                        testID={`book-detail-borrow-tab-${item.value}`}>
-                        <Text
-                          style={{
-                            color: isActive ? theme.colors.primaryStrong : theme.colors.text,
-                            ...theme.typography.semiBold,
-                            fontSize: 16,
-                          }}>
-                          {item.label}
-                        </Text>
-                        <Text
-                          style={{
-                            color: theme.colors.textMuted,
-                            ...theme.typography.body,
-                            fontSize: 12,
-                            lineHeight: 18,
-                          }}>
-                          {item.description}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                          padding: theme.spacing.sm,
+                          width: '100%',
+                        }}>
+                        <View style={{ flex: 1 }}>
+                          <PillButton
+                            href={undefined}
+                            label="取消"
+                            onPress={closeBorrowModal}
+                            testID="book-detail-borrow-cancel"
+                            variant="glass"
+                          />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <PillButton
+                            href={undefined}
+                            label={borrowMutation.isPending ? '借阅中…' : '确认借阅'}
+                            onPress={async () => {
+                              const normalizedBorrowTarget = activeBorrowTarget.trim();
 
-                <View style={{ gap: 8 }}>
-                  <Text style={{ color: theme.colors.textSoft, ...theme.typography.medium, fontSize: 12 }}>
-                    {borrowMode === 'robot_delivery' ? '配送地点' : '取书地点'}
-                  </Text>
-                  <TextInput
-                    onChangeText={borrowMode === 'robot_delivery' ? setDeliveryTarget : setPickupTarget}
-                    placeholder={borrowMode === 'robot_delivery' ? '例如：阅览室 A-12' : '例如：主馆 1 楼书柜'}
-                    style={{
-                      backgroundColor: theme.colors.surface,
-                      borderColor: theme.colors.borderStrong,
-                      borderRadius: theme.radii.md,
-                      borderWidth: 1,
-                      color: theme.colors.text,
-                      minHeight: 52,
-                      paddingHorizontal: 14,
-                    }}
-                    testID="book-detail-borrow-target-input"
-                    value={activeBorrowTarget}
-                  />
-                </View>
+                              if (borrowMode === 'robot_delivery' && !normalizedBorrowTarget) {
+                                toast.error('请先输入座位号。');
+                                return;
+                              }
 
-                <View
-                  style={{
-                    backgroundColor: theme.colors.warningSoft,
-                    borderRadius: theme.radii.md,
-                    padding: theme.spacing.md,
-                  }}>
-                  <Text style={{ color: theme.colors.warning, ...theme.typography.medium, fontSize: 13 }}>
-                    {borrowMode === 'robot_delivery'
-                      ? `预计等待时间 · ${etaLabel}`
-                      : '取书方式 · 到柜自取'}
-                  </Text>
-                </View>
-
-                <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
-                  <PillButton
-                    href={undefined}
-                    label="取消"
-                    onPress={closeBorrowModal}
-                    testID="book-detail-borrow-cancel"
-                    variant="glass"
-                  />
-                  <PillButton
-                    href={undefined}
-                    label={borrowMutation.isPending ? '借阅中…' : '确认借阅'}
-                    onPress={async () => {
-                      try {
-                        const order = await borrowMutation.mutateAsync({
-                          bookId: book.id,
-                          deliveryTarget: activeBorrowTarget,
-                          mode: borrowMode,
-                        });
-                        closeBorrowModal();
-                        router.push(`/orders/${order.id}`);
-                      } catch (error) {
-                        toast.error(getLibraryErrorMessage(error, '借阅下单失败，请稍后重试。'));
-                      }
-                    }}
-                    testID="book-detail-borrow-confirm"
-                    variant="accent"
-                  />
-                </View>
-              </Animated.View>
-            </View>
+                              try {
+                                const order = await borrowMutation.mutateAsync({
+                                  bookId: book.id,
+                                  deliveryTarget: normalizedBorrowTarget,
+                                  mode: borrowMode,
+                                });
+                                closeBorrowModal();
+                                router.push(`/orders/${order.id}`);
+                              } catch (error) {
+                                toast.error(getLibraryErrorMessage(error, '借阅下单失败，请稍后重试。'));
+                              }
+                            }}
+                            testID="book-detail-borrow-confirm"
+                            variant="accent"
+                          />
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                </Pressable>
+              </KeyboardAvoidingView>
+            </Pressable>
           </Modal>
         ) : null}
       </PageShell>

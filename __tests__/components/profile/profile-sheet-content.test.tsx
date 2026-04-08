@@ -67,9 +67,9 @@ describe('ProfileSheetContent', () => {
 
     render(<ProfileSheetContent onDismiss={onDismiss} />);
 
-    expect(screen.getByText('账户')).toBeTruthy();
-    expect(screen.getByText('查看资料、借阅记录与常用入口。')).toBeTruthy();
-    expect(screen.queryByText('个人中心')).toBeNull();
+    expect(screen.getByText('个人中心')).toBeTruthy();
+    expect(screen.queryByText('账户')).toBeNull();
+    expect(screen.queryByText('查看资料、借阅记录与常用入口。')).toBeNull();
     expect(screen.getByText('me-content')).toBeTruthy();
 
     const surfaceStyle = StyleSheet.flatten(screen.getByTestId('profile-sheet-surface').props.style);
@@ -89,7 +89,7 @@ describe('ProfileSheetContent', () => {
 
     expect(surfaceStyle.flex).toBeUndefined();
     expect(screen.queryByTestId('profile-sheet-scroll-content')).toBeNull();
-    expect(screen.getByText('账户')).toBeTruthy();
+    expect(screen.getByText('个人中心')).toBeTruthy();
     expect(screen.getByText('me-content')).toBeTruthy();
   });
 

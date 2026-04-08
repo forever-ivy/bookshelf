@@ -73,10 +73,15 @@ describe('ProfileRoute', () => {
     render(<ProfileRoute />);
 
     expect(screen.getByText('陈知行')).toBeTruthy();
-    expect(screen.getByText('借阅偏好概览')).toBeTruthy();
+    expect(screen.getByText('借阅偏好')).toBeTruthy();
     expect(screen.getAllByText('近期节奏').length).toBeGreaterThan(0);
     expect(screen.getByText('本月概览')).toBeTruthy();
     expect(screen.getAllByText('借阅记录').length).toBeGreaterThan(0);
+    expect(screen.queryByText('最近借阅、主题偏好与阅读节奏，一页查看。')).toBeNull();
+    expect(screen.queryByText('优先展示当前最相关的阅读主题。')).toBeNull();
+    expect(screen.queryByText('作为推荐与找书排序的参考。')).toBeNull();
+    expect(screen.queryByText('保持简洁，只保留最有用的三条信息。')).toBeNull();
+    expect(screen.queryByText('本月关键数据集中展示。')).toBeNull();
     expect(screen.queryByText('陈知行 · 借阅偏好')).toBeNull();
     expect(screen.queryByText('阅读画像')).toBeNull();
     expect(screen.queryByText('学习偏好线索')).toBeNull();

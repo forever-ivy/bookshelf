@@ -9,9 +9,9 @@ import { profilePortrait } from '@/lib/app/mock-data';
 export function ReadingProfileHero({
   headline = '借阅档案',
   keywords = profilePortrait.keywords,
-  schedule = '晚间 19:00 - 22:00 最稳定',
+  schedule = '晚间稳定',
   summary = profilePortrait.subtitle,
-  title = '借阅偏好概览',
+  title = '借阅偏好',
 }: {
   headline?: string;
   keywords?: readonly string[];
@@ -31,15 +31,6 @@ export function ReadingProfileHero({
       }}>
       <View style={{ gap: theme.spacing.xl, padding: theme.spacing.xl }}>
         <View style={{ gap: theme.spacing.sm }}>
-          <Text
-            style={{
-              color: theme.colors.primaryStrong,
-              ...theme.typography.medium,
-              fontSize: 11,
-              letterSpacing: 0.8,
-            }}>
-            PROFILE
-          </Text>
           <Text
             style={{
               color: theme.colors.text,

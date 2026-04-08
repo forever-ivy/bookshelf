@@ -23,6 +23,70 @@ const readerFacingNoteByCode: Record<string, string> = {
   overdue: '已超过应还时间，请尽快处理归还或续借。',
 };
 
+function normalizeFulfillmentPhase(raw: any): BorrowOrderView['fulfillmentPhase'] {
+  const phase = raw?.fulfillmentPhase ?? raw?.fulfillment_phase ?? null;
+
+  if (
+    phase === 'dispatch_started' ||
+    phase === 'in_transit' ||
+    phase === 'pickup_pending' ||
+    phase === 'delivered' ||
+    phase === 'completed'
+  ) {
+    return phase;
+  }
+
+  return null;
+}
+
+function normalizeReaderOrderStatus(rawStatus: unknown): BorrowOrderView['status'] {
+  switch (rawStatus) {
+    case 'cancelled':
+      return 'cancelled';
+    case 'completed':
+    case 'returned':
+      return 'completed';
+    case 'overdue':
+      return 'overdue';
+    case 'renewable':
+      return 'renewable';
+    case 'dueSoon':
+      return 'dueSoon';
+    default:
+      return 'active';
+  }
+}
+
+function resolveReaderStatusLabel(
+  raw: any,
+  normalizedStatus: BorrowOrderView['status'],
+  fulfillmentPhase: BorrowOrderView['fulfillmentPhase']
+): string {
+  if (fulfillmentPhase === 'dispatch_started' || fulfillmentPhase === 'in_transit') {
+    return '正在配送';
+  }
+
+  if (fulfillmentPhase === 'pickup_pending') {
+    return '待取书';
+  }
+
+  if (fulfillmentPhase === 'delivered') {
+    return '已送达';
+  }
+
+  if (fulfillmentPhase === 'completed') {
+    return '已完成';
+  }
+
+  return (
+    raw.statusLabel ??
+    raw.status_label ??
+    (typeof raw.status === 'string' ? readerFacingStatusLabelByCode[raw.status] : undefined) ??
+    readerFacingStatusLabelByCode[normalizedStatus] ??
+    '进行中'
+  );
+}
+
 export async function listActiveOrders(token?: string | null): Promise<BorrowOrderView[]> {
   return libraryRequest('/api/v1/orders/me/active', {
     fallback: async () => listMockOrders().filter((order) => order.status !== 'completed'),
@@ -79,7 +143,7 @@ export async function createBorrowOrder(
   return libraryRequest('/api/v1/orders/borrow-orders', {
     body: JSON.stringify({
       book_id: payload.bookId,
-      delivery_target: payload.deliveryTarget ?? '阅览室座位',
+      delivery_target: payload.deliveryTarget,
       order_mode: payload.mode ?? 'robot_delivery',
     }),
     fallback: () => createMockBorrowOrder(payload.bookId, { deliveryTarget: payload.deliveryTarget, mode: payload.mode }),
@@ -164,13 +228,17 @@ export function normalizeOrder(raw: any): BorrowOrderView {
   const rawBook = raw.book ?? raw.borrow_order?.book ?? raw.borrowOrder?.book;
   const bookId = raw.book_id ?? raw.bookId ?? raw.borrow_order?.book_id ?? raw.borrowOrder?.book_id;
   const dueLabel = raw.dueDateLabel ?? raw.due_date_label ?? raw.due_at ?? raw.borrow_order?.due_at ?? '7 天后到期';
-  const rawStatus = raw.status;
+  const rawStatus = raw.status ?? raw.borrow_order?.status ?? raw.borrowOrder?.status;
   const rawNote = raw.note ?? raw.failure_reason ?? raw.borrow_order?.failure_reason ?? '';
+  const fulfillmentPhase = normalizeFulfillmentPhase(raw);
+  const normalizedStatus = normalizeReaderOrderStatus(rawStatus);
+
   return {
     actionableLabel: raw.actionableLabel ?? raw.actionable_label ?? '查看借阅',
     book: rawBook ? normalizeBookCard(rawBook) : bookId ? getMockBookForOrder(bookId) : getMockBookForOrder(1),
     cancellable: raw.cancellable ?? false,
     dueDateLabel: typeof dueLabel === 'string' ? dueLabel : '7 天后到期',
+    fulfillmentPhase,
     id: raw.id ?? raw.borrow_order?.id ?? raw.borrowOrder?.id ?? Date.now(),
     mode: raw.mode ?? raw.order_mode ?? raw.borrow_order?.order_mode ?? 'robot_delivery',
     note:
@@ -179,23 +247,8 @@ export function normalizeOrder(raw: any): BorrowOrderView {
         : '',
     renewable: raw.renewable ?? raw.borrow_order?.renewable ?? false,
     returnable: raw.returnable ?? false,
-    status:
-      rawStatus === 'cancelled'
-        ? 'cancelled'
-        : rawStatus === 'completed'
-        ? 'completed'
-        : rawStatus === 'overdue'
-          ? 'overdue'
-          : rawStatus === 'renewable'
-            ? 'renewable'
-            : rawStatus === 'dueSoon'
-              ? 'dueSoon'
-              : 'active',
-    statusLabel:
-      raw.statusLabel ??
-      raw.status_label ??
-      (typeof rawStatus === 'string' ? readerFacingStatusLabelByCode[rawStatus] : undefined) ??
-      '进行中',
+    status: normalizedStatus,
+    statusLabel: resolveReaderStatusLabel(raw, normalizedStatus, fulfillmentPhase),
     timeline: raw.timeline ?? raw.delivery_timeline ?? [{ completed: true, label: '已完成' }],
   };
 }

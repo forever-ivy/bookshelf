@@ -30,7 +30,7 @@ export type BorrowOrderJourney = UnifiedExceptionJourney | UnifiedTimelineJourne
 
 type JourneyInput = Pick<
   BorrowOrderView,
-  'dueDateLabel' | 'mode' | 'status' | 'statusLabel' | 'timeline'
+  'dueDateLabel' | 'fulfillmentPhase' | 'mode' | 'status' | 'statusLabel' | 'timeline'
 >;
 
 const unifiedStageLabels: Record<UnifiedStageKey, string> = {
@@ -61,8 +61,8 @@ export function buildBorrowOrderJourney(input: JourneyInput): BorrowOrderJourney
     };
   }
 
-  const currentStageKey = getCurrentStageKey(input.status);
-  const currentStageLabel = unifiedStageLabels[currentStageKey];
+  const currentStageKey = getCurrentStageKey(input.status, input.fulfillmentPhase);
+  const currentStageLabel = getCurrentStageLabel(input, currentStageKey);
   const stageTimestamps = mapStageTimestamps(input.timeline);
   const tone = getJourneyTone(input.status);
   const currentStageIndex = stageOrder.indexOf(currentStageKey);
@@ -82,12 +82,45 @@ export function buildBorrowOrderJourney(input: JourneyInput): BorrowOrderJourney
   };
 }
 
-function getCurrentStageKey(status: BorrowOrderView['status']): UnifiedStageKey {
+function getCurrentStageKey(
+  status: BorrowOrderView['status'],
+  fulfillmentPhase?: BorrowOrderView['fulfillmentPhase']
+): UnifiedStageKey {
   if (status === 'completed') {
     return 'returned';
   }
 
+  if (
+    fulfillmentPhase === 'dispatch_started' ||
+    fulfillmentPhase === 'in_transit' ||
+    fulfillmentPhase === 'pickup_pending'
+  ) {
+    return 'fulfillment';
+  }
+
+  if (fulfillmentPhase === 'delivered') {
+    return 'active';
+  }
+
   return 'active';
+}
+
+function getCurrentStageLabel(input: JourneyInput, key: UnifiedStageKey) {
+  if (key === 'fulfillment') {
+    if (input.fulfillmentPhase === 'pickup_pending') {
+      return '待取书';
+    }
+
+    if (input.fulfillmentPhase === 'dispatch_started' || input.fulfillmentPhase === 'in_transit') {
+      return '正在配送';
+    }
+  }
+
+  if (key === 'active' && input.fulfillmentPhase === 'delivered') {
+    return '已送达';
+  }
+
+  return unifiedStageLabels[key];
 }
 
 function getJourneyTone(status: BorrowOrderView['status']): JourneyTone {
@@ -108,6 +141,20 @@ function getJourneyTone(status: BorrowOrderView['status']): JourneyTone {
 function getCurrentStageDescription(input: JourneyInput, key: UnifiedStageKey) {
   if (key === 'returned') {
     return '本次借阅流程已完成，图书已归还入库。';
+  }
+
+  if (key === 'fulfillment') {
+    if (input.fulfillmentPhase === 'pickup_pending') {
+      return '图书已为你预留在书柜，请前往取书。';
+    }
+
+    if (input.fulfillmentPhase === 'dispatch_started' || input.fulfillmentPhase === 'in_transit') {
+      return '机器人已发出，正在把图书送到你的阅读位。';
+    }
+  }
+
+  if (key === 'active' && input.fulfillmentPhase === 'delivered') {
+    return `图书已经送达，${input.dueDateLabel}。`;
   }
 
   switch (input.status) {

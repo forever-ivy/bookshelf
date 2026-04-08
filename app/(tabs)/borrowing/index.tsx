@@ -39,6 +39,10 @@ function getNotificationKindLabel(kind: NotificationItem['kind']) {
   return '系统提醒';
 }
 
+function getNotificationSignature(item: NotificationItem) {
+  return [item.kind, item.title.trim(), item.body.trim()].join('::');
+}
+
 export default function BorrowingRoute() {
   const [activeTab, setActiveTab] = React.useState<BorrowingTabKey>('borrowing');
   const [expandedGroups, setExpandedGroups] = React.useState<Set<string>>(new Set());
@@ -56,7 +60,7 @@ export default function BorrowingRoute() {
     allActiveOrders: borrowing.allActiveOrders,
     canonicalOrders: borrowing.canonicalOrders,
   });
-  const previousNotificationIds = React.useRef<Set<string>>(new Set());
+  const previousNotificationSignatures = React.useRef<Set<string>>(new Set());
   const hasHydratedNotifications = React.useRef(false);
   const notificationDismissProgress = React.useRef<Record<string, Animated.Value>>({});
 
@@ -171,15 +175,17 @@ export default function BorrowingRoute() {
       return;
     }
 
-    const nextIds = new Set(notificationsQuery.data.map((item) => item.id));
+    const nextSignatures = new Set(notificationsQuery.data.map(getNotificationSignature));
     if (!hasHydratedNotifications.current) {
-      previousNotificationIds.current = nextIds;
+      previousNotificationSignatures.current = nextSignatures;
       hasHydratedNotifications.current = true;
       return;
     }
 
-    const newCount = notificationsQuery.data.filter((item) => !previousNotificationIds.current.has(item.id)).length;
-    previousNotificationIds.current = nextIds;
+    const newCount = notificationsQuery.data.filter(
+      (item) => !previousNotificationSignatures.current.has(getNotificationSignature(item))
+    ).length;
+    previousNotificationSignatures.current = nextSignatures;
 
     if (newCount > 0) {
       toast.success(`收到 ${newCount} 条新提醒`);

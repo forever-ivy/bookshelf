@@ -148,18 +148,26 @@ describe('MeRoute', () => {
   it('renders reader-facing account overview and usage records', () => {
     render(<MeRoute />);
 
-    expect(screen.getByText('账户概览')).toBeTruthy();
-    expect(screen.getByText('当前借阅')).toBeTruthy();
+    expect(screen.getByText('今日提醒')).toBeTruthy();
+    expect(screen.getByText('数据概览')).toBeTruthy();
+    expect(screen.getByText('阅读偏好')).toBeTruthy();
+    expect(screen.getByText('活跃')).toBeTruthy();
+    expect(screen.queryByText('先处理最影响当前节奏的一项。')).toBeNull();
+    expect(screen.queryByText('把最常用的数据收在一起，不再拆成多块卡片。')).toBeNull();
+    expect(screen.queryByText('只保留最近的几条，方便快速扫一眼。')).toBeNull();
     expect(screen.queryByText('收藏图书')).toBeNull();
     expect(screen.queryByText('书单')).toBeNull();
     expect(screen.getByText('最近使用记录')).toBeTruthy();
-    expect(screen.getByText('机器学习、推荐系统')).toBeTruthy();
+    expect(screen.getByText('机器学习')).toBeTruthy();
+    expect(screen.getByText('推荐系统')).toBeTruthy();
     expect(screen.getByText('机器学习从零到一')).toBeTruthy();
     expect(screen.queryByText('消息通知')).toBeNull();
     expect(screen.queryByText('借阅与推荐概览')).toBeNull();
     expect(screen.queryByText('推荐信号')).toBeNull();
     expect(screen.queryByText('找书行为')).toBeNull();
     expect(screen.queryByText('最近搜索与推荐')).toBeNull();
+    expect(screen.queryByText('账户概览')).toBeNull();
+    expect(screen.queryByText('阅读成就')).toBeNull();
   });
 
   it('keeps account sections mounted with skeletons during first load', () => {
@@ -172,15 +180,16 @@ describe('MeRoute', () => {
     render(<MeRoute />);
 
     expect(screen.getByText('今日提醒')).toBeTruthy();
-    expect(screen.getByText('账户概览')).toBeTruthy();
+    expect(screen.getByText('数据概览')).toBeTruthy();
     expect(screen.queryByText('收藏图书')).toBeNull();
     expect(screen.queryByText('书单')).toBeNull();
-    expect(screen.getByText('阅读成就')).toBeTruthy();
     expect(screen.getByTestId('me-reminders-skeleton')).toBeTruthy();
     expect(screen.getByTestId('me-profile-summary-skeleton')).toBeTruthy();
     expect(screen.getAllByTestId('me-collection-skeleton').length).toBeGreaterThan(0);
     expect(screen.getByTestId('me-history-skeleton')).toBeTruthy();
     expect(screen.queryByTestId('me-notifications-skeleton')).toBeNull();
     expect(screen.queryByText('机器学习从零到一')).toBeNull();
+    expect(screen.queryByText('账户概览')).toBeNull();
+    expect(screen.queryByText('阅读成就')).toBeNull();
   });
 });

@@ -79,4 +79,23 @@ describe('buildBorrowOrderJourney', () => {
       'current',
     ]);
   });
+
+  it('keeps newly dispatched delivery orders in the fulfillment stage', () => {
+    const result = buildBorrowOrderJourney({
+      dueDateLabel: '4 月 9 日前归还',
+      fulfillmentPhase: 'dispatch_started',
+      mode: 'robot_delivery',
+      status: 'active',
+      statusLabel: '正在配送',
+      timeline: [{ completed: true, label: '下单成功', timestamp: '2026-03-20T12:00:00.000Z' }],
+    });
+
+    expect(result.variant).toBe('timeline');
+    if (result.variant !== 'timeline') {
+      throw new Error('expected timeline journey');
+    }
+
+    expect(result.currentStageKey).toBe('fulfillment');
+    expect(result.currentStageLabel).toBe('正在配送');
+  });
 });
