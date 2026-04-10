@@ -227,3 +227,130 @@ export type ReaderOverview = {
   recentRecommendations: Array<Record<string, unknown>>;
   stats: ReaderOverviewStats;
 };
+
+export type TutorSourceType = 'book' | 'upload';
+
+export type TutorProfileStatus = 'failed' | 'generating' | 'ready';
+
+export type TutorSessionStatus = 'active' | 'completed' | 'paused';
+
+export type TutorPersona = {
+  coachingFocus?: string | null;
+  greeting: string;
+  name: string;
+  style?: string | null;
+};
+
+export type TutorCurriculumStep = {
+  goal?: string | null;
+  guidingQuestion?: string | null;
+  id: string;
+  successCriteria?: string | null;
+  title: string;
+};
+
+export type TutorProfile = {
+  bookId: number | null;
+  createdAt: string;
+  curriculum: TutorCurriculumStep[];
+  id: number;
+  persona: TutorPersona;
+  sourceText?: string | null;
+  sourceType: TutorSourceType;
+  status: TutorProfileStatus;
+  title: string;
+  updatedAt: string;
+};
+
+export type TutorCompletedStep = {
+  completedAt: string;
+  confidence: number;
+  stepIndex: number;
+};
+
+export type TutorSession = {
+  completedSteps: TutorCompletedStep[];
+  completedStepsCount: number;
+  conversationSessionId: number;
+  createdAt: string;
+  currentStepIndex: number;
+  currentStepTitle: string | null;
+  id: number;
+  lastMessagePreview?: string | null;
+  progressLabel: string;
+  status: TutorSessionStatus;
+  tutorProfileId: number;
+  updatedAt: string;
+};
+
+export type TutorSessionMessage = {
+  content: string;
+  createdAt: string;
+  id: number;
+  role: 'assistant' | 'user';
+  tutorSessionId: number;
+};
+
+export type TutorSuggestion = {
+  bookId?: number | null;
+  description: string;
+  id: string;
+  kind: 'continue_session' | 'create_from_book' | 'next_step' | 'review';
+  profileId?: number | null;
+  title: string;
+};
+
+export type TutorDashboardContinueSession = TutorSession & {
+  personaName?: string | null;
+  profileId: number;
+  title: string;
+};
+
+export type TutorDashboard = {
+  continueSession: TutorDashboardContinueSession | null;
+  recentProfiles: TutorProfile[];
+  suggestions: TutorSuggestion[];
+};
+
+export type CreateTutorProfileInput = {
+  bookId?: number;
+  sourceText?: string;
+  sourceType: TutorSourceType;
+  teachingGoal?: string;
+  title?: string;
+};
+
+export type StartTutorSessionResult = {
+  firstStep: TutorCurriculumStep | null;
+  session: TutorSession;
+  welcomeMessage: string;
+};
+
+export type TutorStepEvaluation = {
+  confidence: number;
+  meetsCriteria: boolean;
+  reasoning?: string | null;
+  stepIndex: number;
+};
+
+export type TutorStreamEvent =
+  | {
+      delta: string;
+      type: 'assistant.delta';
+    }
+  | {
+      message: TutorSessionMessage;
+      type: 'assistant.done';
+    }
+  | {
+      evaluation: TutorStepEvaluation;
+      type: 'evaluation';
+    }
+  | {
+      session: TutorSession;
+      type: 'session.updated';
+    }
+  | {
+      message: string;
+      type: 'error';
+    };

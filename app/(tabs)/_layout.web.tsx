@@ -41,17 +41,24 @@ export default function WebTabsLayout() {
           }}
         />
         <Tabs.Screen
-          name="search"
-          options={{
-            tabBarIcon: ({ color }) => <AppIcon color={color} name="search" />,
-            title: '找书',
-          }}
-        />
-        <Tabs.Screen
           name="borrowing"
           options={{
             tabBarIcon: ({ color }) => <AppIcon color={color} name="borrowing" />,
             title: '借阅',
+          }}
+        />
+        <Tabs.Screen
+          name="tutor"
+          options={{
+            tabBarIcon: ({ color }) => <AppIcon color={color} name="tutor" />,
+            title: '导学',
+          }}
+        />
+        <Tabs.Screen
+          name="search"
+          options={{
+            tabBarIcon: ({ color }) => <AppIcon color={color} name="search" />,
+            title: '找书',
           }}
         />
       </Tabs>

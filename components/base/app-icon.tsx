@@ -36,6 +36,7 @@ export type AppIconName =
   | 'profile'
   | 'search'
   | 'spark'
+  | 'tutor'
   | 'truck'
   | 'x';
 
@@ -54,6 +55,7 @@ const iconByName: Record<AppIconName, LucideIcon> = {
   profile: CircleUserRound,
   search: Search,
   spark: Sparkles,
+  tutor: Sparkles,
   truck: Truck,
   x: X,
 };
@@ -76,7 +78,7 @@ export function AppIcon({
 }
 
 export function getNativeTabIconProps(
-  name: Extract<AppIconName, 'borrowing' | 'home' | 'profile' | 'search'>
+  name: Extract<AppIconName, 'borrowing' | 'home' | 'profile' | 'search' | 'tutor'>
 ) {
   switch (name) {
     case 'home':
@@ -93,6 +95,11 @@ export function getNativeTabIconProps(
       return {
         md: 'menu_book',
         sf: { default: 'books.vertical.fill', selected: 'books.vertical.fill' },
+      } as const;
+    case 'tutor':
+      return {
+        md: 'auto_awesome',
+        sf: { default: 'apple.intelligence', selected: 'apple.intelligence' },
       } as const;
     case 'profile':
       return {

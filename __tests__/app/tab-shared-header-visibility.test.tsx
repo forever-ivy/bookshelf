@@ -133,6 +133,7 @@ jest.mock('expo-router', () => {
       Screen,
       Toolbar,
     },
+    useLocalSearchParams: () => ({}),
     useRouter: () => ({
       push: jest.fn(),
       replace: jest.fn(),
@@ -150,6 +151,7 @@ jest.mock('@/lib/app/artwork', () => ({
   appArtwork: {
     notionBorrowSuccess: 1,
     notionNoResults: 1,
+    notionTutorProgress: 1,
   },
 }));
 
@@ -225,15 +227,42 @@ jest.mock('@/hooks/use-library-app-data', () => ({
     ],
     isFetching: false,
   }),
+  useDismissNotificationMutation: () => ({
+    mutateAsync: jest.fn(),
+  }),
   useRecommendationSearchQuery: () => ({
     data: [],
     error: null,
     isFetching: false,
   }),
+  useCreateTutorProfileMutation: () => ({
+    isPending: false,
+    mutateAsync: jest.fn(),
+  }),
+  useTutorDashboardQuery: () => ({
+    data: {
+      continueSession: null,
+      suggestions: [
+        {
+          description: '先从资料的第一步目标开始，把概念说成自己的语言。',
+          id: 'suggestion-1',
+          title: '从第一步开始导学',
+        },
+      ],
+    },
+    isFetching: false,
+  }),
+  useTutorProfilesQuery: () => ({
+    data: [],
+  }),
+  useTutorSessionsQuery: () => ({
+    data: [],
+  }),
 }));
 
 import BorrowingRoute from '@/app/(tabs)/borrowing';
 import SearchRoute from '@/app/(tabs)/search';
+import TutorRoute from '@/app/(tabs)/tutor';
 
 function findPrimaryScrollView(view: ReturnType<typeof render>) {
   return view.UNSAFE_getAllByType(ScrollView).find((node) => !node.props.horizontal);
@@ -369,5 +398,63 @@ describe('shared tab header visibility', () => {
     expect(restoredHeaderItems.leftItems).toHaveLength(1);
     expect(restoredHeaderItems.rightItems).toHaveLength(1);
     expect(screen.getByTestId('search-header-profile-slot')).toBeTruthy();
+  });
+
+  it('hides the tutor title and profile action when scrolled down, then restores them at the top', () => {
+    const view = render(<TutorRoute />);
+    const scrollView = findPrimaryScrollView(view);
+    const initialHeaderItems = getSharedHeaderItems(view);
+
+    expect(scrollView).toBeTruthy();
+    expect(screen.getByTestId('tutor-header-inline-title-slot')).toBeTruthy();
+    expect(screen.getAllByText('导学').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('tutor-header-profile-slot')).toBeTruthy();
+    expect(screen.getByTestId('tutor-artwork')).toBeTruthy();
+    expect(initialHeaderItems.leftItems).toEqual([
+      expect.objectContaining({
+        hidesSharedBackground: true,
+        type: 'custom',
+      }),
+    ]);
+    expect(initialHeaderItems.rightItems).toEqual([
+      expect.objectContaining({
+        hidesSharedBackground: true,
+        type: 'custom',
+      }),
+    ]);
+
+    act(() => {
+      scrollView?.props.onScroll({
+        nativeEvent: {
+          contentOffset: {
+            y: 72,
+          },
+        },
+      });
+    });
+
+    expect(getSharedHeaderItems(view)).toEqual({
+      leftItems: [],
+      rightItems: [],
+      searchPlaceholder: undefined,
+    });
+    expect(screen.queryByTestId('tutor-header-inline-title-slot')).toBeNull();
+    expect(screen.queryByTestId('tutor-header-profile-slot')).toBeNull();
+
+    act(() => {
+      scrollView?.props.onScroll({
+        nativeEvent: {
+          contentOffset: {
+            y: 0,
+          },
+        },
+      });
+    });
+
+    const restoredHeaderItems = getSharedHeaderItems(view);
+
+    expect(restoredHeaderItems.leftItems).toHaveLength(1);
+    expect(restoredHeaderItems.rightItems).toHaveLength(1);
+    expect(screen.getByTestId('tutor-header-profile-slot')).toBeTruthy();
   });
 });

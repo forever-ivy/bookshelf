@@ -185,13 +185,14 @@ export async function libraryFetchJson<T>(
   }
 
   const token = await readToken(options.token);
+  const hasFormDataBody = typeof FormData !== 'undefined' && options.body instanceof FormData;
   let response: Response;
   try {
     response = await fetch(`${baseUrl}${path}`, {
       ...options,
       headers: {
         Accept: 'application/json',
-        ...(options.body ? { 'Content-Type': 'application/json' } : null),
+        ...(options.body && !hasFormDataBody ? { 'Content-Type': 'application/json' } : null),
         ...(options.headers ?? {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },

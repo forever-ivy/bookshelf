@@ -92,6 +92,10 @@ jest.mock('expo-image-picker', () => {
   };
 });
 
+jest.mock('expo-document-picker', () => ({
+  getDocumentAsync: jest.fn(async () => ({ assets: null, canceled: true })),
+}));
+
 jest.mock('expo-blur', () => {
   const React = require('react');
   const { View } = require('react-native');

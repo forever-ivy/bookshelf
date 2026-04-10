@@ -167,6 +167,34 @@ describe('libraryRequest', () => {
       status: 401,
     });
   });
+
+  it('does not force a JSON content type for FormData uploads', async () => {
+    process.env.EXPO_PUBLIC_LIBRARY_SERVICE_URL = 'http://localhost:8000';
+    const formData = new FormData();
+    formData.append('title', 'AI 导学资料');
+    global.fetch = jest.fn(
+      async () =>
+        new Response(JSON.stringify({ ok: true }), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200,
+        })
+    ) as unknown as typeof fetch;
+
+    await libraryRequest('/api/v1/tutor/profiles/upload', {
+      body: formData,
+      fallback: () => ({ ok: false }),
+      method: 'POST',
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect((global.fetch as jest.Mock).mock.calls[0]?.[1]?.headers).toEqual(
+      expect.objectContaining({
+        Accept: 'application/json',
+        Authorization: 'Bearer stored-token',
+      })
+    );
+    expect((global.fetch as jest.Mock).mock.calls[0]?.[1]?.headers?.['Content-Type']).toBeUndefined();
+  });
 });
 
 describe('library client helpers', () => {

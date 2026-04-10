@@ -180,6 +180,9 @@ describe('HomeRoute quick actions', () => {
     expect(screen.getByText('1 单配送中')).toBeTruthy();
     expect(screen.getByText('1 本临近到期')).toBeTruthy();
     expect(screen.getByText('连续学习 9 天')).toBeTruthy();
+    expect(screen.queryByText('学习导师')).toBeNull();
+    expect(screen.queryByText('继续《机器学习从零到一》')).toBeNull();
+    expect(screen.queryByText('1 / 4 步')).toBeNull();
     expect(screen.queryByText('搜索书名、作者、更多信息')).toBeNull();
     expect(screen.queryByText('继续借阅')).toBeNull();
     expect(screen.queryByText('配送状态')).toBeNull();
@@ -196,6 +199,7 @@ describe('HomeRoute quick actions', () => {
 
     render(<HomeRoute />);
 
+    expect(screen.queryByTestId('home-learning-focus-skeleton')).toBeNull();
     expect(screen.getByText('快速开始')).toBeTruthy();
     expect(screen.getByText('推荐借阅')).toBeTruthy();
     expect(screen.getByText('专题书单')).toBeTruthy();

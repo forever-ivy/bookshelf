@@ -6,6 +6,7 @@ import {
   createBooklist,
   createBorrowOrder,
   createReturnRequest,
+  createTutorProfile,
   deleteBooklist,
   dismissNotification,
   getAchievements,
@@ -20,6 +21,9 @@ import {
   getRecommendationDashboard,
   getReturnRequest,
   getSimilarBooks,
+  getTutorDashboard,
+  getTutorProfile,
+  getTutorSession,
   getMyOverview,
   listActiveOrders,
   listBooklists,
@@ -31,14 +35,19 @@ import {
   listNotifications,
   listOrderHistory,
   listReturnRequests,
+  listTutorProfiles,
+  listTutorSessionMessages,
+  listTutorSessions,
   login,
   searchBooksExplicit,
   registerReader,
   removeBookFromBooklist,
   renewBorrowOrder,
   searchRecommendations,
+  startTutorSession,
   toggleFavorite,
   updateMyProfile,
+  type CreateTutorProfileInput,
   type LoginInput,
   type ProfileUpdateInput,
   type RegisterInput,
@@ -319,6 +328,63 @@ export function useBooklistsQuery() {
   });
 }
 
+export function useTutorDashboardQuery() {
+  const { token } = useAppSession();
+
+  return useQuery({
+    queryFn: () => getTutorDashboard(token),
+    queryKey: ['tutor', 'dashboard', token],
+  });
+}
+
+export function useTutorProfilesQuery() {
+  const { token } = useAppSession();
+
+  return useQuery({
+    queryFn: () => listTutorProfiles(token),
+    queryKey: ['tutor', 'profiles', token],
+  });
+}
+
+export function useTutorProfileQuery(profileId: number) {
+  const { token } = useAppSession();
+
+  return useQuery({
+    enabled: Number.isFinite(profileId),
+    queryFn: () => getTutorProfile(profileId, token),
+    queryKey: ['tutor', 'profiles', 'detail', profileId, token],
+  });
+}
+
+export function useTutorSessionsQuery() {
+  const { token } = useAppSession();
+
+  return useQuery({
+    queryFn: () => listTutorSessions(token),
+    queryKey: ['tutor', 'sessions', token],
+  });
+}
+
+export function useTutorSessionQuery(sessionId: number) {
+  const { token } = useAppSession();
+
+  return useQuery({
+    enabled: Number.isFinite(sessionId),
+    queryFn: () => getTutorSession(sessionId, token),
+    queryKey: ['tutor', 'sessions', 'detail', sessionId, token],
+  });
+}
+
+export function useTutorSessionMessagesQuery(sessionId: number) {
+  const { token } = useAppSession();
+
+  return useQuery({
+    enabled: Number.isFinite(sessionId),
+    queryFn: () => listTutorSessionMessages(sessionId, token),
+    queryKey: ['tutor', 'sessions', 'messages', sessionId, token],
+  });
+}
+
 export function useNotificationsQuery() {
   const { token } = useAppSession();
 
@@ -461,6 +527,48 @@ export function useCreateBooklistMutation() {
     mutationFn: (input: Parameters<typeof createBooklist>[0]) => createBooklist(input, token),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['booklists'] });
+    },
+  });
+}
+
+export function useCreateTutorProfileMutation() {
+  const queryClient = useQueryClient();
+  const { token } = useAppSession();
+
+  return useMutation({
+    mutationFn: (input: CreateTutorProfileInput) => createTutorProfile(input, token),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tutor'] });
+    },
+  });
+}
+
+export function useStartTutorSessionMutation() {
+  const queryClient = useQueryClient();
+  const { token } = useAppSession();
+
+  return useMutation({
+    mutationFn: (profileId: number) => startTutorSession(profileId, token),
+    onSuccess: (payload) => {
+      queryClient.invalidateQueries({ queryKey: ['tutor'] });
+      queryClient.setQueryData(['tutor', 'sessions', 'detail', payload.session.id, token], payload.session);
+      queryClient.setQueryData(['tutor', 'sessions', 'messages', payload.session.id, token], (previous: unknown) => {
+        const items = Array.isArray(previous) ? previous : [];
+
+        if (items.length > 0 || !payload.welcomeMessage) {
+          return items;
+        }
+
+        return [
+          {
+            content: payload.welcomeMessage,
+            createdAt: payload.session.createdAt,
+            id: `${payload.session.id}-welcome`,
+            role: 'assistant',
+            tutorSessionId: payload.session.id,
+          },
+        ];
+      });
     },
   });
 }

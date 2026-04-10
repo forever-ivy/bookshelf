@@ -14,7 +14,8 @@
       "Bash(rmdir /Users/Code/bookshelf/bookshelf/app/search)",
       "Bash(python3:*)",
       "Bash(npx jest:*)",
-      "Bash(npx expo:*)"
+      "Bash(npx expo:*)",
+      "Bash(npm ls:*)"
     ]
   }
 }

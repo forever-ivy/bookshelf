@@ -154,6 +154,20 @@ const mockCreateBooklistMutation = {
     title: '稍后阅读',
   })),
 };
+const mockCreateTutorProfileMutateAsync = jest.fn(async () => ({
+  bookId: 1,
+  createdAt: '2026-04-08T08:00:00Z',
+  curriculum: [],
+  id: 901,
+  persona: {
+    greeting: '我们一步步来。',
+    name: '周老师',
+  },
+  sourceType: 'book',
+  status: 'ready',
+  title: '机器学习从零到一',
+  updatedAt: '2026-04-08T08:00:00Z',
+}));
 const mockBooklistsQueryData = {
   customItems: [
     {
@@ -298,6 +312,10 @@ jest.mock('@/hooks/use-library-app-data', () => ({
     data: mockCollaborativeLoading ? undefined : mockCollaborativeBooksData,
     error: null,
     isFetching: mockCollaborativeLoading,
+  }),
+  useCreateTutorProfileMutation: () => ({
+    isPending: false,
+    mutateAsync: mockCreateTutorProfileMutateAsync,
   }),
   useFavoritesQuery: () => ({
     data: [
@@ -495,6 +513,22 @@ describe('BookDetailRoute', () => {
         height: undefined,
       })
     );
+    expect(screen.getByText('创建学习导师')).toBeTruthy();
+  });
+
+  it('creates a tutor from the current book and jumps to the tutor detail page', async () => {
+    render(<BookDetailRoute />);
+
+    fireEvent.press(screen.getByTestId('book-detail-create-tutor'));
+
+    await waitFor(() => {
+      expect(mockCreateTutorProfileMutateAsync).toHaveBeenCalledWith({
+        bookId: 1,
+        sourceType: 'book',
+        title: '机器学习从零到一',
+      });
+    });
+    expect(mockRouter.push).toHaveBeenCalledWith('/tutor/901');
   });
 
   it('shows the current book as in transit when there is an active robot delivery order', () => {
@@ -629,7 +663,7 @@ describe('BookDetailRoute', () => {
         availabilityLabel: '暂不可借',
         deliveryAvailable: false,
         etaLabel: '到柜自取',
-        etaMinutes: null,
+        etaMinutes: 0,
         stockStatus: 'out_of_stock',
       },
     };

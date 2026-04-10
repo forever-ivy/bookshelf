@@ -13,6 +13,7 @@ export const appArtwork = {
   notionInterestSelection: require('../../assets/illustrations/notion-style/interest-selection-alpha.png'),
   notionInterestSelectionFocused: require('../../assets/illustrations/notion-style/ChatGPT Image Apr 2, 2026, 05_32_14 PM.png'),
   notionNoResults: require('../../assets/illustrations/notion-style/no-results-alpha.png'),
+  notionTutorProgress: require('../../assets/illustrations/notion-style/tutor-ai-assistance.png'),
   notionRegisterWelcome: require('../../assets/illustrations/notion-style/ChatGPT Image Apr 2, 2026, 05_42_38 PM.png'),
   notionReadingProgress: require('../../assets/illustrations/notion-style/reading-in-progress-alpha.png'),
   notionReturnSuccess: require('../../assets/illustrations/notion-style/ChatGPT Image Apr 2, 2026, 05_42_49 PM.png'),

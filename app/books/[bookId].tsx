@@ -35,6 +35,7 @@ import {
   useCollaborativeBooksQuery,
   useCreateBooklistMutation,
   useCreateBorrowOrderMutation,
+  useCreateTutorProfileMutation,
   useFavoritesQuery,
   useHybridBooksQuery,
   useSimilarBooksQuery,
@@ -527,6 +528,7 @@ export default function BookDetailRoute() {
   const addBookToBooklistMutation = useAddBookToBooklistMutation();
   const createBooklistMutation = useCreateBooklistMutation();
   const borrowMutation = useCreateBorrowOrderMutation();
+  const createTutorProfileMutation = useCreateTutorProfileMutation();
   const favoriteMutation = useToggleFavoriteMutation();
   const [isBorrowModalMounted, setIsBorrowModalMounted] = React.useState(false);
   const [isBooklistModalVisible, setIsBooklistModalVisible] = React.useState(false);
@@ -556,6 +558,23 @@ export default function BookDetailRoute() {
 
   const closeBorrowModal = () => {
     setIsBorrowModalMounted(false);
+  };
+
+  const handleCreateTutor = async () => {
+    if (!book) {
+      return;
+    }
+
+    try {
+      const profile = await createTutorProfileMutation.mutateAsync({
+        bookId: book.id,
+        sourceType: 'book',
+        title: book.title,
+      });
+      router.push(`/tutor/${profile.id}`);
+    } catch (error) {
+      toast.error(getLibraryErrorMessage(error, '创建学习导师失败，请稍后再试。'));
+    }
   };
 
   if (!Number.isFinite(bookId)) {
@@ -793,6 +812,21 @@ export default function BookDetailRoute() {
                       surfaceTestID="book-detail-decision-booklist-surface"
                       testID="book-detail-open-booklist-modal"
                       variant="soft"
+                    />
+                  </View>
+                  <View style={{ width: '100%' }} testID="book-detail-decision-tertiary-row">
+                    <PillButton
+                      fullWidth
+                      href={undefined}
+                      icon="spark"
+                      label={createTutorProfileMutation.isPending ? '创建中…' : '创建学习导师'}
+                      onPress={() => {
+                        void handleCreateTutor();
+                      }}
+                      size="hero"
+                      surfaceTestID="book-detail-decision-tutor-surface"
+                      testID="book-detail-create-tutor"
+                      variant="accent"
                     />
                   </View>
                 </View>

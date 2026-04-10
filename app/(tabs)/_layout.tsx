@@ -21,6 +21,10 @@ export default function TabsLayout() {
           <NativeTabs.Trigger.Icon {...getNativeTabIconProps('borrowing')} />
           <NativeTabs.Trigger.Label>借阅</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="tutor">
+          <NativeTabs.Trigger.Icon {...getNativeTabIconProps('tutor')} />
+          <NativeTabs.Trigger.Label>导学</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
         <NativeTabs.Trigger name="search" role="search">
           <NativeTabs.Trigger.Icon {...getNativeTabIconProps('search')} />
           <NativeTabs.Trigger.Label>找书</NativeTabs.Trigger.Label>

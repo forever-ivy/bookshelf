@@ -7,35 +7,38 @@ import { appTheme } from '@/constants/app-theme';
 
 let mockPathname = '/';
 let mockRecordedStackScreenOptions: Record<string, unknown> | undefined;
-let mockRecordedScreens: Array<{ name?: string; options?: Record<string, unknown> }> = [];
+let mockRecordedScreens: { name?: string; options?: Record<string, unknown> }[] = [];
 
 jest.mock('react-native-reanimated', () => ({}));
 
 jest.mock('expo-router', () => {
-  const React = require('react');
-  const { View } = require('react-native');
+  const React = jest.requireActual('react') as typeof import('react');
+  const { View } = jest.requireActual('react-native') as typeof import('react-native');
 
-  const Stack = ({
+  function MockStack({
     children,
     screenOptions,
   }: {
     children: React.ReactNode;
     screenOptions?: Record<string, unknown>;
-  }) => {
+  }) {
     mockRecordedStackScreenOptions = screenOptions;
     return React.createElement(View, { testID: 'root-stack' }, children);
-  };
+  }
 
-  Stack.Screen = ({
+  function MockStackScreen({
     name,
     options,
   }: {
     name?: string;
     options?: Record<string, unknown>;
-  }) => {
+  }) {
     mockRecordedScreens.push({ name, options });
     return null;
-  };
+  }
+
+  const Stack: any = MockStack;
+  Stack.Screen = MockStackScreen;
 
   return {
     Stack,
@@ -113,6 +116,14 @@ describe('RootLayout', () => {
         options: expect.objectContaining({
           presentation: 'card',
           title: '',
+        }),
+      })
+    );
+    expect(mockRecordedScreens).toContainEqual(
+      expect.objectContaining({
+        name: 'tutor/[profileId]',
+        options: expect.objectContaining({
+          headerShown: false,
         }),
       })
     );

@@ -45,6 +45,7 @@ jest.mock('@/providers/profile-sheet-provider', () => ({
 import HomeTabLayout from '@/app/(tabs)/(home)/_layout';
 import BorrowingTabLayout from '@/app/(tabs)/borrowing/_layout';
 import SearchTabLayout from '@/app/(tabs)/search/_layout';
+import TutorTabLayout from '@/app/(tabs)/tutor/_layout';
 
 describe('tab stack layouts', () => {
   beforeEach(() => {
@@ -117,6 +118,30 @@ describe('tab stack layouts', () => {
         headerTitleStyle:
           Platform.OS === 'ios' ? expect.objectContaining({ color: 'transparent' }) : undefined,
         headerTransparent: Platform.OS === 'ios',
+      })
+    );
+    expect(mockRecordedChildScreens).toContainEqual(
+      expect.objectContaining({
+        name: 'index',
+        options: expect.objectContaining({
+          headerLargeTitleShadowVisible: false,
+        }),
+      })
+    );
+  });
+
+  it('keeps the tutor tab stack aligned with the home-style transparent header structure', () => {
+    render(<TutorTabLayout />);
+
+    expect(screen.getByTestId('mock-stack')).toBeTruthy();
+    expect(mockRecordedScreenOptions).toEqual(
+      expect.objectContaining({
+        headerLargeStyle:
+          Platform.OS === 'ios' ? expect.objectContaining({ backgroundColor: 'transparent' }) : undefined,
+        headerTitleStyle:
+          Platform.OS === 'ios' ? expect.objectContaining({ color: 'transparent' }) : undefined,
+        headerTransparent: Platform.OS === 'ios',
+        headerShadowVisible: false,
       })
     );
     expect(mockRecordedChildScreens).toContainEqual(
