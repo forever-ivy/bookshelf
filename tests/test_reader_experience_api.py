@@ -8,7 +8,7 @@ from app.core.database import get_session_factory
 from app.core.security import AuthIdentity, create_token, hash_password
 from app.db.base import utc_now
 from app.inventory.models import BookCopy, BookStock, Cabinet, CabinetSlot
-from app.orders.models import BorrowOrder, DeliveryOrder
+from app.orders.models import BorrowOrder, OrderFulfillment
 from app.readers.models import ReaderAccount, ReaderProfile
 
 
@@ -95,7 +95,7 @@ def seed_reader_experience_state() -> dict[str, int]:
         copy_ids: list[int] = []
         slots = []
         for index, book in enumerate(books, start=1):
-            copy = BookCopy(book_id=book.id, cabinet_id=cabinet.id, inventory_status="stored")
+            copy = BookCopy(book_id=book.id, inventory_status="stored")
             session.add(copy)
             session.flush()
             copy_ids.append(copy.id)
@@ -158,11 +158,14 @@ def seed_reader_experience_state() -> dict[str, int]:
         session.flush()
 
         session.add(
-            DeliveryOrder(
+            OrderFulfillment(
                 borrow_order_id=active_order.id,
+                mode="robot_delivery",
+                source_cabinet_id=cabinet.id,
+                source_slot_id=slots[0].id,
                 delivery_target="阅览室 A12",
-                eta_minutes=12,
                 status="delivered",
+                delivered_at=utc_now(),
                 completed_at=utc_now(),
             )
         )

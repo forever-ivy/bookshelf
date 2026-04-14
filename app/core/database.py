@@ -1,23 +1,19 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from pathlib import Path
 
-from sqlalchemy import create_engine, inspect, text
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.schema import CreateColumn, CreateIndex
 
 from app.core.config import Settings, get_settings
 from app.db.base import Base, import_model_modules
 
 DEFAULT_CABINET_NAME = "主书柜"
-LEGACY_INDEX_DROPS: dict[str, set[str]] = {
-    "books": {"ix_books_classification_code"},
-}
-LEGACY_COLUMN_DROPS: dict[str, set[str]] = {
-    "books": {"classification_code"},
-    "cabinet_slots": {"current_copy_id"},
-}
+BASELINE_REVISION = "20260402_01"
 
 _engine: Engine | None = None
 _session_factory: sessionmaker[Session] | None = None
@@ -84,53 +80,28 @@ def _seed_default_cabinet() -> None:
         )
 
 
-def _ensure_metadata_columns_exist() -> None:
-    engine = get_engine()
-    inspector = inspect(engine)
-    existing_tables = set(inspector.get_table_names())
-    preparer = engine.dialect.identifier_preparer
+def _alembic_config() -> Config:
+    project_root = Path(__file__).resolve().parents[2]
+    config = Config(str(project_root / "alembic.ini"))
+    config.set_main_option("script_location", str(project_root / "alembic"))
+    config.set_main_option("sqlalchemy.url", get_settings().database_url)
+    return config
 
+
+def _run_alembic_upgrade() -> None:
+    command.upgrade(_alembic_config(), "head")
+
+
+def _run_alembic_stamp(revision: str) -> None:
+    command.stamp(_alembic_config(), revision)
+
+
+def _has_alembic_version_table(engine: Engine) -> bool:
     with engine.begin() as connection:
-        connection_inspector = inspect(connection)
-        for table in Base.metadata.sorted_tables:
-            if table.name not in existing_tables:
-                continue
-
-            existing_columns = {column["name"] for column in connection_inspector.get_columns(table.name)}
-            existing_indexes = {index["name"] for index in connection_inspector.get_indexes(table.name)}
-            table_name = preparer.quote(table.name)
-
-            for index_name in LEGACY_INDEX_DROPS.get(table.name, set()):
-                if index_name not in existing_indexes:
-                    continue
-                connection.exec_driver_sql(f"DROP INDEX IF EXISTS {preparer.quote(index_name)}")
-                existing_indexes.remove(index_name)
-
-            for column_name in LEGACY_COLUMN_DROPS.get(table.name, set()):
-                if column_name not in existing_columns:
-                    continue
-                connection.exec_driver_sql(
-                    f"ALTER TABLE {table_name} DROP COLUMN {preparer.quote(column_name)}"
-                )
-                existing_columns.remove(column_name)
-
-            for column in table.columns:
-                if column.name in existing_columns:
-                    continue
-                if column.primary_key:
-                    continue
-                if not column.nullable and column.server_default is None:
-                    continue
-
-                compiled = str(CreateColumn(column).compile(dialect=engine.dialect)).strip().rstrip(",")
-                connection.exec_driver_sql(f"ALTER TABLE {table_name} ADD COLUMN {compiled}")
-
-            for index in table.indexes:
-                if not index.name or index.name in existing_indexes:
-                    continue
-                statement = str(CreateIndex(index).compile(dialect=engine.dialect))
-                statement = statement.replace("CREATE INDEX ", "CREATE INDEX IF NOT EXISTS ", 1)
-                connection.exec_driver_sql(statement)
+        result = connection.exec_driver_sql(
+            "SELECT 1 FROM information_schema.tables WHERE table_name = 'alembic_version' LIMIT 1"
+        )
+        return result.scalar() is not None
 
 
 def init_schema() -> None:
@@ -139,8 +110,14 @@ def init_schema() -> None:
     with engine.begin() as connection:
         if engine.url.get_backend_name() == "postgresql":
             connection.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS vector")
-    Base.metadata.create_all(bind=engine)
-    _ensure_metadata_columns_exist()
+            connection.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+    if engine.url.get_backend_name() == "postgresql":
+        if not _has_alembic_version_table(engine):
+            Base.metadata.create_all(bind=engine)
+            _run_alembic_stamp(BASELINE_REVISION)
+        _run_alembic_upgrade()
+    else:
+        Base.metadata.create_all(bind=engine)
     _seed_default_cabinet()
     from app.catalog.taxonomy import backfill_book_taxonomy, books_need_taxonomy_backfill
 
@@ -159,6 +136,12 @@ def rebuild_schema() -> None:
     with engine.begin() as connection:
         if engine.url.get_backend_name() == "postgresql":
             connection.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS vector")
+            connection.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS pg_trgm")
     Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
+    if engine.url.get_backend_name() == "postgresql":
+        Base.metadata.create_all(bind=engine)
+        _run_alembic_stamp(BASELINE_REVISION)
+        _run_alembic_upgrade()
+    else:
+        Base.metadata.create_all(bind=engine)
     _seed_default_cabinet()

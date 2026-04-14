@@ -10,7 +10,7 @@ from app.core.database import get_session_factory
 from app.core.security import verify_password
 from app.demo_seed import seed_demo_data
 from app.inventory.models import BookCopy, BookStock, Cabinet, CabinetSlot, InventoryEvent
-from app.orders.models import BorrowOrder, DeliveryOrder, ReturnRequest
+from app.orders.models import BorrowOrder, OrderFulfillment, ReturnRequest
 from app.readers.models import ReaderAccount, ReaderProfile
 from app.recommendation.models import RecommendationLog
 from app.robot_sim.models import RobotStatusEvent, RobotTask, RobotUnit
@@ -33,7 +33,7 @@ def test_seed_demo_data_populates_all_main_entities(app):
             "copies": 40,
             "slots": 32,
             "orders": 36,
-            "deliveries": 11,
+            "fulfillments": 11,
             "robot_tasks": 11,
             "robot_events": 28,
             "inventory_events": 24,
@@ -54,7 +54,7 @@ def test_seed_demo_data_populates_all_main_entities(app):
         assert _count(session, CabinetSlot) == 32
         assert _count(session, InventoryEvent) == 24
         assert _count(session, BorrowOrder) == 36
-        assert _count(session, DeliveryOrder) == 11
+        assert _count(session, OrderFulfillment) == 11
         assert _count(session, ReturnRequest) == 7
         assert _count(session, RobotUnit) == 3
         assert _count(session, RobotTask) == 11
@@ -130,11 +130,11 @@ def test_seeded_admin_can_log_in_and_fetch_orders(client):
     filtered_response = client.get(
         "/api/v1/admin/orders",
         headers={"Authorization": f"Bearer {token}"},
-        params={"status": payload["items"][0]["borrow_order"]["status"], "page": 1, "page_size": 100},
+        params={"status": payload["items"][0]["order"]["status"], "page": 1, "page_size": 100},
     )
     assert filtered_response.status_code == 200
     filtered_payload = filtered_response.json()
     assert filtered_payload["page"] == 1
     assert filtered_payload["page_size"] == 100
     assert filtered_payload["total"] >= len(filtered_payload["items"]) >= 1
-    assert all(item["borrow_order"]["status"] == payload["items"][0]["borrow_order"]["status"] for item in filtered_payload["items"])
+    assert all(item["order"]["status"] == payload["items"][0]["order"]["status"] for item in filtered_payload["items"])

@@ -67,10 +67,14 @@ def test_default_settings_target_postgres(monkeypatch):
 def test_init_schema_enables_pgvector_extension_on_postgres(monkeypatch):
     fake_engine = FakeEngine("postgresql+psycopg://library:library@localhost:5432/library_service")
     create_all_calls = []
+    stamped_revisions = []
+    upgraded = []
 
     monkeypatch.setattr(database_module, "get_engine", lambda: fake_engine)
     monkeypatch.setattr(database_module, "import_model_modules", lambda: None)
-    monkeypatch.setattr(database_module, "_ensure_metadata_columns_exist", lambda: None)
+    monkeypatch.setattr(database_module, "_has_alembic_version_table", lambda engine: False)
+    monkeypatch.setattr(database_module, "_run_alembic_stamp", lambda revision: stamped_revisions.append(revision))
+    monkeypatch.setattr(database_module, "_run_alembic_upgrade", lambda: upgraded.append(True))
     monkeypatch.setattr(
         database_module.Base.metadata,
         "create_all",
@@ -80,8 +84,11 @@ def test_init_schema_enables_pgvector_extension_on_postgres(monkeypatch):
     database_module.init_schema()
 
     assert fake_engine.connection.statements[0][0] == "CREATE EXTENSION IF NOT EXISTS vector"
-    assert "INSERT INTO cabinets" in fake_engine.connection.statements[1][0]
+    assert fake_engine.connection.statements[1][0] == "CREATE EXTENSION IF NOT EXISTS pg_trgm"
+    assert "INSERT INTO cabinets" in fake_engine.connection.statements[2][0]
     assert create_all_calls == [fake_engine]
+    assert stamped_revisions == [database_module.BASELINE_REVISION]
+    assert upgraded == [True]
 
 
 def test_init_schema_skips_pgvector_extension_on_sqlite(monkeypatch):
@@ -90,7 +97,6 @@ def test_init_schema_skips_pgvector_extension_on_sqlite(monkeypatch):
 
     monkeypatch.setattr(database_module, "get_engine", lambda: fake_engine)
     monkeypatch.setattr(database_module, "import_model_modules", lambda: None)
-    monkeypatch.setattr(database_module, "_ensure_metadata_columns_exist", lambda: None)
     monkeypatch.setattr(
         database_module.Base.metadata,
         "create_all",
@@ -137,7 +143,8 @@ def test_admin_foundation_models_are_part_of_current_schema():
 def test_database_2_core_columns_exist():
     assert "created_at" in BorrowOrder.__table__.c
     assert "updated_at" in BorrowOrder.__table__.c
-    assert "assigned_copy_id" in BorrowOrder.__table__.c
+    assert "requested_book_id" in BorrowOrder.__table__.c
+    assert "fulfilled_copy_id" in BorrowOrder.__table__.c
     assert "current_slot_id" in BookCopy.__table__.c
     assert "reserved_copies" in BookCopy.metadata.tables["book_stock"].c
     assert "current_copy_id" not in CabinetSlot.__table__.c

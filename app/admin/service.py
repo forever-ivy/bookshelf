@@ -30,7 +30,7 @@ from app.core.errors import ApiError
 from app.db.base import utc_now
 from app.inventory.models import BookCopy, BookStock, Cabinet, CabinetSlot, InventoryEvent
 from app.inventory.service import adjust_stock_counts
-from app.orders.models import BorrowOrder, DeliveryOrder
+from app.orders.models import BorrowOrder, OrderFulfillment
 from app.readers.models import ReaderAccount, ReaderProfile
 from app.recommendation.feed_contract import (
     build_recommendation_feed_payload,
@@ -314,25 +314,43 @@ def _stock_summary(session: Session, book_id: int) -> dict:
 def _copies_for_book(session: Session, book_id: int) -> list[dict]:
     rows = session.execute(
         select(BookCopy, Cabinet, CabinetSlot)
-        .join(Cabinet, Cabinet.id == BookCopy.cabinet_id, isouter=True)
-        .join(CabinetSlot, CabinetSlot.id == BookCopy.current_slot_id, isouter=True)
+        .select_from(BookCopy)
+        .outerjoin(CabinetSlot, CabinetSlot.id == BookCopy.current_slot_id)
+        .outerjoin(Cabinet, Cabinet.id == CabinetSlot.cabinet_id)
         .where(BookCopy.book_id == book_id)
-        .order_by(Cabinet.id.asc(), CabinetSlot.slot_code.asc(), BookCopy.id.asc())
+        .order_by(Cabinet.id.asc().nullslast(), CabinetSlot.slot_code.asc().nullslast(), BookCopy.id.asc())
     ).all()
-    return [
-        {
-            "id": copy.id,
-            "cabinet_id": copy.cabinet_id,
-            "cabinet_name": None if cabinet is None else cabinet.name,
-            "cabinet_location": None if cabinet is None else cabinet.location,
-            "slot_code": None if slot is None else slot.slot_code,
-            "inventory_status": copy.inventory_status,
-            "available_for_borrow": copy.inventory_status == "stored",
-            "created_at": _iso(copy.created_at),
-            "updated_at": _iso(copy.updated_at),
-        }
-        for copy, cabinet, slot in rows
-    ]
+    items: list[dict] = []
+    for copy, cabinet, slot in rows:
+        cabinet_id = None if slot is None else slot.cabinet_id
+        cabinet_name = None if cabinet is None else cabinet.name
+        cabinet_location = None if cabinet is None else cabinet.location
+        if cabinet_id is None:
+            fallback = session.execute(
+                select(OrderFulfillment.source_cabinet_id, Cabinet.name, Cabinet.location)
+                .select_from(BorrowOrder)
+                .join(OrderFulfillment, OrderFulfillment.borrow_order_id == BorrowOrder.id)
+                .outerjoin(Cabinet, Cabinet.id == OrderFulfillment.source_cabinet_id)
+                .where(BorrowOrder.fulfilled_copy_id == copy.id)
+                .order_by(BorrowOrder.created_at.desc(), BorrowOrder.id.desc())
+                .limit(1)
+            ).first()
+            if fallback is not None:
+                cabinet_id, cabinet_name, cabinet_location = fallback
+        items.append(
+            {
+                "id": copy.id,
+                "cabinet_id": cabinet_id,
+                "cabinet_name": cabinet_name,
+                "cabinet_location": cabinet_location,
+                "slot_code": None if slot is None else slot.slot_code,
+                "inventory_status": copy.inventory_status,
+                "available_for_borrow": copy.inventory_status == "stored",
+                "created_at": _iso(copy.created_at),
+                "updated_at": _iso(copy.updated_at),
+            }
+        )
+    return items
 
 
 def _effective_book_shelf_status(raw_shelf_status: str | None, *, total_copies: int) -> str:
@@ -1053,8 +1071,11 @@ def dashboard_overview(session: Session) -> dict:
     active_delivery_task_count = (
         session.scalar(
             select(func.count())
-            .select_from(DeliveryOrder)
-            .where(DeliveryOrder.status.not_in(["completed", "cancelled"]))
+            .select_from(OrderFulfillment)
+            .where(
+                OrderFulfillment.mode == "robot_delivery",
+                OrderFulfillment.status.not_in(["completed", "cancelled"]),
+            )
         )
         or 0
     )
@@ -1123,8 +1144,9 @@ def dashboard_heatmap(session: Session) -> dict:
     start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
     rows = session.execute(
         select(Cabinet.id, Cabinet.location, BorrowOrder.id)
-        .join(BookCopy, BookCopy.cabinet_id == Cabinet.id)
-        .join(BorrowOrder, BorrowOrder.assigned_copy_id == BookCopy.id)
+        .select_from(BorrowOrder)
+        .join(OrderFulfillment, OrderFulfillment.borrow_order_id == BorrowOrder.id)
+        .join(Cabinet, Cabinet.id == OrderFulfillment.source_cabinet_id)
         .where(BorrowOrder.created_at >= start_of_day)
         .order_by(Cabinet.id.asc(), BorrowOrder.id.asc())
     ).all()

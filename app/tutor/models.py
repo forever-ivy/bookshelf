@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, JSON_VARIANT, utc_now
@@ -53,6 +53,16 @@ class TutorSourceDocument(Base):
 
 class TutorDocumentChunk(Base):
     __tablename__ = "tutor_document_chunks"
+    __table_args__ = (
+        Index("ix_tutor_document_chunks_search_vector_trgm", "search_vector", postgresql_using="gin", postgresql_ops={"search_vector": "gin_trgm_ops"}),
+        Index(
+            "ix_tutor_document_chunks_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     profile_id: Mapped[int] = mapped_column(ForeignKey("tutor_profiles.id"), index=True)
@@ -60,6 +70,7 @@ class TutorDocumentChunk(Base):
     chunk_index: Mapped[int] = mapped_column(Integer, default=0)
     content: Mapped[str] = mapped_column(Text)
     content_tsv: Mapped[str | None] = mapped_column(Text, nullable=True)
+    search_vector: Mapped[str | None] = mapped_column(Text, nullable=True)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(1536), nullable=True)
     metadata_json: Mapped[dict | None] = mapped_column(JSON_VARIANT, nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(default=utc_now, nullable=True)

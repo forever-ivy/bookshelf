@@ -13,7 +13,7 @@ from app.conversation.models import ConversationMessage, ConversationSession
 from app.core.security import hash_password
 from app.db.base import utc_now
 from app.inventory.models import BookCopy, BookStock, Cabinet, CabinetSlot, InventoryEvent
-from app.orders.models import BorrowOrder, DeliveryOrder, ReturnRequest
+from app.orders.models import BorrowOrder, OrderFulfillment, ReturnRequest
 from app.readers.models import ReaderAccount, ReaderProfile
 from app.recommendation.models import RecommendationLog
 from app.robot_sim.models import RobotStatusEvent, RobotTask, RobotUnit
@@ -47,7 +47,7 @@ def _reset_all_tables(session: Session) -> None:
         AdminActionLog,
         RobotTask,
         ReturnRequest,
-        DeliveryOrder,
+        OrderFulfillment,
         BorrowOrder,
         InventoryEvent,
         CabinetSlot,
@@ -977,126 +977,157 @@ def seed_demo_data(session: Session) -> dict[str, int]:
     )
     session.flush()
 
-    delivery_1 = DeliveryOrder(
-        borrow_order_id=order_1.id,
+    def build_fulfillment(
+        *,
+        order: BorrowOrder,
+        copy: BookCopy,
+        delivery_target: str,
+        status: str,
+        created_at,
+        updated_at,
+        completed_at=None,
+        delivered_at=None,
+    ) -> OrderFulfillment:
+        return OrderFulfillment(
+            borrow_order_id=order.id,
+            mode="robot_delivery",
+            source_cabinet_id=copy.cabinet_id,
+            source_slot_id=copy.current_slot_id,
+            delivery_target=delivery_target,
+            status=status,
+            created_at=created_at,
+            updated_at=updated_at,
+            completed_at=completed_at,
+            delivered_at=delivered_at,
+        )
+
+    fulfillment_1 = build_fulfillment(
+        order=order_1,
+        copy=active_delivery_copy,
         delivery_target="三楼南阅览区 A 区",
-        eta_minutes=6,
         status="delivering",
         created_at=now - timedelta(hours=6),
         updated_at=now - timedelta(minutes=8),
     )
-    delivery_2 = DeliveryOrder(
-        borrow_order_id=order_4.id,
+    fulfillment_2 = build_fulfillment(
+        order=order_4,
+        copy=completed_delivery_copy,
         delivery_target="二楼研讨间 04",
-        eta_minutes=0,
         status="completed",
         created_at=now - timedelta(days=4),
         updated_at=now - timedelta(days=3, hours=20),
         completed_at=now - timedelta(days=3, hours=20),
+        delivered_at=now - timedelta(days=3, hours=20),
     )
-    delivery_3 = DeliveryOrder(
-        borrow_order_id=order_5.id,
+    fulfillment_3 = build_fulfillment(
+        order=order_5,
+        copy=delivered_copy,
         delivery_target="一楼服务台",
-        eta_minutes=1,
         status="delivered",
         created_at=now - timedelta(hours=20),
         updated_at=now - timedelta(hours=1, minutes=40),
+        delivered_at=now - timedelta(hours=1, minutes=40),
     )
-    delivery_4 = DeliveryOrder(
-        borrow_order_id=order_6.id,
+    fulfillment_4 = build_fulfillment(
+        order=order_6,
+        copy=policy_delivery_copy,
         delivery_target="北区教师研修室",
-        eta_minutes=5,
         status="delivering",
         created_at=now - timedelta(hours=4, minutes=30),
         updated_at=now - timedelta(minutes=22),
     )
-    delivery_5 = DeliveryOrder(
-        borrow_order_id=order_8.id,
+    fulfillment_5 = build_fulfillment(
+        order=order_8,
+        copy=workflow_borrowed_copy,
         delivery_target="数字媒体实验室",
-        eta_minutes=0,
         status="completed",
         created_at=now - timedelta(days=3, hours=2),
         updated_at=now - timedelta(days=2, hours=20),
         completed_at=now - timedelta(days=2, hours=20),
+        delivered_at=now - timedelta(days=2, hours=20),
     )
-    delivery_6 = DeliveryOrder(
-        borrow_order_id=order_10.id,
+    fulfillment_6 = build_fulfillment(
+        order=order_10,
+        copy=security_delivery_copy,
         delivery_target="信息学院实验中心",
-        eta_minutes=4,
         status="delivering",
         created_at=now - timedelta(hours=3, minutes=40),
         updated_at=now - timedelta(minutes=18),
     )
-    delivery_7 = DeliveryOrder(
-        borrow_order_id=order_11.id,
+    fulfillment_7 = build_fulfillment(
+        order=order_11,
+        copy=leadership_borrowed_copy,
         delivery_target="艺术学院展厅准备区",
-        eta_minutes=0,
         status="delivered",
         created_at=now - timedelta(hours=28),
         updated_at=now - timedelta(hours=2, minutes=10),
+        delivered_at=now - timedelta(hours=2, minutes=10),
     )
-    delivery_8 = DeliveryOrder(
-        borrow_order_id=order_14.id,
+    fulfillment_8 = build_fulfillment(
+        order=order_14,
+        copy=automation_borrowed_copy,
         delivery_target="西区运营工位",
-        eta_minutes=0,
         status="completed",
         created_at=now - timedelta(days=6, hours=2),
         updated_at=now - timedelta(days=5, hours=18),
         completed_at=now - timedelta(days=5, hours=18),
+        delivered_at=now - timedelta(days=5, hours=18),
     )
-    delivery_9 = DeliveryOrder(
-        borrow_order_id=order_16.id,
+    fulfillment_9 = build_fulfillment(
+        order=order_16,
+        copy=metrics_borrowed_copy,
         delivery_target="二楼数据分析室",
-        eta_minutes=0,
         status="completed",
         created_at=now - timedelta(days=2, hours=3),
         updated_at=now - timedelta(days=1, hours=18),
         completed_at=now - timedelta(days=1, hours=18),
+        delivered_at=now - timedelta(days=1, hours=18),
     )
-    delivery_10 = DeliveryOrder(
-        borrow_order_id=order_17.id,
+    fulfillment_10 = build_fulfillment(
+        order=order_17,
+        copy=cloud_delivery_copy,
         delivery_target="北区云原生工坊",
-        eta_minutes=3,
         status="delivering",
         created_at=now - timedelta(hours=2, minutes=20),
         updated_at=now - timedelta(minutes=9),
     )
-    delivery_11 = DeliveryOrder(
-        borrow_order_id=order_18.id,
+    fulfillment_11 = build_fulfillment(
+        order=order_18,
+        copy=learning_borrowed_copy,
         delivery_target="学习共享空间 3A",
-        eta_minutes=0,
         status="completed",
         created_at=now - timedelta(days=4, hours=6),
         updated_at=now - timedelta(days=3, hours=20),
         completed_at=now - timedelta(days=3, hours=20),
+        delivered_at=now - timedelta(days=3, hours=20),
     )
     session.add_all(
         [
-            delivery_1,
-            delivery_2,
-            delivery_3,
-            delivery_4,
-            delivery_5,
-            delivery_6,
-            delivery_7,
-            delivery_8,
-            delivery_9,
-            delivery_10,
-            delivery_11,
+            fulfillment_1,
+            fulfillment_2,
+            fulfillment_3,
+            fulfillment_4,
+            fulfillment_5,
+            fulfillment_6,
+            fulfillment_7,
+            fulfillment_8,
+            fulfillment_9,
+            fulfillment_10,
+            fulfillment_11,
         ]
     )
     session.flush()
 
     task_1 = RobotTask(
         robot_id=robot_1.id,
-        delivery_order_id=delivery_1.id,
+        fulfillment_id=fulfillment_1.id,
         status="carrying",
         created_at=now - timedelta(hours=6),
         updated_at=now - timedelta(minutes=8),
     )
     task_2 = RobotTask(
         robot_id=robot_2.id,
-        delivery_order_id=delivery_2.id,
+        fulfillment_id=fulfillment_2.id,
         status="completed",
         created_at=now - timedelta(days=4),
         updated_at=now - timedelta(days=3, hours=20),
@@ -1104,21 +1135,21 @@ def seed_demo_data(session: Session) -> dict[str, int]:
     )
     task_3 = RobotTask(
         robot_id=robot_2.id,
-        delivery_order_id=delivery_3.id,
+        fulfillment_id=fulfillment_3.id,
         status="returning",
         created_at=now - timedelta(hours=20),
         updated_at=now - timedelta(hours=1, minutes=10),
     )
     task_4 = RobotTask(
         robot_id=robot_1.id,
-        delivery_order_id=delivery_4.id,
+        fulfillment_id=fulfillment_4.id,
         status="carrying",
         created_at=now - timedelta(hours=4, minutes=30),
         updated_at=now - timedelta(minutes=22),
     )
     task_5 = RobotTask(
         robot_id=robot_1.id,
-        delivery_order_id=delivery_5.id,
+        fulfillment_id=fulfillment_5.id,
         status="completed",
         created_at=now - timedelta(days=3, hours=2),
         updated_at=now - timedelta(days=2, hours=20),
@@ -1126,21 +1157,21 @@ def seed_demo_data(session: Session) -> dict[str, int]:
     )
     task_6 = RobotTask(
         robot_id=robot_3.id,
-        delivery_order_id=delivery_6.id,
+        fulfillment_id=fulfillment_6.id,
         status="carrying",
         created_at=now - timedelta(hours=3, minutes=40),
         updated_at=now - timedelta(minutes=18),
     )
     task_7 = RobotTask(
         robot_id=robot_2.id,
-        delivery_order_id=delivery_7.id,
+        fulfillment_id=fulfillment_7.id,
         status="returning",
         created_at=now - timedelta(hours=28),
         updated_at=now - timedelta(hours=1, minutes=50),
     )
     task_8 = RobotTask(
         robot_id=robot_1.id,
-        delivery_order_id=delivery_8.id,
+        fulfillment_id=fulfillment_8.id,
         status="completed",
         created_at=now - timedelta(days=6, hours=2),
         updated_at=now - timedelta(days=5, hours=18),
@@ -1148,7 +1179,7 @@ def seed_demo_data(session: Session) -> dict[str, int]:
     )
     task_9 = RobotTask(
         robot_id=robot_3.id,
-        delivery_order_id=delivery_9.id,
+        fulfillment_id=fulfillment_9.id,
         status="completed",
         created_at=now - timedelta(days=2, hours=3),
         updated_at=now - timedelta(days=1, hours=18),
@@ -1156,14 +1187,14 @@ def seed_demo_data(session: Session) -> dict[str, int]:
     )
     task_10 = RobotTask(
         robot_id=robot_2.id,
-        delivery_order_id=delivery_10.id,
+        fulfillment_id=fulfillment_10.id,
         status="carrying",
         created_at=now - timedelta(hours=2, minutes=20),
         updated_at=now - timedelta(minutes=9),
     )
     task_11 = RobotTask(
         robot_id=robot_3.id,
-        delivery_order_id=delivery_11.id,
+        fulfillment_id=fulfillment_11.id,
         status="completed",
         created_at=now - timedelta(days=4, hours=6),
         updated_at=now - timedelta(days=3, hours=20),
@@ -1518,7 +1549,7 @@ def seed_demo_data(session: Session) -> dict[str, int]:
         AdminActionLog(
             admin_id=admin.id,
             target_type="borrow_order_bundle",
-            target_id=order_5.id,
+            target_ref=str(order_5.id),
             action="admin_correction",
             before_state={
                 "borrow_status": "delivering",
@@ -1547,7 +1578,7 @@ def seed_demo_data(session: Session) -> dict[str, int]:
         "copies": 40,
         "slots": 32,
         "orders": 36,
-        "deliveries": 11,
+        "fulfillments": 11,
         "robot_tasks": 11,
         "robot_events": 28,
         "inventory_events": 24,

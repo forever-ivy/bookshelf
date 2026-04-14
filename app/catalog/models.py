@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Index, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, JSON_VARIANT, utc_now
@@ -46,6 +46,19 @@ class BookTagLink(Base):
 
 class Book(Base):
     __tablename__ = "books"
+    __table_args__ = (
+        Index("ix_books_search_vector_trgm", "search_vector", postgresql_using="gin", postgresql_ops={"search_vector": "gin_trgm_ops"}),
+        Index("ix_books_title_trgm", "title", postgresql_using="gin", postgresql_ops={"title": "gin_trgm_ops"}),
+        Index("ix_books_author_trgm", "author", postgresql_using="gin", postgresql_ops={"author": "gin_trgm_ops"}),
+        Index("ix_books_keywords_trgm", "keywords", postgresql_using="gin", postgresql_ops={"keywords": "gin_trgm_ops"}),
+        Index(
+            "ix_books_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(255), index=True)
@@ -59,6 +72,7 @@ class Book(Base):
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     shelf_status: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     search_document: Mapped[str | None] = mapped_column(Text, nullable=True)
+    search_vector: Mapped[str | None] = mapped_column(Text, nullable=True)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(1536), nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(default=utc_now, nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(default=utc_now, onupdate=utc_now, nullable=True)
@@ -66,6 +80,15 @@ class Book(Base):
 
 class BookSourceDocument(Base):
     __tablename__ = "book_source_documents"
+    __table_args__ = (
+        Index(
+            "uq_book_source_documents_primary_per_book",
+            "book_id",
+            unique=True,
+            postgresql_where=text("is_primary = true"),
+            sqlite_where=text("is_primary = 1"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     book_id: Mapped[int] = mapped_column(ForeignKey("books.id"), index=True)

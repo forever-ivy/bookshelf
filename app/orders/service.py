@@ -16,7 +16,7 @@ from app.core.events import broker
 from app.db.base import utc_now
 from app.inventory.models import BookCopy, BookStock, Cabinet, CabinetSlot, InventoryEvent
 from app.inventory.service import adjust_stock_counts
-from app.orders.models import BorrowOrder, DeliveryOrder, OrderFulfillment, ReturnRequest
+from app.orders.models import BorrowOrder, OrderFulfillment, ReturnRequest
 from app.readers.models import ReaderProfile
 from app.robot_sim.models import RobotStatusEvent, RobotTask, RobotUnit
 
@@ -64,7 +64,6 @@ ORDER_PRIORITIES = {"urgent", "high", "normal", "low"}
 class OrderBundle:
     borrow_order: BorrowOrder
     fulfillment: OrderFulfillment | None
-    delivery_order: DeliveryOrder | None
     robot_task: RobotTask | None
     robot_task_history: list[RobotTask]
     robot_unit: RobotUnit | None
@@ -94,7 +93,6 @@ def _event_payload(
     event_type: str,
     borrow_order: BorrowOrder,
     fulfillment: OrderFulfillment | None = None,
-    delivery_order: DeliveryOrder | None = None,
     robot_task: RobotTask | None = None,
     robot_unit: RobotUnit | None = None,
     note: str | None = None,
@@ -103,7 +101,6 @@ def _event_payload(
         order_mode=borrow_order.order_mode,
         borrow_status=borrow_order.status,
         fulfillment_status=fulfillment.status if fulfillment is not None else None,
-        delivery_status=delivery_order.status if delivery_order is not None else None,
         task_status=robot_task.status if robot_task is not None else None,
         robot_status=robot_unit.status if robot_unit is not None else None,
     )
@@ -119,14 +116,9 @@ def _event_payload(
         "fulfillment_status": fulfillment.status if fulfillment is not None else None,
         "source_cabinet_id": fulfillment.source_cabinet_id if fulfillment is not None else None,
         "source_slot_id": fulfillment.source_slot_id if fulfillment is not None else None,
-        "delivery_status": delivery_order.status if delivery_order is not None else None,
         "task_status": robot_task.status if robot_task is not None else None,
         "robot_status": robot_unit.status if robot_unit is not None else None,
-        "delivery_target": (
-            fulfillment.delivery_target
-            if fulfillment is not None
-            else (delivery_order.delivery_target if delivery_order is not None else None)
-        ),
+        "delivery_target": fulfillment.delivery_target if fulfillment is not None else None,
         "fulfillment_phase": fulfillment_phase,
     }
     if note is not None:
@@ -139,14 +131,13 @@ def _derive_fulfillment_phase_from_state(
     order_mode: str,
     borrow_status: str,
     fulfillment_status: str | None,
-    delivery_status: str | None,
     task_status: str | None,
     robot_status: str | None,
 ) -> str:
     if borrow_status in {"completed", "returned"}:
         return "completed"
 
-    if borrow_status == "delivered" or fulfillment_status == "delivered" or delivery_status == "delivered":
+    if borrow_status == "delivered" or fulfillment_status == "delivered":
         return "delivered"
 
     if order_mode == "cabinet_pickup":
@@ -155,7 +146,6 @@ def _derive_fulfillment_phase_from_state(
     if (
         borrow_status == "delivering"
         or fulfillment_status == "delivering"
-        or delivery_status == "delivering"
         or task_status in {"carrying", "arriving"}
         or robot_status in {"carrying", "arriving"}
     ):
@@ -184,9 +174,12 @@ def _record_robot_event(
     )
 
 
-def _stock_for_copy(session: Session, copy: BookCopy) -> BookStock | None:
+def _stock_for_copy(session: Session, copy: BookCopy, *, cabinet_id: str | None = None) -> BookStock | None:
+    resolved_cabinet_id = cabinet_id or copy.cabinet_id
+    if resolved_cabinet_id is None:
+        return None
     stock = session.scalars(
-        select(BookStock).where(BookStock.book_id == copy.book_id, BookStock.cabinet_id == copy.cabinet_id)
+        select(BookStock).where(BookStock.book_id == copy.book_id, BookStock.cabinet_id == resolved_cabinet_id)
     ).first()
     if stock is not None:
         return stock
@@ -195,11 +188,11 @@ def _stock_for_copy(session: Session, copy: BookCopy) -> BookStock | None:
             func.count(BookCopy.id),
             func.sum(case((BookCopy.inventory_status == "stored", 1), else_=0)),
             func.sum(case((BookCopy.inventory_status.in_(["reserved", "in_delivery"]), 1), else_=0)),
-        ).where(BookCopy.book_id == copy.book_id, BookCopy.cabinet_id == copy.cabinet_id)
+        ).where(BookCopy.book_id == copy.book_id, BookCopy.cabinet_id == resolved_cabinet_id)
     ).one()
     stock = BookStock(
         book_id=copy.book_id,
-        cabinet_id=copy.cabinet_id,
+        cabinet_id=resolved_cabinet_id,
         total_copies=int(counts[0] or 0),
         available_copies=int(counts[1] or 0),
         reserved_copies=int(counts[2] or 0),
@@ -228,12 +221,21 @@ def _allocate_copy_for_order(session: Session, *, book_id: int, order_mode: str)
     if stock is None or stock.available_copies <= 0:
         raise ApiError(409, "book_unavailable", "The selected book is currently unavailable")
 
-    slot.status = "empty"
-    copy.current_slot_id = None
+    slot.status = "locked"
     stock.available_copies -= 1
     stock.reserved_copies += 1
     copy.inventory_status = "reserved"
     return slot, copy
+
+
+def _release_copy_from_slot(session: Session, copy: BookCopy) -> CabinetSlot | None:
+    if copy.current_slot_id is None:
+        return None
+    slot = session.get(CabinetSlot, copy.current_slot_id)
+    copy.current_slot_id = None
+    if slot is not None:
+        slot.status = "empty"
+    return slot
 
 
 def _sync_copy_status_with_order(session: Session, order: BorrowOrder) -> None:
@@ -242,12 +244,16 @@ def _sync_copy_status_with_order(session: Session, order: BorrowOrder) -> None:
     copy = session.get(BookCopy, order.assigned_copy_id)
     if copy is None:
         return
-    stock = _stock_for_copy(session, copy)
+    source_cabinet_id = session.scalar(
+        select(OrderFulfillment.source_cabinet_id).where(OrderFulfillment.borrow_order_id == order.id).limit(1)
+    )
+    stock = _stock_for_copy(session, copy, cabinet_id=source_cabinet_id)
 
     if order.status == "returned":
         return
 
     if order.status in {"delivered", "completed"}:
+        _release_copy_from_slot(session, copy)
         if copy.inventory_status != "borrowed":
             if stock is not None and stock.reserved_copies > 0:
                 stock.reserved_copies -= 1
@@ -261,6 +267,7 @@ def _sync_copy_status_with_order(session: Session, order: BorrowOrder) -> None:
     if order.status in {"created", "awaiting_pick"}:
         desired_status = "reserved"
     elif order.fulfillment_mode == "robot_delivery" and order.status in {"picked_from_cabinet", "delivering"}:
+        _release_copy_from_slot(session, copy)
         desired_status = "in_delivery"
     else:
         desired_status = "reserved"
@@ -290,23 +297,30 @@ def _restore_copy_for_cancelled_order(session: Session, *, order: BorrowOrder) -
     copy = session.get(BookCopy, order.assigned_copy_id)
     if copy is None:
         return
-    slot = _find_free_slot_for_copy(session, cabinet_id=copy.cabinet_id)
+    slot = session.get(CabinetSlot, copy.current_slot_id) if copy.current_slot_id is not None else None
     if slot is None:
-        raise ApiError(409, "slot_unavailable", "No free slot available to restore the cancelled order")
+        cabinet_id = session.scalar(
+            select(OrderFulfillment.source_cabinet_id).where(OrderFulfillment.borrow_order_id == order.id).limit(1)
+        )
+        if cabinet_id is None:
+            raise ApiError(409, "slot_unavailable", "No source cabinet available to restore the cancelled order")
+        slot = _find_free_slot_for_copy(session, cabinet_id=cabinet_id)
+        if slot is None:
+            raise ApiError(409, "slot_unavailable", "No free slot available to restore the cancelled order")
+        copy.current_slot_id = slot.id
 
-    copy.current_slot_id = slot.id
     slot.status = "occupied"
     copy.inventory_status = "stored"
     adjust_stock_counts(
         session,
         book_id=copy.book_id,
-        cabinet_id=copy.cabinet_id,
+        cabinet_id=slot.cabinet_id,
         available_delta=1,
         reserved_delta=-1,
     )
     session.add(
         InventoryEvent(
-            cabinet_id=copy.cabinet_id,
+            cabinet_id=slot.cabinet_id,
             event_type="book_restored",
             slot_code=slot.slot_code,
             book_id=copy.book_id,
@@ -325,7 +339,6 @@ def get_order_bundle(session: Session, borrow_order_id: int) -> OrderBundle:
         raise ApiError(404, "borrow_order_not_found", "Borrow order not found")
 
     fulfillment = session.query(OrderFulfillment).filter_by(borrow_order_id=borrow_order.id).one_or_none()
-    delivery_order = session.query(DeliveryOrder).filter_by(borrow_order_id=borrow_order.id).one_or_none()
     robot_task_history: list[RobotTask] = []
     robot_task = None
     robot_unit = None
@@ -333,13 +346,6 @@ def get_order_bundle(session: Session, borrow_order_id: int) -> OrderBundle:
         robot_task_history = (
             session.query(RobotTask)
             .filter(RobotTask.fulfillment_id == fulfillment.id)
-            .order_by(RobotTask.sequence_no.asc(), RobotTask.id.asc())
-            .all()
-        )
-    if not robot_task_history and delivery_order is not None:
-        robot_task_history = (
-            session.query(RobotTask)
-            .filter(RobotTask.delivery_order_id == delivery_order.id)
             .order_by(RobotTask.sequence_no.asc(), RobotTask.id.asc())
             .all()
         )
@@ -351,7 +357,6 @@ def get_order_bundle(session: Session, borrow_order_id: int) -> OrderBundle:
     return OrderBundle(
         borrow_order=borrow_order,
         fulfillment=fulfillment,
-        delivery_order=delivery_order,
         robot_task=robot_task,
         robot_task_history=robot_task_history,
         robot_unit=robot_unit,
@@ -452,7 +457,6 @@ def serialize_order(bundle: OrderBundle, *, session: Session | None = None) -> d
         order_mode=bundle.borrow_order.order_mode,
         borrow_status=bundle.borrow_order.status,
         fulfillment_status=bundle.fulfillment.status if bundle.fulfillment is not None else None,
-        delivery_status=bundle.delivery_order.status if bundle.delivery_order is not None else None,
         task_status=bundle.robot_task.status if bundle.robot_task is not None else None,
         robot_status=bundle.robot_unit.status if bundle.robot_unit is not None else None,
     )
@@ -594,7 +598,7 @@ def list_order_bundles_page(
         stmt = (
             stmt.join(Book, BorrowOrder.book_id == Book.id)
             .join(ReaderProfile, BorrowOrder.reader_id == ReaderProfile.id)
-            .outerjoin(DeliveryOrder, DeliveryOrder.borrow_order_id == BorrowOrder.id)
+            .outerjoin(OrderFulfillment, OrderFulfillment.borrow_order_id == BorrowOrder.id)
             .where(
                 or_(
                     cast(BorrowOrder.id, String).ilike(search_pattern),
@@ -603,7 +607,7 @@ def list_order_bundles_page(
                     ReaderProfile.display_name.ilike(search_pattern),
                     ReaderProfile.college.ilike(search_pattern),
                     ReaderProfile.major.ilike(search_pattern),
-                    DeliveryOrder.delivery_target.ilike(search_pattern),
+                    OrderFulfillment.delivery_target.ilike(search_pattern),
                 )
             )
         )
@@ -656,7 +660,7 @@ def _is_bundle_cancellable(bundle: OrderBundle) -> bool:
     if bundle.borrow_order.order_mode == "robot_delivery":
         return (
             bundle.borrow_order.status == "created"
-            and (bundle.delivery_order is None or bundle.delivery_order.status == "awaiting_pick")
+            and (bundle.fulfillment is None or bundle.fulfillment.status == "awaiting_pick")
             and (bundle.robot_task is None or bundle.robot_task.status == "assigned")
         )
     return False
@@ -700,7 +704,6 @@ def serialize_task(task: RobotTask, robot: RobotUnit | None = None, fulfillment:
         "id": task.id,
         "robotId": task.robot_id,
         "fulfillmentId": task.fulfillment_id,
-        "deliveryOrderId": task.delivery_order_id,
         "status": task.status,
         "orderId": fulfillment.borrow_order_id if fulfillment is not None else None,
         "path": task.path_json,
@@ -918,7 +921,7 @@ def create_borrow_order(
     fulfillment = OrderFulfillment(
         borrow_order_id=borrow_order.id,
         mode=normalized_order_mode,
-        source_cabinet_id=allocated_copy.cabinet_id,
+        source_cabinet_id=source_slot.cabinet_id,
         source_slot_id=source_slot.id,
         delivery_target=normalized_delivery_target or None,
         status="awaiting_pick",
@@ -926,26 +929,15 @@ def create_borrow_order(
     session.add(fulfillment)
     session.flush()
 
-    delivery_order: DeliveryOrder | None = None
     robot_task: RobotTask | None = None
     robot: RobotUnit | None = None
 
     if normalized_order_mode == "robot_delivery":
-        delivery_order = DeliveryOrder(
-            borrow_order_id=borrow_order.id,
-            delivery_target=normalized_delivery_target,
-            eta_minutes=15,
-            status="awaiting_pick",
-        )
-        session.add(delivery_order)
-        session.flush()
-
         robot = _resolve_robot(session)
         robot.status = "assigned"
 
         robot_task = RobotTask(
             robot_id=robot.id,
-            delivery_order_id=delivery_order.id,
             fulfillment_id=fulfillment.id,
             status="assigned",
             sequence_no=1,
@@ -963,7 +955,6 @@ def create_borrow_order(
                 event_type="order_created",
                 borrow_order=borrow_order,
                 fulfillment=fulfillment,
-                delivery_order=delivery_order,
                 robot_task=robot_task,
                 robot_unit=robot,
             ),
@@ -981,7 +972,6 @@ def create_borrow_order(
             event_type="order_created",
             borrow_order=borrow_order,
             fulfillment=fulfillment,
-            delivery_order=delivery_order,
             robot_task=robot_task,
             robot_unit=robot,
         )
@@ -1029,7 +1019,6 @@ def create_return_request(
         _event_payload(
             event_type="return_request_created",
             borrow_order=bundle.borrow_order,
-            delivery_order=bundle.delivery_order,
             robot_task=bundle.robot_task,
             robot_unit=bundle.robot_unit,
             note=note,
@@ -1140,7 +1129,10 @@ def process_return_request(
     if copy.inventory_status != "borrowed":
         raise ApiError(409, "copy_not_borrowed", "Assigned copy is not currently in borrowed status")
 
-    slot = _find_free_slot_for_copy(session, cabinet_id=copy.cabinet_id)
+    source_cabinet_id = bundle.fulfillment.source_cabinet_id if bundle.fulfillment is not None else None
+    if source_cabinet_id is None:
+        raise ApiError(409, "source_cabinet_missing", "No source cabinet available for the return flow")
+    slot = _find_free_slot_for_copy(session, cabinet_id=source_cabinet_id)
     if slot is None:
         raise ApiError(409, "slot_unavailable", "No free slot available to store the returned book")
 
@@ -1156,12 +1148,12 @@ def process_return_request(
     adjust_stock_counts(
         session,
         book_id=copy.book_id,
-        cabinet_id=copy.cabinet_id,
+        cabinet_id=slot.cabinet_id,
         available_delta=1,
     )
     order.status = "returned"
     request_row.copy_id = copy.id
-    request_row.receive_cabinet_id = copy.cabinet_id
+    request_row.receive_cabinet_id = slot.cabinet_id
     request_row.receive_slot_id = slot.id
     request_row.processed_by_admin_id = admin_id
     request_row.processed_at = utc_now()
@@ -1172,7 +1164,7 @@ def process_return_request(
 
     session.add(
         InventoryEvent(
-            cabinet_id=copy.cabinet_id,
+            cabinet_id=slot.cabinet_id,
             event_type="book_returned",
             slot_code=slot.slot_code,
             book_id=copy.book_id,
@@ -1216,7 +1208,6 @@ def process_return_request(
         **_event_payload(
             event_type="return_request_completed",
             borrow_order=order,
-            delivery_order=bundle.delivery_order,
             robot_task=bundle.robot_task,
             robot_unit=bundle.robot_unit,
         ),
@@ -1306,9 +1297,14 @@ def receive_return_request(
         )
     )
     if copy is not None:
+        event_cabinet_id = (
+            bundle.fulfillment.source_cabinet_id
+            if bundle.fulfillment is not None and bundle.fulfillment.source_cabinet_id
+            else copy.cabinet_id
+        )
         session.add(
             InventoryEvent(
-                cabinet_id=copy.cabinet_id,
+                cabinet_id=event_cabinet_id,
                 event_type="return_received",
                 book_id=bundle.borrow_order.book_id,
                 copy_id=copy.id,
@@ -1321,7 +1317,6 @@ def receive_return_request(
             **_event_payload(
                 event_type="return_request_received",
                 borrow_order=bundle.borrow_order,
-                delivery_order=bundle.delivery_order,
                 robot_task=bundle.robot_task,
                 robot_unit=bundle.robot_unit,
                 note=note,
@@ -1359,14 +1354,19 @@ def complete_return_request(
     before_state = serialize_return_request(request_row, bundle.borrow_order)
     target_slot = _resolve_return_slot(session, cabinet_id=cabinet_id, slot_code=slot_code)
 
-    original_cabinet_id = copy.cabinet_id
+    original_cabinet_id = (
+        bundle.fulfillment.source_cabinet_id
+        if bundle.fulfillment is not None and bundle.fulfillment.source_cabinet_id
+        else copy.cabinet_id
+    )
     if original_cabinet_id == cabinet_id:
         adjust_stock_counts(session, book_id=copy.book_id, cabinet_id=cabinet_id, available_delta=1)
-    else:
+    elif original_cabinet_id is not None:
         adjust_stock_counts(session, book_id=copy.book_id, cabinet_id=original_cabinet_id, total_delta=-1)
         adjust_stock_counts(session, book_id=copy.book_id, cabinet_id=cabinet_id, total_delta=1, available_delta=1)
+    else:
+        adjust_stock_counts(session, book_id=copy.book_id, cabinet_id=cabinet_id, total_delta=1, available_delta=1)
 
-    copy.cabinet_id = cabinet_id
     copy.current_slot_id = target_slot.id
     copy.inventory_status = "stored"
     target_slot.status = "occupied"
@@ -1421,7 +1421,6 @@ def complete_return_request(
             **_event_payload(
                 event_type="return_request_completed",
                 borrow_order=bundle.borrow_order,
-                delivery_order=bundle.delivery_order,
                 robot_task=bundle.robot_task,
                 robot_unit=bundle.robot_unit,
                 note=note,
@@ -1451,7 +1450,6 @@ def cancel_borrow_order(
 
     order = bundle.borrow_order
     fulfillment = bundle.fulfillment
-    delivery = bundle.delivery_order
     task = bundle.robot_task
     robot = bundle.robot_unit
 
@@ -1464,11 +1462,6 @@ def cancel_borrow_order(
         fulfillment.status = "cancelled"
         if fulfillment.completed_at is None:
             fulfillment.completed_at = utc_now()
-
-    if delivery is not None:
-        delivery.status = "cancelled"
-        if delivery.completed_at is None:
-            delivery.completed_at = utc_now()
 
     if task is not None:
         task.status = "cancelled"
@@ -1492,7 +1485,6 @@ def cancel_borrow_order(
         event_type="order_cancelled",
         borrow_order=order,
         fulfillment=fulfillment,
-        delivery_order=delivery,
         robot_task=task,
         robot_unit=robot,
     )
@@ -1509,13 +1501,12 @@ def cancel_borrow_order(
 
 
 def advance_order_bundle(session: Session, bundle: OrderBundle) -> OrderBundle:
-    if bundle.delivery_order is None and bundle.robot_task is None and bundle.robot_unit is None:
+    if bundle.fulfillment is None and bundle.robot_task is None and bundle.robot_unit is None:
         return bundle
 
     changed = False
     order = bundle.borrow_order
     fulfillment = bundle.fulfillment
-    delivery = bundle.delivery_order
     task = bundle.robot_task
     robot = bundle.robot_unit
 
@@ -1535,14 +1526,6 @@ def advance_order_bundle(session: Session, bundle: OrderBundle) -> OrderBundle:
                 fulfillment.delivered_at = utc_now()
             if fulfillment.status == "completed" and fulfillment.completed_at is None:
                 fulfillment.completed_at = utc_now()
-
-    if delivery is not None:
-        next_delivery_status = _next_status(delivery.status, DELIVERY_FLOW)
-        if next_delivery_status != delivery.status:
-            delivery.status = next_delivery_status
-            changed = True
-            if delivery.status == "completed" and delivery.completed_at is None:
-                delivery.completed_at = utc_now()
 
     if task is not None:
         next_task_status = _next_status(task.status, TASK_FLOW)
@@ -1564,7 +1547,6 @@ def advance_order_bundle(session: Session, bundle: OrderBundle) -> OrderBundle:
             event_type="order_progressed",
             borrow_order=order,
             fulfillment=fulfillment,
-            delivery_order=delivery,
             robot_task=task,
             robot_unit=robot,
         )
@@ -1595,7 +1577,6 @@ def correct_order_bundle(
         event_type="admin_correction_before",
         borrow_order=bundle.borrow_order,
         fulfillment=bundle.fulfillment,
-        delivery_order=bundle.delivery_order,
         robot_task=bundle.robot_task,
         robot_unit=bundle.robot_unit,
     )
@@ -1607,8 +1588,6 @@ def correct_order_bundle(
         bundle.borrow_order.status = borrow_status
     if bundle.fulfillment is not None and delivery_status is not None:
         bundle.fulfillment.status = delivery_status
-    if bundle.delivery_order is not None and delivery_status is not None:
-        bundle.delivery_order.status = delivery_status
     if bundle.robot_task is not None and task_status is not None:
         bundle.robot_task.status = task_status
     if bundle.robot_unit is not None and robot_status is not None:
@@ -1619,7 +1598,6 @@ def correct_order_bundle(
         event_type="admin_correction",
         borrow_order=bundle.borrow_order,
         fulfillment=bundle.fulfillment,
-        delivery_order=bundle.delivery_order,
         robot_task=bundle.robot_task,
         robot_unit=bundle.robot_unit,
     )
@@ -1660,18 +1638,14 @@ def prioritize_order_bundle(
     before_state = _event_payload(
         event_type="order_priority_before",
         borrow_order=bundle.borrow_order,
-        delivery_order=bundle.delivery_order,
         robot_task=bundle.robot_task,
         robot_unit=bundle.robot_unit,
     )
     bundle.borrow_order.priority = normalized_priority
-    if bundle.delivery_order is not None:
-        bundle.delivery_order.priority = normalized_priority
     after_state = {
         **_event_payload(
             event_type="order_prioritized",
             borrow_order=bundle.borrow_order,
-            delivery_order=bundle.delivery_order,
             robot_task=bundle.robot_task,
             robot_unit=bundle.robot_unit,
         ),
@@ -1715,22 +1689,17 @@ def intervene_order_bundle(
     before_state = _event_payload(
         event_type="order_intervention_before",
         borrow_order=bundle.borrow_order,
-        delivery_order=bundle.delivery_order,
         robot_task=bundle.robot_task,
         robot_unit=bundle.robot_unit,
     )
     bundle.borrow_order.intervention_status = normalized_intervention
     bundle.borrow_order.failure_reason = failure_reason
-    if bundle.delivery_order is not None:
-        bundle.delivery_order.intervention_status = normalized_intervention
-        bundle.delivery_order.failure_reason = failure_reason
     if bundle.robot_task is not None:
         bundle.robot_task.failure_reason = failure_reason
     after_state = {
         **_event_payload(
             event_type="order_intervened",
             borrow_order=bundle.borrow_order,
-            delivery_order=bundle.delivery_order,
             robot_task=bundle.robot_task,
             robot_unit=bundle.robot_unit,
             note=failure_reason,
@@ -1771,22 +1740,21 @@ def retry_order_bundle(
     before_state = _event_payload(
         event_type="order_retry_before",
         borrow_order=bundle.borrow_order,
-        delivery_order=bundle.delivery_order,
         robot_task=bundle.robot_task,
         robot_unit=bundle.robot_unit,
         note=note,
     )
 
-    bundle.borrow_order.status = "created" if bundle.delivery_order is not None else "awaiting_pick"
+    bundle.borrow_order.status = "created" if bundle.borrow_order.fulfillment_mode == "robot_delivery" else "awaiting_pick"
     bundle.borrow_order.attempt_count = int(bundle.borrow_order.attempt_count or 0) + 1
     bundle.borrow_order.failure_reason = None
     bundle.borrow_order.intervention_status = None
 
-    if bundle.delivery_order is not None:
-        bundle.delivery_order.status = "awaiting_pick"
-        bundle.delivery_order.attempt_count = int(bundle.delivery_order.attempt_count or 0) + 1
-        bundle.delivery_order.failure_reason = None
-        bundle.delivery_order.intervention_status = None
+    if bundle.fulfillment is not None:
+        bundle.fulfillment.status = "awaiting_pick"
+        bundle.fulfillment.completed_at = None
+        bundle.fulfillment.delivered_at = None
+        bundle.fulfillment.picked_at = None
 
     if bundle.robot_task is not None:
         bundle.robot_task.status = "assigned"
@@ -1801,7 +1769,7 @@ def retry_order_bundle(
         **_event_payload(
             event_type="order_retried",
             borrow_order=bundle.borrow_order,
-            delivery_order=bundle.delivery_order,
+            fulfillment=bundle.fulfillment,
             robot_task=bundle.robot_task,
             robot_unit=bundle.robot_unit,
             note=note,
@@ -1848,13 +1816,6 @@ def reassign_robot_task(
 
     previous_robot = session.get(RobotUnit, task.robot_id)
     fulfillment = session.get(OrderFulfillment, task.fulfillment_id) if task.fulfillment_id is not None else None
-    if fulfillment is None:
-        if task.delivery_order_id is None:
-            raise ApiError(404, "fulfillment_not_found", "Fulfillment not found")
-        delivery = session.get(DeliveryOrder, task.delivery_order_id)
-        if delivery is None:
-            raise ApiError(404, "delivery_order_not_found", "Delivery order not found")
-        fulfillment = session.query(OrderFulfillment).filter_by(borrow_order_id=delivery.borrow_order_id).one_or_none()
     if fulfillment is None:
         raise ApiError(404, "fulfillment_not_found", "Fulfillment not found")
     borrow_order = session.get(BorrowOrder, fulfillment.borrow_order_id)

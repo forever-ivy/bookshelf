@@ -21,7 +21,7 @@ from app.core.database import get_session_factory
 from app.core.security import AuthIdentity, create_token, hash_password
 from app.db.base import utc_now
 from app.inventory.models import BookCopy, BookStock, Cabinet, CabinetSlot, InventoryEvent
-from app.orders.models import BorrowOrder, DeliveryOrder
+from app.orders.models import BorrowOrder, OrderFulfillment
 from app.readers.models import ReaderAccount, ReaderProfile
 from app.recommendation.models import RecommendationLog
 from app.admin import service as admin_service
@@ -218,10 +218,10 @@ def seed_management_state() -> dict[str, int]:
             ]
         )
 
-        east_copy = BookCopy(book_id=book_today.id, cabinet_id=east_cabinet.id, inventory_status="in_delivery")
-        west_copy = BookCopy(book_id=book_history.id, cabinet_id=west_cabinet.id, inventory_status="stored")
-        match_copy = BookCopy(book_id=book_match.id, cabinet_id=east_cabinet.id, inventory_status="stored")
-        sparse_copy = BookCopy(book_id=book_sparse.id, cabinet_id=west_cabinet.id, inventory_status="stored")
+        east_copy = BookCopy(book_id=book_today.id, inventory_status="in_delivery")
+        west_copy = BookCopy(book_id=book_history.id, inventory_status="stored")
+        match_copy = BookCopy(book_id=book_match.id, inventory_status="stored")
+        sparse_copy = BookCopy(book_id=book_sparse.id, inventory_status="stored")
         session.add_all([east_copy, west_copy, match_copy, sparse_copy])
         session.flush()
 
@@ -335,16 +335,17 @@ def seed_management_state() -> dict[str, int]:
         session.add_all(overlap_borrows)
         session.flush()
 
-        delivery = DeliveryOrder(
+        fulfillment = OrderFulfillment(
             borrow_order_id=borrow_today.id,
+            mode="robot_delivery",
+            source_cabinet_id=east_cabinet.id,
+            source_slot_id=None,
             delivery_target="东区研讨间",
-            eta_minutes=5,
             status="delivering",
-            priority="urgent",
             created_at=now - timedelta(hours=1),
             updated_at=now - timedelta(minutes=8),
         )
-        session.add(delivery)
+        session.add(fulfillment)
         session.flush()
 
         online_robot = RobotUnit(
@@ -365,7 +366,7 @@ def seed_management_state() -> dict[str, int]:
         session.add(
             RobotTask(
                 robot_id=online_robot.id,
-                delivery_order_id=delivery.id,
+                fulfillment_id=fulfillment.id,
                 status="carrying",
                 attempt_count=1,
                 path_json={"nodes": ["cabinet-east", "东区研讨间"]},

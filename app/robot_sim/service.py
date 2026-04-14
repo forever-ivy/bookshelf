@@ -92,7 +92,7 @@ def list_robot_tasks(session: Session) -> list[dict]:
         {
             "id": task.id,
             "robot_id": task.robot_id,
-            "delivery_order_id": task.delivery_order_id,
+            "fulfillment_id": task.fulfillment_id,
             "status": task.status,
         }
         for task in tasks

@@ -78,7 +78,7 @@ def seed_voice_state():
         assert cabinet is not None
         session.add_all([profile, book])
         session.flush()
-        copy = BookCopy(book_id=book.id, cabinet_id=cabinet.id, inventory_status="stored")
+        copy = BookCopy(book_id=book.id, inventory_status="stored")
         session.add(copy)
         session.flush()
         occupied_slot = CabinetSlot(cabinet_id="cabinet-001", slot_code="A01", status="occupied")

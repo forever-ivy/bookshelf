@@ -67,7 +67,7 @@ def seed_recommendation_studio_state() -> dict[str, int]:
         assert cabinet is not None
 
         for index, book in enumerate(books, start=1):
-            copy = BookCopy(book_id=book.id, cabinet_id=cabinet.id, inventory_status="stored")
+            copy = BookCopy(book_id=book.id, inventory_status="stored")
             session.add(copy)
             session.flush()
             slot = CabinetSlot(

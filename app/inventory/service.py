@@ -311,7 +311,7 @@ def store_from_ocr_texts(
             session.flush()
         source = "llm_parse"
 
-    copy = BookCopy(book_id=book.id, cabinet_id=cabinet_id, current_slot_id=slot.id, inventory_status="stored")
+    copy = BookCopy(book_id=book.id, current_slot_id=slot.id, inventory_status="stored")
     session.add(copy)
     session.flush()
 
@@ -373,29 +373,23 @@ def take_by_text(
     order_id: int | None = None,
     fulfillment_id: int | None = None,
 ) -> dict:
-    if order_id is None and fulfillment_id is None:
-        raise ApiError(400, "fulfillment_binding_required", "Taking a book requires an order or fulfillment binding")
+    if fulfillment_id is None:
+        raise ApiError(400, "fulfillment_binding_required", "Taking a book requires a fulfillment binding")
 
     title_query = _extract_take_title(text)
     if not title_query:
         raise ApiError(400, "missing_book_title", "Please provide the title to take")
     from app.orders.models import BorrowOrder, OrderFulfillment
 
-    fulfillment = None
-    if fulfillment_id is not None:
-        fulfillment = session.get(OrderFulfillment, fulfillment_id)
-    elif order_id is not None:
-        fulfillment = session.scalars(
-            select(OrderFulfillment).where(OrderFulfillment.borrow_order_id == order_id)
-        ).first()
+    fulfillment = session.get(OrderFulfillment, fulfillment_id)
     if fulfillment is None:
         raise ApiError(404, "fulfillment_not_found", "Fulfillment not found")
 
     order = session.get(BorrowOrder, fulfillment.borrow_order_id)
-    if order is None or order.assigned_copy_id is None:
+    if order is None or order.fulfilled_copy_id is None:
         raise ApiError(404, "borrow_order_not_found", "Borrow order not found")
-    copy = session.get(BookCopy, order.assigned_copy_id)
-    book = session.get(Book, order.book_id)
+    copy = session.get(BookCopy, order.fulfilled_copy_id)
+    book = session.get(Book, order.requested_book_id)
     if copy is None or book is None:
         raise ApiError(404, "order_copy_missing", "Borrow order copy not found")
     if fulfillment.source_cabinet_id and fulfillment.source_cabinet_id != cabinet_id:
@@ -415,17 +409,26 @@ def take_by_text(
     available_delta = -1 if copy.inventory_status == "stored" else 0
     reserved_delta = -1 if copy.inventory_status in {"reserved", "in_delivery"} else 0
     copy.current_slot_id = None
-    copy.inventory_status = "borrowed"
-    order.status = "delivered"
-    if order.picked_at is None:
-        order.picked_at = utc_now()
-    if order.delivered_at is None:
-        order.delivered_at = utc_now()
-    fulfillment.status = "delivered"
-    if fulfillment.picked_at is None:
-        fulfillment.picked_at = utc_now()
-    if fulfillment.delivered_at is None:
-        fulfillment.delivered_at = utc_now()
+    if order.fulfillment_mode == "robot_delivery":
+        copy.inventory_status = "in_delivery"
+        order.status = "picked_from_cabinet"
+        fulfillment.status = "picked_from_cabinet"
+        if order.picked_at is None:
+            order.picked_at = utc_now()
+        if fulfillment.picked_at is None:
+            fulfillment.picked_at = utc_now()
+    else:
+        copy.inventory_status = "borrowed"
+        order.status = "delivered"
+        if order.picked_at is None:
+            order.picked_at = utc_now()
+        if order.delivered_at is None:
+            order.delivered_at = utc_now()
+        fulfillment.status = "delivered"
+        if fulfillment.picked_at is None:
+            fulfillment.picked_at = utc_now()
+        if fulfillment.delivered_at is None:
+            fulfillment.delivered_at = utc_now()
     adjust_stock_counts(
         session,
         book_id=book.id,

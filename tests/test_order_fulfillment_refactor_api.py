@@ -76,7 +76,7 @@ def seed_state():
         session.add(slot)
         session.flush()
 
-        copy = BookCopy(book_id=book.id, cabinet_id=cabinet.id, current_slot_id=slot.id, inventory_status="stored")
+        copy = BookCopy(book_id=book.id, current_slot_id=slot.id, inventory_status="stored")
         session.add(copy)
         session.flush()
         session.commit()

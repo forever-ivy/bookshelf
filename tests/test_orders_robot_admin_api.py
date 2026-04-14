@@ -55,7 +55,7 @@ def seed_state():
         robot = RobotUnit(code="robot-1", status="idle")
         session.add_all([profile, book, robot])
         session.flush()
-        copy = BookCopy(book_id=book.id, cabinet_id=cabinet.id, inventory_status="stored")
+        copy = BookCopy(book_id=book.id, inventory_status="stored")
         session.add(copy)
         session.flush()
         session.add(
@@ -194,7 +194,8 @@ def test_reader_borrow_order_creates_delivery_and_task(client):
         slot = session.query(CabinetSlot).filter_by(slot_code="A01").one()
         copy = session.get(BookCopy, state["copy"].id)
         stock = session.query(BookStock).filter_by(book_id=state["book"].id, cabinet_id="cabinet-001").one()
-        assert slot.current_copy_id is None
+        assert slot.current_copy_id == state["copy"].id
+        assert slot.status == "locked"
         assert copy.inventory_status == "reserved"
         assert stock.total_copies == 1
         assert stock.available_copies == 0
@@ -288,12 +289,16 @@ def test_robot_auto_progress_worker_completes_delivery(client):
         robot = session.get(RobotUnit, create_response.json()["robot"]["id"])
         task = session.get(RobotTask, create_response.json()["currentRobotTask"]["id"])
         copy = session.get(BookCopy, create_response.json()["order"]["fulfilledCopyId"])
+        slot = session.query(CabinetSlot).filter_by(slot_code="A01").one()
         stock = session.query(BookStock).filter_by(book_id=state["book"].id, cabinet_id="cabinet-001").one()
         assert order.status == "completed"
         assert delivery.status == "completed"
         assert robot.status == "idle"
         assert task.status == "completed"
         assert copy.inventory_status == "borrowed"
+        assert copy.current_slot_id is None
+        assert slot.current_copy_id is None
+        assert slot.status == "empty"
         assert stock.total_copies == 1
         assert stock.available_copies == 0
         assert stock.reserved_copies == 0

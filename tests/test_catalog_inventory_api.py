@@ -36,7 +36,7 @@ def seed_catalog_data(app):
         assert cabinet is not None
         session.add_all([dune, principia])
         session.flush()
-        dune_copy = BookCopy(book_id=dune.id, cabinet_id=cabinet.id, inventory_status="stored")
+        dune_copy = BookCopy(book_id=dune.id, inventory_status="stored")
         session.add(dune_copy)
         session.flush()
 

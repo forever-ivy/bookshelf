@@ -26,6 +26,7 @@ class Cabinet(Base):
 class BookCopy(Base):
     __tablename__ = "book_copies"
     __table_args__ = (
+        UniqueConstraint("id", "book_id", name="uq_book_copies_id_book"),
         CheckConstraint(
             f"inventory_status IN {COPY_STATUSES}",
             name="ck_book_copies_inventory_status",
@@ -34,7 +35,6 @@ class BookCopy(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     book_id: Mapped[int] = mapped_column(ForeignKey("books.id"), index=True)
-    cabinet_id: Mapped[str] = mapped_column(ForeignKey("cabinets.id"), index=True)
     current_slot_id: Mapped[int | None] = mapped_column(ForeignKey("cabinet_slots.id"), nullable=True, index=True)
     inventory_status: Mapped[str] = mapped_column(String(32), default="stored", index=True)
     created_at: Mapped[datetime | None] = mapped_column(default=utc_now, nullable=True)
@@ -93,3 +93,11 @@ class InventoryEvent(Base):
     copy_id: Mapped[int | None] = mapped_column(ForeignKey("book_copies.id"), nullable=True, index=True)
     payload_json: Mapped[dict | None] = mapped_column(JSON_VARIANT, nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(default=utc_now, index=True, nullable=True)
+
+
+BookCopy.cabinet_id = column_property(
+    select(CabinetSlot.cabinet_id)
+    .where(CabinetSlot.id == BookCopy.current_slot_id)
+    .correlate_except(CabinetSlot)
+    .scalar_subquery()
+)

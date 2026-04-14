@@ -147,8 +147,8 @@ def test_search_endpoint_includes_author_and_slot_when_inventory_exists(client, 
                     (1, "cabinet-001", 1, 1, 0),
                 ),
                 (
-                    "INSERT INTO book_copies (book_id, cabinet_id, inventory_status) VALUES (?, ?, ?)",
-                    (1, "cabinet-001", "stored"),
+                    "INSERT INTO book_copies (book_id, inventory_status) VALUES (?, ?)",
+                    (1, "stored"),
                 ),
                 (
                     "INSERT INTO cabinet_slots (cabinet_id, slot_code, status) VALUES (?, ?, ?)",

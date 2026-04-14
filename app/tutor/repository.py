@@ -193,6 +193,7 @@ def replace_document_chunks(
             chunk_index=int(chunk["chunk_index"]),
             content=str(chunk["content"]),
             content_tsv=chunk.get("content_tsv"),
+            search_vector=chunk.get("search_vector") or chunk.get("content_tsv"),
             embedding=chunk.get("embedding"),
             metadata_json=chunk.get("metadata_json"),
         )

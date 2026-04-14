@@ -2,14 +2,21 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, ForeignKey, String
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, JSON_VARIANT, utc_now
 
 
+ROBOT_UNIT_STATUSES = ("idle", "assigned", "carrying", "arriving", "returning", "offline")
+ROBOT_TASK_STATUSES = ("assigned", "carrying", "arriving", "returning", "completed", "cancelled")
+
+
 class RobotUnit(Base):
     __tablename__ = "robot_units"
+    __table_args__ = (
+        CheckConstraint(f"status IN {ROBOT_UNIT_STATUSES}", name="ck_robot_units_status"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     code: Mapped[str] = mapped_column(String(64), unique=True, index=True)
@@ -22,10 +29,19 @@ class RobotUnit(Base):
 
 class RobotTask(Base):
     __tablename__ = "robot_tasks"
+    __table_args__ = (
+        CheckConstraint(f"status IN {ROBOT_TASK_STATUSES}", name="ck_robot_tasks_status"),
+        Index(
+            "uq_robot_tasks_current_fulfillment",
+            "fulfillment_id",
+            unique=True,
+            postgresql_where=text("is_current = true"),
+            sqlite_where=text("is_current = 1"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     robot_id: Mapped[int] = mapped_column(ForeignKey("robot_units.id"), index=True)
-    delivery_order_id: Mapped[int | None] = mapped_column(ForeignKey("delivery_orders.id"), nullable=True, index=True)
     fulfillment_id: Mapped[int | None] = mapped_column(ForeignKey("order_fulfillments.id"), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(64), default="assigned")
     path_json: Mapped[dict | None] = mapped_column(JSON_VARIANT, nullable=True)

@@ -10,7 +10,7 @@ from app.catalog.models import Book
 from app.catalog.service import build_book_payload, build_book_payloads
 from app.core.errors import ApiError
 from app.db.base import utc_now
-from app.orders.models import BorrowOrder, DeliveryOrder, ReturnRequest
+from app.orders.models import BorrowOrder, OrderFulfillment, ReturnRequest
 from app.readers.models import (
     DismissedNotification,
     FavoriteBook,
@@ -352,14 +352,14 @@ def list_reader_notifications(session: Session, *, reader_id: int, limit: int = 
     items: list[dict] = []
 
     active_rows = session.execute(
-        select(BorrowOrder, Book, DeliveryOrder)
+        select(BorrowOrder, Book, OrderFulfillment)
         .join(Book, BorrowOrder.book_id == Book.id)
-        .join(DeliveryOrder, DeliveryOrder.borrow_order_id == BorrowOrder.id, isouter=True)
+        .join(OrderFulfillment, OrderFulfillment.borrow_order_id == BorrowOrder.id, isouter=True)
         .where(BorrowOrder.reader_id == reader_id, BorrowOrder.status.not_in(FINAL_READER_ORDER_STATUSES))
         .order_by(BorrowOrder.updated_at.desc(), BorrowOrder.id.desc())
         .limit(3)
     ).all()
-    for order, book, delivery in active_rows:
+    for order, book, fulfillment in active_rows:
         due_at = _as_utc(order.due_at)
         if due_at is not None and due_at <= now + timedelta(days=2):
             items.append(
@@ -372,7 +372,7 @@ def list_reader_notifications(session: Session, *, reader_id: int, limit: int = 
             )
             continue
         if order.order_mode == "robot_delivery":
-            destination = delivery.delivery_target if delivery is not None else "阅览区"
+            destination = fulfillment.delivery_target if fulfillment is not None else "阅览区"
             items.append(
                 {
                     "id": f"delivery-{order.id}",

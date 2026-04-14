@@ -6,7 +6,7 @@ from app.catalog.models import Book
 from app.conversation.models import ConversationMessage, ConversationSession
 from app.core.database import get_session_factory
 from app.core.security import AuthIdentity, create_token, hash_password
-from app.orders.models import BorrowOrder, DeliveryOrder
+from app.orders.models import BorrowOrder, OrderFulfillment
 from app.recommendation.models import RecommendationLog
 from app.readers.models import ReaderAccount, ReaderProfile
 
@@ -95,10 +95,10 @@ def seed_reader_hub_state() -> dict[str, int]:
         session.flush()
 
         session.add(
-            DeliveryOrder(
+            OrderFulfillment(
                 borrow_order_id=active_order.id,
+                mode="robot_delivery",
                 delivery_target="A-201",
-                eta_minutes=8,
                 status="delivering",
             )
         )
@@ -205,7 +205,7 @@ def test_reader_can_get_own_overview_and_orders(client):
     assert orders_response.status_code == 200
     items = orders_response.json()["items"]
     assert len(items) == 2
-    assert items[0]["borrow_order"]["reader_id"] == state["reader_profile_id"]
+    assert items[0]["order"]["readerId"] == state["reader_profile_id"]
 
 
 def test_admin_can_list_readers_and_view_reader_resources(client):
