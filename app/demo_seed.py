@@ -17,6 +17,15 @@ from app.orders.models import BorrowOrder, DeliveryOrder, ReturnRequest
 from app.readers.models import ReaderAccount, ReaderProfile
 from app.recommendation.models import RecommendationLog
 from app.robot_sim.models import RobotStatusEvent, RobotTask, RobotUnit
+from app.tutor.models import (
+    TutorDocumentChunk,
+    TutorGenerationJob,
+    TutorProfile,
+    TutorSession,
+    TutorSessionMessage,
+    TutorSourceDocument,
+    TutorStepCompletion,
+)
 
 
 @dataclass(slots=True)
@@ -26,6 +35,13 @@ class SeedContext:
 
 def _reset_all_tables(session: Session) -> None:
     for model in (
+        TutorStepCompletion,
+        TutorSessionMessage,
+        TutorSession,
+        TutorDocumentChunk,
+        TutorSourceDocument,
+        TutorGenerationJob,
+        TutorProfile,
         ConversationMessage,
         RobotStatusEvent,
         AdminActionLog,

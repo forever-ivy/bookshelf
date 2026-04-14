@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     embedding_base_url: str | None = None
     embedding_dimensions: int = 1536
     embedding_batch_size: int = 20
+    tutor_storage_dir: str = "artifacts/tutor"
+    tutor_tasks_eager: bool = False
+    tutor_chunk_size: int = 700
+    tutor_chunk_overlap: int = 120
+    tutor_retrieval_top_k: int = 5
     recommendation_ml_enabled: bool = True
     recommendation_ml_model_path: str = "artifacts/recommendation_mf_model.json"
     cors_allow_origins: str = (

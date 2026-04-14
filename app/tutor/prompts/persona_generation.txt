@@ -1,0 +1,9 @@
+请根据资料主题、学习目标和摘要，为导学系统生成一个 JSON 对象。
+
+字段：
+- topicName
+- targetAudience
+- personaHints
+- domainSpecificConstraints
+
+只返回 JSON。

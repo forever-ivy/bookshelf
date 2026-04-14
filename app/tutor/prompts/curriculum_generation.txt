@@ -1,0 +1,12 @@
+请根据资料主题、学习目标和摘要，为导学系统生成一个 JSON 对象，字段如下：
+- title
+- overview
+- steps: 数组，每个元素都包含：
+  - index
+  - title
+  - learningObjective
+  - successCriteria
+  - guidingQuestion
+  - keywords
+
+只返回 JSON。

@@ -35,6 +35,7 @@ MODEL_MODULES = (
     "app.robot_sim.models",
     "app.recommendation.models",
     "app.conversation.models",
+    "app.tutor.models",
     "app.analytics.models",
     "app.system.models",
 )

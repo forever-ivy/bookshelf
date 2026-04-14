@@ -17,6 +17,7 @@ from app.readers.router import router as readers_router
 from app.recommendation.router import router as recommendation_router
 from app.robot_sim.router import router as robot_sim_router
 from app.system.router import router as system_router
+from app.tutor.router import router as tutor_router
 from app.voice.router import router as voice_router
 
 api_router = APIRouter()
@@ -33,6 +34,7 @@ api_router.include_router(orders_router)
 api_router.include_router(robot_sim_router)
 api_router.include_router(recommendation_router)
 api_router.include_router(conversation_router)
+api_router.include_router(tutor_router)
 api_router.include_router(voice_router)
 api_router.include_router(analytics_router)
 api_router.include_router(admin_router)
