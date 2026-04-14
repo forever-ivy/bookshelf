@@ -17,8 +17,12 @@ type TutorNotebookPalette = {
   secondaryMetaColor: string;
 };
 
+function isTutorProfilePending(profile: TutorProfile) {
+  return profile.status === 'queued' || profile.status === 'processing';
+}
+
 function resolveNotebookPalette(profile: TutorProfile): TutorNotebookPalette {
-  if (profile.status === 'generating') {
+  if (isTutorProfilePending(profile)) {
     return {
       cardBackground: '#FFFFFF',
       coverAccent: '#DCE7F3',
@@ -59,18 +63,26 @@ function resolveNotebookPalette(profile: TutorProfile): TutorNotebookPalette {
 function resolveMeta(profile: TutorProfile, session?: TutorSession | null) {
   return {
     previewText:
-      profile.status === 'generating'
-        ? '正在解析文档，请稍后'
+      isTutorProfilePending(profile)
+        ? profile.status === 'queued'
+          ? '导学任务已入队，请稍后'
+          : '正在解析文档，请稍后'
         : session?.lastMessagePreview ?? profile.persona.greeting,
     primaryMeta:
-      profile.status === 'generating'
-        ? '正在解析文档'
+      isTutorProfilePending(profile)
+        ? profile.status === 'queued'
+          ? '等待开始处理'
+          : '正在解析文档'
         : session?.progressLabel ?? `${Math.max(profile.curriculum.length, 1)} 个学习步骤`,
     secondaryMeta:
-      profile.status === 'generating'
+      isTutorProfilePending(profile)
         ? '请稍后'
         : session?.currentStepTitle ?? profile.curriculum[0]?.title ?? profile.persona.name,
-    tertiaryMeta: profile.status === 'generating' ? '文档处理中' : profile.persona.name,
+    tertiaryMeta: isTutorProfilePending(profile)
+      ? profile.status === 'queued'
+        ? '任务排队中'
+        : '文档处理中'
+      : profile.persona.name,
   };
 }
 

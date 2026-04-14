@@ -78,6 +78,10 @@ jest.mock('@/hooks/use-library-app-data', () => ({
     isPending: false,
     mutateAsync: jest.fn(),
   }),
+  useUploadTutorProfileMutation: () => ({
+    isPending: false,
+    mutateAsync: jest.fn(),
+  }),
   useTutorDashboardQuery: () => ({
     data: {
       continueSession: {
@@ -116,6 +120,7 @@ jest.mock('@/hooks/use-library-app-data', () => ({
           greeting: '我们先把这本书真正学进去。',
           name: '周老师',
         },
+        sources: [],
         sourceType: 'book',
         status: 'ready',
         title: '机器学习从零到一',
@@ -130,8 +135,9 @@ jest.mock('@/hooks/use-library-app-data', () => ({
           greeting: '先把实验资料拆出重点。',
           name: '实验课助教',
         },
+        sources: [],
         sourceType: 'upload',
-        status: 'generating',
+        status: 'processing',
         title: '实验手册导学',
         updatedAt: '2026-04-08T09:15:00Z',
       },
@@ -183,6 +189,7 @@ describe('tutor library route', () => {
             greeting: '我们先把这本书真正学进去。',
             name: '周老师',
           },
+          sources: [],
           sourceType: 'book',
           status: 'ready',
           title: '机器学习从零到一',
@@ -209,8 +216,9 @@ describe('tutor library route', () => {
             greeting: '我已经按资料内容搭好一个预习路径，我们从第一步开始。',
             name: '资料陪练助教',
           },
+          sources: [],
           sourceType: 'upload',
-          status: 'generating',
+          status: 'processing',
           title: 'course-outline.pdf',
           updatedAt: '2026-04-08T09:15:00Z',
         }}

@@ -4,20 +4,23 @@ import React from 'react';
 import { TutorCreateSheet } from '@/components/tutor/tutor-create-sheet';
 
 describe('tutor create sheet layout', () => {
-  it('keeps the custom style card compact and shows the prompt editor in a separate panel', () => {
+  it('keeps the sheet focused on picking a document for upload-based tutor creation', () => {
     render(
       <TutorCreateSheet
+        creating={false}
         onClose={jest.fn()}
-        onCreateWithStyle={jest.fn()}
         onDocumentPicked={jest.fn()}
         visible
       />
     );
 
-    fireEvent.press(screen.getByTestId('tutor-style-card-custom'));
+    expect(screen.getByText('创建学习导师')).toBeTruthy();
+    expect(screen.getByText('上传资料')).toBeTruthy();
+    expect(screen.queryByTestId('tutor-style-card-custom')).toBeNull();
+    expect(screen.queryByPlaceholderText('例如：用轻松幽默的方式讲解，多举生活中的例子…')).toBeNull();
 
-    expect(screen.getByTestId('tutor-style-card-custom')).toBeTruthy();
-    expect(screen.getByTestId('tutor-style-custom-prompt-panel')).toBeTruthy();
-    expect(screen.getByPlaceholderText('例如：用轻松幽默的方式讲解，多举生活中的例子…')).toBeTruthy();
+    fireEvent.press(screen.getByText('选择文件'));
+
+    expect(screen.getByText('支持 PDF、Markdown、TXT')).toBeTruthy();
   });
 });

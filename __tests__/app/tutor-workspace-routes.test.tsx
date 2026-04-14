@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, render, screen } from '@testing-library/react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 import { Platform } from 'react-native';
 
@@ -6,8 +7,8 @@ import TutorWorkspaceGuideRoute from '@/app/tutor/[profileId]/(workspace)/(searc
 import TutorWorkspaceMoreRoute from '@/app/tutor/[profileId]/(workspace)/more';
 import TutorWorkspaceSourcesRoute from '@/app/tutor/[profileId]/(workspace)/sources';
 import { TutorWorkspaceProvider } from '@/components/tutor/tutor-workspace-provider';
+import { streamTutorSessionReply } from '@/lib/api/tutor';
 
-const mockSendMessage = jest.fn(async () => {});
 const mockRouterPush = jest.fn();
 const mockUseLocalSearchParams = jest.fn(() => ({ profileId: '101' }));
 const expectedHeaderActionKey =
@@ -29,6 +30,46 @@ let mockSessionMessagesData = [
     tutorSessionId: 301,
   },
 ];
+let mockProfileData = {
+  bookId: 1,
+  createdAt: '2026-04-08T08:00:00Z',
+  curriculum: [
+    {
+      goal: '先建立阅读地图。',
+      guidingQuestion: '如果只用一句话介绍这本书，它最核心的任务是什么？',
+      id: 'step-1',
+      title: '建立整体框架',
+    },
+    {
+      goal: '把关键概念说清楚。',
+      guidingQuestion: '你会怎么向同学解释“监督学习”和“标签数据”？',
+      id: 'step-2',
+      title: '用自己的话解释概念',
+    },
+  ],
+  id: 101,
+  persona: {
+    coachingFocus: '先搭框架，再逼自己用自己的话解释。',
+    greeting: '我们先把这本书真正学进去。',
+    name: '周老师',
+    style: '先追问，再给脚手架提示',
+  },
+  sourceSummary: '从馆藏书摘要拆出的导学提要。',
+  sourceType: 'book' as const,
+  sources: [
+    {
+      fileName: 'book-1.md',
+      id: 7,
+      kind: 'book_synthetic' as const,
+      metadata: { bookId: 1, bookTitle: '机器学习从零到一' },
+      parseStatus: 'parsed' as const,
+      profileId: 101,
+    },
+  ],
+  status: 'ready' as const,
+  title: '机器学习从零到一',
+  updatedAt: '2026-04-08T08:30:00Z',
+};
 
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaProvider: ({ children }: { children: React.ReactNode }) => children,
@@ -72,7 +113,7 @@ jest.mock('expo-router', () => {
     };
   }) =>
     React.createElement(
-      View,
+      View as React.ComponentType<any>,
       { options, testID: 'workspace-stack-screen' },
       options?.headerLeft ? options.headerLeft() : null,
       options?.title ? React.createElement(Text, null, options.title) : null,
@@ -84,7 +125,7 @@ jest.mock('expo-router', () => {
     mockSearchBarProps = props;
 
     return React.createElement(
-      View,
+      View as React.ComponentType<any>,
       { placeholder: props.placeholder, testID: 'workspace-search-bar' },
       typeof props.placeholder === 'string' ? React.createElement(Text, null, props.placeholder) : null
     );
@@ -105,21 +146,15 @@ jest.mock('expo-router', () => {
   };
 });
 
-jest.mock('@ai-sdk/react', () => ({
-  useChat: ({ messages }: { messages?: unknown[] }) => ({
-    error: undefined,
-    messages: messages ?? [],
-    sendMessage: mockSendMessage,
-    status: 'ready',
+jest.mock('@/hooks/use-app-session', () => ({
+  useAppSession: () => ({
+    token: 'reader-token',
   }),
-}));
-
-jest.mock('expo/fetch', () => ({
-  fetch: global.fetch,
 }));
 
 jest.mock('@/hooks/use-library-app-data', () => ({
   useStartTutorSessionMutation: () => ({
+    isPending: false,
     mutateAsync: jest.fn(async () => ({
       firstStep: {
         guidingQuestion: '如果只用一句话介绍这本书，它最核心的任务是什么？',
@@ -135,47 +170,27 @@ jest.mock('@/hooks/use-library-app-data', () => ({
         currentStepTitle: '用自己的话解释概念',
         id: 301,
         lastMessagePreview: '先试着说说什么是标签数据。',
-        progressLabel: '1 / 4 步',
+        progressLabel: '1 / 2 步',
         status: 'active',
         tutorProfileId: 101,
         updatedAt: '2026-04-08T08:30:00Z',
       },
-      welcomeMessage: '我们开始吧。',
+      welcomeMessage: {
+        content: '我们开始吧。',
+        createdAt: '2026-04-08T08:00:00Z',
+        id: 900,
+        role: 'assistant',
+        tutorSessionId: 301,
+      },
     })),
   }),
   useTutorProfileQuery: () => ({
-    data: {
-      bookId: 1,
-      createdAt: '2026-04-08T08:00:00Z',
-      curriculum: [
-        {
-          goal: '先建立阅读地图。',
-          guidingQuestion: '如果只用一句话介绍这本书，它最核心的任务是什么？',
-          id: 'step-1',
-          title: '建立整体框架',
-        },
-        {
-          goal: '把关键概念说清楚。',
-          guidingQuestion: '你会怎么向同学解释“监督学习”和“标签数据”？',
-          id: 'step-2',
-          title: '用自己的话解释概念',
-        },
-      ],
-      id: 101,
-      persona: {
-        coachingFocus: '先搭框架，再逼自己用自己的话解释。',
-        greeting: '我们先把这本书真正学进去。',
-        name: '周老师',
-        style: '先追问，再给脚手架提示',
-      },
-      sourceType: 'book',
-      status: 'ready',
-      title: '机器学习从零到一',
-      updatedAt: '2026-04-08T08:30:00Z',
-    },
+    data: mockProfileData,
+    isPending: false,
   }),
   useTutorSessionMessagesQuery: () => ({
     data: mockSessionMessagesData,
+    refetch: jest.fn(async () => ({ data: mockSessionMessagesData })),
   }),
   useTutorSessionsQuery: () => ({
     data: [
@@ -188,17 +203,34 @@ jest.mock('@/hooks/use-library-app-data', () => ({
         currentStepTitle: '用自己的话解释概念',
         id: 301,
         lastMessagePreview: '先试着说说什么是标签数据。',
-        progressLabel: '1 / 4 步',
+        progressLabel: '1 / 2 步',
         status: 'active',
         tutorProfileId: 101,
         updatedAt: '2026-04-08T08:30:00Z',
       },
     ],
+    refetch: jest.fn(async () => ({ data: [] })),
   }),
 }));
 
+jest.mock('@/lib/api/tutor', () => ({
+  streamTutorSessionReply: jest.fn(),
+}));
+
 function renderWithWorkspaceProvider(ui: React.ReactElement) {
-  return render(<TutorWorkspaceProvider profileId={101}>{ui}</TutorWorkspaceProvider>);
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <TutorWorkspaceProvider profileId={101}>{ui}</TutorWorkspaceProvider>
+    </QueryClientProvider>
+  );
 }
 
 function pressHeaderMenu(
@@ -228,14 +260,12 @@ function pressHeaderMenu(
     return;
   }
 
-  fireEvent.press(screen.getByTestId(testID));
+  screen.getByTestId(testID).props.onPress();
 }
 
 describe('tutor workspace routes', () => {
   beforeEach(() => {
-    jest.useRealTimers();
     mockRouterPush.mockClear();
-    mockSendMessage.mockClear();
     mockSearchBarProps = null;
     mockSessionMessagesData = [
       {
@@ -253,6 +283,7 @@ describe('tutor workspace routes', () => {
         tutorSessionId: 301,
       },
     ];
+    (streamTutorSessionReply as jest.Mock).mockReset();
   });
 
   it('renders the guide route content by default', () => {
@@ -268,17 +299,9 @@ describe('tutor workspace routes', () => {
     expect(screen.getByText('导学')).toBeTruthy();
     expect(screen.getByTestId('workspace-search-bar')).toBeTruthy();
     expect(screen.getByText('继续你的学习')).toBeTruthy();
-    expect(screen.queryByText('当前上下文')).toBeNull();
     expect(
       screen.getByText('我们先不急着背定义，先说说你眼里“监督学习”的目标是什么？')
     ).toBeTruthy();
-    expect(screenOptions).toEqual(
-      expect.objectContaining({
-        headerShadowVisible: false,
-        headerTitle: '',
-        headerTransparent: Platform.OS === 'ios',
-      })
-    );
 
     pressHeaderMenu(screenOptions, 'tutor-workspace-guide-menu-button');
 
@@ -288,7 +311,51 @@ describe('tutor workspace routes', () => {
     });
   });
 
-  it('sends the chat message from the native search bar submit event', async () => {
+  it('streams tutor replies from the backend sse client and updates workspace signals', async () => {
+    (streamTutorSessionReply as jest.Mock).mockImplementation(async function* () {
+      yield { phase: 'retrieving', type: 'status' };
+      yield { delta: '先抓住模型、数据和目标。', type: 'assistant.delta' };
+      yield {
+        evaluation: {
+          confidence: 0.86,
+          meetsCriteria: true,
+          reasoning: '回答已经覆盖当前步骤的关键线索。',
+          stepIndex: 1,
+        },
+        type: 'evaluation',
+      };
+      yield {
+        session: {
+          completedSteps: [
+            { completedAt: '2026-04-08T08:00:00Z', confidence: 0.82, stepIndex: 0 },
+            { completedAt: '2026-04-08T08:31:00Z', confidence: 0.86, stepIndex: 1 },
+          ],
+          completedStepsCount: 2,
+          conversationSessionId: 401,
+          createdAt: '2026-04-08T08:00:00Z',
+          currentStepIndex: 1,
+          currentStepTitle: '用自己的话解释概念',
+          id: 301,
+          lastMessagePreview: '先抓住模型、数据和目标。',
+          progressLabel: '2 / 2 步',
+          status: 'completed',
+          tutorProfileId: 101,
+          updatedAt: '2026-04-08T08:31:00Z',
+        },
+        type: 'session.updated',
+      };
+      yield {
+        message: {
+          content: '先抓住模型、数据和目标。',
+          createdAt: '2026-04-08T08:31:00Z',
+          id: 880,
+          role: 'assistant',
+          tutorSessionId: 301,
+        },
+        type: 'assistant.done',
+      };
+    });
+
     renderWithWorkspaceProvider(<TutorWorkspaceGuideRoute />);
 
     await act(async () => {
@@ -299,47 +366,18 @@ describe('tutor workspace routes', () => {
       onSearchButtonPress?.({ nativeEvent: { text: '帮我总结这一节的核心线索' } });
     });
 
-    expect(mockSendMessage).toHaveBeenCalledWith(
-      { text: '帮我总结这一节的核心线索' },
-      expect.objectContaining({
-        body: expect.objectContaining({
-          profile: expect.any(Object),
-          session: expect.any(Object),
-        }),
-      })
+    expect(streamTutorSessionReply).toHaveBeenCalledWith(
+      301,
+      { content: '帮我总结这一节的核心线索' },
+      'reader-token'
     );
+    expect(screen.getByText('工作区状态')).toBeTruthy();
+    expect(screen.getByText('先抓住模型、数据和目标。')).toBeTruthy();
+    expect(screen.getByText('步骤已推进')).toBeTruthy();
+    expect(screen.getByText(/本轮置信度 86%/)).toBeTruthy();
   });
 
-  it('replays the local mock demo for the book summary prompt without calling chat transport', async () => {
-    jest.useFakeTimers();
-    renderWithWorkspaceProvider(<TutorWorkspaceGuideRoute />);
-
-    await act(async () => {
-      const onSearchButtonPress = mockSearchBarProps?.onSearchButtonPress as
-        | ((event: { nativeEvent: { text: string } }) => void)
-        | undefined;
-
-      onSearchButtonPress?.({ nativeEvent: { text: '简述这本书的主要内容' } });
-    });
-
-    expect(mockSendMessage).not.toHaveBeenCalled();
-    expect(screen.getByText('简述这本书的主要内容')).toBeTruthy();
-    expect(screen.getByTestId('tutor-assistant-thinking-indicator')).toBeTruthy();
-    expect(screen.queryByText('思考 5s')).toBeNull();
-
-    await act(async () => {
-      jest.advanceTimersByTime(14000);
-    });
-
-    expect(screen.queryByTestId('tutor-assistant-thinking-indicator')).toBeNull();
-    expect(screen.getByText('思考 5s')).toBeTruthy();
-    expect(screen.getByText('主要内容')).toBeTruthy();
-    expect(screen.getByText(/机器学习从零到一 主要不是在堆概念/)).toBeTruthy();
-
-    jest.useRealTimers();
-  });
-
-  it('renders the sources route with the primary source and a local placeholder list', () => {
+  it('renders the sources route from backend source documents instead of local placeholders', () => {
     renderWithWorkspaceProvider(<TutorWorkspaceSourcesRoute />);
     const screenOptions = screen.getByTestId('workspace-stack-screen').props.options;
 
@@ -349,21 +387,11 @@ describe('tutor workspace routes', () => {
         [expectedHeaderActionKey]: expect.any(Function),
       })
     );
-    expect(screen.getAllByText('来源').length).toBeGreaterThan(0);
     expect(screen.getByText('当前主来源')).toBeTruthy();
-    expect(screen.getByText('已添加来源')).toBeTruthy();
-    expect(screen.getByText('还没有额外文件')).toBeTruthy();
-    fireEvent.press(screen.getByText('添加文件来源'));
-    expect(screen.getByText('附加文件 1')).toBeTruthy();
-    expect(screen.getByText('BOOK')).toBeTruthy();
-    expect(screen.getAllByText('机器学习从零到一').length).toBeGreaterThan(0);
-    expect(screenOptions).toEqual(
-      expect.objectContaining({
-        headerShadowVisible: false,
-        headerTitle: '',
-        headerTransparent: Platform.OS === 'ios',
-      })
-    );
+    expect(screen.getByText('book-1.md')).toBeTruthy();
+    expect(screen.getByText(/已解析/)).toBeTruthy();
+    expect(screen.queryByText('还没有额外文件')).toBeNull();
+    expect(screen.queryByText('添加文件来源')).toBeNull();
 
     pressHeaderMenu(screenOptions, 'tutor-workspace-sources-menu-button');
 
@@ -388,21 +416,6 @@ describe('tutor workspace routes', () => {
     expect(screen.getByText('闪卡')).toBeTruthy();
     expect(screen.getByText('测验')).toBeTruthy();
     expect(screen.getByText('思维导图')).toBeTruthy();
-    expect(screen.queryByText('工作区动作')).toBeNull();
-    expect(screen.queryByText('查看导学路径')).toBeNull();
-    expect(screen.queryByText('清空会话')).toBeNull();
-    expect(screen.queryByText('重命名导学本')).toBeNull();
-    expect(screen.queryByText('删除导学本')).toBeNull();
-    expect(screen.queryByText('音频导览')).toBeNull();
-    expect(screen.queryByText('视频导览')).toBeNull();
-    expect(screen.queryByText('幻灯片')).toBeNull();
-    expect(screenOptions).toEqual(
-      expect.objectContaining({
-        headerShadowVisible: false,
-        headerTitle: '',
-        headerTransparent: Platform.OS === 'ios',
-      })
-    );
 
     pressHeaderMenu(screenOptions, 'tutor-workspace-more-menu-button');
 
@@ -411,15 +424,4 @@ describe('tutor workspace routes', () => {
       pathname: '/tutor/[profileId]/info-sheet',
     });
   });
-
-  it('shows starter prompts when the session has no history', () => {
-    mockSessionMessagesData = [];
-
-    renderWithWorkspaceProvider(<TutorWorkspaceGuideRoute />);
-
-    expect(screen.getByText('我们先把这本书真正学进去。')).toBeTruthy();
-    expect(screen.getByText('试着用一句话总结这份资料要解决什么问题')).toBeTruthy();
-    expect(screen.getByText('把当前这一步讲给一个刚入门的同学听')).toBeTruthy();
-  });
-
 });

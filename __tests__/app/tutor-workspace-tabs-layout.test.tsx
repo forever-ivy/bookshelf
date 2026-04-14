@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 
 import TutorWorkspaceTabsLayout from '@/app/tutor/[profileId]/(workspace)/_layout';
@@ -97,17 +98,10 @@ jest.mock('expo-router', () => ({
   usePathname: () => mockPathname,
 }));
 
-jest.mock('@ai-sdk/react', () => ({
-  useChat: ({ messages }: { messages?: unknown[] }) => ({
-    error: undefined,
-    messages: messages ?? [],
-    sendMessage: jest.fn(async () => {}),
-    status: 'ready',
+jest.mock('@/hooks/use-app-session', () => ({
+  useAppSession: () => ({
+    token: 'reader-token',
   }),
-}));
-
-jest.mock('expo/fetch', () => ({
-  fetch: global.fetch,
 }));
 
 jest.mock('@/hooks/use-library-app-data', () => ({
@@ -139,6 +133,7 @@ jest.mock('@/hooks/use-library-app-data', () => ({
   }),
   useTutorSessionMessagesQuery: () => ({
     data: [],
+    refetch: jest.fn(async () => ({ data: [] })),
   }),
   useTutorSessionsQuery: () => ({
     data: [
@@ -154,6 +149,7 @@ jest.mock('@/hooks/use-library-app-data', () => ({
         updatedAt: '2026-04-08T08:30:00Z',
       },
     ],
+    refetch: jest.fn(async () => ({ data: [] })),
   }),
 }));
 
@@ -166,10 +162,20 @@ describe('tutor workspace tabs layout', () => {
   });
 
   function renderLayout() {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: false,
+        },
+      },
+    });
+
     return render(
-      <TutorWorkspaceProvider profileId={101}>
-        <TutorWorkspaceTabsLayout />
-      </TutorWorkspaceProvider>
+      <QueryClientProvider client={queryClient}>
+        <TutorWorkspaceProvider profileId={101}>
+          <TutorWorkspaceTabsLayout />
+        </TutorWorkspaceProvider>
+      </QueryClientProvider>
     );
   }
 

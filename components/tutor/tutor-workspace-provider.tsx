@@ -1,66 +1,47 @@
-import { useChat } from '@ai-sdk/react';
-import { DefaultChatTransport } from 'ai';
-import { fetch as expoFetch } from 'expo/fetch';
+import { useQueryClient } from '@tanstack/react-query';
 import { usePathname } from 'expo-router';
 import React from 'react';
 import { toast } from 'sonner-native';
 
+import { useAppSession } from '@/hooks/use-app-session';
 import { useTutorSessionMessagesQuery } from '@/hooks/use-library-app-data';
 import {
   resolveTutorWorkspaceSourceSummary,
   resolveTutorWorkspaceStatusDescription,
   useTutorWorkspace,
 } from '@/hooks/use-tutor-workspace';
-import { generateAPIUrl } from '@/lib/generate-api-url';
+import { getLibraryErrorMessage } from '@/lib/api/client';
+import { streamTutorSessionReply } from '@/lib/api/tutor';
+import type { TutorStepEvaluation } from '@/lib/api/types';
 import {
-  buildTutorBookSummaryMarkdown,
+  buildSyntheticCompletedSteps,
+  buildTutorSessionTransitionLabel,
   buildTutorWorkspaceHighlights,
   buildTutorWorkspaceSources,
-  isTutorOneTimeDemoPrompt,
-  createInitialTutorChatMessages,
-  extractTextFromUIMessage,
-  type TutorChatEvaluationPart,
-  type TutorChatSessionPart,
-  type TutorChatStatusPart,
-  type TutorUIMessage,
-} from '@/lib/tutor/mock-chat';
+  createTutorRenderedMessages,
+  resolveTutorStreamStatusSignal,
+  type TutorWorkspaceInsightCard,
+  type TutorWorkspaceRenderedMessage,
+  type TutorWorkspaceSessionSignal,
+  type TutorWorkspaceSourceCard,
+  type TutorWorkspaceStatusSignal,
+} from '@/lib/tutor/workspace';
 
 export type TutorWorkspaceTab = 'guide' | 'more' | 'sources';
-export type TutorWorkspaceDraftSource = {
-  addedAt: string;
-  id: string;
-  kind: 'document' | 'image' | 'pdf';
-  name: string;
-  status: 'indexed' | 'preparing';
-};
-
-type DemoTypingStep = {
-  chunk: string;
-  delayMs: number;
-};
 
 type TutorWorkspaceContextValue = {
-  addDraftSource: () => void;
   draft: string;
   footerInset: number;
   handleSend: (nextDraft?: string) => Promise<void>;
-  highlightCards: ReturnType<typeof buildTutorWorkspaceHighlights>;
-  latestEvaluation: TutorChatEvaluationPart | null;
-  latestSessionSignal: TutorChatSessionPart | null;
-  latestStatus: TutorChatStatusPart | null;
+  highlightCards: TutorWorkspaceInsightCard[];
+  latestEvaluation: TutorStepEvaluation | null;
+  latestSessionSignal: TutorWorkspaceSessionSignal | null;
+  latestStatus: TutorWorkspaceStatusSignal | null;
   profile: ReturnType<typeof useTutorWorkspace>['profile'];
-  renderedMessages: {
-    id: string;
-    role: string;
-    thinking?: boolean;
-    thinkingLabel?: string;
-    streaming: boolean;
-    text: string;
-  }[];
+  renderedMessages: TutorWorkspaceRenderedMessage[];
   setDraft: React.Dispatch<React.SetStateAction<string>>;
   sourceCount: number;
-  sourceCards: ReturnType<typeof buildTutorWorkspaceSources>;
-  sourceDrafts: TutorWorkspaceDraftSource[];
+  sourceCards: TutorWorkspaceSourceCard[];
   sourceSummary: string;
   starterPrompts: string[];
   workspaceSession: ReturnType<typeof useTutorWorkspace>['workspaceSession'];
@@ -80,44 +61,38 @@ export function resolveTutorWorkspaceActiveTab(pathname: string): TutorWorkspace
   return 'guide';
 }
 
-function resolveTutorWorkspaceFooterInset(tab: TutorWorkspaceTab) {
-  switch (tab) {
-    case 'sources':
-      return 24;
-    case 'more':
-      return 24;
-    case 'guide':
-    default:
-      return 24;
-  }
+function resolveTutorWorkspaceFooterInset(_tab: TutorWorkspaceTab) {
+  return 24;
 }
 
-function buildDemoTypingSteps(text: string) {
-  const segments = text.match(/[\s\S]{1,4}/g) ?? [text];
+function mergeTutorSessionWithProfile(
+  profile: NonNullable<ReturnType<typeof useTutorWorkspace>['profile']>,
+  session: NonNullable<ReturnType<typeof useTutorWorkspace>['workspaceSession']>
+) {
+  const totalSteps = profile.curriculum.length;
 
-  return segments.reduce<DemoTypingStep[]>((steps, chunk) => {
-    const trimmed = chunk.trim();
-    let delayMs = 96;
+  return {
+    ...session,
+    completedSteps:
+      session.completedSteps.length > 0
+        ? session.completedSteps
+        : buildSyntheticCompletedSteps(session.completedStepsCount),
+    progressLabel: `${session.completedStepsCount} / ${Math.max(totalSteps, 1)} 步`,
+  };
+}
 
-    if (!trimmed) {
-      delayMs = 70;
-    } else if (/\n\n/.test(chunk)) {
-      delayMs = 420;
-    } else if (/\n/.test(chunk)) {
-      delayMs = 240;
-    } else if (/[。！？.!?]$/.test(trimmed)) {
-      delayMs = 320;
-    } else if (/[，、】【；：,;:]$/.test(trimmed)) {
-      delayMs = 180;
-    } else if (/^#{1,6}/.test(trimmed)) {
-      delayMs = 280;
-    } else if (/^- /.test(trimmed)) {
-      delayMs = 220;
-    }
-
-    steps.push({ chunk, delayMs });
-    return steps;
-  }, []);
+function buildStarterPrompts(
+  profile: NonNullable<ReturnType<typeof useTutorWorkspace>['profile']>,
+  workspaceSession: NonNullable<ReturnType<typeof useTutorWorkspace>['workspaceSession']>
+) {
+  const currentStep = profile.curriculum[workspaceSession.currentStepIndex] ?? null;
+  return [
+    currentStep?.guidingQuestion ?? '先用一句话说说你理解到哪里了',
+    profile.sourceType === 'upload'
+      ? '指出这份资料里最值得先看的一部分'
+      : '用一句话说出这本书真正要解决的问题',
+    '说说你现在最不确定的一个概念或步骤',
+  ];
 }
 
 export function TutorWorkspaceProvider({
@@ -128,109 +103,54 @@ export function TutorWorkspaceProvider({
   profileId: number;
 }) {
   const pathname = usePathname();
-  const { profile, setWorkspaceSession, workspaceSession } = useTutorWorkspace(profileId);
+  const queryClient = useQueryClient();
+  const { token } = useAppSession();
+  const { profile, sessionsQuery, setWorkspaceSession, workspaceSession } = useTutorWorkspace(profileId);
   const sessionMessagesQuery = useTutorSessionMessagesQuery(workspaceSession?.id ?? Number.NaN);
   const [draft, setDraft] = React.useState('');
-  const [demoMessages, setDemoMessages] = React.useState<TutorWorkspaceContextValue['renderedMessages']>([]);
-  const [sourceDrafts, setSourceDrafts] = React.useState<TutorWorkspaceDraftSource[]>([]);
-  const [latestEvaluation, setLatestEvaluation] = React.useState<TutorChatEvaluationPart | null>(
-    null
-  );
-  const [latestStatus, setLatestStatus] = React.useState<TutorChatStatusPart | null>(null);
+  const [localMessages, setLocalMessages] = React.useState<TutorWorkspaceRenderedMessage[]>([]);
+  const [latestEvaluation, setLatestEvaluation] = React.useState<TutorStepEvaluation | null>(null);
+  const [latestStatus, setLatestStatus] = React.useState<TutorWorkspaceStatusSignal | null>(null);
   const [latestSessionSignal, setLatestSessionSignal] =
-    React.useState<TutorChatSessionPart | null>(null);
-  const demoTimersRef = React.useRef<ReturnType<typeof setTimeout>[]>([]);
-  const transport = React.useMemo(
-    () =>
-      new DefaultChatTransport({
-        api: generateAPIUrl('/api/tutor-chat'),
-        fetch: expoFetch as typeof globalThis.fetch,
-      }),
-    []
-  );
-
-  const initialMessages = React.useMemo(
-    () =>
-      profile && workspaceSession
-        ? createInitialTutorChatMessages(profile, workspaceSession, sessionMessagesQuery.data ?? [])
-        : [],
-    [profile, sessionMessagesQuery.data, workspaceSession]
-  );
-  const sourceCards = React.useMemo(
-    () => (profile && workspaceSession ? buildTutorWorkspaceSources(profile, workspaceSession) : []),
-    [profile, workspaceSession]
-  );
-  const highlightCards = React.useMemo(
-    () =>
-      profile && workspaceSession ? buildTutorWorkspaceHighlights(profile, workspaceSession) : [],
-    [profile, workspaceSession]
-  );
-
-  const { messages, sendMessage, status } = useChat<TutorUIMessage>({
-    id:
-      profile && workspaceSession
-        ? `tutor-workspace-${profile.id}-${workspaceSession.id}-${sessionMessagesQuery.data?.length ?? 0}`
-        : 'tutor-workspace-pending',
-    messages: initialMessages,
-    onData: (part) => {
-      if (part.type === 'data-tutorStatus') {
-        setLatestStatus(part.data);
-      }
-
-      if (part.type === 'data-tutorEvaluation') {
-        setLatestEvaluation(part.data);
-      }
-
-      if (part.type === 'data-tutorSession') {
-        setLatestSessionSignal(part.data);
-        setWorkspaceSession((current) =>
-          current
-            ? {
-                ...current,
-                completedStepsCount: part.data.completedStepsCount,
-                currentStepIndex: part.data.currentStepIndex,
-                currentStepTitle: part.data.currentStepTitle,
-                progressLabel: part.data.progressLabel,
-                status: part.data.status,
-              }
-            : current
-        );
-      }
-    },
-    onError: (error) => {
-      toast.error(error.message);
-    },
-    transport,
-  });
+    React.useState<TutorWorkspaceSessionSignal | null>(null);
+  const [isSending, setIsSending] = React.useState(false);
 
   const baseRenderedMessages = React.useMemo(
-    () =>
-      messages
-        .map((message, index) => ({
-          id: message.id,
-          role: message.role,
-          streaming:
-            status === 'streaming' && index === messages.length - 1 && message.role === 'assistant',
-          text: extractTextFromUIMessage(message),
-        }))
-        .filter((message) => message.text.length > 0),
-    [messages, status]
+    () => createTutorRenderedMessages(sessionMessagesQuery.data ?? []),
+    [sessionMessagesQuery.data]
   );
+
+  React.useEffect(() => {
+    if (localMessages.length === 0) {
+      return;
+    }
+
+    const localAssistant = localMessages.findLast((message) => message.role === 'assistant');
+    const historyContainsAssistant = baseRenderedMessages.some(
+      (message) => message.role === 'assistant' && message.text === localAssistant?.text && !message.streaming
+    );
+
+    if (historyContainsAssistant) {
+      setLocalMessages([]);
+    }
+  }, [baseRenderedMessages, localMessages]);
 
   const renderedMessages = React.useMemo(
-    () => [...baseRenderedMessages, ...demoMessages],
-    [baseRenderedMessages, demoMessages]
+    () => [...baseRenderedMessages, ...localMessages],
+    [baseRenderedMessages, localMessages]
   );
 
-  const clearDemoTimers = React.useCallback(() => {
-    demoTimersRef.current.forEach((timerId) => clearTimeout(timerId));
-    demoTimersRef.current = [];
-  }, []);
-
-  React.useEffect(() => clearDemoTimers, [clearDemoTimers]);
+  const sourceCards = React.useMemo(
+    () => (profile ? buildTutorWorkspaceSources(profile) : []),
+    [profile]
+  );
+  const highlightCards = React.useMemo(
+    () => (profile && workspaceSession ? buildTutorWorkspaceHighlights(profile, workspaceSession) : []),
+    [profile, workspaceSession]
+  );
 
   const starterPrompts = React.useMemo(() => {
-    if ((sessionMessagesQuery.data?.length ?? 0) > 0) {
+    if ((sessionMessagesQuery.data?.length ?? 0) > 0 || localMessages.length > 0) {
       return [];
     }
 
@@ -238,129 +158,191 @@ export function TutorWorkspaceProvider({
       return [];
     }
 
-    return [
-      '试着用一句话总结这份资料要解决什么问题',
-      '把当前这一步讲给一个刚入门的同学听',
-      profile.sourceType === 'upload' ? '指出这份资料里最容易忽略的一处细节' : '结合这本书举一个最典型的应用场景',
-    ];
-  }, [profile, sessionMessagesQuery.data, workspaceSession]);
+    return buildStarterPrompts(profile, workspaceSession);
+  }, [localMessages.length, profile, sessionMessagesQuery.data, workspaceSession]);
 
-  const addDraftSource = React.useCallback(() => {
-    setSourceDrafts((current) => {
-      const nextIndex = current.length + 1;
-      const kinds: TutorWorkspaceDraftSource['kind'][] = ['pdf', 'document', 'image'];
-      const nextKind = kinds[(nextIndex - 1) % kinds.length];
+  const updateMessagesCache = React.useCallback(
+    (sessionId: number, userMessage: TutorWorkspaceRenderedMessage, assistantMessage: TutorWorkspaceRenderedMessage) => {
+      queryClient.setQueryData(
+        ['tutor', 'sessions', 'messages', sessionId, token],
+        (previous: unknown) => {
+          const items = Array.isArray(previous) ? previous : [];
+          const nextItems = [...items];
 
-      return [
-        ...current,
-        {
-          addedAt: `刚刚添加`,
-          id: `draft-source-${nextIndex}`,
-          kind: nextKind,
-          name: `附加文件 ${nextIndex}`,
-          status: 'preparing',
-        },
-      ];
-    });
-  }, []);
+          const hasUser = nextItems.some(
+            (message: any) => message.role === 'user' && message.content === userMessage.text
+          );
+          const hasAssistant = nextItems.some(
+            (message: any) => message.role === 'assistant' && message.content === assistantMessage.text
+          );
+
+          if (!hasUser) {
+            nextItems.push({
+              content: userMessage.text,
+              createdAt: new Date().toISOString(),
+              id: -Date.now(),
+              role: 'user',
+              tutorSessionId: sessionId,
+            });
+          }
+          if (!hasAssistant) {
+            nextItems.push({
+              content: assistantMessage.text,
+              createdAt: new Date().toISOString(),
+              id: -Date.now() - 1,
+              role: 'assistant',
+              tutorSessionId: sessionId,
+            });
+          }
+
+          return nextItems;
+        }
+      );
+    },
+    [queryClient, token]
+  );
+
+  const updateSessionCaches = React.useCallback(
+    (nextSession: NonNullable<ReturnType<typeof useTutorWorkspace>['workspaceSession']>) => {
+      queryClient.setQueryData(['tutor', 'sessions', 'detail', nextSession.id, token], nextSession);
+      queryClient.setQueryData(['tutor', 'sessions', token], (previous: unknown) => {
+        const items = Array.isArray(previous) ? previous : [];
+        const hasExisting = items.some((item: any) => item?.id === nextSession.id);
+
+        if (!hasExisting) {
+          return [nextSession, ...items];
+        }
+
+        return items.map((item: any) => (item?.id === nextSession.id ? nextSession : item));
+      });
+    },
+    [queryClient, token]
+  );
 
   const handleSend = React.useCallback(async (nextDraft?: string) => {
     const normalized = (nextDraft ?? draft).trim();
-    if (!normalized || !profile || !workspaceSession) {
+    if (!normalized || !profile || !workspaceSession || !token || isSending) {
       return;
     }
 
-    const shouldRunDemo = isTutorOneTimeDemoPrompt(normalized);
+    const userMessageId = `local-user-${Date.now()}`;
+    const assistantMessageId = `local-assistant-${Date.now()}`;
+    const optimisticUserMessage: TutorWorkspaceRenderedMessage = {
+      id: userMessageId,
+      role: 'user',
+      streaming: false,
+      text: normalized,
+    };
 
+    setDraft('');
     setLatestEvaluation(null);
     setLatestSessionSignal(null);
-    setLatestStatus(
-      shouldRunDemo
-        ? null
-        : {
-            label: '导师正在组织新的追问…',
-            tone: 'info',
-          }
-    );
-    setDraft('');
-
-    if (shouldRunDemo) {
-      clearDemoTimers();
-
-      const userMessageId = `demo-user-${Date.now()}`;
-      const assistantMessageId = `demo-assistant-${Date.now()}`;
-      const markdownReply = buildTutorBookSummaryMarkdown(profile, workspaceSession);
-      const typingSteps = buildDemoTypingSteps(markdownReply);
-
-      setDemoMessages([
-        {
-          id: userMessageId,
-          role: 'user',
-          streaming: false,
-          text: normalized,
-        },
-        {
-          id: assistantMessageId,
-          role: 'assistant',
-          thinking: true,
-          thinkingLabel: '思考 5s',
-          streaming: false,
-          text: '',
-        },
-      ]);
-
-      const revealStartTimer = setTimeout(() => {
-        setDemoMessages((current) =>
-          current.map((message) =>
-            message.id === assistantMessageId
-              ? {
-                  ...message,
-                  thinking: false,
-                  thinkingLabel: '思考 5s',
-                  streaming: true,
-                  text: '',
-                }
-              : message
-          )
-        );
-
-        let accumulatedDelay = 0;
-
-        typingSteps.forEach((step, index) => {
-          accumulatedDelay += step.delayMs;
-
-          const chunkTimer = setTimeout(() => {
-            setDemoMessages((current) =>
-              current.map((message) =>
-                message.id === assistantMessageId
-                  ? {
-                      ...message,
-                      streaming: index < typingSteps.length - 1,
-                      text: `${message.text}${step.chunk}`,
-                    }
-                  : message
-              )
-            );
-          }, accumulatedDelay);
-
-          demoTimersRef.current.push(chunkTimer);
-        });
-      }, 5000);
-
-      demoTimersRef.current.push(revealStartTimer);
-      return;
-    }
-
-    await sendMessage(
-      { text: normalized },
+    setLatestStatus(resolveTutorStreamStatusSignal());
+    setLocalMessages([
+      optimisticUserMessage,
       {
-        body: {
-          profile,
-          session: workspaceSession,
-        },
+        id: assistantMessageId,
+        role: 'assistant',
+        streaming: true,
+        text: '',
+      },
+    ]);
+    setIsSending(true);
+
+    try {
+      let finalAssistantMessage: TutorWorkspaceRenderedMessage | null = null;
+
+      for await (const event of streamTutorSessionReply(
+        workspaceSession.id,
+        { content: normalized },
+        token
+      )) {
+        if (event.type === 'status') {
+          setLatestStatus(resolveTutorStreamStatusSignal(event.phase));
+          continue;
+        }
+
+        if (event.type === 'assistant.delta') {
+          setLocalMessages((current) =>
+            current.map((message) =>
+              message.id === assistantMessageId
+                ? {
+                    ...message,
+                    text: `${message.text}${event.delta}`,
+                  }
+                : message
+            )
+          );
+          continue;
+        }
+
+        if (event.type === 'evaluation') {
+          setLatestEvaluation(event.evaluation);
+          continue;
+        }
+
+        if (event.type === 'session.updated') {
+          const nextSession = profile ? mergeTutorSessionWithProfile(profile, event.session) : event.session;
+          setLatestSessionSignal({
+            completedStepsCount: nextSession.completedStepsCount,
+            currentStepIndex: nextSession.currentStepIndex,
+            currentStepTitle: nextSession.currentStepTitle,
+            progressLabel: nextSession.progressLabel,
+            status: nextSession.status,
+            transitionLabel: buildTutorSessionTransitionLabel(workspaceSession, nextSession),
+          });
+          setWorkspaceSession(nextSession);
+          updateSessionCaches(nextSession);
+          continue;
+        }
+
+        if (event.type === 'assistant.done') {
+          finalAssistantMessage = {
+            id: `message-${event.message.id}`,
+            role: 'assistant',
+            streaming: false,
+            text: event.message.content,
+          };
+          setLocalMessages([
+            optimisticUserMessage,
+            finalAssistantMessage,
+          ]);
+          updateMessagesCache(workspaceSession.id, optimisticUserMessage, finalAssistantMessage);
+          continue;
+        }
+
+        if (event.type === 'error') {
+          throw new Error(event.message);
+        }
       }
-    );
-  }, [clearDemoTimers, draft, profile, sendMessage, workspaceSession]);
+
+      if (!finalAssistantMessage) {
+        setLocalMessages([]);
+      }
+    } catch (error) {
+      setLocalMessages([]);
+      setLatestStatus({
+        label: '这一轮导学没有成功返回，正在和后端重新同步。',
+        tone: 'warning',
+      });
+      toast.error(getLibraryErrorMessage(error, '导学回复失败，请稍后再试。'));
+      await Promise.allSettled([sessionMessagesQuery.refetch(), sessionsQuery.refetch()]);
+    } finally {
+      setIsSending(false);
+    }
+  }, [
+    draft,
+    isSending,
+    profile,
+    queryClient,
+    sessionMessagesQuery,
+    sessionsQuery,
+    setWorkspaceSession,
+    token,
+    updateMessagesCache,
+    updateSessionCaches,
+    workspaceSession,
+  ]);
 
   const activeTab = resolveTutorWorkspaceActiveTab(pathname);
 
@@ -375,18 +357,15 @@ export function TutorWorkspaceProvider({
       latestStatus,
       profile,
       renderedMessages,
-      addDraftSource,
       setDraft,
-      sourceCount: 1 + sourceDrafts.length,
+      sourceCount: sourceCards.length,
       sourceCards,
-      sourceDrafts,
       sourceSummary: profile ? resolveTutorWorkspaceSourceSummary(profile) : '',
       starterPrompts,
       workspaceSession,
     }),
     [
       activeTab,
-      addDraftSource,
       draft,
       handleSend,
       highlightCards,
@@ -396,7 +375,6 @@ export function TutorWorkspaceProvider({
       profile,
       renderedMessages,
       sourceCards,
-      sourceDrafts,
       starterPrompts,
       workspaceSession,
     ]

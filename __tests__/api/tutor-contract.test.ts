@@ -4,85 +4,78 @@ import {
   getTutorProfile,
   listTutorSessionMessages,
   startTutorSession,
+  streamTutorSessionReply,
+  uploadTutorProfile,
 } from '@/lib/api/tutor';
 
 describe('tutor contract', () => {
   const originalBaseUrl = process.env.EXPO_PUBLIC_LIBRARY_SERVICE_URL;
-  const originalTutorDataMode = process.env.EXPO_PUBLIC_TUTOR_DATA_MODE;
   const originalFetch = global.fetch;
 
   beforeEach(() => {
     process.env.EXPO_PUBLIC_LIBRARY_SERVICE_URL = 'https://library.example';
-    process.env.EXPO_PUBLIC_TUTOR_DATA_MODE = 'live';
     global.fetch = jest.fn();
   });
 
   afterEach(() => {
     process.env.EXPO_PUBLIC_LIBRARY_SERVICE_URL = originalBaseUrl;
-    process.env.EXPO_PUBLIC_TUTOR_DATA_MODE = originalTutorDataMode;
     global.fetch = originalFetch;
     jest.resetAllMocks();
   });
 
-  it('prefers frontend tutor mock data by default until live mode is enabled', async () => {
-    delete process.env.EXPO_PUBLIC_TUTOR_DATA_MODE;
+  it('throws service_not_configured when the tutor backend base url is missing', async () => {
+    delete process.env.EXPO_PUBLIC_LIBRARY_SERVICE_URL;
 
-    const result = await getTutorDashboard('reader-token');
-
+    await expect(getTutorDashboard('reader-token')).rejects.toMatchObject({
+      code: 'service_not_configured',
+    });
     expect(global.fetch).not.toHaveBeenCalled();
-    expect(result.recentProfiles.length).toBeGreaterThanOrEqual(4);
-    expect(result.recentProfiles.some((profile) => profile.title === '高等数学题型拆解')).toBe(true);
   });
 
-  it('includes a teacher-style lead-in before the history timeline prompt in mock session messages', async () => {
-    delete process.env.EXPO_PUBLIC_TUTOR_DATA_MODE;
-
-    const messages = await listTutorSessionMessages(305);
-
-    expect(messages[0]?.content).toBe(
-      '我们先把这段近代史看成一条会不断推进的主线。近代史最容易碎片化。先别背条目，如果只保留四个时间节点，你会选哪四个？'
-    );
-  });
-
-  it('normalizes dashboard progress, continue session, and suggestions', async () => {
+  it('normalizes dashboard progress, resumable sessions, and suggestions', async () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       json: async () => ({
-        continue_session: {
-          completed_steps_count: 1,
-          conversation_session_id: 401,
-          current_step_index: 1,
-          current_step_title: '用自己的话解释监督学习',
-          id: 301,
-          last_message_preview: '先试着说说什么是标签数据。',
-          progress_label: '1 / 4 步',
-          status: 'active',
-          tutor_profile: {
-            id: 101,
-            persona_json: {
-              greeting: '我们一步步来。',
-              name: '周老师',
-            },
-            title: '机器学习从零到一',
-          },
-        },
-        recent_profiles: [
+        recentProfiles: [
           {
-            created_at: '2026-04-08T08:00:00Z',
-            curriculum_json: [{ title: '建立整体地图' }],
+            createdAt: '2026-04-08T08:00:00Z',
+            curriculum: {
+              steps: [
+                {
+                  guidingQuestion: '你觉得机器学习最先该建立什么概念？',
+                  index: 0,
+                  successCriteria: '能说出模型、数据、目标之间的关系',
+                  title: '建立整体框架',
+                },
+              ],
+            },
             id: 101,
-            persona_json: { greeting: '我们一步步来。', name: '周老师' },
-            source_type: 'book',
+            persona: { greeting: '我们一步步来。', name: '周老师' },
+            sourceSummary: '从馆藏摘要里提炼出来的导学主线。',
+            sourceType: 'book',
             status: 'ready',
             title: '机器学习从零到一',
-            updated_at: '2026-04-08T08:20:00Z',
+            updatedAt: '2026-04-08T08:20:00Z',
+          },
+        ],
+        resumableSessions: [
+          {
+            completedStepsCount: 1,
+            currentStepIndex: 1,
+            currentStepTitle: '用自己的话解释监督学习',
+            id: 301,
+            lastMessagePreview: '先试着说说什么是标签数据。',
+            readerId: 9,
+            startedAt: '2026-04-08T08:02:00Z',
+            status: 'active',
+            tutorProfileId: 101,
+            updatedAt: '2026-04-08T08:22:00Z',
           },
         ],
         suggestions: [
           {
-            description: '先从整体框架入手，再回到算法细节。',
-            id: 'next-step-1',
-            kind: 'next_step',
-            title: '继续当前书的第 2 步',
+            kind: 'start_session',
+            profileId: 101,
+            title: '机器学习从零到一',
           },
         ],
       }),
@@ -96,124 +89,184 @@ describe('tutor contract', () => {
       currentStepIndex: 1,
       currentStepTitle: '用自己的话解释监督学习',
       id: 301,
-      progressLabel: '1 / 4 步',
       profileId: 101,
-      title: '机器学习从零到一',
+      tutorProfileId: 101,
     });
     expect(result.recentProfiles[0]).toMatchObject({
       id: 101,
+      sourceSummary: '从馆藏摘要里提炼出来的导学主线。',
       sourceType: 'book',
       status: 'ready',
       title: '机器学习从零到一',
     });
+    expect(result.recentProfiles[0]?.curriculum[0]).toMatchObject({
+      guidingQuestion: '你觉得机器学习最先该建立什么概念？',
+      successCriteria: '能说出模型、数据、目标之间的关系',
+      title: '建立整体框架',
+    });
     expect(result.suggestions[0]).toMatchObject({
-      description: '先从整体框架入手，再回到算法细节。',
-      id: 'next-step-1',
-      kind: 'next_step',
-      title: '继续当前书的第 2 步',
+      kind: 'start_session',
+      profileId: 101,
+      title: '机器学习从零到一',
     });
   });
 
-  it('normalizes profile details and session bootstrap payloads', async () => {
+  it('normalizes profile details, sources, message citations, and session bootstrap payloads', async () => {
     (global.fetch as jest.Mock)
       .mockResolvedValueOnce({
         json: async () => ({
+          latestJob: {
+            id: 9,
+            status: 'processing',
+          },
           profile: {
-            book_id: 1,
-            created_at: '2026-04-08T08:00:00Z',
-            curriculum_json: [
-              {
-                guiding_question: '你觉得机器学习最先该建立什么概念？',
-                id: 'step-1',
-                success_criteria: '能说出模型、数据、目标之间的关系',
-                title: '建立整体框架',
-              },
-            ],
+            bookId: 1,
+            createdAt: '2026-04-08T08:00:00Z',
+            curriculum: {
+              steps: [
+                {
+                  guidingQuestion: '你觉得机器学习最先该建立什么概念？',
+                  index: 0,
+                  successCriteria: '能说出模型、数据、目标之间的关系',
+                  title: '建立整体框架',
+                },
+              ],
+            },
             id: 101,
-            persona_json: {
+            persona: {
               greeting: '我们一步步来。',
               name: '周老师',
               style: '先提问再提示',
             },
-            source_type: 'book',
+            sourceSummary: '从馆藏书摘要拆出的导学提要。',
+            sourceType: 'book',
             status: 'ready',
             title: '机器学习从零到一',
-            updated_at: '2026-04-08T08:20:00Z',
+            updatedAt: '2026-04-08T08:20:00Z',
           },
+          sources: [
+            {
+              contentHash: 'abc',
+              fileName: 'book-1.md',
+              id: 7,
+              kind: 'book_synthetic',
+              metadata: { bookId: 1, bookTitle: '机器学习从零到一' },
+              mimeType: 'text/markdown',
+              parseStatus: 'parsed',
+              profileId: 101,
+            },
+          ],
         }),
         ok: true,
       })
       .mockResolvedValueOnce({
         json: async () => ({
-          first_step: {
-            guiding_question: '先用一句话概括这本书会教你什么。',
-            id: 'step-1',
+          items: [
+            {
+              citations: [
+                {
+                  chunkId: 11,
+                  excerpt: '围绕模型、数据和目标组织内容。',
+                  sourceTitle: '机器学习从零到一',
+                },
+              ],
+              content: '我们先回到模型、数据和目标这三者的关系。',
+              createdAt: '2026-04-08T08:22:00Z',
+              id: 801,
+              role: 'assistant',
+              sessionId: 301,
+            },
+          ],
+        }),
+        ok: true,
+      })
+      .mockResolvedValueOnce({
+        json: async () => ({
+          firstStep: {
+            guidingQuestion: '先用一句话概括这本书会教你什么。',
+            index: 0,
             title: '建立整体框架',
           },
           session: {
-            completed_steps_count: 0,
-            completed_steps_json: [],
-            conversation_session_id: 9001,
-            current_step_index: 0,
+            completedStepsCount: 0,
+            currentStepIndex: 0,
+            currentStepTitle: '建立整体框架',
             id: 301,
-            progress_label: '0 / 4 步',
+            startedAt: '2026-04-08T08:21:00Z',
             status: 'active',
-            tutor_profile_id: 101,
+            tutorProfileId: 101,
+            updatedAt: '2026-04-08T08:21:00Z',
           },
-          welcome_message: '欢迎回来，我们先用一句话概括这本书。',
+          welcomeMessage: {
+            content: '欢迎回来，我们先用一句话概括这本书。',
+            createdAt: '2026-04-08T08:21:00Z',
+            id: 802,
+            role: 'assistant',
+            sessionId: 301,
+          },
         }),
         ok: true,
       });
 
     const profile = await getTutorProfile(101, 'reader-token');
+    const messages = await listTutorSessionMessages(301, 'reader-token');
     const session = await startTutorSession(101, 'reader-token');
 
     expect(profile).toMatchObject({
       bookId: 1,
       id: 101,
+      sourceSummary: '从馆藏书摘要拆出的导学提要。',
       sourceType: 'book',
       status: 'ready',
       title: '机器学习从零到一',
     });
-    expect(profile.persona).toMatchObject({
-      greeting: '我们一步步来。',
-      name: '周老师',
-      style: '先提问再提示',
+    expect(profile.sources[0]).toMatchObject({
+      fileName: 'book-1.md',
+      kind: 'book_synthetic',
+      parseStatus: 'parsed',
+      profileId: 101,
     });
-    expect(profile.curriculum[0]).toMatchObject({
-      guidingQuestion: '你觉得机器学习最先该建立什么概念？',
-      successCriteria: '能说出模型、数据、目标之间的关系',
-      title: '建立整体框架',
+    expect(messages[0]).toMatchObject({
+      content: '我们先回到模型、数据和目标这三者的关系。',
+      role: 'assistant',
+      tutorSessionId: 301,
+    });
+    expect(messages[0]?.citations?.[0]).toMatchObject({
+      chunkId: 11,
+      sourceTitle: '机器学习从零到一',
     });
     expect(session.session).toMatchObject({
-      conversationSessionId: 9001,
       currentStepIndex: 0,
+      currentStepTitle: '建立整体框架',
       id: 301,
-      progressLabel: '0 / 4 步',
       tutorProfileId: 101,
     });
     expect(session.firstStep).toMatchObject({
       guidingQuestion: '先用一句话概括这本书会教你什么。',
       title: '建立整体框架',
     });
-    expect(session.welcomeMessage).toBe('欢迎回来，我们先用一句话概括这本书。');
+    expect(session.welcomeMessage).toMatchObject({
+      content: '欢迎回来，我们先用一句话概括这本书。',
+      role: 'assistant',
+      tutorSessionId: 301,
+    });
   });
 
-  it('sends aligned tutor profile creation payloads', async () => {
+  it('sends aligned tutor profile creation payloads for book-based tutors', async () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       json: async () => ({
         profile: {
-          created_at: '2026-04-08T08:00:00Z',
-          curriculum_json: [],
+          createdAt: '2026-04-08T08:00:00Z',
+          curriculum: { steps: [] },
           id: 102,
-          persona_json: {
-            greeting: '我们从你的资料开始。',
-            name: '实验课助教',
+          persona: {
+            greeting: '我们从这本书开始。',
+            name: '馆藏导学老师',
           },
-          source_type: 'upload',
-          status: 'generating',
-          title: '实验手册导学',
-          updated_at: '2026-04-08T08:00:00Z',
+          sourceType: 'book',
+          status: 'queued',
+          title: '机器学习从零到一',
+          updatedAt: '2026-04-08T08:00:00Z',
         },
       }),
       ok: true,
@@ -221,35 +274,122 @@ describe('tutor contract', () => {
 
     await createTutorProfile(
       {
-        sourceType: 'upload',
-        sourceText: '实验步骤一：配置环境。',
+        bookId: 1,
+        sourceType: 'book',
         teachingGoal: '实验预习',
-        title: '实验手册导学',
+        title: '机器学习从零到一',
       },
       'reader-token'
     );
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect((global.fetch as jest.Mock).mock.calls[0]?.[0]).toBe('https://library.example/api/v1/tutor/profiles');
+    expect((global.fetch as jest.Mock).mock.calls[0]?.[0]).toBe(
+      'https://library.example/api/v1/tutor/profiles'
+    );
     expect(JSON.parse(String((global.fetch as jest.Mock).mock.calls[0]?.[1]?.body))).toEqual({
-      source_text: '实验步骤一：配置环境。',
-      source_type: 'upload',
-      teaching_goal: '实验预习',
-      title: '实验手册导学',
+      bookId: 1,
+      sourceType: 'book',
+      teachingGoal: '实验预习',
+      title: '机器学习从零到一',
     });
   });
 
-  it('returns a parsing upload profile with the file name while frontend mock mode is active', async () => {
-    delete process.env.EXPO_PUBLIC_TUTOR_DATA_MODE;
-
-    const profile = await createTutorProfile({
-      sourceText: 'file:///mock/course-outline.pdf',
-      sourceType: 'upload',
-      title: 'course-outline.pdf',
+  it('uploads tutor source files with FormData and normalizes the queued profile', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      json: async () => ({
+        profile: {
+          createdAt: '2026-04-08T08:00:00Z',
+          curriculum: { steps: [] },
+          id: 202,
+          persona: {
+            greeting: '资料正在解析中。',
+            name: '资料分析助手',
+          },
+          sourceType: 'upload',
+          status: 'queued',
+          title: '操作系统实验讲义',
+          updatedAt: '2026-04-08T08:00:00Z',
+        },
+      }),
+      ok: true,
     });
 
-    expect(profile.status).toBe('generating');
-    expect(profile.title).toBe('course-outline.pdf');
-    expect(profile.persona.greeting).toBe('正在解析文档，请稍后');
+    const formData = new FormData();
+    formData.append('title', '操作系统实验讲义');
+    formData.append('teachingGoal', '帮助我完成实验预习');
+    formData.append('file', 'mock-binary');
+
+    const profile = await uploadTutorProfile(formData, 'reader-token');
+
+    expect(profile).toMatchObject({
+      id: 202,
+      sourceType: 'upload',
+      status: 'queued',
+      title: '操作系统实验讲义',
+    });
+    expect((global.fetch as jest.Mock).mock.calls[0]?.[0]).toBe(
+      'https://library.example/api/v1/tutor/profiles/upload'
+    );
+    expect((global.fetch as jest.Mock).mock.calls[0]?.[1]?.body).toBe(formData);
+  });
+
+  it('parses backend sse events for tutor streaming replies', async () => {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            [
+              'data: {"event":"status","data":{"phase":"retrieving","sessionId":301}}',
+              '',
+              'data: {"event":"assistant.delta","data":{"delta":"我们先"}}',
+              '',
+              'data: {"event":"evaluation","data":{"confidence":0.82,"meetsCriteria":true,"reasoning":"回答已经覆盖当前步骤的关键线索。","stepIndex":0}}',
+              '',
+              'data: {"event":"session.updated","data":{"id":301,"tutorProfileId":101,"status":"active","currentStepIndex":1,"currentStepTitle":"用自己的话解释概念","completedStepsCount":1,"startedAt":"2026-04-08T08:21:00Z","updatedAt":"2026-04-08T08:22:00Z"}}',
+              '',
+              'data: {"event":"assistant.done","data":{"message":{"id":801,"sessionId":301,"role":"assistant","content":"我们先回到模型、数据和目标这三者的关系。","citations":[{"chunkId":11,"sourceTitle":"机器学习从零到一"}],"createdAt":"2026-04-08T08:22:00Z"}}}',
+              '',
+            ].join('\n')
+          )
+        );
+        controller.close();
+      },
+    });
+
+    (global.fetch as jest.Mock).mockResolvedValue({
+      body: stream,
+      headers: { get: () => 'text/event-stream' },
+      ok: true,
+      status: 200,
+    });
+
+    const events = [];
+    for await (const event of streamTutorSessionReply(
+      301,
+      { content: '帮我总结这一节的核心线索' },
+      'reader-token'
+    )) {
+      events.push(event);
+    }
+
+    expect(events.map((event) => event.type)).toEqual([
+      'status',
+      'assistant.delta',
+      'evaluation',
+      'session.updated',
+      'assistant.done',
+    ]);
+    expect(events[0]).toMatchObject({
+      phase: 'retrieving',
+      type: 'status',
+    });
+    expect(events[4]).toMatchObject({
+      message: {
+        citations: [{ chunkId: 11, sourceTitle: '机器学习从零到一' }],
+        tutorSessionId: 301,
+      },
+      type: 'assistant.done',
+    });
   });
 });

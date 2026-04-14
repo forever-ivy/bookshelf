@@ -230,9 +230,9 @@ export type ReaderOverview = {
 
 export type TutorSourceType = 'book' | 'upload';
 
-export type TutorProfileStatus = 'failed' | 'generating' | 'ready';
+export type TutorProfileStatus = 'failed' | 'processing' | 'queued' | 'ready';
 
-export type TutorSessionStatus = 'active' | 'completed' | 'paused';
+export type TutorSessionStatus = 'active' | 'archived' | 'completed';
 
 export type TutorPersona = {
   coachingFocus?: string | null;
@@ -245,19 +245,55 @@ export type TutorCurriculumStep = {
   goal?: string | null;
   guidingQuestion?: string | null;
   id: string;
+  index?: number;
+  keywords?: string[];
+  learningObjective?: string | null;
   successCriteria?: string | null;
   title: string;
+};
+
+export type TutorCitation = {
+  chunkId?: number | null;
+  excerpt?: string | null;
+  sourceTitle?: string | null;
+} & Record<string, unknown>;
+
+export type TutorSourceDocument = {
+  contentHash?: string | null;
+  fileName: string;
+  id: number;
+  kind: 'book_synthetic' | 'upload_file' | string;
+  metadata?: Record<string, unknown>;
+  mimeType?: string | null;
+  parseStatus?: string | null;
+  profileId: number;
+};
+
+export type TutorGenerationJob = {
+  attemptCount?: number;
+  createdAt?: string | null;
+  errorMessage?: string | null;
+  id: number;
+  jobType?: string | null;
+  profileId?: number;
+  status: string;
+  updatedAt?: string | null;
 };
 
 export type TutorProfile = {
   bookId: number | null;
   createdAt: string;
   curriculum: TutorCurriculumStep[];
+  failureCode?: string | null;
+  failureMessage?: string | null;
   id: number;
+  latestJob?: TutorGenerationJob | null;
   persona: TutorPersona;
-  sourceText?: string | null;
+  sourceSummary?: string | null;
   sourceType: TutorSourceType;
+  sources: TutorSourceDocument[];
   status: TutorProfileStatus;
+  teachingGoal?: string | null;
   title: string;
   updatedAt: string;
 };
@@ -284,6 +320,7 @@ export type TutorSession = {
 };
 
 export type TutorSessionMessage = {
+  citations?: TutorCitation[];
   content: string;
   createdAt: string;
   id: number;
@@ -295,7 +332,13 @@ export type TutorSuggestion = {
   bookId?: number | null;
   description: string;
   id: string;
-  kind: 'continue_session' | 'create_from_book' | 'next_step' | 'review';
+  kind:
+    | 'continue_session'
+    | 'create_from_book'
+    | 'next_step'
+    | 'review'
+    | 'retry_generation'
+    | 'start_session';
   profileId?: number | null;
   title: string;
 };
@@ -313,9 +356,8 @@ export type TutorDashboard = {
 };
 
 export type CreateTutorProfileInput = {
-  bookId?: number;
-  sourceText?: string;
-  sourceType: TutorSourceType;
+  bookId: number;
+  sourceType: 'book';
   teachingGoal?: string;
   title?: string;
 };
@@ -323,7 +365,7 @@ export type CreateTutorProfileInput = {
 export type StartTutorSessionResult = {
   firstStep: TutorCurriculumStep | null;
   session: TutorSession;
-  welcomeMessage: string;
+  welcomeMessage: TutorSessionMessage;
 };
 
 export type TutorStepEvaluation = {
@@ -345,6 +387,10 @@ export type TutorStreamEvent =
   | {
       evaluation: TutorStepEvaluation;
       type: 'evaluation';
+    }
+  | {
+      phase?: string | null;
+      type: 'status';
     }
   | {
       session: TutorSession;

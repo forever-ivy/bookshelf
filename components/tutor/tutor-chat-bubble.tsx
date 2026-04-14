@@ -8,13 +8,6 @@ type MarkdownBlock =
   | { content: string; type: 'heading' | 'paragraph' | 'quote' }
   | { items: string[]; type: 'list' };
 
-function resolveMockThinkingLabel(text: string) {
-  const seed = Array.from(text).reduce((total, character) => total + character.charCodeAt(0), 0);
-  const seconds = 7 + (seed % 12);
-
-  return `思考 ${seconds}s`;
-}
-
 function parseMarkdown(text: string) {
   const lines = text.split('\n');
   const blocks: MarkdownBlock[] = [];
@@ -132,6 +125,7 @@ function AssistantAction({
   icon: LucideIcon;
 }) {
   const { theme } = useAppTheme();
+  const ActionIcon = Icon as React.ComponentType<any>;
 
   return (
     <Pressable
@@ -142,7 +136,7 @@ function AssistantAction({
         opacity: pressed ? 0.72 : 1,
         paddingVertical: 4,
       })}>
-      <Icon color={theme.colors.iconInk} size={21} strokeWidth={1.8} />
+      <ActionIcon color={theme.colors.iconInk} size={21} strokeWidth={1.8} />
     </Pressable>
   );
 }
@@ -194,17 +188,19 @@ export function TutorChatBubble({
             maxWidth: '100%',
             paddingRight: theme.spacing.lg,
           }}>
-          <Text
-            selectable
-            testID="tutor-assistant-thinking-label"
-            style={{
-              color: theme.colors.textSoft,
-              ...theme.typography.medium,
-              fontSize: 13,
-              marginBottom: 20,
-            }}>
-            {thinkingLabel ?? resolveMockThinkingLabel(text)}
-          </Text>
+          {thinkingLabel ? (
+            <Text
+              selectable
+              testID="tutor-assistant-thinking-label"
+              style={{
+                color: theme.colors.textSoft,
+                ...theme.typography.medium,
+                fontSize: 13,
+                marginBottom: 20,
+              }}>
+              {thinkingLabel}
+            </Text>
+          ) : null}
 
           <View style={{ gap: 24 }}>
             {assistantBlocks.map((block, index) => {

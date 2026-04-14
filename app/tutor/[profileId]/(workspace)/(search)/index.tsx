@@ -252,8 +252,6 @@ export default function TutorWorkspaceGuideRoute() {
                   key={message.id}
                   role={message.role as 'assistant' | 'user'}
                   streaming={message.streaming}
-                  thinking={message.thinking}
-                  thinkingLabel={message.thinkingLabel}
                   text={message.text}
                 />
               ))}

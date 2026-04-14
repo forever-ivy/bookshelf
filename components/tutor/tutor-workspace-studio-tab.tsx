@@ -9,6 +9,8 @@ import {
 
 import { useAppTheme } from '@/hooks/use-app-theme';
 
+const EllipsisIcon = EllipsisVertical as React.ComponentType<any>;
+
 const studioItems = [
   {
     accent: '#8A423D',
@@ -55,7 +57,7 @@ export function TutorWorkspaceStudioTab({
 
       <View style={{ gap: theme.spacing.md }}>
         {studioItems.map((item) => {
-          const Icon = item.icon;
+          const Icon = item.icon as React.ComponentType<any>;
 
           return (
             <Pressable
@@ -97,7 +99,7 @@ export function TutorWorkspaceStudioTab({
                     justifyContent: 'center',
                     width: 54,
                   }}>
-                  <EllipsisVertical color={theme.colors.text} size={18} strokeWidth={2} />
+                  <EllipsisIcon color={theme.colors.text} size={18} strokeWidth={2} />
                 </View>
               </View>
             </Pressable>

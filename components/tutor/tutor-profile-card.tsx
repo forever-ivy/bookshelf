@@ -12,9 +12,11 @@ function resolveStatusCopy(status: TutorProfile['status']) {
       return '可开始';
     case 'failed':
       return '需重试';
-    case 'generating':
+    case 'queued':
+      return '排队中';
+    case 'processing':
     default:
-      return '生成中';
+      return '解析中';
   }
 }
 

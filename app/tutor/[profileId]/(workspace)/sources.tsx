@@ -17,10 +17,9 @@ export default function TutorWorkspaceSourcesRoute() {
   const isIos = Platform.OS === 'ios';
   const router = useRouter();
   const {
-    addDraftSource,
     footerInset,
     profile,
-    sourceDrafts,
+    sourceCards,
     workspaceSession,
   } = useTutorWorkspaceScreen();
   const menuButtonOptions = useTutorWorkspaceHeaderMenuOptions({
@@ -75,11 +74,8 @@ export default function TutorWorkspaceSourcesRoute() {
             contentInsetAdjustmentBehavior="automatic"
             showsVerticalScrollIndicator={false}>
             <TutorWorkspaceSourcesTab
-              draftSources={sourceDrafts}
               heading="来源"
-              onAddSource={addDraftSource}
-              sourceLabel={profile.sourceType === 'upload' ? 'PDF' : 'BOOK'}
-              title={profile.title}
+              sourceCards={sourceCards}
             />
           </ScrollView>
         </KeyboardAvoidingView>

@@ -2,38 +2,30 @@ import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { BookOpen, EllipsisVertical, FileText } from 'lucide-react-native';
 
-import type { TutorWorkspaceDraftSource } from '@/components/tutor/tutor-workspace-provider';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import type { TutorWorkspaceSourceCard } from '@/lib/tutor/workspace';
 
-function resolveDraftKindLabel(kind: TutorWorkspaceDraftSource['kind']) {
-  switch (kind) {
-    case 'pdf':
-      return 'PDF';
-    case 'image':
-      return 'IMAGE';
-    case 'document':
-    default:
-      return 'DOC';
-  }
+const EllipsisIcon = EllipsisVertical as React.ComponentType<any>;
+
+function resolveSourceIcon(meta: string) {
+  return meta.includes('BOOK') ? BookOpen : FileText;
 }
 
 export function TutorWorkspaceSourcesTab({
-  draftSources,
   heading = '来源',
-  onAddSource,
   onOpenDetails,
-  sourceLabel,
-  title,
+  sourceCards,
 }: {
-  draftSources: TutorWorkspaceDraftSource[];
   heading?: string;
-  onAddSource: () => void;
   onOpenDetails?: () => void;
-  sourceLabel: string;
-  title: string;
+  sourceCards: TutorWorkspaceSourceCard[];
 }) {
   const { theme } = useAppTheme();
-  const SourceIcon = sourceLabel === 'PDF' ? FileText : BookOpen;
+  const primarySource = sourceCards[0] ?? null;
+  const additionalSources = sourceCards.slice(1);
+  const PrimarySourceIcon = primarySource
+    ? (resolveSourceIcon(primarySource.meta) as React.ComponentType<any>)
+    : null;
 
   return (
     <View style={{ gap: theme.spacing.xl }}>
@@ -63,7 +55,7 @@ export function TutorWorkspaceSourcesTab({
                 justifyContent: 'center',
                 width: 34,
               }}>
-              <EllipsisVertical color={theme.colors.text} size={18} strokeWidth={2} />
+              <EllipsisIcon color={theme.colors.text} size={18} strokeWidth={2} />
             </View>
           </Pressable>
         ) : (
@@ -71,7 +63,8 @@ export function TutorWorkspaceSourcesTab({
         )}
       </View>
 
-      <View style={{ gap: theme.spacing.md }}>
+      {primarySource ? (
+        <View style={{ gap: theme.spacing.md }}>
         <Text
           style={{
             color: theme.colors.text,
@@ -100,7 +93,13 @@ export function TutorWorkspaceSourcesTab({
                 justifyContent: 'center',
                 width: 42,
               }}>
-              <SourceIcon color={theme.colors.warning} size={20} strokeWidth={1.9} />
+              {PrimarySourceIcon ? (
+                <PrimarySourceIcon
+                  color={theme.colors.warning}
+                  size={20}
+                  strokeWidth={1.9}
+                />
+              ) : null}
             </View>
 
             <View style={{ flex: 1, gap: 4 }}>
@@ -110,7 +109,7 @@ export function TutorWorkspaceSourcesTab({
                   ...theme.typography.semiBold,
                   fontSize: 15,
                 }}>
-                {title}
+                {primarySource.title}
               </Text>
               <Text
                 style={{
@@ -119,42 +118,25 @@ export function TutorWorkspaceSourcesTab({
                   fontSize: 12,
                   textTransform: 'uppercase',
                 }}>
-                {sourceLabel}
+                {primarySource.meta}
               </Text>
             </View>
           </View>
         </View>
       </View>
+      ) : null}
 
       <View style={{ gap: theme.spacing.md }}>
-        <View style={{ alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text
-            style={{
-              color: theme.colors.text,
-              ...theme.typography.semiBold,
-              fontSize: 16,
-            }}>
-            已添加来源
-          </Text>
+        <Text
+          style={{
+            color: theme.colors.text,
+            ...theme.typography.semiBold,
+            fontSize: 16,
+          }}>
+          {primarySource && additionalSources.length > 0 ? '其他来源' : '来源详情'}
+        </Text>
 
-          <Pressable
-            accessibilityRole="button"
-            onPress={onAddSource}
-            style={({ pressed }) => ({
-              opacity: pressed ? 0.84 : 1,
-            })}>
-            <Text
-              style={{
-                color: theme.colors.primaryStrong,
-                ...theme.typography.semiBold,
-                fontSize: 14,
-              }}>
-              添加文件来源
-            </Text>
-          </Pressable>
-        </View>
-
-        {draftSources.length === 0 ? (
+        {additionalSources.length === 0 ? (
           <View
             style={{
               backgroundColor: theme.colors.surfaceKnowledge,
@@ -171,13 +153,16 @@ export function TutorWorkspaceSourcesTab({
                 fontSize: 14,
                 lineHeight: 21,
               }}>
-              还没有额外文件
+              {primarySource?.excerpt ?? '来源信息正在准备中。'}
             </Text>
           </View>
         ) : (
           <View style={{ gap: theme.spacing.sm }}>
-            {draftSources.map((source) => (
-              <View
+            {additionalSources.map((source) => {
+              const AdditionalSourceIcon = resolveSourceIcon(source.meta) as React.ComponentType<any>;
+
+              return (
+                <View
                 key={source.id}
                 style={{
                   backgroundColor: theme.colors.surface,
@@ -198,7 +183,11 @@ export function TutorWorkspaceSourcesTab({
                     justifyContent: 'center',
                     width: 42,
                   }}>
-                  <FileText color={theme.colors.primaryStrong} size={20} strokeWidth={1.9} />
+                  <AdditionalSourceIcon
+                    color={theme.colors.primaryStrong}
+                    size={20}
+                    strokeWidth={1.9}
+                  />
                 </View>
 
                 <View style={{ flex: 1, gap: 4 }}>
@@ -208,7 +197,7 @@ export function TutorWorkspaceSourcesTab({
                       ...theme.typography.semiBold,
                       fontSize: 15,
                     }}>
-                    {source.name}
+                    {source.title}
                   </Text>
                   <Text
                     style={{
@@ -216,11 +205,12 @@ export function TutorWorkspaceSourcesTab({
                       ...theme.typography.medium,
                       fontSize: 12,
                     }}>
-                    {resolveDraftKindLabel(source.kind)} · {source.status === 'preparing' ? '准备中' : '已整理'} · {source.addedAt}
+                    {source.meta}
                   </Text>
                 </View>
               </View>
-            ))}
+              );
+            })}
           </View>
         )}
       </View>

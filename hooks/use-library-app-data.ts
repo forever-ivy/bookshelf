@@ -46,6 +46,7 @@ import {
   searchRecommendations,
   startTutorSession,
   toggleFavorite,
+  uploadTutorProfile,
   updateMyProfile,
   type CreateTutorProfileInput,
   type LoginInput,
@@ -56,6 +57,12 @@ import { useAppSession } from '@/hooks/use-app-session';
 
 function withToken<T>(token: string | null | undefined, callback: (token?: string | null) => Promise<T>) {
   return callback(token);
+}
+
+function hasPendingTutorProfileStatus(
+  status: string | null | undefined
+): status is 'processing' | 'queued' {
+  return status === 'queued' || status === 'processing';
 }
 
 export function useSessionIdentityQuery() {
@@ -334,6 +341,10 @@ export function useTutorDashboardQuery() {
   return useQuery({
     queryFn: () => getTutorDashboard(token),
     queryKey: ['tutor', 'dashboard', token],
+    refetchInterval: (query) =>
+      (query.state.data?.recentProfiles ?? []).some((profile) => hasPendingTutorProfileStatus(profile.status))
+        ? 3000
+        : false,
   });
 }
 
@@ -343,6 +354,10 @@ export function useTutorProfilesQuery() {
   return useQuery({
     queryFn: () => listTutorProfiles(token),
     queryKey: ['tutor', 'profiles', token],
+    refetchInterval: (query) =>
+      (query.state.data ?? []).some((profile) => hasPendingTutorProfileStatus(profile.status))
+        ? 3000
+        : false,
   });
 }
 
@@ -353,6 +368,8 @@ export function useTutorProfileQuery(profileId: number) {
     enabled: Number.isFinite(profileId),
     queryFn: () => getTutorProfile(profileId, token),
     queryKey: ['tutor', 'profiles', 'detail', profileId, token],
+    refetchInterval: (query) =>
+      hasPendingTutorProfileStatus(query.state.data?.status) ? 3000 : false,
   });
 }
 
@@ -543,6 +560,18 @@ export function useCreateTutorProfileMutation() {
   });
 }
 
+export function useUploadTutorProfileMutation() {
+  const queryClient = useQueryClient();
+  const { token } = useAppSession();
+
+  return useMutation({
+    mutationFn: (formData: FormData) => uploadTutorProfile(formData, token),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tutor'] });
+    },
+  });
+}
+
 export function useStartTutorSessionMutation() {
   const queryClient = useQueryClient();
   const { token } = useAppSession();
@@ -555,19 +584,11 @@ export function useStartTutorSessionMutation() {
       queryClient.setQueryData(['tutor', 'sessions', 'messages', payload.session.id, token], (previous: unknown) => {
         const items = Array.isArray(previous) ? previous : [];
 
-        if (items.length > 0 || !payload.welcomeMessage) {
+        if (items.length > 0 || !payload.welcomeMessage?.content) {
           return items;
         }
 
-        return [
-          {
-            content: payload.welcomeMessage,
-            createdAt: payload.session.createdAt,
-            id: `${payload.session.id}-welcome`,
-            role: 'assistant',
-            tutorSessionId: payload.session.id,
-          },
-        ];
+        return [payload.welcomeMessage];
       });
     },
   });

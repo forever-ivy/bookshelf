@@ -7,7 +7,7 @@ import type { TutorCompletedStep, TutorCurriculumStep } from '@/lib/api';
 import type {
   TutorWorkspaceInsightCard,
   TutorWorkspaceSourceCard,
-} from '@/lib/tutor/mock-chat';
+} from '@/lib/tutor/workspace';
 
 export type TutorWorkspaceInfoPanel = 'highlights' | 'path' | 'sources';
 

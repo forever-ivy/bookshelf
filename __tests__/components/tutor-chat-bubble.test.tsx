@@ -19,7 +19,7 @@ describe('tutor chat bubble', () => {
       />
     );
 
-    expect(screen.getByTestId('tutor-assistant-thinking-label')).toBeTruthy();
+    expect(screen.queryByTestId('tutor-assistant-thinking-label')).toBeNull();
     expect(screen.getByText('主要内容')).toBeTruthy();
     expect(screen.getByText('这本书先帮你建立机器学习的整体地图。')).toBeTruthy();
     expect(screen.getByText('先认识数据、目标和模型')).toBeTruthy();
@@ -37,6 +37,13 @@ describe('tutor chat bubble', () => {
     expect(screen.queryByText('思考 5s')).toBeNull();
     expect(screen.queryByText('思考中')).toBeNull();
     expect(screen.queryByLabelText('复制回答')).toBeNull();
+  });
+
+  it('renders an explicit assistant status label only when provided', () => {
+    render(<TutorChatBubble role="assistant" text="先抓住模型、数据和目标。" thinkingLabel="检索完成" />);
+
+    expect(screen.getByTestId('tutor-assistant-thinking-label')).toBeTruthy();
+    expect(screen.getByText('检索完成')).toBeTruthy();
   });
 
   it('keeps user replies in the original compact bubble without assistant mock chrome', () => {

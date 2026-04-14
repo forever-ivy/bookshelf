@@ -15,10 +15,10 @@ import { TutorCreateSheet } from '@/components/tutor/tutor-create-sheet';
 import { TutorNotebookCard } from '@/components/tutor/tutor-notebook-card';
 import { useHeaderChromeVisibility } from '@/hooks/use-header-chrome-visibility';
 import {
-  useCreateTutorProfileMutation,
   useTutorDashboardQuery,
   useTutorProfilesQuery,
   useTutorSessionsQuery,
+  useUploadTutorProfileMutation,
 } from '@/hooks/use-library-app-data';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { getLibraryErrorMessage } from '@/lib/api/client';
@@ -35,7 +35,7 @@ export default function TutorIndexRoute() {
   const dashboardQuery = useTutorDashboardQuery();
   const profilesQuery = useTutorProfilesQuery();
   const sessionsQuery = useTutorSessionsQuery();
-  const createProfileMutation = useCreateTutorProfileMutation();
+  const uploadProfileMutation = useUploadTutorProfileMutation();
   const [isCreateSheetOpen, setIsCreateSheetOpen] = React.useState(false);
   const { onScroll, showHeaderChrome } = useHeaderChromeVisibility();
   const isIos = Platform.OS === 'ios';
@@ -242,24 +242,23 @@ export default function TutorIndexRoute() {
       </PageShell>
 
       <TutorCreateSheet
-        creating={createProfileMutation.isPending}
+        creating={uploadProfileMutation.isPending}
         onClose={() => setIsCreateSheetOpen(false)}
         onDocumentPicked={(doc) =>
           handleCreated(
-            createProfileMutation.mutateAsync({
-              sourceText: doc.uri,
-              sourceType: 'upload',
-              title: doc.name,
-            })
-          )
-        }
-        onCreateWithStyle={(input) =>
-          handleCreated(
-            createProfileMutation.mutateAsync({
-              sourceText: input.customPrompt ?? '',
-              sourceType: 'style',
-              style: input.styleKey,
-            })
+            (() => {
+              const formData = new FormData();
+              formData.append('title', doc.name);
+              formData.append(
+                'file',
+                {
+                  name: doc.name,
+                  type: doc.mimeType ?? 'application/octet-stream',
+                  uri: doc.uri,
+                } as unknown as Blob
+              );
+              return uploadProfileMutation.mutateAsync(formData);
+            })()
           )
         }
         visible={isCreateSheetOpen}

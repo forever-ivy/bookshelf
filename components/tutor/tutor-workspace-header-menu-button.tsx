@@ -15,6 +15,7 @@ export function TutorWorkspaceHeaderMenuButton({
   testID?: string;
 }) {
   const { theme } = useAppTheme();
+  const MenuIcon = EllipsisVertical as React.ComponentType<any>;
 
   return (
     <Pressable
@@ -32,7 +33,7 @@ export function TutorWorkspaceHeaderMenuButton({
         opacity: pressed ? 0.82 : 1,
         width: 44,
       })}>
-      <EllipsisVertical color={theme.colors.text} size={20} strokeWidth={2} />
+      <MenuIcon color={theme.colors.text} size={20} strokeWidth={2} />
     </Pressable>
   );
 }

@@ -8,6 +8,7 @@ import {
 } from '@/hooks/use-library-app-data';
 import { getLibraryErrorMessage } from '@/lib/api/client';
 import type { TutorProfile, TutorSession } from '@/lib/api/types';
+import { resolveTutorWorkspaceSourceSummary as resolveWorkspaceSourceSummary } from '@/lib/tutor/workspace';
 
 export function resolveTutorWorkspaceStatusDescription(status?: TutorProfile['status']) {
   switch (status) {
@@ -15,17 +16,17 @@ export function resolveTutorWorkspaceStatusDescription(status?: TutorProfile['st
       return '导学本已经准备好，正在为你开启工作区。';
     case 'failed':
       return '这份资料暂时没能生成成功，你可以换一份资料重新开始。';
-    case 'generating':
-      return '正在解析文档，请稍后';
+    case 'processing':
+      return '正在解析并整理资料，请稍后。';
+    case 'queued':
+      return '导学任务已经入队，马上开始处理。';
     default:
       return '正在加载导学本资料与当前工作区。';
   }
 }
 
 export function resolveTutorWorkspaceSourceSummary(profile: TutorProfile) {
-  return profile.sourceType === 'book'
-    ? '来源于当前馆藏书。后续可以接入章节、目录、摘要和读者借阅上下文。'
-    : '来源于你上传或粘贴的学习资料。后续可以接入 PDF、讲义与实验手册的结构化解析。';
+  return resolveWorkspaceSourceSummary(profile);
 }
 
 export function useTutorWorkspace(profileId: number) {
