@@ -4,9 +4,12 @@ const STATUS_LABELS: Record<string, string> = {
   arriving: '送达中',
   assigned: '已分配',
   awaiting_pick: '待取书',
+  awaiting_receive: '待接收',
   available: '可借',
   blacklist: '禁止借阅',
+  borrowed: '已借出',
   carrying: '运输中',
+  cancelled: '已取消',
   completed: '已完成',
   critical: '严重',
   created: '已创建',
@@ -33,10 +36,12 @@ const STATUS_LABELS: Record<string, string> = {
   on_shelf: '已上架',
   order_created: '新建订单',
   open: '待处理',
+  parsed: '已解析',
   pending: '待处理',
   permission: '权限',
   picked_from_cabinet: '书柜取书中',
   processing: '处理中',
+  queued: '已入队',
   received: '已接收',
   reserved: '已预留',
   resolved: '已解决',
@@ -48,6 +53,7 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 const ORDER_MODE_LABELS: Record<string, string> = {
+  cabinet_pickup: '到柜自取',
   robot_delivery: '机器人送书',
   self_pickup: '到柜自取',
 }

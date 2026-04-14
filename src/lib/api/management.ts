@@ -4,6 +4,7 @@ import type {
   AdminAuditLog,
   AdminBook,
   AdminBookCategory,
+  AdminBookSourceDocument,
   AdminBookTag,
   AdminCabinet,
   AdminCabinetSlot,
@@ -28,6 +29,51 @@ import type {
   AdminSystemSetting,
   PaginatedResponse,
 } from '@/types/domain'
+
+function normalizeAdminBookSourceDocument(raw: any): AdminBookSourceDocument {
+  return {
+    book_id: Number(raw?.bookId ?? raw?.book_id ?? 0),
+    content_hash: raw?.contentHash ?? raw?.content_hash ?? null,
+    created_at: raw?.createdAt ?? raw?.created_at ?? null,
+    extracted_text_path: raw?.extractedTextPath ?? raw?.extracted_text_path ?? null,
+    file_name: raw?.fileName ?? raw?.file_name ?? 'source.pdf',
+    id: Number(raw?.id ?? 0),
+    is_primary: Boolean(raw?.isPrimary ?? raw?.is_primary),
+    metadata_json: raw?.metadata ?? raw?.metadata_json ?? {},
+    mime_type: raw?.mimeType ?? raw?.mime_type ?? null,
+    parse_status: raw?.parseStatus ?? raw?.parse_status ?? null,
+    source_kind: raw?.sourceKind ?? raw?.source_kind ?? 'pdf',
+    storage_path: raw?.storagePath ?? raw?.storage_path ?? null,
+    updated_at: raw?.updatedAt ?? raw?.updated_at ?? null,
+  }
+}
+
+function normalizeAdminBook(raw: any): AdminBook {
+  return {
+    ...raw,
+    source_documents: Array.isArray(raw?.source_documents)
+      ? raw.source_documents.map((item: any) => normalizeAdminBookSourceDocument(item))
+      : [],
+  }
+}
+
+function normalizeAdminAuditLog(raw: any): AdminAuditLog {
+  const targetRef = String(raw?.targetRef ?? raw?.target_ref ?? raw?.target_id ?? '')
+  const parsedTargetId = Number(targetRef)
+
+  return {
+    action: raw?.action ?? '',
+    admin_id: Number(raw?.admin_id ?? raw?.adminId ?? 0),
+    after_state: raw?.after_state ?? raw?.afterState ?? {},
+    before_state: raw?.before_state ?? raw?.beforeState ?? {},
+    created_at: raw?.created_at ?? raw?.createdAt ?? null,
+    id: Number(raw?.id ?? 0),
+    note: raw?.note ?? null,
+    target_id: Number.isFinite(parsedTargetId) ? parsedTargetId : null,
+    target_ref: targetRef,
+    target_type: raw?.target_type ?? raw?.targetType ?? '',
+  }
+}
 
 type RecommendationStudioQuickActionInput = Omit<AdminRecommendationStudioQuickAction, 'source'> & {
   source?: AdminRecommendationStudioQuickAction['source']
@@ -120,14 +166,17 @@ type AdminReadersQuery = AdminPaginationQuery & {
 }
 
 export async function getAdminBooks(params: AdminBooksQuery = {}) {
-  const response = await http.get<PaginatedResponse<AdminBook>>('/api/v1/admin/books', {
+  const response = await http.get<PaginatedResponse<any>>('/api/v1/admin/books', {
     query: params.query,
     page: params.page ?? 1,
     page_size: params.pageSize ?? 50,
     shelf_status: params.shelfStatus,
     category_id: params.categoryId,
   })
-  return response.data
+  return {
+    ...response.data,
+    items: (response.data.items ?? []).map((item) => normalizeAdminBook(item)),
+  }
 }
 
 export async function createAdminBook(payload: {
@@ -140,8 +189,8 @@ export async function createAdminBook(payload: {
   summary?: string
   shelf_status?: string
 }) {
-  const response = await http.post<{ book: AdminBook }>('/api/v1/admin/books', payload)
-  return response.data.book
+  const response = await http.post<{ book: any }>('/api/v1/admin/books', payload)
+  return normalizeAdminBook(response.data.book)
 }
 
 export async function updateAdminBook(
@@ -157,15 +206,38 @@ export async function updateAdminBook(
     shelf_status?: string
   },
 ) {
-  const response = await http.patch<{ book: AdminBook }>(`/api/v1/admin/books/${bookId}`, payload)
-  return response.data.book
+  const response = await http.patch<{ book: any }>(`/api/v1/admin/books/${bookId}`, payload)
+  return normalizeAdminBook(response.data.book)
 }
 
 export async function setAdminBookStatus(bookId: number, shelfStatus: string) {
-  const response = await http.post<{ book: AdminBook }>(`/api/v1/admin/books/${bookId}/status`, {
+  const response = await http.post<{ book: any }>(`/api/v1/admin/books/${bookId}/status`, {
     shelf_status: shelfStatus,
   })
-  return response.data.book
+  return normalizeAdminBook(response.data.book)
+}
+
+export async function uploadAdminBookSourceDocument(
+  bookId: number,
+  payload: {
+    file: File
+    isPrimary?: boolean
+  },
+) {
+  const formData = new FormData()
+  formData.append('file', payload.file)
+  if (payload.isPrimary !== undefined) {
+    formData.append('is_primary', String(payload.isPrimary))
+  }
+  const response = await http.post<{ sourceDocument: any }>(`/api/v1/admin/books/${bookId}/source-documents`, formData)
+  return normalizeAdminBookSourceDocument(response.data.sourceDocument)
+}
+
+export async function setPrimaryAdminBookSourceDocument(bookId: number, documentId: number) {
+  const response = await http.post<{ sourceDocument: any }>(
+    `/api/v1/admin/books/${bookId}/source-documents/${documentId}/primary`,
+  )
+  return normalizeAdminBookSourceDocument(response.data.sourceDocument)
 }
 
 export async function getAdminCategories(params: AdminPaginationQuery & { query?: string; status?: string } = {}) {
@@ -219,8 +291,11 @@ export async function getAdminAuditLogs(params?: {
   target_type?: string
   action?: string
 }) {
-  const response = await http.get<PaginatedResponse<AdminAuditLog>>('/api/v1/admin/audit-logs', params)
-  return response.data
+  const response = await http.get<PaginatedResponse<any>>('/api/v1/admin/audit-logs', params)
+  return {
+    ...response.data,
+    items: (response.data.items ?? []).map((item) => normalizeAdminAuditLog(item)),
+  }
 }
 
 export async function ackAdminAlert(alertId: number, note?: string) {

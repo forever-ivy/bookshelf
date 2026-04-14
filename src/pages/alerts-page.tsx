@@ -264,10 +264,10 @@ export function AlertsPage() {
                     <div key={log.id} className="rounded-[1.45rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.4)] px-5 py-5">
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                         <div className="space-y-3">
-                      <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <StatusBadge status="permission" label="操作" />
                             <span className="text-sm font-medium text-[var(--foreground)]">
-                              对象 #{log.target_id}
+                              对象 #{log.target_ref || log.target_id || '—'}
                             </span>
                           </div>
                           <p className="text-sm leading-6 text-[var(--foreground)]">{log.note ?? '无备注'}</p>

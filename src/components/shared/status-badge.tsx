@@ -8,6 +8,7 @@ function resolveVariant(status?: string | null) {
     case 'completed':
     case 'delivered':
     case 'idle':
+    case 'parsed':
     case 'stored':
     case 'active':
     case 'available':
@@ -26,6 +27,7 @@ function resolveVariant(status?: string | null) {
     case 'in_delivery':
     case 'reserved':
     case 'received':
+    case 'queued':
       return {
         variant: 'default' as const,
         icon: LoaderCircle,
@@ -46,6 +48,8 @@ function resolveVariant(status?: string | null) {
     case 'none':
     case 'normal':
     case 'off_shelf':
+    case 'borrowed':
+    case 'cancelled':
       return {
         variant: 'outline' as const,
         icon: Clock3,

@@ -79,6 +79,7 @@ export type AdminBook = Book & {
   shelf_status?: string | null
   category_detail?: AdminBookCategory | null
   tags: AdminBookTag[]
+  source_documents?: AdminBookSourceDocument[]
   stock_summary?: {
     total_copies: number
     available_copies: number
@@ -95,6 +96,22 @@ export type AdminBook = Book & {
     created_at?: string | null
     updated_at?: string | null
   }>
+}
+
+export type AdminBookSourceDocument = {
+  id: number
+  book_id: number
+  source_kind: string
+  mime_type?: string | null
+  file_name: string
+  storage_path?: string | null
+  extracted_text_path?: string | null
+  content_hash?: string | null
+  parse_status?: string | null
+  is_primary: boolean
+  metadata_json?: Record<string, unknown>
+  created_at?: string | null
+  updated_at?: string | null
 }
 
 export type AdminDashboardOverview = {
@@ -150,7 +167,8 @@ export type AdminAuditLog = {
   id: number
   admin_id: number
   target_type: string
-  target_id: number
+  target_id?: number | null
+  target_ref: string
   action: string
   before_state?: Record<string, unknown>
   after_state?: Record<string, unknown>
@@ -368,8 +386,11 @@ export type InventoryStatus = {
 export type BorrowOrder = {
   id: number
   reader_id: number
+  requested_book_id: number
   book_id: number
+  fulfilled_copy_id?: number | null
   assigned_copy_id?: number | null
+  fulfillment_mode: string
   order_mode: string
   status: string
   priority?: string | null
@@ -380,32 +401,47 @@ export type BorrowOrder = {
   created_at?: string | null
   updated_at?: string | null
   completed_at?: string | null
+  renewable?: boolean
 }
 
-export type DeliveryOrder = {
+export type OrderFulfillment = {
   id: number
   borrow_order_id: number
+  order_id: number
+  mode: string
+  source_cabinet_id?: string | null
+  source_slot_id?: number | null
   delivery_target: string
-  eta_minutes: number
   status: string
+  eta_minutes?: number | null
   priority?: string | null
   due_at?: string | null
   failure_reason?: string | null
   intervention_status?: string | null
-  attempt_count?: number
+  attempt_count?: number | null
+  picked_at?: string | null
+  delivered_at?: string | null
   created_at?: string | null
   updated_at?: string | null
   completed_at?: string | null
 }
 
+export type DeliveryOrder = OrderFulfillment
+
 export type RobotTask = {
   id: number
   robot_id: number
-  delivery_order_id: number
+  fulfillment_id?: number | null
+  delivery_order_id?: number | null
   status: string
   borrow_order_id?: number | null
+  order_id?: number | null
   path_json?: Record<string, unknown> | null
   reassigned_from_task_id?: number | null
+  superseded_by_task_id?: number | null
+  superseded_at?: string | null
+  sequence_no?: number | null
+  is_current?: boolean
   failure_reason?: string | null
   attempt_count?: number
   created_at?: string | null
@@ -434,12 +470,26 @@ export type RobotEvent = {
   created_at?: string | null
 }
 
+export type InventorySnapshot = {
+  cabinet_id?: string | null
+  slot_id?: number | null
+  slot_code?: string | null
+  copy_id?: number | null
+  copy_status?: string | null
+}
+
 export type OrderBundle = {
+  order: BorrowOrder
+  fulfillment?: OrderFulfillment | null
+  current_robot_task?: RobotTask | null
+  robot_task_history?: RobotTask[]
+  robot?: RobotUnit | null
+  return_request?: AdminReturnRequest | null
+  inventory_snapshot?: InventorySnapshot | null
   borrow_order: BorrowOrder
   delivery_order?: DeliveryOrder | null
   robot_task?: RobotTask | null
   robot_unit?: RobotUnit | null
-  robot?: RobotUnit | null
   fulfillment_phase?: string | null
 }
 
@@ -448,6 +498,16 @@ export type AdminReturnRequest = {
   borrow_order_id: number
   reader_id?: number | null
   book_id?: number | null
+  copy_id?: number | null
+  borrow_order_status?: string | null
+  fulfillment_mode?: string | null
+  receive_cabinet_id?: string | null
+  receive_slot_id?: number | null
+  processed_by_admin_id?: number | null
+  processed_at?: string | null
+  result?: string | null
+  condition_code?: string | null
+  received_at?: string | null
   status: string
   note?: string | null
   created_at?: string | null

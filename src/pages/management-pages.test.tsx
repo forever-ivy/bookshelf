@@ -20,8 +20,10 @@ const managementApi = vi.hoisted(() => ({
   getAdminDashboardHeatmap: vi.fn(),
   getAdminBooks: vi.fn(),
   createAdminBook: vi.fn(),
+  setPrimaryAdminBookSourceDocument: vi.fn(),
   updateAdminBook: vi.fn(),
   setAdminBookStatus: vi.fn(),
+  uploadAdminBookSourceDocument: vi.fn(),
   getAdminCategories: vi.fn(),
   createAdminCategory: vi.fn(),
   getAdminTags: vi.fn(),
@@ -165,6 +167,36 @@ describe('management pages', () => {
       summary: '系统化管理 AI 服务。',
       tags: [{ id: 1, code: 'hot', name: '热门' }],
       stock_summary: { total_copies: 3, available_copies: 2, reserved_copies: 1 },
+    })
+    managementApi.uploadAdminBookSourceDocument.mockResolvedValue({
+      id: 11,
+      book_id: 1,
+      source_kind: 'pdf',
+      mime_type: 'application/pdf',
+      file_name: 'guide.pdf',
+      storage_path: '/tmp/guide.pdf',
+      extracted_text_path: '/tmp/guide.md',
+      content_hash: 'hash-11',
+      parse_status: 'parsed',
+      is_primary: true,
+      metadata_json: {},
+      created_at: '2026-03-22T09:00:00Z',
+      updated_at: '2026-03-22T09:00:00Z',
+    })
+    managementApi.setPrimaryAdminBookSourceDocument.mockResolvedValue({
+      id: 12,
+      book_id: 1,
+      source_kind: 'pdf',
+      mime_type: 'application/pdf',
+      file_name: 'secondary.pdf',
+      storage_path: '/tmp/secondary.pdf',
+      extracted_text_path: '/tmp/secondary.md',
+      content_hash: 'hash-12',
+      parse_status: 'parsed',
+      is_primary: true,
+      metadata_json: {},
+      created_at: '2026-03-22T09:00:00Z',
+      updated_at: '2026-03-22T09:05:00Z',
     })
     managementApi.getAdminCategories.mockResolvedValue({
       items: [{ id: 1, code: 'ai', name: '人工智能', status: 'active' }],
@@ -1072,6 +1104,79 @@ describe('management pages', () => {
     expect(await screen.findByRole('button', { name: '查看详情' })).toBeInTheDocument()
     expect(screen.getByTestId('location-search').textContent).not.toContain('book_id=1')
     expect(screen.getByTestId('location-search').textContent).toContain('shelf_status=on_shelf')
+  })
+
+  it('allows promoting an existing book source document to the primary tutor asset', async () => {
+    const user = userEvent.setup()
+
+    managementApi.getAdminBooks.mockResolvedValue({
+      items: [
+        {
+          id: 1,
+          title: '智能系统设计',
+          author: '程墨',
+          category_id: 1,
+          category: '人工智能',
+          shelf_status: 'on_shelf',
+          isbn: '9787111000001',
+          barcode: 'AI-0001',
+          summary: '系统化管理 AI 服务。',
+          tags: [{ id: 1, code: 'hot', name: '热门' }],
+          source_documents: [
+            {
+              id: 11,
+              book_id: 1,
+              source_kind: 'pdf',
+              mime_type: 'application/pdf',
+              file_name: 'primary.pdf',
+              storage_path: '/tmp/primary.pdf',
+              extracted_text_path: '/tmp/primary.md',
+              content_hash: 'hash-11',
+              parse_status: 'parsed',
+              is_primary: true,
+              metadata_json: {},
+              created_at: '2026-03-22T09:00:00Z',
+              updated_at: '2026-03-22T09:00:00Z',
+            },
+            {
+              id: 12,
+              book_id: 1,
+              source_kind: 'pdf',
+              mime_type: 'application/pdf',
+              file_name: 'secondary.pdf',
+              storage_path: '/tmp/secondary.pdf',
+              extracted_text_path: '/tmp/secondary.md',
+              content_hash: 'hash-12',
+              parse_status: 'parsed',
+              is_primary: false,
+              metadata_json: {},
+              created_at: '2026-03-22T09:00:00Z',
+              updated_at: '2026-03-22T09:00:00Z',
+            },
+          ],
+          copies: [],
+          stock_summary: { total_copies: 0, available_copies: 0, reserved_copies: 0 },
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 50,
+    })
+
+    render(
+      <TestProviders>
+        <BooksPage />
+      </TestProviders>,
+    )
+
+    expect(await screen.findByRole('heading', { name: '图书管理' })).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: '查看详情' }))
+    expect(await screen.findByRole('heading', { name: '智能系统设计' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '设为主资源' }))
+
+    await waitFor(() => {
+      expect(managementApi.setPrimaryAdminBookSourceDocument).toHaveBeenCalledWith(1, 12)
+    })
   })
 
   it('creates and edits books, categories, and tags from the books workspace', async () => {

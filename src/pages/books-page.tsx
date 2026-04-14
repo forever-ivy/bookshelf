@@ -37,7 +37,9 @@ import {
   getAdminBooks,
   getAdminCategories,
   getAdminTags,
+  setPrimaryAdminBookSourceDocument,
   setAdminBookStatus,
+  uploadAdminBookSourceDocument,
   updateAdminBook,
 } from '@/lib/api/management'
 import type { AdminBook, AdminBookCategory, AdminBookTag, PaginatedResponse } from '@/types/domain'
@@ -139,7 +141,7 @@ function formatCopyInventoryStatusLabel(status?: string | null) {
       return '已存放'
     case 'reserved':
       return '已预留'
-    case 'checked_out':
+    case 'borrowed':
       return '已借出'
     case 'in_transit':
       return '运输中'
@@ -186,6 +188,8 @@ export function BooksPage() {
   const [bookEditForm, setBookEditForm] = useState(EMPTY_BOOK_EDIT_FORM)
   const [categoryForm, setCategoryForm] = useState(EMPTY_CATEGORY_FORM)
   const [tagForm, setTagForm] = useState(EMPTY_TAG_FORM)
+  const [bookSourceFile, setBookSourceFile] = useState<File | null>(null)
+  const [bookSourceIsPrimary, setBookSourceIsPrimary] = useState(true)
   const [booksTotalBaseline, setBooksTotalBaseline] = useState<number | null>(null)
   const categoriesPageSize =
     activeTab === 'books' ||
@@ -413,6 +417,35 @@ export function BooksPage() {
     },
   })
 
+  const uploadBookSourceMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedBook || !bookSourceFile) {
+        throw new Error('No selected source file')
+      }
+      return uploadAdminBookSourceDocument(selectedBook.id, {
+        file: bookSourceFile,
+        isPrimary: bookSourceIsPrimary,
+      })
+    },
+    onSuccess: () => {
+      setBookSourceFile(null)
+      setBookSourceIsPrimary(true)
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'books'] })
+    },
+  })
+
+  const promoteBookSourceMutation = useMutation({
+    mutationFn: async (documentId: number) => {
+      if (!selectedBook) {
+        throw new Error('No selected book')
+      }
+      return setPrimaryAdminBookSourceDocument(selectedBook.id, documentId)
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'books'] })
+    },
+  })
+
   const createCategoryMutation = useMutation({
     mutationFn: () =>
       createAdminCategory({
@@ -588,6 +621,7 @@ export function BooksPage() {
 
   function renderBookEntityCatalog(book: AdminBook) {
     const copies = book.copies ?? []
+    const sourceDocuments = book.source_documents ?? []
 
     return (
       <div className="space-y-8">
@@ -637,6 +671,106 @@ export function BooksPage() {
               </p>
             </div>
           </div>
+        </section>
+
+        <section className="space-y-4 border-b border-[var(--line-subtle)] pb-6">
+          <div className="space-y-1">
+            <h4 className="text-[1.15rem] font-semibold tracking-[-0.03em] text-[var(--foreground)]">数字资源</h4>
+            <p className="text-sm text-[var(--muted-foreground)]">
+              导学系统会优先使用这里的主资源 PDF / 文本文件；如果没有上传数字资源，才会退回到书目元数据摘要。
+            </p>
+          </div>
+
+          <div className="rounded-[1.25rem] border border-[var(--line-subtle)] bg-[var(--surface-container-low)] p-4">
+            <div className="grid gap-4 lg:grid-cols-[1.3fr_auto] lg:items-end">
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="book-source-upload">上传 PDF / 文本资源</Label>
+                  <Input
+                    id="book-source-upload"
+                    type="file"
+                    accept=".pdf,.txt,.md,.markdown"
+                    onChange={(event) => {
+                      const nextFile = event.target.files?.[0] ?? null
+                      setBookSourceFile(nextFile)
+                    }}
+                  />
+                </div>
+                <label className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
+                  <input
+                    checked={bookSourceIsPrimary}
+                    type="checkbox"
+                    onChange={(event) => setBookSourceIsPrimary(event.target.checked)}
+                  />
+                  上传后设为导学主资源
+                </label>
+              </div>
+              <Button
+                disabled={!bookSourceFile || uploadBookSourceMutation.isPending}
+                onClick={() => uploadBookSourceMutation.mutate()}
+              >
+                {uploadBookSourceMutation.isPending ? '上传中…' : '上传资源'}
+              </Button>
+            </div>
+          </div>
+
+          {sourceDocuments.length === 0 ? (
+            <div className="rounded-[1.2rem] border border-dashed border-[var(--line-subtle)] bg-white/70 px-4 py-4 text-sm text-[var(--muted-foreground)]">
+              这本书还没有上传数字资源，导学只能退回到书名、作者、摘要等元数据。
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {sourceDocuments.map((document) => (
+                <section
+                  key={document.id}
+                  className="rounded-[1.25rem] border border-[var(--line-subtle)] bg-white/80 px-4 py-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <p className="font-semibold text-[var(--foreground)]">{document.file_name}</p>
+                      <p className="text-sm text-[var(--muted-foreground)]">
+                        {document.source_kind.toUpperCase()} · {document.mime_type ?? '未知类型'}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <StatusBadge status={document.parse_status} />
+                      {document.is_primary ? <StatusBadge status="active" label="主资源" /> : null}
+                      {!document.is_primary ? (
+                        <Button
+                          disabled={promoteBookSourceMutation.isPending}
+                          size="sm"
+                          variant="outline"
+                          onClick={() => promoteBookSourceMutation.mutate(document.id)}
+                        >
+                          设为主资源
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <dl className="mt-4 grid gap-3 border-t border-[var(--line-subtle)] pt-4 text-sm md:grid-cols-2 xl:grid-cols-4">
+                    <div className="space-y-1">
+                      <dt className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">资源编号</dt>
+                      <dd className="font-medium text-[var(--foreground)]">#{document.id}</dd>
+                    </div>
+                    <div className="space-y-1">
+                      <dt className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">解析文本</dt>
+                      <dd className="font-medium text-[var(--foreground)]">{formatSnapshotValue(document.extracted_text_path)}</dd>
+                    </div>
+                    <div className="space-y-1">
+                      <dt className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">哈希</dt>
+                      <dd className="break-all font-medium text-[var(--foreground)]">{formatSnapshotValue(document.content_hash)}</dd>
+                    </div>
+                    <div className="space-y-1">
+                      <dt className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">更新时间</dt>
+                      <dd className="font-medium text-[var(--foreground)]">
+                        {formatDateTime(document.updated_at ?? document.created_at)}
+                      </dd>
+                    </div>
+                  </dl>
+                </section>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="space-y-4">
