@@ -24,7 +24,7 @@ class AdminActionLog(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     admin_id: Mapped[int] = mapped_column(ForeignKey("admin_accounts.id"), index=True)
     target_type: Mapped[str] = mapped_column(String(64), index=True)
-    target_id: Mapped[int] = mapped_column(index=True)
+    target_ref: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     action: Mapped[str] = mapped_column(String(64), index=True)
     before_state: Mapped[dict | None] = mapped_column(JSON_VARIANT, nullable=True)
     after_state: Mapped[dict | None] = mapped_column(JSON_VARIANT, nullable=True)

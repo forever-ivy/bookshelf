@@ -16,6 +16,7 @@ LEGACY_INDEX_DROPS: dict[str, set[str]] = {
 }
 LEGACY_COLUMN_DROPS: dict[str, set[str]] = {
     "books": {"classification_code"},
+    "cabinet_slots": {"current_copy_id"},
 }
 
 _engine: Engine | None = None

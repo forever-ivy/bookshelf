@@ -113,11 +113,12 @@ def seed_reader_experience_state() -> dict[str, int]:
                     cabinet_id=cabinet.id,
                     slot_code=f"A0{index}",
                     status="occupied",
-                    current_copy_id=copy.id,
                 )
             )
         session.add_all(slots)
         session.flush()
+        for slot, copy_id in zip(slots, copy_ids, strict=False):
+            session.get(BookCopy, copy_id).current_slot_id = slot.id
 
         active_order = BorrowOrder(
             reader_id=primary_profile.id,

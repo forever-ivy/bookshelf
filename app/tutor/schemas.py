@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 class TutorProfileCreateRequest(BaseModel):
     source_type: Literal["book"] = Field(alias="sourceType")
     book_id: int = Field(alias="bookId")
+    book_source_document_id: int | None = Field(default=None, alias="bookSourceDocumentId")
     title: str | None = None
     teaching_goal: str | None = Field(default=None, alias="teachingGoal")
 
@@ -29,6 +30,7 @@ def serialize_profile(profile: Any) -> dict[str, Any]:
         "readerId": profile.reader_id,
         "sourceType": profile.source_type,
         "bookId": profile.book_id,
+        "bookSourceDocumentId": profile.book_source_document_id,
         "title": profile.title,
         "teachingGoal": profile.teaching_goal,
         "status": profile.status,
@@ -46,8 +48,8 @@ def serialize_source_document(document: Any) -> dict[str, Any]:
     return {
         "id": document.id,
         "profileId": document.profile_id,
-        "readerId": document.reader_id,
         "kind": document.kind,
+        "originBookSourceDocumentId": document.origin_book_source_document_id,
         "mimeType": document.mime_type,
         "fileName": document.file_name,
         "storagePath": document.storage_path,
@@ -78,7 +80,6 @@ def serialize_session(tutor_session: Any) -> dict[str, Any]:
     return {
         "id": tutor_session.id,
         "tutorProfileId": tutor_session.profile_id,
-        "readerId": tutor_session.reader_id,
         "status": tutor_session.status,
         "currentStepIndex": tutor_session.current_step_index,
         "currentStepTitle": tutor_session.current_step_title,

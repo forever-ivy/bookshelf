@@ -78,9 +78,22 @@ def _encode_audio(reply: str, speech_connector) -> tuple[str, str]:
     return base64.b64encode(audio).decode("ascii"), "mp3"
 
 
-async def _extract_request_payload(request: Request) -> tuple[str, bytes | None, bytes | None, bool]:
+def _parse_optional_int(value) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise ApiError(400, "invalid_binding", "Order or fulfillment binding must be an integer")
+
+
+async def _extract_request_payload(request: Request) -> tuple[str, bytes | None, bytes | None, bool, int | None, int | None]:
     content_type = (request.headers.get("content-type") or "").lower()
     wants_audio = request.query_params.get("audio") == "1"
+    order_id = _parse_optional_int(request.query_params.get("orderId") or request.query_params.get("order_id"))
+    fulfillment_id = _parse_optional_int(
+        request.query_params.get("fulfillmentId") or request.query_params.get("fulfillment_id")
+    )
     text = ""
     audio_bytes: bytes | None = None
     image_bytes: bytes | None = None
@@ -92,7 +105,11 @@ async def _extract_request_payload(request: Request) -> tuple[str, bytes | None,
             payload = {}
         text = str(payload.get("text") or "").strip()
         wants_audio = wants_audio or bool(payload.get("audio"))
-        return text, audio_bytes, image_bytes, wants_audio
+        order_id = _parse_optional_int(payload.get("orderId") or payload.get("order_id") or order_id)
+        fulfillment_id = _parse_optional_int(
+            payload.get("fulfillmentId") or payload.get("fulfillment_id") or fulfillment_id
+        )
+        return text, audio_bytes, image_bytes, wants_audio, order_id, fulfillment_id
 
     if "multipart/form-data" in content_type:
         form = await request.form()
@@ -104,7 +121,9 @@ async def _extract_request_payload(request: Request) -> tuple[str, bytes | None,
         if image_upload is not None and hasattr(image_upload, "read"):
             image_bytes = await image_upload.read()
         wants_audio = wants_audio or str(form.get("audio") or form.get("audio_reply") or "") == "1"
-        return text, audio_bytes, image_bytes, wants_audio
+        order_id = _parse_optional_int(form.get("orderId") or form.get("order_id") or order_id)
+        fulfillment_id = _parse_optional_int(form.get("fulfillmentId") or form.get("fulfillment_id") or fulfillment_id)
+        return text, audio_bytes, image_bytes, wants_audio, order_id, fulfillment_id
 
     body = await request.body()
     if request.query_params.get("audio") == "1" or content_type in {
@@ -113,13 +132,13 @@ async def _extract_request_payload(request: Request) -> tuple[str, bytes | None,
         "audio/x-wav",
         "audio/mpeg",
     }:
-        return text, body, image_bytes, True
+        return text, body, image_bytes, True, order_id, fulfillment_id
 
     try:
         text = body.decode("utf-8").strip()
     except UnicodeDecodeError:
-        return text, body, image_bytes, True
-    return text, audio_bytes, image_bytes, wants_audio
+        return text, body, image_bytes, True, order_id, fulfillment_id
+    return text, audio_bytes, image_bytes, wants_audio, order_id, fulfillment_id
 
 
 def _handle_store(db: Session, *, cabinet_id: str, image_bytes: bytes | None) -> dict:
@@ -156,9 +175,22 @@ def _handle_store(db: Session, *, cabinet_id: str, image_bytes: bytes | None) ->
     }
 
 
-def _handle_take(db: Session, *, cabinet_id: str, text: str) -> dict:
-    take_result = take_by_text(db, cabinet_id=cabinet_id, text=text)
-    reply = f"已为你找到《{take_result['book']['title']}》，位置在槽位 {take_result['slot_code']}。"
+def _handle_take(
+    db: Session,
+    *,
+    cabinet_id: str,
+    text: str,
+    order_id: int | None,
+    fulfillment_id: int | None,
+) -> dict:
+    take_result = take_by_text(
+        db,
+        cabinet_id=cabinet_id,
+        text=text,
+        order_id=order_id,
+        fulfillment_id=fulfillment_id,
+    )
+    reply = f"已为你找到《{take_result['book']['title']}》，位置在槽位 {take_result['slotCode']}。"
     return {
         "ok": True,
         "intent": "take",
@@ -166,7 +198,9 @@ def _handle_take(db: Session, *, cabinet_id: str, text: str) -> dict:
         "msg": reply,
         "reply": reply,
         "book": take_result["book"],
-        "slot_code": take_result["slot_code"],
+        "slot_code": take_result["slotCode"],
+        "order_id": take_result["orderId"],
+        "fulfillment_id": take_result["fulfillmentId"],
     }
 
 
@@ -179,7 +213,16 @@ def _handle_chat(db: Session, *, reader_id: int | None, raw_text: str, normalize
     return {"ok": True, "intent": "chat", "text": normalized_text, "reply": reply}
 
 
-def _route_text(db: Session, identity: AuthIdentity, text: str, *, raw_text: str, image_bytes: bytes | None) -> dict:
+def _route_text(
+    db: Session,
+    identity: AuthIdentity,
+    text: str,
+    *,
+    raw_text: str,
+    image_bytes: bytes | None,
+    order_id: int | None,
+    fulfillment_id: int | None,
+) -> dict:
     normalized = normalize_voice_text(text)
     original = (raw_text or text).strip() or normalized
     _publish("user", normalized or original, reader_id=identity.profile_id)
@@ -191,7 +234,13 @@ def _route_text(db: Session, identity: AuthIdentity, text: str, *, raw_text: str
 
     settings = get_settings()
     if intent == "take":
-        result = _handle_take(db, cabinet_id=settings.cabinet_id, text=normalized)
+        result = _handle_take(
+            db,
+            cabinet_id=settings.cabinet_id,
+            text=normalized,
+            order_id=order_id,
+            fulfillment_id=fulfillment_id,
+        )
     elif intent == "store":
         result = _handle_store(db, cabinet_id=settings.cabinet_id, image_bytes=image_bytes)
     else:
@@ -207,7 +256,7 @@ async def ingest_voice(
     identity: AuthIdentity = Depends(require_reader),
     db: Session = Depends(get_db),
 ) -> dict:
-    text, audio_bytes, image_bytes, wants_audio = await _extract_request_payload(request)
+    text, audio_bytes, image_bytes, wants_audio, order_id, fulfillment_id = await _extract_request_payload(request)
     speech_connector = NullSpeechConnector()
 
     if audio_bytes:
@@ -224,6 +273,8 @@ async def ingest_voice(
         normalized,
         raw_text=text,
         image_bytes=image_bytes,
+        order_id=order_id,
+        fulfillment_id=fulfillment_id,
     )
 
     if wants_audio:

@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.catalog.models import Book
+from app.catalog.models import Book, BookSourceDocument
 from app.core.errors import ApiError
 from app.tutor.models import (
     TutorDocumentChunk,
@@ -33,11 +33,13 @@ def create_profile(
     title: str,
     teaching_goal: str | None,
     book_id: int | None = None,
+    book_source_document_id: int | None = None,
 ) -> TutorProfile:
     profile = TutorProfile(
         reader_id=reader_id,
         source_type=source_type,
         book_id=book_id,
+        book_source_document_id=book_source_document_id,
         title=title,
         teaching_goal=teaching_goal,
         status="queued",
@@ -51,8 +53,8 @@ def create_source_document(
     session: Session,
     *,
     profile_id: int,
-    reader_id: int,
     kind: str,
+    origin_book_source_document_id: int | None = None,
     mime_type: str | None,
     file_name: str | None,
     storage_path: str | None,
@@ -61,8 +63,8 @@ def create_source_document(
 ) -> TutorSourceDocument:
     document = TutorSourceDocument(
         profile_id=profile_id,
-        reader_id=reader_id,
         kind=kind,
+        origin_book_source_document_id=origin_book_source_document_id,
         mime_type=mime_type,
         file_name=file_name,
         storage_path=storage_path,
@@ -135,6 +137,27 @@ def get_primary_source_document(session: Session, *, profile_id: int) -> TutorSo
     return session.execute(statement).scalars().first()
 
 
+def get_book_source_document(session: Session, *, document_id: int) -> BookSourceDocument | None:
+    return session.get(BookSourceDocument, document_id)
+
+
+def require_book_source_document(session: Session, *, document_id: int) -> BookSourceDocument:
+    document = get_book_source_document(session, document_id=document_id)
+    if document is None:
+        raise ApiError(404, "book_source_document_not_found", "Book source document not found")
+    return document
+
+
+def get_primary_book_source_document(session: Session, *, book_id: int) -> BookSourceDocument | None:
+    statement = (
+        select(BookSourceDocument)
+        .where(BookSourceDocument.book_id == book_id)
+        .order_by(BookSourceDocument.is_primary.desc(), BookSourceDocument.id.asc())
+        .limit(1)
+    )
+    return session.execute(statement).scalars().first()
+
+
 def list_profile_jobs(session: Session, *, profile_id: int) -> Sequence[TutorGenerationJob]:
     statement = (
         select(TutorGenerationJob)
@@ -188,9 +211,8 @@ def list_profile_chunks(session: Session, *, profile_id: int) -> Sequence[TutorD
     return session.execute(statement).scalars().all()
 
 
-def create_session(session: Session, *, reader_id: int, profile_id: int, current_step_title: str | None) -> TutorSession:
+def create_session(session: Session, *, profile_id: int, current_step_title: str | None) -> TutorSession:
     tutor_session = TutorSession(
-        reader_id=reader_id,
         profile_id=profile_id,
         status="active",
         current_step_index=0,
@@ -205,7 +227,8 @@ def create_session(session: Session, *, reader_id: int, profile_id: int, current
 def list_sessions(session: Session, *, reader_id: int) -> Sequence[TutorSession]:
     statement = (
         select(TutorSession)
-        .where(TutorSession.reader_id == reader_id)
+        .join(TutorProfile, TutorProfile.id == TutorSession.profile_id)
+        .where(TutorProfile.reader_id == reader_id)
         .order_by(TutorSession.updated_at.desc(), TutorSession.id.desc())
     )
     return session.execute(statement).scalars().all()
@@ -219,7 +242,8 @@ def require_owned_session(session: Session, *, session_id: int, reader_id: int) 
     tutor_session = get_session(session, session_id=session_id)
     if tutor_session is None:
         raise ApiError(404, "tutor_session_not_found", "Tutor session not found")
-    if tutor_session.reader_id != reader_id:
+    profile = session.get(TutorProfile, tutor_session.profile_id)
+    if profile is None or profile.reader_id != reader_id:
         raise ApiError(403, "tutor_session_forbidden", "Tutor session does not belong to the current reader")
     return tutor_session
 

@@ -81,8 +81,11 @@ def seed_voice_state():
         copy = BookCopy(book_id=book.id, cabinet_id=cabinet.id, inventory_status="stored")
         session.add(copy)
         session.flush()
-        session.add(CabinetSlot(cabinet_id="cabinet-001", slot_code="A01", status="occupied", current_copy_id=copy.id))
-        session.add(CabinetSlot(cabinet_id="cabinet-001", slot_code="A02", status="empty", current_copy_id=None))
+        occupied_slot = CabinetSlot(cabinet_id="cabinet-001", slot_code="A01", status="occupied")
+        empty_slot = CabinetSlot(cabinet_id="cabinet-001", slot_code="A02", status="empty")
+        session.add_all([occupied_slot, empty_slot])
+        session.flush()
+        copy.current_slot_id = occupied_slot.id
         session.add(BookStock(book_id=book.id, cabinet_id="cabinet-001", total_copies=1, available_copies=1, reserved_copies=0))
         session.commit()
         return {"reader": reader, "profile": profile, "book": book}
@@ -99,6 +102,19 @@ def reader_headers(account_id: int, profile_id: int):
     return {"Authorization": f"Bearer {token}"}
 
 
+def create_take_order(client, state: dict) -> int:
+    response = client.post(
+        "/api/v1/orders/borrow-orders",
+        headers=reader_headers(state["reader"].id, state["profile"].id),
+        json={
+            "book_id": state["book"].id,
+            "order_mode": "cabinet_pickup",
+        },
+    )
+    assert response.status_code == 201
+    return response.json()["order"]["id"]
+
+
 def test_voice_ingest_accepts_text_and_routes_take_flow(client, monkeypatch):
     from app.voice import router as voice_router
 
@@ -106,10 +122,11 @@ def test_voice_ingest_accepts_text_and_routes_take_flow(client, monkeypatch):
     monkeypatch.setattr(voice_router, "build_speech_connector", lambda: FakeSpeechConnector())
 
     state = seed_voice_state()
+    order_id = create_take_order(client, state)
     response = client.post(
         "/api/v1/voice/ingest",
         headers=reader_headers(state["reader"].id, state["profile"].id),
-        json={"text": "帮我拿《深度学习》"},
+        json={"text": "帮我拿《深度学习》", "orderId": order_id},
     )
 
     assert response.status_code == 200
@@ -135,13 +152,14 @@ def test_voice_ingest_accepts_audio_and_returns_tts_payload(client, monkeypatch)
     monkeypatch.setattr(voice_router, "build_speech_connector", lambda: FakeSpeechConnector())
 
     state = seed_voice_state()
+    order_id = create_take_order(client, state)
     response = client.post(
         "/api/v1/voice/ingest",
         headers={
             **reader_headers(state["reader"].id, state["profile"].id),
             "content-type": "application/octet-stream",
         },
-        params={"audio": "1"},
+        params={"audio": "1", "orderId": str(order_id)},
         content=b"fake-audio",
     )
 
@@ -186,10 +204,11 @@ def test_voice_take_flow_does_not_require_llm_provider(client, monkeypatch):
     monkeypatch.setattr(voice_router, "build_speech_connector", lambda: FakeSpeechConnector())
 
     state = seed_voice_state()
+    order_id = create_take_order(client, state)
     response = client.post(
         "/api/v1/voice/ingest",
         headers=reader_headers(state["reader"].id, state["profile"].id),
-        json={"text": "帮我拿《深度学习》"},
+        json={"text": "帮我拿《深度学习》", "orderId": order_id},
     )
 
     assert response.status_code == 200

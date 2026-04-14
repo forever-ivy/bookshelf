@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.catalog.models import Book
 from app.core.errors import ApiError
+from app.db.base import utc_now
 from app.inventory.models import BookCopy, BookStock, Cabinet, CabinetSlot, InventoryEvent
 
 
@@ -24,7 +25,7 @@ def _ensure_cabinet(session: Session, cabinet_id: str) -> Cabinet:
 def list_slots(session: Session) -> list[dict]:
     rows = session.execute(
         select(CabinetSlot, BookCopy.book_id)
-        .outerjoin(BookCopy, CabinetSlot.current_copy_id == BookCopy.id)
+        .outerjoin(BookCopy, BookCopy.current_slot_id == CabinetSlot.id)
         .order_by(CabinetSlot.slot_code.asc())
     ).all()
     return [
@@ -157,9 +158,10 @@ def _extract_take_title(text: str) -> str:
 def _find_free_slot(session: Session, cabinet_id: str) -> CabinetSlot | None:
     return session.scalars(
         select(CabinetSlot)
+        .outerjoin(BookCopy, BookCopy.current_slot_id == CabinetSlot.id)
         .where(
             CabinetSlot.cabinet_id == cabinet_id,
-            CabinetSlot.current_copy_id.is_(None),
+            BookCopy.id.is_(None),
             CabinetSlot.status.in_(["empty", "free"]),
         )
         .order_by(CabinetSlot.slot_code.asc(), CabinetSlot.id.asc())
@@ -309,12 +311,11 @@ def store_from_ocr_texts(
             session.flush()
         source = "llm_parse"
 
-    copy = BookCopy(book_id=book.id, cabinet_id=cabinet_id, inventory_status="stored")
+    copy = BookCopy(book_id=book.id, cabinet_id=cabinet_id, current_slot_id=slot.id, inventory_status="stored")
     session.add(copy)
     session.flush()
 
     slot.status = "occupied"
-    slot.current_copy_id = copy.id
     adjust_stock_counts(
         session,
         book_id=book.id,
@@ -342,7 +343,7 @@ def store_from_ocr_texts(
         "slot": {
             "slot_code": slot.slot_code,
             "status": slot.status,
-            "current_copy_id": slot.current_copy_id,
+            "current_copy_id": copy.id,
         },
     }
 
@@ -364,69 +365,94 @@ def store_from_image_bytes(
     )
 
 
-def take_by_text(session: Session, *, cabinet_id: str, text: str) -> dict:
+def take_by_text(
+    session: Session,
+    *,
+    cabinet_id: str,
+    text: str,
+    order_id: int | None = None,
+    fulfillment_id: int | None = None,
+) -> dict:
+    if order_id is None and fulfillment_id is None:
+        raise ApiError(400, "fulfillment_binding_required", "Taking a book requires an order or fulfillment binding")
+
     title_query = _extract_take_title(text)
     if not title_query:
         raise ApiError(400, "missing_book_title", "Please provide the title to take")
+    from app.orders.models import BorrowOrder, OrderFulfillment
 
-    base_stmt = (
-        select(CabinetSlot, BookCopy, Book)
-        .join(BookCopy, CabinetSlot.current_copy_id == BookCopy.id)
-        .join(Book, BookCopy.book_id == Book.id)
-        .where(CabinetSlot.cabinet_id == cabinet_id, CabinetSlot.status == "occupied")
-    )
-    candidate_terms = _candidate_terms([title_query], max_terms=6)
-    rows = []
-    if candidate_terms:
-        rows = session.execute(
-            base_stmt.where(
-                or_(*[_normalized_column(Book.title).like(f"%{term}%") for term in candidate_terms])
-            ).order_by(CabinetSlot.slot_code.asc())
-        ).all()
-    if not rows:
-        rows = session.execute(base_stmt.order_by(CabinetSlot.slot_code.asc())).all()
+    fulfillment = None
+    if fulfillment_id is not None:
+        fulfillment = session.get(OrderFulfillment, fulfillment_id)
+    elif order_id is not None:
+        fulfillment = session.scalars(
+            select(OrderFulfillment).where(OrderFulfillment.borrow_order_id == order_id)
+        ).first()
+    if fulfillment is None:
+        raise ApiError(404, "fulfillment_not_found", "Fulfillment not found")
 
-    best_slot: CabinetSlot | None = None
-    best_copy: BookCopy | None = None
-    best_book: Book | None = None
-    best_score = 0.0
-    for slot, copy, book in rows:
-        score = _similarity(title_query, book.title)
-        normalized_query = _normalize(title_query)
-        if normalized_query and normalized_query in _normalize(book.title):
-            score += 0.2
-        if score > best_score:
-            best_slot = slot
-            best_copy = copy
-            best_book = book
-            best_score = score
+    order = session.get(BorrowOrder, fulfillment.borrow_order_id)
+    if order is None or order.assigned_copy_id is None:
+        raise ApiError(404, "borrow_order_not_found", "Borrow order not found")
+    copy = session.get(BookCopy, order.assigned_copy_id)
+    book = session.get(Book, order.book_id)
+    if copy is None or book is None:
+        raise ApiError(404, "order_copy_missing", "Borrow order copy not found")
+    if fulfillment.source_cabinet_id and fulfillment.source_cabinet_id != cabinet_id:
+        raise ApiError(409, "cabinet_mismatch", "Fulfillment does not belong to the active cabinet")
 
-    if best_slot is None or best_book is None or best_copy is None or best_score < 0.5:
-        raise ApiError(404, "book_not_found_on_shelf", "No matching book found on shelf")
+    score = _similarity(title_query, book.title)
+    normalized_query = _normalize(title_query)
+    if normalized_query and normalized_query in _normalize(book.title):
+        score += 0.2
+    if score < 0.5:
+        raise ApiError(404, "book_not_found_on_shelf", "No matching book found for the fulfillment")
 
-    best_slot.status = "empty"
-    best_slot.current_copy_id = None
-    best_copy.inventory_status = "borrowed"
+    source_slot = session.get(CabinetSlot, fulfillment.source_slot_id) if fulfillment.source_slot_id is not None else None
+    if source_slot is not None:
+        source_slot.status = "empty"
+
+    available_delta = -1 if copy.inventory_status == "stored" else 0
+    reserved_delta = -1 if copy.inventory_status in {"reserved", "in_delivery"} else 0
+    copy.current_slot_id = None
+    copy.inventory_status = "borrowed"
+    order.status = "delivered"
+    if order.picked_at is None:
+        order.picked_at = utc_now()
+    if order.delivered_at is None:
+        order.delivered_at = utc_now()
+    fulfillment.status = "delivered"
+    if fulfillment.picked_at is None:
+        fulfillment.picked_at = utc_now()
+    if fulfillment.delivered_at is None:
+        fulfillment.delivered_at = utc_now()
     adjust_stock_counts(
         session,
-        book_id=best_book.id,
+        book_id=book.id,
         cabinet_id=cabinet_id,
-        available_delta=-1,
+        available_delta=available_delta,
+        reserved_delta=reserved_delta,
     )
     session.add(
         InventoryEvent(
             cabinet_id=cabinet_id,
             event_type="book_taken",
-            slot_code=best_slot.slot_code,
-            book_id=best_book.id,
-            copy_id=best_copy.id,
-            payload_json={"query": title_query},
+            slot_code=None if source_slot is None else source_slot.slot_code,
+            book_id=book.id,
+            copy_id=copy.id,
+            payload_json={
+                "query": title_query,
+                "borrowOrderId": order.id,
+                "fulfillmentId": fulfillment.id,
+            },
         )
     )
     session.commit()
 
     return {
         "ok": True,
-        "slot_code": best_slot.slot_code,
-        "book": _serialize_book(best_book),
+        "slotCode": None if source_slot is None else source_slot.slot_code,
+        "book": _serialize_book(book),
+        "orderId": order.id,
+        "fulfillmentId": fulfillment.id,
     }

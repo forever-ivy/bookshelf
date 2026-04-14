@@ -10,7 +10,7 @@ from app.core.events import broker
 from app.core.sse import encode_sse
 from app.core.security import AuthIdentity, create_token, hash_password
 from app.inventory.models import BookCopy, BookStock, Cabinet, CabinetSlot
-from app.orders.models import BorrowOrder, DeliveryOrder, ReturnRequest
+from app.orders.models import BorrowOrder, OrderFulfillment, ReturnRequest
 from app.readers.models import ReaderAccount, ReaderProfile
 from app.robot_sim.models import RobotStatusEvent, RobotTask, RobotUnit
 from app.workers.robot_auto_progress import RobotAutoProgressWorker
@@ -67,14 +67,14 @@ def seed_state():
                 reserved_copies=0,
             )
         )
-        session.add(
-            CabinetSlot(
-                cabinet_id=cabinet.id,
-                slot_code="A01",
-                status="occupied",
-                current_copy_id=copy.id,
-            )
+        slot = CabinetSlot(
+            cabinet_id=cabinet.id,
+            slot_code="A01",
+            status="occupied",
         )
+        session.add(slot)
+        session.flush()
+        copy.current_slot_id = slot.id
         session.commit()
         return {
             "admin": admin,
@@ -143,23 +143,23 @@ def test_reader_borrow_order_creates_delivery_and_task(client):
 
     assert response.status_code == 201
     payload = response.json()
-    assert payload["borrow_order"]["status"] == "created"
-    assert payload["fulfillment_phase"] == "dispatch_started"
-    assert payload["delivery_order"]["status"] == "awaiting_pick"
-    assert payload["robot_task"]["status"] == "assigned"
-    assert payload["robot_unit"]["status"] == "assigned"
-    assert payload["borrow_order"]["assigned_copy_id"] == state["copy"].id
+    assert payload["order"]["status"] == "created"
+    assert payload["fulfillmentPhase"] == "dispatch_started"
+    assert payload["fulfillment"]["status"] == "awaiting_pick"
+    assert payload["currentRobotTask"]["status"] == "assigned"
+    assert payload["robot"]["status"] == "assigned"
+    assert payload["order"]["fulfilledCopyId"] == state["copy"].id
 
     admin_response = client.get(
-        f"/api/v1/admin/orders/{payload['borrow_order']['id']}",
+        f"/api/v1/admin/orders/{payload['order']['id']}",
         headers=admin_headers(state["admin"].id),
     )
     assert admin_response.status_code == 200
     detail = admin_response.json()
-    assert detail["borrow_order"]["status"] == "created"
-    assert detail["fulfillment_phase"] == "dispatch_started"
-    assert detail["delivery_order"]["delivery_target"] == "Reading Hall Seat A7"
-    assert detail["robot_task"]["status"] == "assigned"
+    assert detail["order"]["status"] == "created"
+    assert detail["fulfillmentPhase"] == "dispatch_started"
+    assert detail["fulfillment"]["deliveryTarget"] == "Reading Hall Seat A7"
+    assert detail["currentRobotTask"]["status"] == "assigned"
 
     tasks_response = client.get(
         "/api/v1/admin/tasks",
@@ -195,7 +195,7 @@ def test_reader_borrow_order_creates_delivery_and_task(client):
         copy = session.get(BookCopy, state["copy"].id)
         stock = session.query(BookStock).filter_by(book_id=state["book"].id, cabinet_id="cabinet-001").one()
         assert slot.current_copy_id is None
-        assert copy.inventory_status == "in_delivery"
+        assert copy.inventory_status == "reserved"
         assert stock.total_copies == 1
         assert stock.available_copies == 0
         assert stock.reserved_copies == 1
@@ -218,12 +218,13 @@ def test_cabinet_pickup_order_does_not_create_delivery_task(client):
 
     assert response.status_code == 201
     payload = response.json()
-    assert payload["borrow_order"]["order_mode"] == "cabinet_pickup"
-    assert payload["fulfillment_phase"] == "pickup_pending"
-    assert payload["delivery_order"] is None
-    assert payload["robot_task"] is None
-    assert payload["robot_unit"] is None
-    assert payload["borrow_order"]["assigned_copy_id"] == state["copy"].id
+    assert payload["order"]["fulfillmentMode"] == "cabinet_pickup"
+    assert payload["fulfillmentPhase"] == "pickup_pending"
+    assert payload["fulfillment"]["mode"] == "cabinet_pickup"
+    assert payload["fulfillment"]["status"] == "awaiting_pick"
+    assert payload["currentRobotTask"] is None
+    assert payload["robot"] is None
+    assert payload["order"]["fulfilledCopyId"] == state["copy"].id
 
     tasks_response = client.get(
         "/api/v1/admin/tasks",
@@ -273,7 +274,7 @@ def test_robot_auto_progress_worker_completes_delivery(client):
             "order_mode": "robot_delivery",
         },
     )
-    order_id = create_response.json()["borrow_order"]["id"]
+    order_id = create_response.json()["order"]["id"]
 
     worker = RobotAutoProgressWorker()
     for _ in range(5):
@@ -283,10 +284,10 @@ def test_robot_auto_progress_worker_completes_delivery(client):
     session = get_session_factory()()
     try:
         order = session.get(BorrowOrder, order_id)
-        delivery = session.get(DeliveryOrder, create_response.json()["delivery_order"]["id"])
-        robot = session.get(RobotUnit, create_response.json()["robot_unit"]["id"])
-        task = session.get(RobotTask, create_response.json()["robot_task"]["id"])
-        copy = session.get(BookCopy, create_response.json()["borrow_order"]["assigned_copy_id"])
+        delivery = session.get(OrderFulfillment, create_response.json()["fulfillment"]["id"])
+        robot = session.get(RobotUnit, create_response.json()["robot"]["id"])
+        task = session.get(RobotTask, create_response.json()["currentRobotTask"]["id"])
+        copy = session.get(BookCopy, create_response.json()["order"]["fulfilledCopyId"])
         stock = session.query(BookStock).filter_by(book_id=state["book"].id, cabinet_id="cabinet-001").one()
         assert order.status == "completed"
         assert delivery.status == "completed"
@@ -350,7 +351,7 @@ def test_reader_cannot_create_return_request_for_another_readers_order(client):
             "order_mode": "robot_delivery",
         },
     )
-    order_id = create_response.json()["borrow_order"]["id"]
+    order_id = create_response.json()["order"]["id"]
 
     return_response = client.post(
         f"/api/v1/orders/borrow-orders/{order_id}/return-requests",
@@ -374,7 +375,7 @@ def test_reader_cannot_create_return_request_before_book_is_borrowed(client):
         },
     )
     assert create_response.status_code == 201
-    order_id = create_response.json()["borrow_order"]["id"]
+    order_id = create_response.json()["order"]["id"]
 
     return_response = client.post(
         f"/api/v1/orders/borrow-orders/{order_id}/return-requests",
@@ -400,8 +401,8 @@ def test_admin_can_list_and_complete_return_request_restoring_inventory(client):
     )
     assert create_response.status_code == 201
     order_payload = create_response.json()
-    order_id = order_payload["borrow_order"]["id"]
-    copy_id = order_payload["borrow_order"]["assigned_copy_id"]
+    order_id = order_payload["order"]["id"]
+    copy_id = order_payload["order"]["fulfilledCopyId"]
 
     worker = RobotAutoProgressWorker()
     for _ in range(5):
@@ -433,8 +434,8 @@ def test_admin_can_list_and_complete_return_request_restoring_inventory(client):
     payload = complete_response.json()
     assert payload["return_request"]["id"] == return_request_id
     assert payload["return_request"]["status"] == "completed"
-    assert payload["order"]["borrow_order"]["id"] == order_id
-    assert payload["order"]["borrow_order"]["status"] == "returned"
+    assert payload["order"]["order"]["id"] == order_id
+    assert payload["order"]["order"]["status"] == "returned"
     assert payload["slot"]["status"] == "occupied"
     assert payload["slot"]["current_copy_id"] == copy_id
 
@@ -534,7 +535,7 @@ def test_admin_can_filter_return_requests_by_status_and_reader(client):
     assert reader_filtered_response.status_code == 200
     reader_filtered_items = reader_filtered_response.json()["items"]
     assert [item["id"] for item in reader_filtered_items] == [created_request_id]
-    assert [item["reader_id"] for item in reader_filtered_items] == [first_reader_id]
+    assert [item["readerId"] for item in reader_filtered_items] == [first_reader_id]
 
     combined_filtered_response = client.get(
         "/api/v1/admin/return-requests",
@@ -545,7 +546,7 @@ def test_admin_can_filter_return_requests_by_status_and_reader(client):
     combined_filtered_items = combined_filtered_response.json()["items"]
     assert [item["id"] for item in combined_filtered_items] == [completed_request_id]
     assert [item["status"] for item in combined_filtered_items] == ["completed"]
-    assert [item["reader_id"] for item in combined_filtered_items] == [second_reader_id]
+    assert [item["readerId"] for item in combined_filtered_items] == [second_reader_id]
 
     empty_filtered_response = client.get(
         "/api/v1/admin/return-requests",
@@ -592,9 +593,9 @@ def test_admin_can_filter_orders_by_status_priority_and_intervention(client):
 
     assert response.status_code == 200
     payload = response.json()
-    assert [item["borrow_order"]["id"] for item in payload["items"]] == [high_priority_order_id]
-    assert [item["borrow_order"]["priority"] for item in payload["items"]] == ["high"]
-    assert [item["borrow_order"]["intervention_status"] for item in payload["items"]] == ["manual_review"]
+    assert [item["order"]["id"] for item in payload["items"]] == [high_priority_order_id]
+    assert [item["order"]["priority"] for item in payload["items"]] == ["high"]
+    assert [item["order"]["interventionStatus"] for item in payload["items"]] == ["manual_review"]
 
 
 def test_admin_can_search_orders_by_order_id_book_title_and_reader_name(client):
@@ -651,7 +652,7 @@ def test_admin_can_search_orders_by_order_id_book_title_and_reader_name(client):
         params={"query": "Socratic"},
     )
     assert title_response.status_code == 200
-    assert [item["borrow_order"]["id"] for item in title_response.json()["items"]] == [matched_order_id]
+    assert [item["order"]["id"] for item in title_response.json()["items"]] == [matched_order_id]
 
     reader_response = client.get(
         "/api/v1/admin/orders",
@@ -659,7 +660,7 @@ def test_admin_can_search_orders_by_order_id_book_title_and_reader_name(client):
         params={"query": "Alice"},
     )
     assert reader_response.status_code == 200
-    assert [item["borrow_order"]["id"] for item in reader_response.json()["items"]] == [matched_order_id]
+    assert [item["order"]["id"] for item in reader_response.json()["items"]] == [matched_order_id]
 
     id_response = client.get(
         "/api/v1/admin/orders",
@@ -667,7 +668,7 @@ def test_admin_can_search_orders_by_order_id_book_title_and_reader_name(client):
         params={"query": str(matched_order_id)},
     )
     assert id_response.status_code == 200
-    assert [item["borrow_order"]["id"] for item in id_response.json()["items"]] == [matched_order_id]
+    assert [item["order"]["id"] for item in id_response.json()["items"]] == [matched_order_id]
 
 
 def test_admin_can_get_return_request_detail_before_and_after_completion(client):
@@ -685,8 +686,8 @@ def test_admin_can_get_return_request_detail_before_and_after_completion(client)
     )
     assert create_response.status_code == 201
     order_payload = create_response.json()
-    order_id = order_payload["borrow_order"]["id"]
-    copy_id = order_payload["borrow_order"]["assigned_copy_id"]
+    order_id = order_payload["order"]["id"]
+    copy_id = order_payload["order"]["fulfilledCopyId"]
 
     worker = RobotAutoProgressWorker()
     for _ in range(5):
@@ -709,8 +710,8 @@ def test_admin_can_get_return_request_detail_before_and_after_completion(client)
     detail = detail_response.json()
     assert detail["return_request"]["id"] == return_request_id
     assert detail["return_request"]["status"] == "created"
-    assert detail["order"]["borrow_order"]["id"] == order_id
-    assert detail["order"]["borrow_order"]["status"] == "completed"
+    assert detail["order"]["order"]["id"] == order_id
+    assert detail["order"]["order"]["status"] == "completed"
     assert detail["copy"]["id"] == copy_id
     assert detail["copy"]["inventory_status"] == "borrowed"
     assert detail["slot"] is None
@@ -728,7 +729,7 @@ def test_admin_can_get_return_request_detail_before_and_after_completion(client)
     assert completed_detail_response.status_code == 200
     completed_detail = completed_detail_response.json()
     assert completed_detail["return_request"]["status"] == "completed"
-    assert completed_detail["order"]["borrow_order"]["status"] == "returned"
+    assert completed_detail["order"]["order"]["status"] == "returned"
     assert completed_detail["copy"]["id"] == copy_id
     assert completed_detail["copy"]["inventory_status"] == "stored"
     assert completed_detail["slot"]["status"] == "occupied"
@@ -762,7 +763,7 @@ def test_reader_can_list_and_get_own_return_requests(client):
         },
     )
     assert create_response.status_code == 201
-    order_id = create_response.json()["borrow_order"]["id"]
+    order_id = create_response.json()["order"]["id"]
 
     worker = RobotAutoProgressWorker()
     for _ in range(5):
@@ -785,9 +786,9 @@ def test_reader_can_list_and_get_own_return_requests(client):
     items = list_response.json()["items"]
     assert len(items) == 1
     assert items[0]["id"] == return_request_id
-    assert items[0]["borrow_order_id"] == order_id
-    assert items[0]["reader_id"] == state["profile"].id
-    assert items[0]["borrow_order_status"] == "completed"
+    assert items[0]["borrowOrderId"] == order_id
+    assert items[0]["readerId"] == state["profile"].id
+    assert items[0]["borrowOrderStatus"] == "completed"
 
     detail_response = client.get(
         f"/api/v1/orders/return-requests/{return_request_id}",
@@ -796,8 +797,8 @@ def test_reader_can_list_and_get_own_return_requests(client):
     assert detail_response.status_code == 200
     detail = detail_response.json()
     assert detail["return_request"]["id"] == return_request_id
-    assert detail["order"]["borrow_order"]["id"] == order_id
-    assert detail["order"]["borrow_order"]["status"] == "completed"
+    assert detail["order"]["order"]["id"] == order_id
+    assert detail["order"]["order"]["status"] == "completed"
 
     session = get_session_factory()()
     try:
@@ -842,7 +843,7 @@ def test_reader_can_list_and_filter_own_borrow_orders(client):
         },
     )
     assert create_response.status_code == 201
-    active_order_id = create_response.json()["borrow_order"]["id"]
+    active_order_id = create_response.json()["order"]["id"]
 
     session = get_session_factory()()
     try:
@@ -887,7 +888,7 @@ def test_reader_can_list_and_filter_own_borrow_orders(client):
     )
     assert list_response.status_code == 200
     items = list_response.json()["items"]
-    assert {item["borrow_order"]["id"] for item in items} == {active_order_id, returned_order_id}
+    assert {item["order"]["id"] for item in items} == {active_order_id, returned_order_id}
 
     active_only_response = client.get(
         "/api/v1/orders/borrow-orders",
@@ -896,7 +897,7 @@ def test_reader_can_list_and_filter_own_borrow_orders(client):
     )
     assert active_only_response.status_code == 200
     active_items = active_only_response.json()["items"]
-    assert [item["borrow_order"]["id"] for item in active_items] == [active_order_id]
+    assert [item["order"]["id"] for item in active_items] == [active_order_id]
 
     returned_response = client.get(
         "/api/v1/orders/borrow-orders",
@@ -905,7 +906,7 @@ def test_reader_can_list_and_filter_own_borrow_orders(client):
     )
     assert returned_response.status_code == 200
     returned_items = returned_response.json()["items"]
-    assert [item["borrow_order"]["id"] for item in returned_items] == [returned_order_id]
+    assert [item["order"]["id"] for item in returned_items] == [returned_order_id]
 
 
 def test_reader_can_get_own_order_detail_and_is_forbidden_from_other_readers_order(client):
@@ -922,7 +923,7 @@ def test_reader_can_get_own_order_detail_and_is_forbidden_from_other_readers_ord
         },
     )
     assert create_response.status_code == 201
-    own_order_id = create_response.json()["borrow_order"]["id"]
+    own_order_id = create_response.json()["order"]["id"]
 
     session = get_session_factory()()
     try:
@@ -960,8 +961,8 @@ def test_reader_can_get_own_order_detail_and_is_forbidden_from_other_readers_ord
     )
     assert detail_response.status_code == 200
     detail = detail_response.json()
-    assert detail["borrow_order"]["id"] == own_order_id
-    assert detail["borrow_order"]["reader_id"] == state["profile"].id
+    assert detail["order"]["id"] == own_order_id
+    assert detail["order"]["readerId"] == state["profile"].id
 
     forbidden_response = client.get(
         f"/api/v1/orders/borrow-orders/{other_order_id}",
@@ -986,8 +987,8 @@ def test_reader_can_cancel_fresh_robot_delivery_order_and_restore_inventory(clie
     )
     assert create_response.status_code == 201
     payload = create_response.json()
-    order_id = payload["borrow_order"]["id"]
-    copy_id = payload["borrow_order"]["assigned_copy_id"]
+    order_id = payload["order"]["id"]
+    copy_id = payload["order"]["fulfilledCopyId"]
 
     cancel_response = client.post(
         f"/api/v1/orders/borrow-orders/{order_id}/cancel",
@@ -995,10 +996,10 @@ def test_reader_can_cancel_fresh_robot_delivery_order_and_restore_inventory(clie
     )
     assert cancel_response.status_code == 200
     cancelled = cancel_response.json()
-    assert cancelled["borrow_order"]["status"] == "cancelled"
-    assert cancelled["delivery_order"]["status"] == "cancelled"
-    assert cancelled["robot_task"]["status"] == "cancelled"
-    assert cancelled["robot_unit"]["status"] == "idle"
+    assert cancelled["order"]["status"] == "cancelled"
+    assert cancelled["fulfillment"]["status"] == "cancelled"
+    assert cancelled["currentRobotTask"]["status"] == "cancelled"
+    assert cancelled["robot"]["status"] == "idle"
 
     session = get_session_factory()()
     try:
@@ -1042,7 +1043,7 @@ def test_reader_cannot_cancel_progressed_robot_delivery_order(client):
         },
     )
     assert create_response.status_code == 201
-    order_id = create_response.json()["borrow_order"]["id"]
+    order_id = create_response.json()["order"]["id"]
 
     tick_response = client.post(
         f"/api/v1/robot-sim/orders/{order_id}/tick",
@@ -1066,7 +1067,7 @@ def test_admin_state_correction_creates_audit_log(client):
     state = seed_state()
 
     create_response = post_borrow_order(client, state["profile"].id, state["book"].id)
-    order_id = create_response.json()["borrow_order"]["id"]
+    order_id = create_response.json()["order"]["id"]
 
     response = client.patch(
         f"/api/v1/admin/orders/{order_id}/state",
@@ -1087,7 +1088,7 @@ def test_admin_state_correction_creates_audit_log(client):
         assert audit is not None
         assert audit.admin_id == state["admin"].id
         assert audit.target_type == "borrow_order_bundle"
-        assert audit.target_id == order_id
+        assert audit.target_ref == str(order_id)
         assert audit.action == "admin_correction"
         assert audit.before_state["borrow_status"] == "created"
         assert audit.after_state["borrow_status"] == "delivered"
@@ -1108,7 +1109,7 @@ def test_admin_stream_emits_events_and_admin_can_correct_state(client):
             "order_mode": "robot_delivery",
         },
     )
-    order_id = create_response.json()["borrow_order"]["id"]
+    order_id = create_response.json()["order"]["id"]
 
     async def read_first_event():
         stream = encode_sse(broker.subscribe())
@@ -1130,8 +1131,8 @@ def test_admin_stream_emits_events_and_admin_can_correct_state(client):
 
     assert correction_response.status_code == 200
     correction = correction_response.json()
-    assert correction["borrow_order"]["status"] == "delivered"
-    assert correction["delivery_order"]["status"] == "delivered"
+    assert correction["order"]["status"] == "delivered"
+    assert correction["fulfillment"]["status"] == "delivered"
     assert correction["robot"]["status"] == "returning"
 
     forbidden = client.get(
@@ -1154,7 +1155,7 @@ def test_admin_correction_rejects_unknown_status_values(client):
             "order_mode": "robot_delivery",
         },
     )
-    order_id = create_response.json()["borrow_order"]["id"]
+    order_id = create_response.json()["order"]["id"]
 
     response = client.patch(
         f"/api/v1/admin/orders/{order_id}/state",
@@ -1184,7 +1185,7 @@ def test_robot_sim_tick_endpoint_progresses_order_to_completion(client):
     )
     assert create_response.status_code == 201
     payload = create_response.json()
-    order_id = payload["borrow_order"]["id"]
+    order_id = payload["order"]["id"]
 
     tick_response = client.post(
         "/api/v1/robot-sim/tick",
@@ -1199,11 +1200,11 @@ def test_robot_sim_tick_endpoint_progresses_order_to_completion(client):
     assert tick_payload["executed_steps"] == 5
     assert tick_payload["total_progressed_orders"] == 5
     assert [item["progressed_orders"] for item in tick_payload["steps"]] == [1, 1, 1, 1, 1]
-    assert tick_payload["items"][0]["borrow_order"]["id"] == order_id
-    assert tick_payload["items"][0]["borrow_order"]["status"] == "completed"
-    assert tick_payload["items"][0]["delivery_order"]["status"] == "completed"
-    assert tick_payload["items"][0]["robot_task"]["status"] == "completed"
-    assert tick_payload["items"][0]["robot_unit"]["status"] == "idle"
+    assert tick_payload["items"][0]["order"]["id"] == order_id
+    assert tick_payload["items"][0]["order"]["status"] == "completed"
+    assert tick_payload["items"][0]["fulfillment"]["status"] == "completed"
+    assert tick_payload["items"][0]["currentRobotTask"]["status"] == "completed"
+    assert tick_payload["items"][0]["robot"]["status"] == "idle"
 
 
 def test_robot_sim_tick_endpoint_requires_admin(client):
@@ -1244,7 +1245,7 @@ def test_robot_sim_single_order_tick_endpoint_progresses_target_order(client):
         },
     )
     assert create_response.status_code == 201
-    order_id = create_response.json()["borrow_order"]["id"]
+    order_id = create_response.json()["order"]["id"]
 
     tick_response = client.post(
         f"/api/v1/robot-sim/orders/{order_id}/tick",
@@ -1255,16 +1256,16 @@ def test_robot_sim_single_order_tick_endpoint_progresses_target_order(client):
     assert tick_response.status_code == 200
     payload = tick_response.json()
     assert payload["ok"] is True
-    assert payload["borrow_order_id"] == order_id
+    assert payload["borrowOrderId"] == order_id
     assert payload["requested_steps"] == 2
     assert payload["executed_steps"] == 2
     assert payload["progressed_steps"] == 2
     assert [item["borrow_status"] for item in payload["steps"]] == ["awaiting_pick", "picked_from_cabinet"]
-    assert [item["delivery_status"] for item in payload["steps"]] == ["picked_from_cabinet", "delivering"]
-    assert payload["item"]["borrow_order"]["status"] == "picked_from_cabinet"
-    assert payload["item"]["delivery_order"]["status"] == "delivering"
-    assert payload["item"]["robot_task"]["status"] == "arriving"
-    assert payload["item"]["robot_unit"]["status"] == "arriving"
+    assert [item["fulfillment_status"] for item in payload["steps"]] == ["picked_from_cabinet", "delivering"]
+    assert payload["item"]["order"]["status"] == "picked_from_cabinet"
+    assert payload["item"]["fulfillment"]["status"] == "delivering"
+    assert payload["item"]["currentRobotTask"]["status"] == "arriving"
+    assert payload["item"]["robot"]["status"] == "arriving"
 
 
 def test_robot_sim_single_order_tick_endpoint_returns_404_for_missing_order(client):

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from app.catalog.models import BookSourceDocument
 from app.core.config import get_settings
 from app.recommendation.embeddings import build_book_embedding_text, build_embedding_provider
 from app.tutor import repository
@@ -94,6 +95,19 @@ def extract_text_from_file(*, source_document: TutorSourceDocument) -> str:
     raise RuntimeError(f"Unsupported source file type: {suffix or 'unknown'}")
 
 
+def extract_text_from_book_source_document(*, source_document: BookSourceDocument) -> str:
+    extracted_path = Path(source_document.extracted_text_path or "")
+    if source_document.extracted_text_path and extracted_path.exists():
+        return extracted_path.read_text(encoding="utf-8")
+    if not source_document.storage_path:
+        raise RuntimeError("Book source document does not have a storage path")
+    proxy = TutorSourceDocument(
+        storage_path=source_document.storage_path,
+        extracted_text_path=source_document.extracted_text_path,
+    )
+    return extract_text_from_file(source_document=proxy)
+
+
 def persist_extracted_text(
     *,
     profile: TutorProfile,
@@ -143,7 +157,7 @@ def _read_uploaded_bytes(source_document: TutorSourceDocument) -> bytes:
 
 
 def _prepare_source_text(session: Session, profile: TutorProfile, source_document: TutorSourceDocument) -> str:
-    if profile.source_type == "book":
+    if profile.source_type == "book" and source_document.kind == "book_synthetic":
         if profile.book_id is None:
             raise RuntimeError("Book-based tutor profile is missing book_id")
         book = repository.require_book(session, book_id=profile.book_id)
@@ -158,6 +172,25 @@ def _prepare_source_text(session: Session, profile: TutorProfile, source_documen
             "bookId": book.id,
             "bookTitle": book.title,
             "sourceKind": "synthetic-book-metadata",
+        }
+        return text
+
+    if profile.source_type == "book" and source_document.kind == "book_asset":
+        if source_document.origin_book_source_document_id is None:
+            raise RuntimeError("Book asset tutor source does not reference a book source document")
+        book_source = repository.require_book_source_document(
+            session,
+            document_id=source_document.origin_book_source_document_id,
+        )
+        text = extract_text_from_book_source_document(source_document=book_source)
+        target = persist_extracted_text(profile=profile, source_document=source_document, text=text)
+        source_document.extracted_text_path = str(target)
+        source_document.parse_status = "parsed"
+        source_document.content_hash = book_source.content_hash or hashlib.sha256(text.encode("utf-8")).hexdigest()
+        source_document.metadata_json = {
+            **(source_document.metadata_json or {}),
+            "sourceKind": "book-asset",
+            "bookSourceDocumentId": book_source.id,
         }
         return text
 

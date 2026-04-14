@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from app.core.config import get_settings
-from app.core.database import get_engine
+from app.core.database import get_engine, get_session_factory
+from app.core.security import AuthIdentity, create_token, hash_password
+from app.readers.models import ReaderAccount, ReaderProfile
 
 
 class FakeOCRConnector:
@@ -33,6 +35,25 @@ def seed_rows(conn, statements):
     conn.commit()
 
 
+def reader_headers(profile_id: int):
+    session = get_session_factory()()
+    try:
+        reader = (
+            session.query(ReaderAccount)
+            .join(ReaderProfile, ReaderProfile.account_id == ReaderAccount.id)
+            .filter(ReaderProfile.id == profile_id)
+            .one()
+        )
+        token = create_token(
+            AuthIdentity(account_id=reader.id, role="reader", profile_id=profile_id),
+            ttl_minutes=30,
+            token_type="access",
+        )
+        return {"Authorization": f"Bearer {token}"}
+    finally:
+        session.close()
+
+
 def test_paddle_ocr_connector_uses_service_owned_adapter(monkeypatch):
     from app.connectors import ocr as ocr_connector_module
     from app.connectors import paddle_ocr_adapter
@@ -59,8 +80,8 @@ def test_inventory_ocr_ingest_and_take_by_text_flow(client, monkeypatch):
             conn,
             [
                 (
-                    "INSERT INTO cabinet_slots (cabinet_id, slot_code, status, current_copy_id) VALUES (?, ?, ?, ?)",
-                    ("cabinet-001", "A01", "empty", None),
+                    "INSERT INTO cabinet_slots (cabinet_id, slot_code, status) VALUES (?, ?, ?)",
+                    ("cabinet-001", "A01", "empty"),
                 ),
             ],
         )
@@ -80,7 +101,14 @@ def test_inventory_ocr_ingest_and_take_by_text_flow(client, monkeypatch):
 
     with engine.begin() as conn:
         slot = conn.exec_driver_sql(
-            "SELECT slot_code, status, current_copy_id FROM cabinet_slots WHERE slot_code = 'A01'"
+            """
+            SELECT
+                slot_code,
+                status,
+                (SELECT id FROM book_copies WHERE current_slot_id = cabinet_slots.id LIMIT 1) AS current_copy_id
+            FROM cabinet_slots
+            WHERE slot_code = 'A01'
+            """
         ).fetchone()
         stock = conn.exec_driver_sql(
             "SELECT total_copies, available_copies, reserved_copies FROM book_stock WHERE cabinet_id = 'cabinet-001'"
@@ -101,16 +129,56 @@ def test_inventory_ocr_ingest_and_take_by_text_flow(client, monkeypatch):
     assert events[1][2] is not None
     assert copy == ("stored",)
 
-    take_response = client.post("/api/v1/inventory/take-by-text", json={"text": "帮我拿《深度学习》"})
+    session = get_session_factory()()
+    try:
+        account = ReaderAccount(username="inventory-reader", password_hash=hash_password("reader-password"))
+        session.add(account)
+        session.flush()
+        profile = ReaderProfile(
+            account_id=account.id,
+            display_name="Inventory Reader",
+            affiliation_type="student",
+            college="Computer Science",
+            major="AI",
+            grade_year="2026",
+        )
+        session.add(profile)
+        session.commit()
+        profile_id = profile.id
+    finally:
+        session.close()
+
+    create_order_response = client.post(
+        "/api/v1/orders/borrow-orders",
+        headers=reader_headers(profile_id),
+        json={
+            "book_id": payload["book"]["id"],
+            "order_mode": "cabinet_pickup",
+        },
+    )
+    assert create_order_response.status_code == 201
+    order_payload = create_order_response.json()
+
+    take_response = client.post(
+        "/api/v1/inventory/take-by-text",
+        json={"text": "帮我拿《深度学习》", "order_id": order_payload["order"]["id"]},
+    )
     assert take_response.status_code == 200
     take_payload = take_response.json()
     assert take_payload["ok"] is True
-    assert take_payload["slot_code"] == "A01"
+    assert take_payload["slotCode"] == "A01"
     assert take_payload["book"]["title"] == "深度学习"
 
     with engine.begin() as conn:
         slot = conn.exec_driver_sql(
-            "SELECT slot_code, status, current_copy_id FROM cabinet_slots WHERE slot_code = 'A01'"
+            """
+            SELECT
+                slot_code,
+                status,
+                (SELECT id FROM book_copies WHERE current_slot_id = cabinet_slots.id LIMIT 1) AS current_copy_id
+            FROM cabinet_slots
+            WHERE slot_code = 'A01'
+            """
         ).fetchone()
         stock = conn.exec_driver_sql(
             "SELECT total_copies, available_copies, reserved_copies FROM book_stock WHERE cabinet_id = 'cabinet-001'"
@@ -143,8 +211,8 @@ def test_inventory_ocr_ingest_returns_controlled_error_when_llm_is_misconfigured
             conn,
             [
                 (
-                    "INSERT INTO cabinet_slots (cabinet_id, slot_code, status, current_copy_id) VALUES (?, ?, ?, ?)",
-                    ("cabinet-001", "A01", "empty", None),
+                    "INSERT INTO cabinet_slots (cabinet_id, slot_code, status) VALUES (?, ?, ?)",
+                    ("cabinet-001", "A01", "empty"),
                 ),
             ],
         )

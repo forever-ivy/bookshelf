@@ -47,7 +47,6 @@ def ensure_slots(session, *, cabinet_id: str, slot_prefix: str, required: int) -
             cabinet_id=cabinet_id,
             slot_code=slot_code,
             status="empty",
-            current_copy_id=None,
         )
         session.add(slot)
         existing.append(slot)
@@ -103,7 +102,7 @@ def main() -> None:
             session.flush()
 
             slot.status = "occupied"
-            slot.current_copy_id = copy.id
+            copy.current_slot_id = slot.id
             adjust_stock_counts(
                 session,
                 book_id=book.id,

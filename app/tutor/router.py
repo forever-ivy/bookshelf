@@ -61,6 +61,7 @@ def create_tutor_profile(
         db,
         reader_id=identity.profile_id,
         book_id=payload.book_id,
+        book_source_document_id=payload.book_source_document_id,
         title=payload.title,
         teaching_goal=payload.teaching_goal,
     )

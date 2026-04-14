@@ -16,6 +16,9 @@ class TutorProfile(Base):
     reader_id: Mapped[int] = mapped_column(ForeignKey("reader_profiles.id"), index=True)
     source_type: Mapped[str] = mapped_column(String(32), index=True)
     book_id: Mapped[int | None] = mapped_column(ForeignKey("books.id"), nullable=True, index=True)
+    book_source_document_id: Mapped[int | None] = mapped_column(
+        ForeignKey("book_source_documents.id"), nullable=True, index=True
+    )
     title: Mapped[str] = mapped_column(String(255))
     teaching_goal: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="queued", index=True)
@@ -33,8 +36,10 @@ class TutorSourceDocument(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     profile_id: Mapped[int] = mapped_column(ForeignKey("tutor_profiles.id"), index=True)
-    reader_id: Mapped[int] = mapped_column(ForeignKey("reader_profiles.id"), index=True)
     kind: Mapped[str] = mapped_column(String(32), index=True)
+    origin_book_source_document_id: Mapped[int | None] = mapped_column(
+        ForeignKey("book_source_documents.id"), nullable=True, index=True
+    )
     mime_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
     file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     storage_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
@@ -65,7 +70,6 @@ class TutorSession(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     profile_id: Mapped[int] = mapped_column(ForeignKey("tutor_profiles.id"), index=True)
-    reader_id: Mapped[int] = mapped_column(ForeignKey("reader_profiles.id"), index=True)
     status: Mapped[str] = mapped_column(String(32), default="active", index=True)
     current_step_index: Mapped[int] = mapped_column(Integer, default=0)
     current_step_title: Mapped[str | None] = mapped_column(String(255), nullable=True)

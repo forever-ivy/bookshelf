@@ -151,8 +151,12 @@ def test_search_endpoint_includes_author_and_slot_when_inventory_exists(client, 
                     (1, "cabinet-001", "stored"),
                 ),
                 (
-                    "INSERT INTO cabinet_slots (cabinet_id, slot_code, status, current_copy_id) VALUES (?, ?, ?, ?)",
-                    ("cabinet-001", "D218", "occupied", 1),
+                    "INSERT INTO cabinet_slots (cabinet_id, slot_code, status) VALUES (?, ?, ?)",
+                    ("cabinet-001", "D218", "occupied"),
+                ),
+                (
+                    "UPDATE book_copies SET current_slot_id = ? WHERE id = ?",
+                    (1, 1),
                 ),
             ],
         )

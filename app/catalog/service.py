@@ -49,7 +49,7 @@ def _slot_map(session: Session, book_ids: list[int]) -> dict[int, list[CabinetSl
     for chunk in _chunk_book_ids(book_ids):
         rows = session.execute(
             select(CabinetSlot, BookCopy.book_id)
-            .join(BookCopy, CabinetSlot.current_copy_id == BookCopy.id)
+            .join(BookCopy, BookCopy.current_slot_id == CabinetSlot.id)
             .where(BookCopy.book_id.in_(chunk))
         ).all()
         for slot, book_id in rows:

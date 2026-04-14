@@ -2,10 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, ForeignKey, String, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import CheckConstraint, ForeignKey, String, UniqueConstraint, select
+from sqlalchemy.orm import Mapped, column_property, mapped_column
 
 from app.db.base import Base, JSON_VARIANT, utc_now
+
+
+COPY_STATUSES = ("stored", "reserved", "in_delivery", "borrowed")
+SLOT_STATUSES = ("empty", "free", "occupied", "locked")
 
 
 class Cabinet(Base):
@@ -21,10 +25,17 @@ class Cabinet(Base):
 
 class BookCopy(Base):
     __tablename__ = "book_copies"
+    __table_args__ = (
+        CheckConstraint(
+            f"inventory_status IN {COPY_STATUSES}",
+            name="ck_book_copies_inventory_status",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     book_id: Mapped[int] = mapped_column(ForeignKey("books.id"), index=True)
     cabinet_id: Mapped[str] = mapped_column(ForeignKey("cabinets.id"), index=True)
+    current_slot_id: Mapped[int | None] = mapped_column(ForeignKey("cabinet_slots.id"), nullable=True, index=True)
     inventory_status: Mapped[str] = mapped_column(String(32), default="stored", index=True)
     created_at: Mapped[datetime | None] = mapped_column(default=utc_now, nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(default=utc_now, onupdate=utc_now, nullable=True)
@@ -54,13 +65,19 @@ class CabinetSlot(Base):
     __tablename__ = "cabinet_slots"
     __table_args__ = (
         UniqueConstraint("cabinet_id", "slot_code", name="uq_cabinet_slot_code"),
+        CheckConstraint(
+            f"status IN {SLOT_STATUSES}",
+            name="ck_cabinet_slots_status",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     cabinet_id: Mapped[str] = mapped_column(ForeignKey("cabinets.id"), index=True)
     slot_code: Mapped[str] = mapped_column(String(64), index=True)
     status: Mapped[str] = mapped_column(String(32), default="empty")
-    current_copy_id: Mapped[int | None] = mapped_column(ForeignKey("book_copies.id"), nullable=True, unique=True)
+    current_copy_id: Mapped[int | None] = column_property(
+        select(BookCopy.id).where(BookCopy.current_slot_id == id).correlate_except(BookCopy).scalar_subquery()
+    )
     created_at: Mapped[datetime | None] = mapped_column(default=utc_now, nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(default=utc_now, onupdate=utc_now, nullable=True)
 

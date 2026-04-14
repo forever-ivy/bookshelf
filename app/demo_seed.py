@@ -403,7 +403,6 @@ def seed_demo_data(session: Session) -> dict[str, int]:
             cabinet_id=cabinet_id,
             slot_code=slot_code,
             status="empty",
-            current_copy_id=None,
         )
         session.add(slot)
         session.flush()
@@ -422,8 +421,8 @@ def seed_demo_data(session: Session) -> dict[str, int]:
         copies.append(copy)
         if slot_code is not None:
             slot = slots_by_code[(cabinet_id, slot_code)]
+            copy.current_slot_id = slot.id
             slot.status = "occupied"
-            slot.current_copy_id = copy.id
 
     stock_rows = [
         ("ops", "cabinet-001", 2, 1, 0),

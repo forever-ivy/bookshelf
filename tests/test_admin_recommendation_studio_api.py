@@ -70,6 +70,14 @@ def seed_recommendation_studio_state() -> dict[str, int]:
             copy = BookCopy(book_id=book.id, cabinet_id=cabinet.id, inventory_status="stored")
             session.add(copy)
             session.flush()
+            slot = CabinetSlot(
+                cabinet_id=cabinet.id,
+                slot_code=f"S{index:02d}",
+                status="occupied",
+            )
+            session.add(slot)
+            session.flush()
+            copy.current_slot_id = slot.id
             session.add(
                 BookStock(
                     book_id=book.id,
@@ -77,14 +85,6 @@ def seed_recommendation_studio_state() -> dict[str, int]:
                     total_copies=1,
                     available_copies=1,
                     reserved_copies=0,
-                )
-            )
-            session.add(
-                CabinetSlot(
-                    cabinet_id=cabinet.id,
-                    slot_code=f"S{index:02d}",
-                    status="occupied",
-                    current_copy_id=copy.id,
                 )
             )
 

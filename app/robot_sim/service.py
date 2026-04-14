@@ -63,10 +63,10 @@ def tick_order_steps(session: Session, *, borrow_order_id: int, steps: int) -> d
             {
                 "step": index + 1,
                 "progressed": progressed,
-                "borrow_status": after["borrow_order"]["status"],
-                "delivery_status": None if after["delivery_order"] is None else after["delivery_order"]["status"],
-                "task_status": None if after["robot_task"] is None else after["robot_task"]["status"],
-                "robot_status": None if after["robot_unit"] is None else after["robot_unit"]["status"],
+                "borrow_status": after["order"]["status"],
+                "fulfillment_status": None if after["fulfillment"] is None else after["fulfillment"]["status"],
+                "task_status": None if after["currentRobotTask"] is None else after["currentRobotTask"]["status"],
+                "robot_status": None if after["robot"] is None else after["robot"]["status"],
             }
         )
         if progressed:
@@ -76,7 +76,7 @@ def tick_order_steps(session: Session, *, borrow_order_id: int, steps: int) -> d
 
     final_item = serialize_order(bundle)
     return {
-        "borrow_order_id": borrow_order_id,
+        "borrowOrderId": borrow_order_id,
         "requested_steps": steps,
         "executed_steps": len(step_items),
         "progressed_steps": progressed_steps,

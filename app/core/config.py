@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     embedding_dimensions: int = 1536
     embedding_batch_size: int = 20
     tutor_storage_dir: str = "artifacts/tutor"
+    book_source_storage_dir: str = "artifacts/book-sources"
     tutor_tasks_eager: bool = False
     tutor_chunk_size: int = 700
     tutor_chunk_overlap: int = 120

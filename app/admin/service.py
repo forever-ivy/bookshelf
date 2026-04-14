@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable
 from datetime import datetime, timezone
+import hashlib
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import case, func, or_, select
@@ -21,8 +23,9 @@ from app.admin.models import (
 )
 from app.analytics.models import ReadingEvent, SearchLog
 from app.auth.models import AdminAccount, AdminActionLog
-from app.catalog.models import Book, BookCategory, BookTag, BookTagLink
+from app.catalog.models import Book, BookCategory, BookSourceDocument, BookTag, BookTagLink
 from app.catalog.service import build_book_payload, build_book_payloads
+from app.core.config import get_settings
 from app.core.errors import ApiError
 from app.db.base import utc_now
 from app.inventory.models import BookCopy, BookStock, Cabinet, CabinetSlot, InventoryEvent
@@ -121,7 +124,7 @@ def _audit(
     *,
     admin_id: int,
     target_type: str,
-    target_id: int,
+    target_ref: str,
     action: str,
     before_state: dict | None = None,
     after_state: dict | None = None,
@@ -131,7 +134,7 @@ def _audit(
         AdminActionLog(
             admin_id=admin_id,
             target_type=target_type,
-            target_id=target_id,
+            target_ref=target_ref,
             action=action,
             before_state=before_state,
             after_state=after_state,
@@ -241,6 +244,48 @@ def _serialize_tag(tag: BookTag) -> dict:
     }
 
 
+def _serialize_book_source_document(document: BookSourceDocument) -> dict:
+    return {
+        "id": document.id,
+        "bookId": document.book_id,
+        "sourceKind": document.source_kind,
+        "mimeType": document.mime_type,
+        "fileName": document.file_name,
+        "storagePath": document.storage_path,
+        "extractedTextPath": document.extracted_text_path,
+        "contentHash": document.content_hash,
+        "parseStatus": document.parse_status,
+        "isPrimary": bool(document.is_primary),
+        "metadata": document.metadata_json or {},
+        "createdAt": _iso(document.created_at),
+        "updatedAt": _iso(document.updated_at),
+    }
+
+
+def _ensure_book_source_storage_dir(*, book_id: int) -> Path:
+    root = Path(get_settings().book_source_storage_dir).expanduser()
+    target = root / f"book_{book_id}"
+    target.mkdir(parents=True, exist_ok=True)
+    return target
+
+
+def _extract_source_text_from_path(storage_path: Path) -> str:
+    suffix = storage_path.suffix.lower()
+    raw_bytes = storage_path.read_bytes()
+    if suffix in {".md", ".markdown", ".txt"}:
+        return raw_bytes.decode("utf-8")
+    if suffix == ".pdf":
+        from pypdf import PdfReader  # type: ignore
+
+        reader = PdfReader(str(storage_path))
+        page_texts = [(page.extract_text() or "").strip() for page in reader.pages]
+        text = "\n\n".join(item for item in page_texts if item)
+        if not text:
+            raise ApiError(422, "book_source_parse_failed", "Could not extract text from PDF")
+        return text
+    raise ApiError(400, "unsupported_book_source_type", f"Unsupported file type: {suffix or 'unknown'}")
+
+
 def _tags_for_book(session: Session, book_id: int) -> list[dict]:
     tags = session.scalars(
         select(BookTag)
@@ -270,7 +315,7 @@ def _copies_for_book(session: Session, book_id: int) -> list[dict]:
     rows = session.execute(
         select(BookCopy, Cabinet, CabinetSlot)
         .join(Cabinet, Cabinet.id == BookCopy.cabinet_id, isouter=True)
-        .join(CabinetSlot, CabinetSlot.current_copy_id == BookCopy.id, isouter=True)
+        .join(CabinetSlot, CabinetSlot.id == BookCopy.current_slot_id, isouter=True)
         .where(BookCopy.book_id == book_id)
         .order_by(Cabinet.id.asc(), CabinetSlot.slot_code.asc(), BookCopy.id.asc())
     ).all()
@@ -322,6 +367,14 @@ def serialize_book_admin(session: Session, book: Book) -> dict:
             "tags": _tags_for_book(session, book.id),
             "stock_summary": stock_summary,
             "copies": copies,
+            "source_documents": [
+                _serialize_book_source_document(item)
+                for item in session.scalars(
+                    select(BookSourceDocument)
+                    .where(BookSourceDocument.book_id == book.id)
+                    .order_by(BookSourceDocument.is_primary.desc(), BookSourceDocument.id.asc())
+                ).all()
+            ],
         }
     )
     return payload
@@ -477,7 +530,7 @@ def create_admin_book(session: Session, *, admin_id: int, payload: dict) -> dict
         session,
         admin_id=admin_id,
         target_type="book",
-        target_id=book.id,
+        target_ref=str(book.id),
         action="create_book",
         after_state=after_state,
     )
@@ -513,7 +566,7 @@ def update_admin_book(session: Session, *, book_id: int, admin_id: int, payload:
         session,
         admin_id=admin_id,
         target_type="book",
-        target_id=book.id,
+        target_ref=str(book.id),
         action="update_book",
         before_state=before_state,
         after_state=after_state,
@@ -532,6 +585,118 @@ def set_admin_book_status(session: Session, *, book_id: int, admin_id: int, shel
         admin_id=admin_id,
         payload={"shelf_status": shelf_status},
     )
+
+
+def upload_book_source_document(
+    session: Session,
+    *,
+    book_id: int,
+    admin_id: int,
+    source_kind: str,
+    file_name: str,
+    mime_type: str | None,
+    raw_bytes: bytes,
+    is_primary: bool | None = None,
+) -> dict:
+    book = session.get(Book, book_id)
+    if book is None:
+        raise ApiError(404, "book_not_found", "Book not found")
+    if not raw_bytes:
+        raise ApiError(400, "book_source_empty", "Uploaded source document is empty")
+
+    source_dir = _ensure_book_source_storage_dir(book_id=book_id)
+    safe_name = Path(file_name or "source.txt").name or "source.txt"
+    storage_path = source_dir / safe_name
+    storage_path.write_bytes(raw_bytes)
+    extracted_text = _extract_source_text_from_path(storage_path)
+    extracted_path = source_dir / f"extracted_{safe_name}.md"
+    extracted_path.write_text(extracted_text, encoding="utf-8")
+
+    should_be_primary = bool(is_primary) or session.scalar(
+        select(func.count()).select_from(BookSourceDocument).where(BookSourceDocument.book_id == book_id)
+    ) in {0, None}
+    if should_be_primary:
+        for existing in session.scalars(
+            select(BookSourceDocument).where(BookSourceDocument.book_id == book_id, BookSourceDocument.is_primary.is_(True))
+        ).all():
+            existing.is_primary = False
+
+    document = BookSourceDocument(
+        book_id=book_id,
+        source_kind=source_kind or "pdf",
+        mime_type=mime_type,
+        file_name=safe_name,
+        storage_path=str(storage_path),
+        extracted_text_path=str(extracted_path),
+        content_hash=hashlib.sha256(raw_bytes).hexdigest(),
+        parse_status="parsed",
+        is_primary=should_be_primary,
+        metadata_json={"textLength": len(extracted_text)},
+    )
+    session.add(document)
+    session.flush()
+    _audit(
+        session,
+        admin_id=admin_id,
+        target_type="book_source_document",
+        target_ref=str(document.id),
+        action="upload_book_source_document",
+        after_state=_serialize_book_source_document(document),
+    )
+    session.commit()
+    return {"sourceDocument": _serialize_book_source_document(document)}
+
+
+def set_primary_book_source_document(
+    session: Session,
+    *,
+    book_id: int,
+    document_id: int,
+    admin_id: int,
+) -> dict:
+    book = session.get(Book, book_id)
+    if book is None:
+        raise ApiError(404, "book_not_found", "Book not found")
+
+    document = session.scalar(
+        select(BookSourceDocument).where(
+            BookSourceDocument.id == document_id,
+            BookSourceDocument.book_id == book_id,
+        )
+    )
+    if document is None:
+        raise ApiError(404, "book_source_document_not_found", "Book source document not found")
+
+    if document.is_primary:
+        return {"sourceDocument": _serialize_book_source_document(document)}
+
+    previous_primary = session.scalars(
+        select(BookSourceDocument).where(
+            BookSourceDocument.book_id == book_id,
+            BookSourceDocument.is_primary.is_(True),
+        )
+    ).all()
+    before_state = {
+        "bookId": book_id,
+        "previousPrimaryIds": [item.id for item in previous_primary],
+        "nextPrimaryId": document.id,
+    }
+    for item in previous_primary:
+        item.is_primary = False
+    document.is_primary = True
+    session.flush()
+    after_state = _serialize_book_source_document(document)
+    _audit(
+        session,
+        admin_id=admin_id,
+        target_type="book_source_document",
+        target_ref=str(document.id),
+        action="set_primary_book_source_document",
+        before_state=before_state,
+        after_state=after_state,
+    )
+    session.commit()
+    return {"sourceDocument": after_state}
 
 
 def list_book_categories(session: Session, *, page: int, page_size: int) -> dict:
@@ -561,7 +726,7 @@ def create_book_category(session: Session, *, admin_id: int, payload: dict) -> d
         session,
         admin_id=admin_id,
         target_type="book_category",
-        target_id=category.id,
+        target_ref=str(category.id),
         action="create_book_category",
         after_state=after_state,
     )
@@ -591,7 +756,7 @@ def create_book_tag(session: Session, *, admin_id: int, payload: dict) -> dict:
         session,
         admin_id=admin_id,
         target_type="book_tag",
-        target_id=tag.id,
+        target_ref=str(tag.id),
         action="create_book_tag",
         after_state=after_state,
     )
@@ -652,7 +817,7 @@ def acknowledge_alert(session: Session, *, alert_id: int, admin_id: int, note: s
         session,
         admin_id=admin_id,
         target_type="alert",
-        target_id=alert.id,
+        target_ref=str(alert.id),
         action="acknowledge_alert",
         before_state=before_state,
         after_state=after_state,
@@ -679,7 +844,7 @@ def resolve_alert(session: Session, *, alert_id: int, admin_id: int, note: str |
         session,
         admin_id=admin_id,
         target_type="alert",
-        target_id=alert.id,
+        target_ref=str(alert.id),
         action="resolve_alert",
         before_state=before_state,
         after_state=after_state,
@@ -708,7 +873,7 @@ def _serialize_audit_log(log: AdminActionLog) -> dict:
         "id": log.id,
         "admin_id": log.admin_id,
         "target_type": log.target_type,
-        "target_id": log.target_id,
+        "targetRef": log.target_ref,
         "action": log.action,
         "before_state": log.before_state or {},
         "after_state": log.after_state or {},
@@ -765,7 +930,7 @@ def upsert_system_setting(session: Session, *, setting_key: str, admin_id: int, 
         session,
         admin_id=admin_id,
         target_type="system_setting",
-        target_id=setting.id,
+        target_ref=str(setting.id),
         action="upsert_system_setting",
         before_state=before_state,
         after_state=after_state,
@@ -866,7 +1031,7 @@ def upsert_system_role(session: Session, *, role_code: str, admin_id: int, paylo
         session,
         admin_id=admin_id,
         target_type="system_role",
-        target_id=role.id,
+        target_ref=str(role.id),
         action="upsert_admin_role",
         before_state=before_state,
         after_state=after_state,
@@ -1057,7 +1222,7 @@ def list_admin_cabinet_slots(
     _require_cabinet(session, cabinet_id)
     stmt = (
         select(CabinetSlot, BookCopy, Book)
-        .outerjoin(BookCopy, CabinetSlot.current_copy_id == BookCopy.id)
+        .outerjoin(BookCopy, BookCopy.current_slot_id == CabinetSlot.id)
         .outerjoin(Book, BookCopy.book_id == Book.id)
         .where(CabinetSlot.cabinet_id == cabinet_id)
     )
@@ -1196,7 +1361,7 @@ def apply_inventory_correction(session: Session, *, admin_id: int, payload: dict
         session,
         admin_id=admin_id,
         target_type="inventory_stock",
-        target_id=stock.id,
+        target_ref=str(stock.id),
         action="manual_inventory_correction",
         before_state={"stock": before_state},
         after_state=after_state,
@@ -1319,7 +1484,7 @@ def update_admin_reader(session: Session, *, reader_id: int, admin_id: int, payl
         session,
         admin_id=admin_id,
         target_type="reader_profile",
-        target_id=profile.id,
+        target_ref=str(profile.id),
         action="update_reader_profile",
         before_state=before_state,
         after_state=after_state,
@@ -1985,7 +2150,7 @@ def save_recommendation_studio_draft(session: Session, *, admin_id: int, payload
         session,
         admin_id=admin_id,
         target_type="recommendation_studio",
-        target_id=draft.id,
+        target_ref=str(draft.id),
         action="save_recommendation_studio_draft",
         before_state=before_state,
         after_state=normalized,
@@ -2024,7 +2189,7 @@ def publish_recommendation_studio(session: Session, *, admin_id: int) -> dict:
         session,
         admin_id=admin_id,
         target_type="recommendation_studio_publication",
-        target_id=publication.id,
+        target_ref=str(publication.id),
         action="publish_recommendation_studio",
         after_state=normalized,
     )

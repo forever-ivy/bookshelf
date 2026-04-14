@@ -33,35 +33,64 @@ def create_book_profile(
     *,
     reader_id: int | None,
     book_id: int,
+    book_source_document_id: int | None,
     title: str | None,
     teaching_goal: str | None,
 ) -> tuple[object, object]:
     owner_id = _require_reader_profile_id(reader_id)
     book = repository.require_book(session, book_id=book_id)
+    selected_book_source = None
+    if book_source_document_id is not None:
+        selected_book_source = repository.require_book_source_document(session, document_id=book_source_document_id)
+        if selected_book_source.book_id != book.id:
+            raise ApiError(400, "book_source_document_mismatch", "Book source document does not belong to the book")
+    else:
+        selected_book_source = repository.get_primary_book_source_document(session, book_id=book.id)
     profile = repository.create_profile(
         session,
         reader_id=owner_id,
         source_type="book",
         book_id=book.id,
+        book_source_document_id=None if selected_book_source is None else selected_book_source.id,
         title=(title or f"{book.title}导学本").strip(),
         teaching_goal=teaching_goal,
     )
-    repository.create_source_document(
-        session,
-        profile_id=profile.id,
-        reader_id=owner_id,
-        kind="book_synthetic",
-        mime_type="text/markdown",
-        file_name=f"book-{book.id}.md",
-        storage_path=None,
-        content_hash=None,
-        metadata_json={"bookId": book.id, "bookTitle": book.title},
-    )
+    if selected_book_source is None:
+        repository.create_source_document(
+            session,
+            profile_id=profile.id,
+            kind="book_synthetic",
+            origin_book_source_document_id=None,
+            mime_type="text/markdown",
+            file_name=f"book-{book.id}.md",
+            storage_path=None,
+            content_hash=None,
+            metadata_json={"bookId": book.id, "bookTitle": book.title},
+        )
+    else:
+        repository.create_source_document(
+            session,
+            profile_id=profile.id,
+            kind="book_asset",
+            origin_book_source_document_id=selected_book_source.id,
+            mime_type=selected_book_source.mime_type,
+            file_name=selected_book_source.file_name,
+            storage_path=selected_book_source.storage_path,
+            content_hash=selected_book_source.content_hash,
+            metadata_json={
+                "bookId": book.id,
+                "bookTitle": book.title,
+                "bookSourceDocumentId": selected_book_source.id,
+            },
+        )
     job = repository.create_generation_job(
         session,
         profile_id=profile.id,
         job_type="generate_book_profile",
-        payload_json={"bookId": book.id},
+        payload_json={
+            "bookId": book.id,
+            "bookSourceDocumentId": None if selected_book_source is None else selected_book_source.id,
+        },
     )
     return profile, job
 
@@ -97,8 +126,8 @@ def create_upload_profile(
     source_document = repository.create_source_document(
         session,
         profile_id=profile.id,
-        reader_id=owner_id,
         kind="upload_file",
+        origin_book_source_document_id=None,
         mime_type=mime_type or "application/octet-stream",
         file_name=safe_name,
         storage_path=str(storage_path),
@@ -174,7 +203,6 @@ def start_session(session: Session, *, reader_id: int | None, profile_id: int) -
     first_step = serialize_step(steps[0], default_index=0)
     tutor_session = repository.create_session(
         session,
-        reader_id=owner_id,
         profile_id=profile.id,
         current_step_title=first_step["title"],
     )

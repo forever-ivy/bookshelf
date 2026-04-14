@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -40,7 +40,9 @@ from app.admin.service import (
     publish_recommendation_studio,
     resolve_alert,
     save_recommendation_studio_draft,
+    set_primary_book_source_document,
     set_admin_book_status,
+    upload_book_source_document,
     upsert_system_role,
     update_admin_book,
     update_admin_reader,
@@ -256,6 +258,44 @@ def get_book_endpoint(
     session: Session = Depends(get_db),
 ):
     return {"book": get_admin_book(session, book_id)}
+
+
+@router.post("/books/{book_id}/source-documents", status_code=status.HTTP_201_CREATED)
+async def upload_book_source_document_endpoint(
+    book_id: int,
+    source_kind: str = Form(default="pdf"),
+    is_primary: bool | None = Form(default=None, alias="isPrimary"),
+    is_primary_legacy: bool | None = Form(default=None, alias="is_primary"),
+    file: UploadFile = File(...),
+    identity: AuthIdentity = Depends(require_admin_permission("books.manage")),
+    session: Session = Depends(get_db),
+):
+    raw_bytes = await file.read()
+    return upload_book_source_document(
+        session,
+        book_id=book_id,
+        admin_id=identity.account_id,
+        source_kind=source_kind,
+        file_name=file.filename or "source.txt",
+        mime_type=file.content_type,
+        raw_bytes=raw_bytes,
+        is_primary=is_primary if is_primary is not None else is_primary_legacy,
+    )
+
+
+@router.post("/books/{book_id}/source-documents/{document_id}/primary")
+def set_primary_book_source_document_endpoint(
+    book_id: int,
+    document_id: int,
+    identity: AuthIdentity = Depends(require_admin_permission("books.manage")),
+    session: Session = Depends(get_db),
+):
+    return set_primary_book_source_document(
+        session,
+        book_id=book_id,
+        document_id=document_id,
+        admin_id=identity.account_id,
+    )
 
 
 @router.patch("/books/{book_id}")

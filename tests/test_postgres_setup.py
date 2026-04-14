@@ -138,8 +138,9 @@ def test_database_2_core_columns_exist():
     assert "created_at" in BorrowOrder.__table__.c
     assert "updated_at" in BorrowOrder.__table__.c
     assert "assigned_copy_id" in BorrowOrder.__table__.c
+    assert "current_slot_id" in BookCopy.__table__.c
     assert "reserved_copies" in BookCopy.metadata.tables["book_stock"].c
-    assert "current_copy_id" in CabinetSlot.__table__.c
+    assert "current_copy_id" not in CabinetSlot.__table__.c
     assert "payload_json" in InventoryEvent.__table__.c
     assert "admin_id" in AdminActionLog.__table__.c
 

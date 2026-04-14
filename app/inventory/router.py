@@ -39,6 +39,8 @@ def resolve_llm_provider():
 
 class TakeByTextRequest(BaseModel):
     text: str
+    order_id: int | None = None
+    fulfillment_id: int | None = None
 
 
 @router.get("/slots")
@@ -82,4 +84,10 @@ async def ingest_ocr(request: Request, db: Session = Depends(get_db)) -> dict:
 @router.post("/take-by-text")
 def take_book_by_text(payload: TakeByTextRequest, db: Session = Depends(get_db)) -> dict:
     settings = get_settings()
-    return take_by_text(db, cabinet_id=settings.cabinet_id, text=payload.text)
+    return take_by_text(
+        db,
+        cabinet_id=settings.cabinet_id,
+        text=payload.text,
+        order_id=payload.order_id,
+        fulfillment_id=payload.fulfillment_id,
+    )

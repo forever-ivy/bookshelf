@@ -3,10 +3,10 @@ from __future__ import annotations
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import Base, utc_now
+from app.db.base import Base, JSON_VARIANT, utc_now
 
 
 class BookCategory(Base):
@@ -58,6 +58,25 @@ class Book(Base):
     keywords: Mapped[str | None] = mapped_column(Text, nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     shelf_status: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    search_document: Mapped[str | None] = mapped_column(Text, nullable=True)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(1536), nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(default=utc_now, nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(default=utc_now, onupdate=utc_now, nullable=True)
+
+
+class BookSourceDocument(Base):
+    __tablename__ = "book_source_documents"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    book_id: Mapped[int] = mapped_column(ForeignKey("books.id"), index=True)
+    source_kind: Mapped[str] = mapped_column(String(32), index=True)
+    mime_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    storage_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    extracted_text_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    parse_status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON_VARIANT, nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(default=utc_now, nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(default=utc_now, onupdate=utc_now, nullable=True)

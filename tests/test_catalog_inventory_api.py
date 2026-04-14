@@ -40,15 +40,19 @@ def seed_catalog_data(app):
         session.add(dune_copy)
         session.flush()
 
+        occupied_slot = CabinetSlot(cabinet_id="cabinet-001", slot_code="A01", status="occupied")
+        empty_slot = CabinetSlot(cabinet_id="cabinet-001", slot_code="A02", status="empty")
         session.add_all(
             [
                 BookStock(book_id=dune.id, cabinet_id="cabinet-001", total_copies=2, available_copies=1, reserved_copies=0),
                 BookStock(book_id=principia.id, cabinet_id="cabinet-001", total_copies=0, available_copies=0, reserved_copies=0),
-                CabinetSlot(cabinet_id="cabinet-001", slot_code="A01", status="occupied", current_copy_id=dune_copy.id),
-                CabinetSlot(cabinet_id="cabinet-001", slot_code="A02", status="empty", current_copy_id=None),
+                occupied_slot,
+                empty_slot,
                 InventoryEvent(cabinet_id="cabinet-001", event_type="book_scanned", slot_code="A01"),
             ]
         )
+        session.flush()
+        dune_copy.current_slot_id = occupied_slot.id
         session.commit()
         return {"dune_id": dune.id, "principia_id": principia.id}
     finally:

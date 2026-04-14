@@ -225,6 +225,16 @@ def seed_management_state() -> dict[str, int]:
         session.add_all([east_copy, west_copy, match_copy, sparse_copy])
         session.flush()
 
+        east_slot = CabinetSlot(
+            cabinet_id=east_cabinet.id,
+            slot_code="A01",
+            status="empty",
+        )
+        west_slot = CabinetSlot(
+            cabinet_id=west_cabinet.id,
+            slot_code="B01",
+            status="occupied",
+        )
         session.add_all(
             [
                 BookStock(
@@ -255,20 +265,12 @@ def seed_management_state() -> dict[str, int]:
                     available_copies=1,
                     reserved_copies=0,
                 ),
-                CabinetSlot(
-                    cabinet_id=east_cabinet.id,
-                    slot_code="A01",
-                    status="empty",
-                    current_copy_id=None,
-                ),
-                CabinetSlot(
-                    cabinet_id=west_cabinet.id,
-                    slot_code="B01",
-                    status="occupied",
-                    current_copy_id=west_copy.id,
-                ),
+                east_slot,
+                west_slot,
             ]
         )
+        session.flush()
+        west_copy.current_slot_id = west_slot.id
 
         borrow_today = BorrowOrder(
             reader_id=reader_profile.id,
@@ -714,7 +716,7 @@ def test_admin_books_list_includes_copy_location_details(client):
     assert copies[0]["cabinet_id"] == "cabinet-east"
     assert copies[0]["cabinet_name"] == "东区书柜"
     assert copies[0]["cabinet_location"] == "东区 一层"
-    assert copies[0]["slot_code"] == "A01"
+    assert copies[0]["slot_code"] is None
     assert copies[0]["inventory_status"] == "in_delivery"
     assert copies[0]["available_for_borrow"] is False
 
@@ -854,7 +856,7 @@ def test_admin_audit_logs_endpoint_lists_recent_logs(client):
             AdminActionLog(
                 admin_id=state["admin_id"],
                 target_type="book",
-                target_id=state["book_id"],
+                target_ref=str(state["book_id"]),
                 action="update_book",
                 before_state={"summary": "旧简介"},
                 after_state={"summary": "新简介"},
