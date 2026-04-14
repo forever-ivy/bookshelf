@@ -93,6 +93,8 @@ function normalizeTutorSourceDocument(raw: any): TutorSourceDocument {
     kind: raw?.kind ?? 'upload_file',
     metadata: raw?.metadata ?? raw?.metadata_json ?? {},
     mimeType: raw?.mimeType ?? raw?.mime_type ?? null,
+    originBookSourceDocumentId:
+      raw?.originBookSourceDocumentId ?? raw?.origin_book_source_document_id ?? null,
     parseStatus: raw?.parseStatus ?? raw?.parse_status ?? null,
     profileId: Number(raw?.profileId ?? raw?.profile_id ?? 0),
   };
@@ -118,6 +120,8 @@ function normalizeTutorProfile(raw: any, options: { latestJob?: any; sources?: a
 
   return {
     bookId: raw?.bookId ?? raw?.book_id ?? null,
+    bookSourceDocumentId:
+      raw?.bookSourceDocumentId ?? raw?.book_source_document_id ?? null,
     createdAt: raw?.createdAt ?? raw?.created_at ?? nowIso(),
     curriculum: Array.isArray(curriculumRaw)
       ? curriculumRaw.map((step: any, index: number) => normalizeTutorCurriculumStep(step, index))
@@ -367,6 +371,7 @@ export async function createTutorProfile(
   return strictLibraryRequest('/api/v1/tutor/profiles', {
     body: JSON.stringify({
       bookId: input.bookId,
+      ...(input.bookSourceDocumentId ? { bookSourceDocumentId: input.bookSourceDocumentId } : null),
       sourceType: input.sourceType,
       ...(input.teachingGoal ? { teachingGoal: input.teachingGoal } : null),
       ...(input.title ? { title: input.title } : null),

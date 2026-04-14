@@ -225,11 +225,24 @@ export function normalizeOrder(raw: any): BorrowOrderView {
     throw new Error('order_not_found');
   }
 
-  const rawBook = raw.book ?? raw.borrow_order?.book ?? raw.borrowOrder?.book;
-  const bookId = raw.book_id ?? raw.bookId ?? raw.borrow_order?.book_id ?? raw.borrowOrder?.book_id;
-  const dueLabel = raw.dueDateLabel ?? raw.due_date_label ?? raw.due_at ?? raw.borrow_order?.due_at ?? '7 天后到期';
-  const rawStatus = raw.status ?? raw.borrow_order?.status ?? raw.borrowOrder?.status;
-  const rawNote = raw.note ?? raw.failure_reason ?? raw.borrow_order?.failure_reason ?? '';
+  const rawOrder = raw.order ?? raw.borrow_order ?? raw.borrowOrder ?? raw;
+  const rawBook = raw.book ?? rawOrder.book ?? raw.borrow_order?.book ?? raw.borrowOrder?.book;
+  const bookId = raw.book_id ?? raw.bookId ?? rawOrder.requestedBookId ?? rawOrder.bookId ?? raw.borrow_order?.book_id ?? raw.borrowOrder?.book_id;
+  const dueLabel =
+    raw.dueDateLabel ??
+    raw.due_date_label ??
+    raw.due_at ??
+    rawOrder.dueAt ??
+    raw.borrow_order?.due_at ??
+    raw.borrowOrder?.due_at ??
+    '7 天后到期';
+  const rawStatus = raw.status ?? rawOrder.status ?? raw.borrow_order?.status ?? raw.borrowOrder?.status;
+  const rawNote =
+    raw.note ??
+    rawOrder.failureReason ??
+    raw.failure_reason ??
+    raw.borrow_order?.failure_reason ??
+    '';
   const fulfillmentPhase = normalizeFulfillmentPhase(raw);
   const normalizedStatus = normalizeReaderOrderStatus(rawStatus);
 
@@ -239,13 +252,18 @@ export function normalizeOrder(raw: any): BorrowOrderView {
     cancellable: raw.cancellable ?? false,
     dueDateLabel: typeof dueLabel === 'string' ? dueLabel : '7 天后到期',
     fulfillmentPhase,
-    id: raw.id ?? raw.borrow_order?.id ?? raw.borrowOrder?.id ?? Date.now(),
-    mode: raw.mode ?? raw.order_mode ?? raw.borrow_order?.order_mode ?? 'robot_delivery',
+    id: raw.id ?? rawOrder.id ?? raw.borrow_order?.id ?? raw.borrowOrder?.id ?? Date.now(),
+    mode:
+      raw.mode ??
+      rawOrder.fulfillmentMode ??
+      raw.order_mode ??
+      raw.borrow_order?.order_mode ??
+      'robot_delivery',
     note:
       typeof rawNote === 'string'
         ? readerFacingNoteByCode[rawNote] ?? rawNote
         : '',
-    renewable: raw.renewable ?? raw.borrow_order?.renewable ?? false,
+    renewable: raw.renewable ?? rawOrder.renewable ?? raw.borrow_order?.renewable ?? false,
     returnable: raw.returnable ?? false,
     status: normalizedStatus,
     statusLabel: resolveReaderStatusLabel(raw, normalizedStatus, fulfillmentPhase),
@@ -262,15 +280,8 @@ function normalizeReturnRequestList(payload: any): ReturnRequestSummary[] {
 }
 
 function normalizeReturnRequestDetail(payload: any): ReturnRequestDetail {
-  const rawOrder = payload?.order?.borrow_order
-    ? {
-        ...payload.order.borrow_order,
-        book: payload.order.book,
-      }
-    : payload?.order;
-
   return {
-    order: normalizeOrder(rawOrder),
+    order: normalizeOrder(payload?.order),
     returnRequest: normalizeReturnRequestSummary(payload?.return_request ?? payload?.returnRequest ?? payload),
   };
 }

@@ -121,6 +121,7 @@ describe('tutor contract', () => {
           },
           profile: {
             bookId: 1,
+            bookSourceDocumentId: 41,
             createdAt: '2026-04-08T08:00:00Z',
             curriculum: {
               steps: [
@@ -152,6 +153,7 @@ describe('tutor contract', () => {
               kind: 'book_synthetic',
               metadata: { bookId: 1, bookTitle: '机器学习从零到一' },
               mimeType: 'text/markdown',
+              originBookSourceDocumentId: 41,
               parseStatus: 'parsed',
               profileId: 101,
             },
@@ -214,6 +216,7 @@ describe('tutor contract', () => {
 
     expect(profile).toMatchObject({
       bookId: 1,
+      bookSourceDocumentId: 41,
       id: 101,
       sourceSummary: '从馆藏书摘要拆出的导学提要。',
       sourceType: 'book',
@@ -223,6 +226,7 @@ describe('tutor contract', () => {
     expect(profile.sources[0]).toMatchObject({
       fileName: 'book-1.md',
       kind: 'book_synthetic',
+      originBookSourceDocumentId: 41,
       parseStatus: 'parsed',
       profileId: 101,
     });
@@ -275,6 +279,7 @@ describe('tutor contract', () => {
     await createTutorProfile(
       {
         bookId: 1,
+        bookSourceDocumentId: 41,
         sourceType: 'book',
         teachingGoal: '实验预习',
         title: '机器学习从零到一',
@@ -288,6 +293,7 @@ describe('tutor contract', () => {
     );
     expect(JSON.parse(String((global.fetch as jest.Mock).mock.calls[0]?.[1]?.body))).toEqual({
       bookId: 1,
+      bookSourceDocumentId: 41,
       sourceType: 'book',
       teachingGoal: '实验预习',
       title: '机器学习从零到一',

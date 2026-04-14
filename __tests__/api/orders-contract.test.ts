@@ -145,7 +145,7 @@ describe('orders contract', () => {
     expect(result.statusLabel).toBe('已取消');
   });
 
-  it('normalizes nested service order bundles and exposes the fulfillment phase', async () => {
+  it('normalizes the new service order aggregate and exposes the fulfillment phase', async () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       json: async () => ({
         book: {
@@ -153,22 +153,24 @@ describe('orders contract', () => {
           id: 502,
           title: '服务设计',
         },
-        borrow_order: {
-          due_at: '4 月 8 日',
-          id: 502,
-          order_mode: 'robot_delivery',
-          renewable: false,
-          status: 'created',
-        },
-        delivery_order: {
-          delivery_target: '阅览室 A-12',
+        fulfillmentPhase: 'dispatch_started',
+        fulfillment: {
+          deliveryTarget: '阅览室 A-12',
+          mode: 'robot_delivery',
           status: 'awaiting_pick',
         },
-        fulfillment_phase: 'dispatch_started',
-        robot_task: {
+        order: {
+          dueAt: '4 月 8 日',
+          fulfillmentMode: 'robot_delivery',
+          id: 502,
+          renewable: false,
+          requestedBookId: 502,
+          status: 'created',
+        },
+        robot: {
           status: 'assigned',
         },
-        robot_unit: {
+        currentRobotTask: {
           status: 'assigned',
         },
       }),

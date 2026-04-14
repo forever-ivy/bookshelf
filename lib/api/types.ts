@@ -262,9 +262,10 @@ export type TutorSourceDocument = {
   contentHash?: string | null;
   fileName: string;
   id: number;
-  kind: 'book_synthetic' | 'upload_file' | string;
+  kind: 'book_asset' | 'book_synthetic' | 'upload_file' | string;
   metadata?: Record<string, unknown>;
   mimeType?: string | null;
+  originBookSourceDocumentId?: number | null;
   parseStatus?: string | null;
   profileId: number;
 };
@@ -282,6 +283,7 @@ export type TutorGenerationJob = {
 
 export type TutorProfile = {
   bookId: number | null;
+  bookSourceDocumentId?: number | null;
   createdAt: string;
   curriculum: TutorCurriculumStep[];
   failureCode?: string | null;
@@ -357,6 +359,7 @@ export type TutorDashboard = {
 
 export type CreateTutorProfileInput = {
   bookId: number;
+  bookSourceDocumentId?: number;
   sourceType: 'book';
   teachingGoal?: string;
   title?: string;
