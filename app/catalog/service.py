@@ -4,10 +4,15 @@ from collections import defaultdict
 from collections.abc import Iterable
 from itertools import chain
 
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import case, false, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.catalog.models import Book, BookCategory
+from app.catalog.taxonomy import (
+    build_reader_category_payloads,
+    resolve_reader_category_group,
+    resolve_reader_category_group_identifier,
+)
 from app.inventory.models import BookCopy, BookStock, CabinetSlot
 from app.orders.models import BorrowOrder
 
@@ -128,24 +133,49 @@ def list_reader_categories(session: Session) -> list[dict]:
         .order_by(func.lower(Book.category).asc(), Book.category.asc())
     ).all()
 
-    items: list[dict] = []
+    category_names: list[str] = []
     seen_names: set[str] = set()
 
-    for category_id, name in official_rows:
+    for _category_id, name in official_rows:
         normalized_name = _normalize(name)
         if not normalized_name or normalized_name in seen_names:
             continue
         seen_names.add(normalized_name)
-        items.append({"id": category_id, "name": name})
+        category_names.append(name)
 
     for name in legacy_rows:
         normalized_name = _normalize(name)
         if not normalized_name or normalized_name in seen_names:
             continue
         seen_names.add(normalized_name)
-        items.append({"id": f"legacy:{normalized_name}", "name": name})
+        category_names.append(name)
 
-    return items
+    return build_reader_category_payloads(category_names)
+
+
+def _reader_category_names_for_group(session: Session, category: str) -> list[str]:
+    group = resolve_reader_category_group_identifier(category)
+    if group is None:
+        return []
+
+    rows = session.scalars(
+        select(Book.category)
+        .where(func.trim(func.coalesce(Book.category, "")) != "")
+        .group_by(Book.category)
+        .order_by(func.lower(Book.category).asc(), Book.category.asc())
+    ).all()
+
+    names: list[str] = []
+    seen: set[str] = set()
+    for name in rows:
+        if resolve_reader_category_group(name) != group:
+            continue
+        normalized_name = _normalize(name)
+        if not normalized_name or normalized_name in seen:
+            continue
+        seen.add(normalized_name)
+        names.append(normalized_name)
+    return names
 
 
 def search_books(
@@ -160,7 +190,13 @@ def search_books(
     count_stmt = select(func.count()).select_from(Book)
     clean_category = (category or "").strip().lower()
     if clean_category:
-        category_filter = func.lower(func.coalesce(Book.category, "")) == clean_category
+        reader_category_names = _reader_category_names_for_group(session, clean_category)
+        if reader_category_names:
+            category_filter = func.lower(func.coalesce(Book.category, "")).in_(reader_category_names)
+        elif resolve_reader_category_group_identifier(clean_category) is not None:
+            category_filter = false()
+        else:
+            category_filter = func.lower(func.coalesce(Book.category, "")) == clean_category
         stmt = stmt.where(category_filter)
         count_stmt = count_stmt.where(category_filter)
 

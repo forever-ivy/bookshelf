@@ -193,7 +193,7 @@ def test_build_snapshot_records_from_source_dir_merges_local_book_sources(tmp_pa
     by_title = {record["title"]: record for record in records}
 
     assert by_title["活着"]["author"] == "余华"
-    assert by_title["活着"]["category"] == "I247.57"
+    assert by_title["活着"]["category"] == "文学"
     assert by_title["活着"]["isbn"] == "9787506365437"
     assert "文学" in by_title["活着"]["tags"]
     assert by_title["活着"]["summary"] == "豆瓣简介补充得更完整。"
@@ -201,3 +201,118 @@ def test_build_snapshot_records_from_source_dir_merges_local_book_sources(tmp_pa
     assert by_title["Algorithms Unlocked"]["author"] == "Thomas Cormen"
     assert by_title["Algorithms Unlocked"]["category"] == "Computer Science"
     assert "complexity" in by_title["Algorithms Unlocked"]["search_text"]
+
+
+def test_build_snapshot_records_from_source_dir_filters_noisy_catalog_rows(tmp_path: Path) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+
+    pd.DataFrame(
+        [
+            {
+                "title": "'Aqā'id al-salaf",
+                "author": "/authors/OL4557427A",
+                "category": "nan",
+                "keywords": "nan",
+                "summary": "nan",
+            },
+            {
+                "title": "图书馆空间设计",
+                "author": "王敏",
+                "category": "TP301",
+                "keywords": "空间设计, 图书馆",
+                "summary": "面向现代图书馆的空间设计案例。",
+            },
+            {
+                "title": "临床诊疗手册",
+                "author": "李明",
+                "category": "R4-54/1=43;R322-64",
+                "keywords": "临床, 诊疗",
+                "summary": "面向临床一线的诊疗指导。",
+            },
+            {
+                "title": "世界名著精选",
+                "author": "张华",
+                "category": "H319.4;I",
+                "keywords": "英文, 文学",
+                "summary": "经典文学英文导读。",
+            },
+            {
+                "title": "程序设计教程",
+                "author": "赵峰",
+                "category": "TP3;TP312;C++",
+                "keywords": "程序设计, C++",
+                "summary": "面向程序设计入门的基础教材。",
+            },
+        ]
+    ).to_csv(source_dir / "books_openlibrary_sample.csv", index=False)
+
+    records = build_snapshot_records_from_source_dir(source_dir=source_dir, limit=10)
+
+    assert len(records) == 4
+    by_title = {record["title"]: record for record in records}
+
+    assert by_title["图书馆空间设计"]["author"] == "王敏"
+    assert by_title["图书馆空间设计"]["category"] == "工业技术"
+    assert "图书馆" in by_title["图书馆空间设计"]["tags"]
+    assert by_title["临床诊疗手册"]["category"] == "医药卫生"
+    assert by_title["世界名著精选"]["category"] == "语言文字"
+    assert by_title["程序设计教程"]["category"] == "工业技术"
+
+
+def test_build_snapshot_records_from_source_dir_drops_titles_starting_with_quotes_even_with_real_authors(tmp_path: Path) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+
+    pd.DataFrame(
+        [
+            {
+                "title": "'Salem's lot /",
+                "author": "Uelsmann, Jerry N.",
+                "category": "文学",
+                "keywords": "文学, 小说",
+                "summary": "保留给测试的脏标题。",
+            },
+            {
+                "title": "百年孤独",
+                "author": "加西亚·马尔克斯",
+                "category": "文学",
+                "keywords": "文学, 小说",
+                "summary": "正常书目。",
+            },
+        ]
+    ).to_csv(source_dir / "books_openlibrary_sample.csv", index=False)
+
+    records = build_snapshot_records_from_source_dir(source_dir=source_dir, limit=10)
+
+    assert len(records) == 1
+    assert records[0]["title"] == "百年孤独"
+
+
+def test_build_snapshot_records_from_source_dir_drops_author_placeholder_lists(tmp_path: Path) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+
+    pd.DataFrame(
+        [
+            {
+                "title": "Meet zero",
+                "author": "/authors/OL4423605A; /authors/OL220769A; /authors/OL2623136A",
+                "category": "综合参考",
+                "keywords": "数学, 科普",
+                "summary": "来源含占位作者的脏记录。",
+            },
+            {
+                "title": "数学之美",
+                "author": "吴军",
+                "category": "T",
+                "keywords": "数学, 计算机",
+                "summary": "正常记录。",
+            },
+        ]
+    ).to_csv(source_dir / "books_openlibrary_sample.csv", index=False)
+
+    records = build_snapshot_records_from_source_dir(source_dir=source_dir, limit=10)
+
+    assert len(records) == 1
+    assert records[0]["title"] == "数学之美"

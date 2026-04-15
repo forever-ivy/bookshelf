@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from datetime import timezone, timedelta
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import false, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.admin.models import TopicBooklist, TopicBooklistItem
 from app.catalog.models import Book
 from app.catalog.service import build_book_payload, build_book_payloads
+from app.catalog.taxonomy import resolve_reader_category_group, resolve_reader_category_group_identifier
 from app.core.errors import ApiError
 from app.db.base import utc_now
 from app.orders.models import BorrowOrder, OrderFulfillment, ReturnRequest
@@ -111,7 +112,24 @@ def list_favorite_books(
 
     clean_category = (category or "").strip()
     if clean_category:
-        stmt = stmt.where(func.lower(func.coalesce(Book.category, "")) == clean_category.lower())
+        category_group = resolve_reader_category_group_identifier(clean_category)
+        if category_group is not None:
+            rows = session.scalars(
+                select(Book.category)
+                .where(func.trim(func.coalesce(Book.category, "")) != "")
+                .group_by(Book.category)
+            ).all()
+            category_names = {
+                (name or "").strip().lower()
+                for name in rows
+                if resolve_reader_category_group(name) == category_group and (name or "").strip()
+            }
+            if category_names:
+                stmt = stmt.where(func.lower(func.coalesce(Book.category, "")).in_(sorted(category_names)))
+            else:
+                stmt = stmt.where(false())
+        else:
+            stmt = stmt.where(func.lower(func.coalesce(Book.category, "")) == clean_category.lower())
 
     rows = session.execute(stmt).all()
     book_payloads = build_book_payloads(session, [book for _, book in rows])

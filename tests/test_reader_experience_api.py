@@ -441,7 +441,7 @@ def test_reader_favorites_support_server_side_query_and_category_filters(client)
     category_response = client.get(
         "/api/v1/favorites/books",
         headers=headers,
-        params={"category": "AI"},
+        params={"category": "science-tech"},
     )
     assert category_response.status_code == 200
     category_items = category_response.json()["items"]
@@ -459,7 +459,7 @@ def test_reader_favorites_support_server_side_query_and_category_filters(client)
     combined_response = client.get(
         "/api/v1/favorites/books",
         headers=headers,
-        params={"query": "推荐", "category": "AI"},
+        params={"query": "推荐", "category": "science-tech"},
     )
     assert combined_response.status_code == 200
     combined_items = combined_response.json()["items"]

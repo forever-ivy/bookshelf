@@ -16,7 +16,7 @@ from sqlalchemy import insert, inspect, text, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
-from app.admin.service import DEFAULT_ADMIN_PERMISSIONS
+from app.admin.service import DEFAULT_ADMIN_PERMISSIONS, RECOMMENDATION_STUDIO_DEFAULT_PLACEMENTS
 from app.admin.models import (
     AdminPermission,
     AdminRole,
@@ -201,6 +201,44 @@ SEARCH_MODE_WEIGHTS = (
     ("barcode", 0.05),
     ("voice", 0.03),
 )
+SEEDED_READER_PASSWORD = "reader123"
+NULL_LIKE_TEXTS = frozenset({"nan", "null", "none", "n/a", "na", "nat", "<na>", "undefined", "unknown"})
+AUTHOR_PATH_PATTERN = re.compile(r"^/authors/OL[\w-]+A?$", re.IGNORECASE)
+CLASSIFICATION_CODE_PATTERN = re.compile(r"^[A-Z]{1,3}(?:[\-./=:()]?\d[\dA-Z.\-()/=:]*|)$", re.IGNORECASE)
+QUOTED_TITLE_PREFIXES = ('"', "'", "“", "‘")
+CATEGORY_CODE_LABELS = {
+    "A": "马克思主义",
+    "B": "哲学",
+    "C": "社会科学",
+    "D": "政治法律",
+    "E": "军事",
+    "F": "经济",
+    "G": "文化教育",
+    "H": "语言文字",
+    "I": "文学",
+    "J": "艺术",
+    "K": "历史地理",
+    "N": "自然科学",
+    "O": "数理化",
+    "P": "天文地学",
+    "Q": "生物科学",
+    "R": "医药卫生",
+    "S": "农业科学",
+    "T": "工业技术",
+    "U": "交通运输",
+    "V": "航空航天",
+    "X": "环境科学",
+    "Z": "综合参考",
+}
+CLASSIFICATION_TRANSLATION = str.maketrans({
+    "（": "(",
+    "）": ")",
+    "＝": "=",
+    "－": "-",
+    "；": ";",
+    "，": ",",
+    "：": ":",
+})
 
 
 @dataclass(slots=True)
@@ -319,6 +357,10 @@ def _build_real_name_pool(count: int, rng: random.Random) -> list[str]:
             if len(names) >= count:
                 return names
     return names
+
+
+def _build_seeded_reader_username(reader_id: int) -> str:
+    return f"reader_{reader_id}"
 
 
 def validate_large_dataset_schema(
@@ -448,14 +490,14 @@ def _load_snapshot_records(config: LargeDatasetConfig) -> list[dict[str, Any]]:
             if not line:
                 continue
             payload = json.loads(line)
-            title = _clean_text(payload.get("title"), max_length=255)
-            if not title:
+            payload = _sanitize_snapshot_payload(payload)
+            if payload is None:
                 continue
+            title = payload["title"]
             dedupe_key = payload.get("work_key") or f"{_slugify(title, 80)}|{_slugify(str(payload.get('author') or ''), 80)}"
             if dedupe_key in seen:
                 continue
             seen.add(dedupe_key)
-            payload["title"] = title
             records.append(payload)
     if len(records) < config.target_books:
         raise RuntimeError(
@@ -801,12 +843,22 @@ def _build_admin_records(config: LargeDatasetConfig, rng: random.Random) -> list
     publication_rows = []
     for index in range(1, 13):
         published_at = now - timedelta(days=index * 7)
+        placement_payload = [
+            {
+                "code": placement["code"],
+                "name": placement["name"],
+                "placement_type": placement["placement_type"],
+                "rank": placement["rank"],
+                "status": "active" if placement["rank"] < 4 or index % 4 else "paused",
+            }
+            for placement in RECOMMENDATION_STUDIO_DEFAULT_PLACEMENTS
+        ]
         publication_rows.append(
             {
                 "id": index,
                 "version": index,
                 "status": "published" if index < 11 else "draft",
-                "payload_json": {"placements": rng.sample([row["code"] for row in placement_rows], k=min(3, len(placement_rows)))},
+                "payload_json": {"placements": placement_payload},
                 "published_by": 1 + (index % len(admin_rows)),
                 "published_at": published_at if index < 11 else None,
                 "created_at": published_at,
@@ -891,12 +943,12 @@ def _build_reader_records(
 
     for reader_id in range(1, config.target_readers + 1):
         created_at = _random_datetime(now, config.history_days, rng)
-        username = real_names[reader_id - 1]
+        username = _build_seeded_reader_username(reader_id)
         affiliation = affiliation_sampler.sample(rng)
         segment = segment_sampler.sample(rng)
         college = college_names[rng.randrange(len(college_names))]
         major = COLLEGES[college][rng.randrange(len(COLLEGES[college]))]
-        display_name = username
+        display_name = real_names[reader_id - 1]
         interest_count = rng.randint(2, 5)
         interest_tags = rng.sample(top_tags, k=min(interest_count, len(top_tags))) if top_tags else []
         restriction_status = _pick_weighted(rng, [("active", 0.93), ("watch", 0.04), ("blocked", 0.03)])
@@ -911,7 +963,7 @@ def _build_reader_records(
             {
                 "id": reader_id,
                 "username": username,
-                "password_hash": _stable_hash(f"reader-password-{reader_id}")[:128],
+                "password_hash": hash_password(SEEDED_READER_PASSWORD),
                 "created_at": created_at,
                 "updated_at": created_at + timedelta(days=rng.randint(0, 90)),
             }
@@ -2087,13 +2139,13 @@ def _sync_identity_sequences(session: Session) -> None:
 
 
 def _normalize_category(record: dict[str, Any]) -> str | None:
-    category = _clean_text(record.get("category"), max_length=128)
+    category = _normalize_category_label(record.get("category"))
     if category:
         return category
     subjects = record.get("subjects") or record.get("tags") or []
     if isinstance(subjects, list):
         for subject in subjects:
-            normalized = _clean_text(subject, max_length=128)
+            normalized = _normalize_category_label(subject)
             if normalized:
                 return normalized
     return None
@@ -2108,6 +2160,8 @@ def _normalize_tags(record: dict[str, Any]) -> list[str]:
     for item in raw_tags:
         tag = _clean_text(item, max_length=128)
         if not tag:
+            continue
+        if _looks_like_classification_code(tag) or _looks_like_author_placeholder(tag):
             continue
         key = _slugify(tag, max_length=80)
         if key in seen:
@@ -2124,9 +2178,100 @@ def _clean_text(value: Any, *, max_length: int) -> str | None:
         return None
     text_value = str(value).strip()
     text_value = re.sub(r"\s+", " ", text_value)
-    if not text_value:
+    if not text_value or text_value.lower() in NULL_LIKE_TEXTS:
         return None
     return text_value[:max_length]
+
+
+def _looks_like_author_placeholder(value: str) -> bool:
+    return bool(AUTHOR_PATH_PATTERN.fullmatch(value))
+
+
+def _contains_only_author_placeholders(value: Any) -> bool:
+    author = _clean_text(value, max_length=255)
+    if not author:
+        return False
+    parts = [part.strip() for part in re.split(r"[;,]+", author) if part.strip()]
+    return bool(parts) and all(_looks_like_author_placeholder(part) for part in parts)
+
+
+def _is_classification_part(part: str) -> bool:
+    return bool(CLASSIFICATION_CODE_PATTERN.fullmatch(part)) and (any(char.isdigit() for char in part) or len(part) == 1)
+
+
+def _looks_like_classification_code(value: str) -> bool:
+    compact = re.sub(r"\s+", "", value.translate(CLASSIFICATION_TRANSLATION)).upper()
+    parts = [part for part in re.split(r"[;,]+", compact) if part]
+    if not parts or not _is_classification_part(parts[0]):
+        return False
+    return all(
+        _is_classification_part(part) or bool(re.fullmatch(r"[A-Z][A-Z0-9+]{1,7}", part))
+        for part in parts[1:]
+    )
+
+
+def _clean_author(value: Any) -> str | None:
+    author = _clean_text(value, max_length=255)
+    if not author:
+        return None
+    parts = [part.strip() for part in re.split(r"[;,]+", author) if part.strip()]
+    normalized_parts = [part for part in parts if not _looks_like_author_placeholder(part)]
+    if not normalized_parts:
+        return None
+    normalized = "; ".join(normalized_parts)
+    if _looks_like_author_placeholder(normalized):
+        return None
+    return normalized[:255]
+
+
+def _normalize_category_label(value: Any) -> str | None:
+    category = _clean_text(value, max_length=128)
+    if not category:
+        return None
+    if _looks_like_classification_code(category):
+        compact = re.sub(r"\s+", "", category.translate(CLASSIFICATION_TRANSLATION)).upper()
+        prefix = next((part[0] for part in re.split(r"[;,]+", compact) if part), compact[0])
+        return CATEGORY_CODE_LABELS.get(prefix.upper(), "综合参考")
+    return category
+
+
+def _should_drop_catalog_record(
+    *,
+    title: str,
+    author: str | None,
+    category: str | None,
+    tags: list[str],
+    summary: str | None,
+) -> bool:
+    if title.startswith(QUOTED_TITLE_PREFIXES):
+        return True
+    return not author and not category and not tags and not summary
+
+
+def _sanitize_snapshot_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
+    title = _clean_text(payload.get("title"), max_length=255)
+    if not title:
+        return None
+    author = _clean_author(payload.get("author"))
+    if author is None and _contains_only_author_placeholders(payload.get("author")):
+        return None
+    category = _normalize_category_label(payload.get("category"))
+    summary = _clean_text(payload.get("summary"), max_length=2_000)
+    sanitized_payload = dict(payload)
+    sanitized_payload["title"] = title
+    sanitized_payload["author"] = author
+    sanitized_payload["category"] = category
+    sanitized_payload["summary"] = summary
+    tags = _normalize_tags(sanitized_payload)
+    if _should_drop_catalog_record(title=title, author=author, category=category, tags=tags, summary=summary):
+        return None
+    search_text = _clean_text(payload.get("search_text"), max_length=8_000) or " ".join(
+        part for part in (title, author, category, " ".join(tags), summary) if part
+    )
+    sanitized_payload["tags"] = tags
+    sanitized_payload["subjects"] = tags
+    sanitized_payload["search_text"] = search_text
+    return sanitized_payload
 
 
 def _slugify(value: str, max_length: int = 64) -> str:

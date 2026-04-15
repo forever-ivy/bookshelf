@@ -4,6 +4,7 @@ from collections import Counter
 from dataclasses import dataclass
 import gzip
 import json
+import math
 from pathlib import Path
 import re
 from typing import Any
@@ -11,6 +12,43 @@ from typing import Any
 
 MAX_TAGS_PER_BOOK = 12
 OPENLIBRARY_COVER_TEMPLATE = "https://covers.openlibrary.org/b/id/{cover_id}-L.jpg"
+NULL_LIKE_TEXTS = frozenset({"nan", "null", "none", "n/a", "na", "nat", "<na>", "undefined", "unknown"})
+AUTHOR_PATH_PATTERN = re.compile(r"^/authors/OL[\w-]+A?$", re.IGNORECASE)
+CLASSIFICATION_CODE_PATTERN = re.compile(r"^[A-Z]{1,3}(?:[\-./=:()]?\d[\dA-Z.\-()/=:]*|)$", re.IGNORECASE)
+QUOTED_TITLE_PREFIXES = ('"', "'", "“", "‘")
+CLASSIFICATION_CATEGORY_LABELS = {
+    "A": "马克思主义",
+    "B": "哲学",
+    "C": "社会科学",
+    "D": "政治法律",
+    "E": "军事",
+    "F": "经济",
+    "G": "文化教育",
+    "H": "语言文字",
+    "I": "文学",
+    "J": "艺术",
+    "K": "历史地理",
+    "N": "自然科学",
+    "O": "数理化",
+    "P": "天文地学",
+    "Q": "生物科学",
+    "R": "医药卫生",
+    "S": "农业科学",
+    "T": "工业技术",
+    "U": "交通运输",
+    "V": "航空航天",
+    "X": "环境科学",
+    "Z": "综合参考",
+}
+CLASSIFICATION_TRANSLATION = str.maketrans({
+    "（": "(",
+    "）": ")",
+    "＝": "=",
+    "－": "-",
+    "；": ";",
+    "，": ",",
+    "：": ":",
+})
 
 
 @dataclass(slots=True)
@@ -45,11 +83,80 @@ def _iter_dump_payloads(path: Path, *, expected_type: str) -> tuple[str, dict[st
 def _normalize_text(value: Any) -> str:
     if value is None:
         return ""
+    if isinstance(value, float) and math.isnan(value):
+        return ""
     if isinstance(value, dict):
         value = value.get("value") or value.get("name") or ""
     text = str(value).strip()
     text = re.sub(r"\s+", " ", text)
+    if not text or text.lower() in NULL_LIKE_TEXTS:
+        return ""
     return text
+
+
+def _looks_like_author_placeholder(value: str) -> bool:
+    return bool(AUTHOR_PATH_PATTERN.fullmatch(value))
+
+
+def _contains_only_author_placeholders(value: Any) -> bool:
+    text = _normalize_text(value)
+    if not text:
+        return False
+    parts = [part.strip() for part in re.split(r"[;,]+", text) if part.strip()]
+    return bool(parts) and all(_looks_like_author_placeholder(part) for part in parts)
+
+
+def _is_classification_part(part: str) -> bool:
+    return bool(CLASSIFICATION_CODE_PATTERN.fullmatch(part)) and (any(char.isdigit() for char in part) or len(part) == 1)
+
+
+def _looks_like_classification_code(value: str) -> bool:
+    compact = re.sub(r"\s+", "", value.translate(CLASSIFICATION_TRANSLATION)).upper()
+    parts = [part for part in re.split(r"[;,]+", compact) if part]
+    if not parts or not _is_classification_part(parts[0]):
+        return False
+    return all(
+        _is_classification_part(part) or bool(re.fullmatch(r"[A-Z][A-Z0-9+]{1,7}", part))
+        for part in parts[1:]
+    )
+
+
+def _normalize_author(value: Any) -> str | None:
+    text = _normalize_text(value)[:255] or None
+    if not text:
+        return None
+    parts = [part.strip() for part in re.split(r"[;,]+", text) if part.strip()]
+    normalized_parts = [part for part in parts if not _looks_like_author_placeholder(part)]
+    if not normalized_parts:
+        return None
+    normalized = "; ".join(normalized_parts)
+    if _looks_like_author_placeholder(normalized):
+        return None
+    return normalized[:255]
+
+
+def _normalize_category(value: Any) -> str | None:
+    text = _normalize_text(value)[:128]
+    if not text:
+        return None
+    if _looks_like_classification_code(text):
+        compact = re.sub(r"\s+", "", text.translate(CLASSIFICATION_TRANSLATION)).upper()
+        prefix = next((part[0] for part in re.split(r"[;,]+", compact) if part), compact[0])
+        return CLASSIFICATION_CATEGORY_LABELS.get(prefix.upper(), "综合参考")
+    return text
+
+
+def _should_drop_record(
+    *,
+    title: str,
+    author: str | None,
+    category: str | None,
+    tags: list[str],
+    summary: str | None,
+) -> bool:
+    if title.startswith(QUOTED_TITLE_PREFIXES):
+        return True
+    return not author and not category and not tags and not summary
 
 
 def _normalize_key(value: str) -> str:
@@ -69,6 +176,8 @@ def _extract_subjects(value: Any) -> list[str]:
     for item in value:
         text = _normalize_text(item)
         if not text:
+            continue
+        if _looks_like_classification_code(text) or _looks_like_author_placeholder(text):
             continue
         dedupe_key = _normalize_key(text)
         if not dedupe_key or dedupe_key in seen:
@@ -189,6 +298,8 @@ def _split_keywords(value: Any) -> list[str]:
         normalized = _normalize_text(token)
         if not normalized:
             continue
+        if _looks_like_classification_code(normalized) or _looks_like_author_placeholder(normalized):
+            continue
         dedupe_key = _normalize_key(normalized)
         if not dedupe_key or dedupe_key in seen:
             continue
@@ -212,12 +323,22 @@ def _normalize_source_record(
     normalized_title = _normalize_text(title)[:255]
     if not normalized_title:
         return None
-    normalized_author = _normalize_text(author)[:255] or None
+    normalized_author = _normalize_author(author)
+    if normalized_author is None and _contains_only_author_placeholders(author):
+        return None
     work_key = f"/local/{_normalize_key(normalized_title)}|{_normalize_key(normalized_author or '')}"
-    normalized_category = _normalize_text(category)[:128] or None
-    normalized_summary = _normalize_text(summary) or None
+    normalized_category = _normalize_category(category)
+    normalized_summary = _normalize_summary(summary)
     normalized_isbn = _normalize_text(isbn)[:32] or None
     tags = _split_keywords(keywords)
+    if _should_drop_record(
+        title=normalized_title,
+        author=normalized_author,
+        category=normalized_category,
+        tags=tags,
+        summary=normalized_summary,
+    ):
+        return None
     publish_year = _extract_first_publish_year({"first_publish_year": first_publish_year})
     return {
         "work_key": work_key,
@@ -363,9 +484,9 @@ def _finalize_record(
         return None
     author_keys = _extract_author_keys(payload)
     resolved_authors = [author_names[key] for key in author_keys if key in author_names]
-    author = "; ".join(resolved_authors[:5])[:255] or None
+    author = _normalize_author("; ".join(resolved_authors[:5]))
     subjects = _extract_subjects(payload.get("subjects"))
-    category = subjects[0] if subjects else None
+    category = _normalize_category(subjects[0]) if subjects else None
     summary = _normalize_summary(payload.get("description"))
     cover_url = None
     covers = payload.get("covers") or []
@@ -388,6 +509,8 @@ def _finalize_record(
         "first_publish_year": _extract_first_publish_year(payload),
         "language": _extract_language(payload),
     }
+    if _should_drop_record(title=title, author=author, category=category, tags=subjects, summary=summary):
+        return None
     return record
 
 

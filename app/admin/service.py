@@ -2141,7 +2141,17 @@ def get_recommendation_studio_live_feed(session: Session) -> dict | None:
     publication = _latest_recommendation_studio_publication(session, status="published")
     if publication is None or not publication.payload_json:
         return None
-    return build_recommendation_studio_preview_feed(session, publication.payload_json)
+    try:
+        preview_feed = build_recommendation_studio_preview_feed(session, publication.payload_json)
+    except (ApiError, AttributeError, KeyError, TypeError, ValueError):
+        return None
+    if not (
+        preview_feed.get("today_recommendations")
+        or preview_feed.get("exam_zone")
+        or preview_feed.get("system_booklists")
+    ):
+        return None
+    return preview_feed
 
 
 def get_recommendation_studio(session: Session) -> dict:

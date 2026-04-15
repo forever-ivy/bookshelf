@@ -223,12 +223,57 @@ def test_categories_endpoint_lists_active_reader_categories_without_admin_fields
 
     assert response.status_code == 200
     payload = response.json()
-    names = [item["name"] for item in payload["items"]]
-    assert "人工智能" in names
+    items = payload["items"]
+    names = [item["name"] for item in items]
+    ids = [item["id"] for item in items]
+    assert names == ["科学技术"]
+    assert ids == ["science-tech"]
+    assert "人工智能" not in names
     assert "旧分类" not in names
     assert "空分类" not in names
     assert "code" not in payload["items"][0]
     assert payload["total"] == 1
+
+
+def test_catalog_books_endpoint_filters_by_reader_visible_category_group(client, app):
+    from app.catalog.models import Book, BookCategory
+    from app.core.database import get_session_factory
+
+    session = get_session_factory()()
+    try:
+        ai_category = BookCategory(code="ai", name="人工智能", description="AI", status="active")
+        management_category = BookCategory(code="mgmt", name="管理学", description="管理", status="active")
+        session.add_all([ai_category, management_category])
+        session.flush()
+        session.add_all(
+            [
+                Book(
+                    title="机器学习导论",
+                    author="周志华",
+                    category_id=ai_category.id,
+                    category=ai_category.name,
+                    keywords="ai,machine learning",
+                    summary="AI 入门",
+                ),
+                Book(
+                    title="组织行为学",
+                    author="罗宾斯",
+                    category_id=management_category.id,
+                    category=management_category.name,
+                    keywords="management,organization",
+                    summary="管理学教材",
+                ),
+            ]
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    response = client.get("/api/v1/catalog/books", params={"category": "science-tech"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [item["title"] for item in payload["items"]] == ["机器学习导论"]
 
 
 def test_book_detail_uses_inventory_projection_without_exposing_cabinet_semantics(client, app):
