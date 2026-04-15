@@ -147,7 +147,7 @@ export function useRecommendationSearchQuery(
   const limit = options.limit ?? 5;
 
   return useQuery({
-    enabled,
+    enabled: enabled && query.trim().length > 0,
     queryFn: () => searchRecommendations(query, token, { limit }),
     queryKey: ['recommendation-search', query, limit, token],
   });
@@ -185,12 +185,17 @@ export function useRecommendationDashboardQuery() {
   });
 }
 
-export function usePersonalizedRecommendationsQuery(options: { historyLimit?: number; limit?: number } = {}) {
+export function usePersonalizedRecommendationsQuery(
+  options: { enabled?: boolean; historyLimit?: number; limit?: number } = {}
+) {
   const { token } = useAppSession();
+  const enabled = options.enabled ?? true;
 
   return useQuery({
+    enabled,
     queryFn: () => getPersonalizedRecommendations(token, options),
     queryKey: ['recommendation', 'personalized', options.historyLimit ?? 3, options.limit ?? 5, token],
+    staleTime: 1000 * 60 * 3,
   });
 }
 

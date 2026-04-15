@@ -29,7 +29,7 @@ function resolveFavoriteReason(item: FavoriteBook) {
 
 function buildFavoritesFilters(categories: CatalogCategory[]) {
   const categoryFilters = categories.map((category) => ({
-    key: `category:${category.name}` as const,
+    key: `category:${String(category.id)}` as const,
     label: category.name,
   }));
 

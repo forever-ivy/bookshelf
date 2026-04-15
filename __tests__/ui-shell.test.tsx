@@ -80,6 +80,21 @@ function mockCreatePaginatedMockItems(query: string, count: number, startId: num
   }));
 }
 
+function resolveReaderCategoryGroupId(category: string | null) {
+  switch (category) {
+    case '人工智能':
+    case '工业技术':
+    case '环境科学、安全科学':
+      return 'science-tech';
+    case '管理学':
+      return 'economics-management';
+    case '哲学、宗教':
+      return 'humanities-social-sciences';
+    default:
+      return category;
+  }
+}
+
 function mockCreateLoadingKey(query: string, marker: number) {
   return `${query || '__empty__'}:${marker}`;
 }
@@ -340,9 +355,9 @@ jest.mock('@/hooks/use-library-app-data', () => ({
   useBookDetailQueries: () => [],
   useCatalogCategoriesQuery: () => ({
     data: [
-      { id: 1, name: '人工智能' },
-      { id: 2, name: '管理学' },
-      { id: 3, name: '环境科学、安全科学' },
+      { id: 'science-tech', name: '科学技术' },
+      { id: 'economics-management', name: '经济管理' },
+      { id: 'humanities-social-sciences', name: '人文社科' },
     ],
     isFetching: false,
   }),
@@ -421,7 +436,7 @@ jest.mock('@/hooks/use-library-app-data', () => ({
           ];
 
     const filteredItems = category
-      ? allItems.filter((item) => (item.category ?? null) === category)
+      ? allItems.filter((item) => resolveReaderCategoryGroupId(item.category ?? null) === category)
       : allItems;
     const items = filteredItems.slice(offset, offset + limit);
 
@@ -556,7 +571,7 @@ jest.mock('@/hooks/use-library-app-data', () => ({
             },
           ];
     const filteredItems = category
-      ? allItems.filter((item) => (item.category ?? null) === category)
+      ? allItems.filter((item) => resolveReaderCategoryGroupId(item.category ?? null) === category)
       : allItems;
     const items = filteredItems.slice(offset, offset + limit);
 
@@ -743,9 +758,61 @@ jest.mock('@/hooks/use-library-app-data', () => ({
       },
     ],
   }),
-  usePersonalizedRecommendationsQuery: () => ({
-    data: [],
-  }),
+  usePersonalizedRecommendationsQuery: (
+    options?: { enabled?: boolean; historyLimit?: number; limit?: number }
+  ) => {
+    const enabled = options?.enabled ?? true;
+    const limit = options?.limit ?? 5;
+
+    if (options?.historyLimit === 5 && options?.limit === 8) {
+      return {
+        data: [],
+        error: undefined,
+        isFetching: false,
+      };
+    }
+
+    mockRecommendationPageQueries.push({ limit, query: '' });
+
+    if (!enabled) {
+      return { data: undefined, error: undefined, isFetching: false };
+    }
+
+    if (mockPersonalizedLoading || mockRecommendationLoadingQueries.has(mockCreateLoadingKey('', limit))) {
+      return {
+        data: undefined,
+        error: undefined,
+        isFetching: true,
+      };
+    }
+
+    const discoveryRecommendations = [
+      {
+        availabilityLabel: '馆藏充足 · 可立即借阅',
+        author: 'Ian Goodfellow',
+        cabinetLabel: '主馆 2 楼',
+        coverTone: 'blue',
+        deliveryAvailable: false,
+        etaLabel: '到柜自取',
+        etaMinutes: null,
+        id: 2,
+        matchedFields: ['summary'],
+        recommendationReason: '如果你在做深度学习专题，它会更系统',
+        shelfLabel: '主馆 2 楼',
+        stockStatus: 'available',
+        summary: '推荐区结果',
+        tags: ['推荐'],
+        title: 'Deep Learning',
+      },
+      ...mockCreatePaginatedMockItems('推荐', 11, 9100),
+    ];
+
+    return {
+      data: discoveryRecommendations.slice(0, limit),
+      error: undefined,
+      isFetching: false,
+    };
+  },
   useRecommendationDashboardQuery: () => ({
     data: null,
   }),
@@ -778,53 +845,30 @@ jest.mock('@/hooks/use-library-app-data', () => ({
       };
     }
 
-    const discoveryRecommendations = [
-      {
-        availabilityLabel: '馆藏充足 · 可立即借阅',
-        author: 'Ian Goodfellow',
-        cabinetLabel: '主馆 2 楼',
-        coverTone: 'blue',
-        deliveryAvailable: false,
-        etaLabel: '到柜自取',
-        etaMinutes: null,
-        id: 2,
-        matchedFields: ['summary'],
-        recommendationReason: '如果你在做深度学习专题，它会更系统',
-        shelfLabel: '主馆 2 楼',
-        stockStatus: 'available',
-        summary: '推荐区结果',
-        tags: ['推荐'],
-        title: 'Deep Learning',
-      },
-      ...mockCreatePaginatedMockItems('推荐', 11, 9100),
-    ];
-
     return {
       data:
-        normalizedQuery.length === 0
-          ? discoveryRecommendations.slice(0, limit)
-          : [
-              {
-                availabilityLabel: '馆藏充足 · 可立即借阅',
-                author: normalizedQuery === '安全' ? '安全治理课题组' : 'Ian Goodfellow',
-                cabinetLabel: '主馆 2 楼',
-                coverTone: 'blue',
-                deliveryAvailable: false,
-                etaLabel: '到柜自取',
-                etaMinutes: null,
-                id: normalizedQuery === '安全' ? 9001 : 2,
-                matchedFields: ['summary'],
-                recommendationReason:
-                  normalizedQuery === '安全'
-                    ? '从主题语义看，这本更贴近安全治理方向'
-                    : '如果你在做深度学习专题，它会更系统',
-                shelfLabel: '主馆 2 楼',
-                stockStatus: 'available',
-                summary: '推荐区结果',
-                tags: ['推荐'],
-                title: normalizedQuery === '安全' ? '安全治理导论' : 'Deep Learning',
-              },
-            ],
+        [
+          {
+            availabilityLabel: '馆藏充足 · 可立即借阅',
+            author: normalizedQuery === '安全' ? '安全治理课题组' : 'Ian Goodfellow',
+            cabinetLabel: '主馆 2 楼',
+            coverTone: 'blue',
+            deliveryAvailable: false,
+            etaLabel: '到柜自取',
+            etaMinutes: null,
+            id: normalizedQuery === '安全' ? 9001 : 2,
+            matchedFields: ['summary'],
+            recommendationReason:
+              normalizedQuery === '安全'
+                ? '从主题语义看，这本更贴近安全治理方向'
+                : '如果你在做深度学习专题，它会更系统',
+            shelfLabel: '主馆 2 楼',
+            stockStatus: 'available',
+            summary: '推荐区结果',
+            tags: ['推荐'],
+            title: normalizedQuery === '安全' ? '安全治理导论' : 'Deep Learning',
+          },
+        ],
       error: undefined,
       isFetching: false,
     };
@@ -1019,9 +1063,9 @@ describe('UI shell routes', () => {
     expect(screen.queryByTestId('page-shell-header-title')).toBeNull();
     expect(screen.getByText('筛选')).toBeTruthy();
     expect(screen.getAllByText('全部')).toHaveLength(1);
-    expect(screen.getAllByText('人工智能')).toHaveLength(1);
-    expect(screen.getAllByText('管理学')).toHaveLength(1);
-    expect(screen.getAllByText('环境科学、安全科学')).toHaveLength(1);
+    expect(screen.getAllByText('科学技术')).toHaveLength(1);
+    expect(screen.getAllByText('经济管理')).toHaveLength(1);
+    expect(screen.getAllByText('人文社科')).toHaveLength(1);
     expect(screen.queryByText('支持配送')).toBeNull();
     expect(screen.queryByText('猜你想要')).toBeNull();
     expect(screen.queryByText('馆藏充足')).toBeNull();
@@ -1079,9 +1123,9 @@ describe('UI shell routes', () => {
   it('moves the active shell highlight onto the selected filter chip', () => {
     renderWithProviders(<SearchRoute />);
 
-    fireEvent.press(screen.getByTestId('search-filter-chip-category:管理学'));
+    fireEvent.press(screen.getByTestId('search-filter-chip-category:economics-management'));
 
-    expect(screen.getByTestId('search-filter-chip-category:管理学-shell')).toHaveStyle({
+    expect(screen.getByTestId('search-filter-chip-category:economics-management-shell')).toHaveStyle({
       backgroundColor: appTheme.colors.primarySoft,
       padding: 2,
     });
@@ -1094,12 +1138,12 @@ describe('UI shell routes', () => {
   it('keeps discovery recommendations unchanged when a category chip is selected without a query', () => {
     renderWithProviders(<SearchRoute />);
 
-    fireEvent.press(screen.getByTestId('search-filter-chip-category:管理学'));
+    fireEvent.press(screen.getByTestId('search-filter-chip-category:economics-management'));
 
     expect(screen.getByText('为你推荐')).toBeTruthy();
     expect(screen.queryByText('馆藏结果')).toBeNull();
     expect(screen.getByText('Deep Learning')).toBeTruthy();
-    expect(screen.getByTestId('search-filter-chip-category:管理学-shell')).toHaveStyle({
+    expect(screen.getByTestId('search-filter-chip-category:economics-management-shell')).toHaveStyle({
       backgroundColor: appTheme.colors.primarySoft,
       padding: 2,
     });
@@ -1152,7 +1196,7 @@ describe('UI shell routes', () => {
   it('passes the selected category through to explicit catalog search results', () => {
     renderWithProviders(<SearchRoute />);
 
-    fireEvent.press(screen.getByTestId('search-filter-chip-category:人工智能'));
+    fireEvent.press(screen.getByTestId('search-filter-chip-category:science-tech'));
 
     act(() => {
       const nativeSearchBar = screen.getByTestId('native-search-bar');
@@ -1167,7 +1211,7 @@ describe('UI shell routes', () => {
 
     expect(screen.getByText('统计学习方法')).toBeTruthy();
     expect(mockExplicitPageQueries).toContainEqual({
-      category: '人工智能',
+      category: 'science-tech',
       limit: 20,
       offset: 0,
       query: '统计',

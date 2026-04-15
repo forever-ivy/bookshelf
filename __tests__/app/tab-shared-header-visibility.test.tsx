@@ -230,6 +230,11 @@ jest.mock('@/hooks/use-library-app-data', () => ({
   useDismissNotificationMutation: () => ({
     mutateAsync: jest.fn(),
   }),
+  usePersonalizedRecommendationsQuery: () => ({
+    data: [],
+    error: null,
+    isFetching: false,
+  }),
   useRecommendationSearchQuery: () => ({
     data: [],
     error: null,

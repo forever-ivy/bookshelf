@@ -78,7 +78,7 @@ const mockUseFavoritesQuery = jest.fn(
     const normalizedQuery = filters?.query?.trim().toLowerCase() ?? '';
     const category = filters?.category?.trim() ?? '';
     const data = mockFavoriteBooks.filter((item) => {
-      if (category && item.book.category !== category) {
+      if (category && resolveReaderCategoryGroupId(item.book.category) !== category) {
         return false;
       }
 
@@ -103,9 +103,9 @@ const mockUseFavoritesQuery = jest.fn(
 
 const mockUseCatalogCategoriesQuery = jest.fn(() => ({
   data: [
-    { id: 1, name: '人工智能' },
-    { id: 2, name: '管理学' },
-    { id: 3, name: '环境科学、安全科学' },
+    { id: 'science-tech', name: '科学技术' },
+    { id: 'economics-management', name: '经济管理' },
+    { id: 'humanities-social-sciences', name: '人文社科' },
   ],
   error: null,
   isError: false,
@@ -167,6 +167,17 @@ jest.mock('@/hooks/use-library-app-data', () => ({
 
 import FavoritesRoute from '@/app/favorites/index';
 
+function resolveReaderCategoryGroupId(category: string | null) {
+  switch (category) {
+    case '人工智能':
+      return 'science-tech';
+    case '管理学':
+      return 'economics-management';
+    default:
+      return category;
+  }
+}
+
 describe('FavoritesRoute', () => {
   beforeEach(() => {
     mockRouter.back.mockReset();
@@ -182,9 +193,9 @@ describe('FavoritesRoute', () => {
     expect(screen.getByPlaceholderText('搜索收藏图书')).toBeTruthy();
     expect(screen.getByTestId('search-filter-strip')).toBeTruthy();
     expect(screen.getByText('全部')).toBeTruthy();
-    expect(screen.getByText('人工智能')).toBeTruthy();
-    expect(screen.getByText('管理学')).toBeTruthy();
-    expect(screen.getByText('环境科学、安全科学')).toBeTruthy();
+    expect(screen.getByText('科学技术')).toBeTruthy();
+    expect(screen.getByText('经济管理')).toBeTruthy();
+    expect(screen.getByText('人文社科')).toBeTruthy();
     expect(screen.queryByTestId('search-filter-chip-wanted')).toBeNull();
     expect(screen.queryByTestId('search-filter-chip-delivery')).toBeNull();
     expect(screen.queryByTestId('search-filter-chip-stocked')).toBeNull();
@@ -206,13 +217,13 @@ describe('FavoritesRoute', () => {
     });
 
     fireEvent.changeText(screen.getByTestId('favorites-header-search-bar'), '');
-    fireEvent.press(screen.getByText('人工智能'));
+    fireEvent.press(screen.getByText('科学技术'));
 
     expect(screen.getByText('机器学习')).toBeTruthy();
     expect(screen.getByText('统计学习方法')).toBeTruthy();
     expect(screen.queryByText('组织行为学')).toBeNull();
     expect(mockUseFavoritesQuery).toHaveBeenLastCalledWith({
-      category: '人工智能',
+      category: 'science-tech',
       query: '',
     });
   });
@@ -220,11 +231,11 @@ describe('FavoritesRoute', () => {
   it('keeps category chips driven by the dedicated catalog endpoint even when favorites are empty for that category', () => {
     render(<FavoritesRoute />);
 
-    fireEvent.press(screen.getByText('环境科学、安全科学'));
+    fireEvent.press(screen.getByText('人文社科'));
 
     expect(mockUseCatalogCategoriesQuery).toHaveBeenCalled();
     expect(mockUseFavoritesQuery).toHaveBeenLastCalledWith({
-      category: '环境科学、安全科学',
+      category: 'humanities-social-sciences',
       query: '',
     });
     expect(screen.getByText('没有符合条件的收藏图书')).toBeTruthy();

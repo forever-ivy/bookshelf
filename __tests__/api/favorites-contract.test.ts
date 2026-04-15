@@ -84,12 +84,12 @@ describe('favorites contract', () => {
     });
 
     await listFavorites('reader-token', {
-      category: '人工智能',
+      category: 'science-tech',
       query: '推荐',
     });
 
     expect(libraryRequest).toHaveBeenCalledWith(
-      '/api/v1/favorites/books?query=%E6%8E%A8%E8%8D%90&category=%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD',
+      '/api/v1/favorites/books?query=%E6%8E%A8%E8%8D%90&category=science-tech',
       expect.objectContaining({
         method: 'GET',
         token: 'reader-token',

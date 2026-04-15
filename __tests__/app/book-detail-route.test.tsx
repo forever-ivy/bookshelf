@@ -757,6 +757,22 @@ describe('BookDetailRoute', () => {
     expect(screen.queryByText('你可能还想借')).toBeNull();
   });
 
+  it('shows 暂无 when the book detail has no intro summary', () => {
+    mockBookDetailData = {
+      ...createMockBookDetailData(),
+      catalog: {
+        ...createMockBookDetailData().catalog,
+        summary: '',
+      },
+    };
+
+    render(<BookDetailRoute />);
+
+    expect(screen.getByText('内容信息')).toBeTruthy();
+    expect(screen.getByText('简介')).toBeTruthy();
+    expect(screen.getByText('暂无')).toBeTruthy();
+  });
+
   it('keeps the unified sections mounted with skeletons while loading', () => {
     mockDetailLoading = true;
     mockCollaborativeLoading = true;

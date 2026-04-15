@@ -185,10 +185,10 @@ describe('catalog contract', () => {
       query: '',
     });
 
-    await listBooksPage(undefined, 'reader-token', { category: '人工智能', limit: 20, offset: 0 });
+    await listBooksPage(undefined, 'reader-token', { category: 'science-tech', limit: 20, offset: 0 });
 
     expect(libraryRequest).toHaveBeenCalledWith(
-      '/api/v1/catalog/books?category=%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD&limit=20&offset=0',
+      '/api/v1/catalog/books?category=science-tech&limit=20&offset=0',
       expect.objectContaining({
         method: 'GET',
         token: 'reader-token',
@@ -199,8 +199,8 @@ describe('catalog contract', () => {
   it('fetches reader-visible category chips from the dedicated catalog categories endpoint', async () => {
     (libraryRequest as jest.Mock).mockResolvedValue({
       items: [
-        { id: 3, name: '人工智能' },
-        { id: 5, name: '管理学' },
+        { id: 'science-tech', name: '科学技术' },
+        { id: 'economics-management', name: '经济管理' },
       ],
       total: 2,
     });
@@ -215,8 +215,8 @@ describe('catalog contract', () => {
       })
     );
     expect(result).toEqual([
-      { id: 3, name: '人工智能' },
-      { id: 5, name: '管理学' },
+      { id: 'science-tech', name: '科学技术' },
+      { id: 'economics-management', name: '经济管理' },
     ]);
     expect(result[0]).not.toHaveProperty('code');
   });

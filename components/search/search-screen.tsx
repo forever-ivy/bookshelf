@@ -26,6 +26,7 @@ import {
   useCatalogCategoriesQuery,
   useCatalogBookSearchPageQuery,
   useExplicitBookSearchQuery,
+  usePersonalizedRecommendationsQuery,
   useRecommendationSearchQuery,
 } from '@/hooks/use-library-app-data';
 import { useAppTheme } from '@/hooks/use-app-theme';
@@ -47,7 +48,7 @@ function buildCategoryFilters(categories: CatalogCategory[]) {
   return [
     { key: 'all' as const, label: '全部' },
     ...categories.map((category) => ({
-      key: `category:${category.name}` as const,
+      key: `category:${String(category.id)}` as const,
       label: category.name,
     })),
   ];
@@ -127,13 +128,20 @@ export function SearchScreen({
   });
   const recommendationSearchQuery = useRecommendationSearchQuery(
     searchQuery,
-    !borrowNowMode,
+    !borrowNowMode && !shouldShowDiscoveryRecommendations,
     {
-      limit: shouldShowDiscoveryRecommendations ? recommendationLimit : RECOMMENDATION_PREVIEW_LIMIT,
+      limit: RECOMMENDATION_PREVIEW_LIMIT,
     }
   );
+  const personalizedRecommendationsQuery = usePersonalizedRecommendationsQuery({
+    enabled: shouldShowDiscoveryRecommendations,
+    limit: recommendationLimit,
+  });
   const { theme } = useAppTheme();
   const activeCatalogQuery = shouldUseExplicitSearch ? explicitBookSearchQuery : catalogPageQuery;
+  const activeRecommendationQuery = shouldShowDiscoveryRecommendations
+    ? personalizedRecommendationsQuery
+    : recommendationSearchQuery;
   const [feedbackForm, setFeedbackForm] = React.useState({
     authorOrContext: '',
     note: '',
@@ -226,12 +234,12 @@ export function SearchScreen({
   }, [querySourceKey]);
 
   React.useEffect(() => {
-    if (!recommendationSearchQuery.data) {
+    if (!activeRecommendationQuery.data) {
       return;
     }
 
     setLoadedRecommendationState((previous) => {
-      const nextItems = dedupeBooks(recommendationSearchQuery.data);
+      const nextItems = dedupeBooks(activeRecommendationQuery.data);
       if (previous.key === querySourceKey && haveSameBookIds(previous.items, nextItems)) {
         return previous;
       }
@@ -241,22 +249,32 @@ export function SearchScreen({
         key: querySourceKey,
       };
     });
-  }, [querySourceKey, recommendationSearchQuery.data]);
+  }, [activeRecommendationQuery.data, querySourceKey]);
 
   const catalogCards = React.useMemo(
     () => (loadedCatalogState.key === querySourceKey ? loadedCatalogState.items : []),
     [loadedCatalogState, querySourceKey]
   );
   const recommendationCards = React.useMemo(
-    () => (borrowNowMode ? [] : loadedRecommendationState.key === querySourceKey ? loadedRecommendationState.items : []),
-    [borrowNowMode, loadedRecommendationState, querySourceKey]
+    () => {
+      if (borrowNowMode) {
+        return [];
+      }
+
+      if (loadedRecommendationState.key === querySourceKey && loadedRecommendationState.items.length > 0) {
+        return loadedRecommendationState.items;
+      }
+
+      return activeRecommendationQuery.data ? dedupeBooks(activeRecommendationQuery.data) : [];
+    },
+    [activeRecommendationQuery.data, borrowNowMode, loadedRecommendationState, querySourceKey]
   );
   const hasDiscoveryRecommendationResponse =
-    recommendationSearchQuery.data !== undefined || recommendationCards.length > 0;
+    personalizedRecommendationsQuery.data !== undefined || recommendationCards.length > 0;
   const isWaitingForDiscoveryRecommendations =
     shouldShowDiscoveryRecommendations &&
     !hasDiscoveryRecommendationResponse &&
-    Boolean(recommendationSearchQuery.isFetching);
+    Boolean(personalizedRecommendationsQuery.isFetching);
   const isWaitingForDiscoveryCatalogFallback =
     shouldShowDiscoveryRecommendations &&
     hasDiscoveryRecommendationResponse &&
@@ -267,7 +285,7 @@ export function SearchScreen({
     shouldShowDiscoveryRecommendations &&
     recommendationCards.length > 0 &&
     recommendationLimit > recommendationCards.length &&
-    Boolean(recommendationSearchQuery.isFetching);
+    Boolean(personalizedRecommendationsQuery.isFetching);
   const isLoadingMoreCatalogResults =
     !shouldShowDiscoveryRecommendations &&
     catalogCards.length > 0 &&
@@ -297,7 +315,7 @@ export function SearchScreen({
     shouldShowDiscoveryRecommendations,
   ]);
   const catalogError = activeCatalogQuery.error;
-  const recommendationError = borrowNowMode ? null : recommendationSearchQuery.error;
+  const recommendationError = borrowNowMode ? null : activeRecommendationQuery.error;
   const hasAnyResults = visibleResultCards.length > 0;
   const showGlobalError = borrowNowMode
     ? Boolean(catalogError) && visibleResultCards.length === 0
@@ -308,7 +326,7 @@ export function SearchScreen({
     !showGlobalError &&
     !catalogError &&
     !activeCatalogQuery.isFetching &&
-    !recommendationSearchQuery.isFetching &&
+    !activeRecommendationQuery.isFetching &&
     visibleResultCards.length === 0;
   const canLoadMore =
     shouldShowDiscoveryRecommendations && hasDiscoveryRecommendationResponse && recommendationCards.length > 0
@@ -325,7 +343,7 @@ export function SearchScreen({
     (isWaitingForDiscoveryRecommendations ||
       isWaitingForDiscoveryCatalogFallback ||
       (!shouldShowDiscoveryRecommendations &&
-        (Boolean(activeCatalogQuery.isFetching) || Boolean(recommendationSearchQuery.isFetching))));
+        (Boolean(activeCatalogQuery.isFetching) || Boolean(activeRecommendationQuery.isFetching))));
   const emptyTitle = borrowNowMode ? '当前没有可立即借走的图书' : '这次没找到完全匹配的图书';
   const emptyDescription = borrowNowMode
     ? '可以换个关键词，或者稍后再看新的可借可送图书。'

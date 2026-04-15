@@ -23,6 +23,8 @@ let mockCatalogData:
 let mockCatalogFetching = true;
 let mockRecommendationData: Array<unknown> | undefined;
 let mockRecommendationFetching = true;
+let mockPersonalizedRecommendationData: Array<unknown> | undefined;
+let mockPersonalizedRecommendationFetching = true;
 
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaProvider: ({ children }: { children: React.ReactNode }) => children,
@@ -51,8 +53,8 @@ jest.mock('expo-router', () => {
 jest.mock('@/hooks/use-library-app-data', () => ({
   useCatalogCategoriesQuery: () => ({
     data: [
-      { id: 1, name: '人工智能' },
-      { id: 2, name: '管理学' },
+      { id: 'science-tech', name: '科学技术' },
+      { id: 'economics-management', name: '经济管理' },
     ],
     isFetching: false,
   }),
@@ -65,6 +67,11 @@ jest.mock('@/hooks/use-library-app-data', () => ({
     data: undefined,
     error: null,
     isFetching: false,
+  }),
+  usePersonalizedRecommendationsQuery: () => ({
+    data: mockPersonalizedRecommendationData,
+    error: null,
+    isFetching: mockPersonalizedRecommendationFetching,
   }),
   useRecommendationSearchQuery: () => ({
     data: mockRecommendationData,
@@ -79,6 +86,8 @@ describe('SearchScreen loading state', () => {
   beforeEach(() => {
     mockCatalogData = undefined;
     mockCatalogFetching = true;
+    mockPersonalizedRecommendationData = undefined;
+    mockPersonalizedRecommendationFetching = true;
     mockRecommendationData = undefined;
     mockRecommendationFetching = true;
   });
@@ -124,5 +133,31 @@ describe('SearchScreen loading state', () => {
     expect(screen.getByTestId('search-result-skeleton-1')).toBeTruthy();
     expect(screen.queryByText('机器学习')).toBeNull();
     expect(screen.queryByTestId('search-result-cell')).toBeNull();
+  });
+
+  it('renders personalized recommendations immediately for discovery mode instead of waiting on empty search', () => {
+    mockCatalogData = undefined;
+    mockCatalogFetching = false;
+    mockPersonalizedRecommendationData = [
+      {
+        author: '钱伟长',
+        availabilityLabel: '馆藏充足 · 可立即借阅',
+        cabinetLabel: '主馆 2 楼',
+        coverTone: 'lavender',
+        etaLabel: '可送达',
+        id: 67642,
+        recommendationReason: '基于你的借阅历史生成',
+        summary: '更符合读者历史兴趣的个性化推荐。',
+        title: '钱伟长科学论文集',
+      },
+    ];
+    mockPersonalizedRecommendationFetching = false;
+    mockRecommendationData = undefined;
+    mockRecommendationFetching = true;
+
+    render(<SearchScreen query="" />);
+
+    expect(screen.getByText('钱伟长科学论文集')).toBeTruthy();
+    expect(screen.queryByTestId('search-result-skeleton-1')).toBeNull();
   });
 });

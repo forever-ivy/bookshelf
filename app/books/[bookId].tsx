@@ -157,6 +157,11 @@ function resolveDecisionAvailabilityLabel(value?: string | null) {
   return normalized;
 }
 
+function resolveBookDetailSummary(value?: string | null) {
+  const normalized = value?.trim();
+  return normalized ? normalized : '暂无';
+}
+
 function findActiveOrderForBook(orders: BorrowOrderView[] | undefined, bookId: number) {
   if (!orders?.length) {
     return null;
@@ -853,7 +858,7 @@ export default function BookDetailRoute() {
                     fontSize: 14,
                     lineHeight: 22,
                   }}>
-                  {book.summary}
+                  {resolveBookDetailSummary(book.summary)}
                 </Text>
               </View>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm }}>

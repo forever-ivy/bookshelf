@@ -3,6 +3,77 @@ import { getMockBook, getMockBookDetail, listMockBooks } from '@/lib/api/mock';
 import { libraryRequest } from '@/lib/api/client';
 import { resolveBookDeliveryAvailable, resolveBookEtaLabel } from '@/lib/book-delivery';
 
+type ReaderVisibleCategoryGroup = {
+  classificationRoots?: string[];
+  containsMatches?: string[];
+  exactMatches?: string[];
+  id: string;
+  name: string;
+};
+
+const READER_VISIBLE_CATEGORY_GROUPS: ReaderVisibleCategoryGroup[] = [
+  {
+    containsMatches: ['儿童', '少儿', '童书', '绘本', '启蒙', '亲子', '幼儿', '宝宝'],
+    id: 'children-picture-books',
+    name: '童书绘本',
+  },
+  {
+    containsMatches: ['漫画', 'comic', 'comics', 'manga', 'manhua', '动漫', '二次元', '耽美', '轻小说'],
+    exactMatches: ['bl', 'bl漫画', 'dc', 'marvel', 'tb'],
+    id: 'comics-light-novels',
+    name: '漫画轻小说',
+  },
+  {
+    classificationRoots: ['I'],
+    containsMatches: ['文学', '小说', '散文', '诗歌', '戏剧', '随笔', '故事', '传记', '言情', '武侠', '推理', '科幻', '奇幻'],
+    exactMatches: ['priest'],
+    id: 'literature-fiction',
+    name: '文学小说',
+  },
+  {
+    classificationRoots: ['A', 'B', 'C', 'D', 'E', 'K', 'Z'],
+    containsMatches: ['哲学', '宗教', '历史', '地理', '社会', '政治', '法律', '军事', '文化', '纪实'],
+    id: 'humanities-social-sciences',
+    name: '人文社科',
+  },
+  {
+    classificationRoots: ['F'],
+    containsMatches: ['经济', '管理', '商业', '财务', '金融', '投资', '营销', 'mba', '企业', '创业'],
+    id: 'economics-management',
+    name: '经济管理',
+  },
+  {
+    classificationRoots: ['G', 'H'],
+    containsMatches: ['教育', '考试', '教辅', '教材', '英语', '语文', '词汇', '语言', '文字', '留学', '学习'],
+    id: 'education-language',
+    name: '教育语言',
+  },
+  {
+    classificationRoots: ['N', 'O', 'P', 'Q', 'S', 'T', 'U', 'V', 'X'],
+    containsMatches: ['人工智能', '计算机', '编程', '软件', '网络', '算法', '数据', '科学', '科技', '工程', '工业技术', '环境', '交通', '农业', '化学', '物理', '数学', '生物', '地球科学', '天文'],
+    exactMatches: ['ai'],
+    id: 'science-tech',
+    name: '科学技术',
+  },
+  {
+    classificationRoots: ['J'],
+    containsMatches: ['艺术', '设计', '美术', '摄影', '音乐', '影视', '电影', '建筑'],
+    id: 'art-design',
+    name: '艺术设计',
+  },
+  {
+    classificationRoots: ['R'],
+    containsMatches: ['医学', '医药', '卫生', '健康', '养生', '心理', '育儿', '家庭', '旅行', '美食', '烹饪', '时尚', '健身', '生活'],
+    id: 'life-health',
+    name: '生活健康',
+  },
+  {
+    containsMatches: ['期刊', '论文', '学报', '报告', 'conference', 'proceedings', 'thesis', 'dissertation'],
+    id: 'journals-papers',
+    name: '期刊论文',
+  },
+];
+
 export async function listBooks(query?: string, token?: string | null): Promise<BookCard[]> {
   return listBooksPage(query, token).then((payload) => payload.items);
 }
@@ -227,18 +298,19 @@ function createFallbackBookCardPage(
 }
 
 function createFallbackCatalogCategories(): CatalogCategory[] {
-  const names = Array.from(
-    new Set(
-      listMockBooks(undefined)
-        .map((book) => book.category?.trim() ?? '')
-        .filter(Boolean)
-    )
-  ).sort((left, right) => left.localeCompare(right, 'zh-Hans-CN'));
+  const seenGroupIds = new Set<string>();
+  const groups = listMockBooks(undefined)
+    .map((book) => resolveReaderVisibleCategoryGroup(book.category))
+    .filter((group): group is ReaderVisibleCategoryGroup => Boolean(group))
+    .filter((group) => {
+      if (seenGroupIds.has(group.id)) {
+        return false;
+      }
+      seenGroupIds.add(group.id);
+      return true;
+    });
 
-  return names.map((name, index) => ({
-    id: `mock-category-${index + 1}`,
-    name,
-  }));
+  return groups;
 }
 
 function buildSearchParams(
@@ -306,4 +378,43 @@ function normalizeBookDetail(raw: any, bookId: number): BookDetail {
       ? (raw.relatedBooks ?? raw.related_books).map(normalizeBookCard)
       : getMockBookDetail(bookId)?.relatedBooks ?? [],
   };
+}
+
+function resolveReaderVisibleCategoryGroup(value: unknown): CatalogCategory | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  for (const group of READER_VISIBLE_CATEGORY_GROUPS) {
+    if (group.exactMatches?.includes(normalized)) {
+      return { id: group.id, name: group.name };
+    }
+  }
+
+  for (const group of READER_VISIBLE_CATEGORY_GROUPS) {
+    if (group.containsMatches?.some((token) => normalized.includes(token))) {
+      return { id: group.id, name: group.name };
+    }
+  }
+
+  const classificationRoot = extractClassificationRoot(normalized);
+  if (!classificationRoot) {
+    return null;
+  }
+
+  const matchedGroup = READER_VISIBLE_CATEGORY_GROUPS.find((group) =>
+    group.classificationRoots?.includes(classificationRoot)
+  );
+
+  return matchedGroup ? { id: matchedGroup.id, name: matchedGroup.name } : null;
+}
+
+function extractClassificationRoot(value: string) {
+  const match = value.toUpperCase().match(/[A-Z]/);
+  return match?.[0] ?? null;
 }
