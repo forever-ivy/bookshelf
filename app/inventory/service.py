@@ -373,13 +373,28 @@ def take_by_text(
     order_id: int | None = None,
     fulfillment_id: int | None = None,
 ) -> dict:
-    if fulfillment_id is None:
-        raise ApiError(400, "fulfillment_binding_required", "Taking a book requires a fulfillment binding")
+    from app.orders.models import BorrowOrder, OrderFulfillment
+
+    if fulfillment_id is None and order_id is None:
+        raise ApiError(400, "fulfillment_binding_required", "Taking a book requires an order or fulfillment binding")
 
     title_query = _extract_take_title(text)
     if not title_query:
         raise ApiError(400, "missing_book_title", "Please provide the title to take")
-    from app.orders.models import BorrowOrder, OrderFulfillment
+
+    if fulfillment_id is None and order_id is not None:
+        order = session.get(BorrowOrder, order_id)
+        if order is None:
+            raise ApiError(404, "borrow_order_not_found", "Borrow order not found")
+        fulfillment = session.scalars(
+            select(OrderFulfillment)
+            .where(OrderFulfillment.borrow_order_id == order.id)
+            .order_by(OrderFulfillment.id.asc())
+            .limit(1)
+        ).first()
+        if fulfillment is None:
+            raise ApiError(404, "fulfillment_not_found", "Fulfillment not found")
+        fulfillment_id = fulfillment.id
 
     fulfillment = session.get(OrderFulfillment, fulfillment_id)
     if fulfillment is None:

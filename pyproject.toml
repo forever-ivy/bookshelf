@@ -8,6 +8,9 @@ dependencies = [
   "alembic>=1.14.0",
   "celery>=5.4.0",
   "fastapi>=0.116.0",
+  "httpx>=0.28.1",
+  "langgraph>=0.2.55",
+  "neo4j>=5.28.1",
   "openai>=1.0.0",
   "paddleocr>=2.9.1",
   "pgvector>=0.3.6",
@@ -25,7 +28,6 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-  "httpx>=0.28.1",
   "pytest>=8.3.4",
 ]
 

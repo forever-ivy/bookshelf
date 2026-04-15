@@ -180,12 +180,14 @@ def _handle_take(
     *,
     cabinet_id: str,
     text: str,
+    order_id: int | None,
     fulfillment_id: int | None,
 ) -> dict:
     take_result = take_by_text(
         db,
         cabinet_id=cabinet_id,
         text=text,
+        order_id=order_id,
         fulfillment_id=fulfillment_id,
     )
     reply = f"已为你找到《{take_result['book']['title']}》，位置在槽位 {take_result['slotCode']}。"
@@ -218,6 +220,7 @@ def _route_text(
     *,
     raw_text: str,
     image_bytes: bytes | None,
+    order_id: int | None,
     fulfillment_id: int | None,
 ) -> dict:
     normalized = normalize_voice_text(text)
@@ -235,6 +238,7 @@ def _route_text(
             db,
             cabinet_id=settings.cabinet_id,
             text=normalized,
+            order_id=order_id,
             fulfillment_id=fulfillment_id,
         )
     elif intent == "store":
@@ -269,6 +273,7 @@ async def ingest_voice(
         normalized,
         raw_text=text,
         image_bytes=image_bytes,
+        order_id=order_id,
         fulfillment_id=fulfillment_id,
     )
 

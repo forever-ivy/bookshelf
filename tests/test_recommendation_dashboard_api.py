@@ -75,9 +75,9 @@ def test_recommendation_dashboard_aggregates_modules(client):
                     "INSERT INTO book_stock (book_id, cabinet_id, total_copies, available_copies, reserved_copies) VALUES (?, ?, ?, ?, ?)",
                     (3, "cabinet-001", 1, 1, 0),
                 ),
-                ("INSERT INTO borrow_orders (reader_id, book_id, assigned_copy_id, order_mode, status) VALUES (?, ?, ?, ?, ?)", (1, 1, None, "cabinet_pickup", "completed")),
-                ("INSERT INTO borrow_orders (reader_id, book_id, assigned_copy_id, order_mode, status) VALUES (?, ?, ?, ?, ?)", (2, 1, None, "cabinet_pickup", "completed")),
-                ("INSERT INTO borrow_orders (reader_id, book_id, assigned_copy_id, order_mode, status) VALUES (?, ?, ?, ?, ?)", (2, 2, None, "cabinet_pickup", "completed")),
+                ("INSERT INTO borrow_orders (reader_id, requested_book_id, fulfilled_copy_id, fulfillment_mode, status) VALUES (?, ?, ?, ?, ?)", (1, 1, None, "cabinet_pickup", "completed")),
+                ("INSERT INTO borrow_orders (reader_id, requested_book_id, fulfilled_copy_id, fulfillment_mode, status) VALUES (?, ?, ?, ?, ?)", (2, 1, None, "cabinet_pickup", "completed")),
+                ("INSERT INTO borrow_orders (reader_id, requested_book_id, fulfilled_copy_id, fulfillment_mode, status) VALUES (?, ?, ?, ?, ?)", (2, 2, None, "cabinet_pickup", "completed")),
             ],
         )
 

@@ -1,6 +1,0 @@
-请根据当前学习步骤、成功标准和学生最近一次回答，返回一个 JSON 对象：
-- confidence: 0 到 1 之间的小数
-- meetsCriteria: 布尔值
-- reasoning: 简短中文说明
-
-只返回 JSON。

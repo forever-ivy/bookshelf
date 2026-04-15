@@ -45,15 +45,15 @@ def seed_analytics_state() -> dict[str, int]:
             ("Nature", "Author B", "N49", "nature", "summary"),
         )
         conn.exec_driver_sql(
-            "INSERT INTO borrow_orders (reader_id, book_id, assigned_copy_id, order_mode, status) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO borrow_orders (reader_id, requested_book_id, fulfilled_copy_id, fulfillment_mode, status) VALUES (?, ?, ?, ?, ?)",
             (1, 1, None, "cabinet_pickup", "completed"),
         )
         conn.exec_driver_sql(
-            "INSERT INTO borrow_orders (reader_id, book_id, assigned_copy_id, order_mode, status) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO borrow_orders (reader_id, requested_book_id, fulfilled_copy_id, fulfillment_mode, status) VALUES (?, ?, ?, ?, ?)",
             (1, 2, None, "cabinet_pickup", "completed"),
         )
         conn.exec_driver_sql(
-            "INSERT INTO borrow_orders (reader_id, book_id, assigned_copy_id, order_mode, status) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO borrow_orders (reader_id, requested_book_id, fulfilled_copy_id, fulfillment_mode, status) VALUES (?, ?, ?, ?, ?)",
             (2, 2, None, "cabinet_pickup", "completed"),
         )
         conn.exec_driver_sql(

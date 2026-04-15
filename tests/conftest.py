@@ -22,7 +22,7 @@ def app(tmp_path, monkeypatch):
     monkeypatch.setenv("LIBRARY_AUTO_CREATE_SCHEMA", "true")
     monkeypatch.setenv("LIBRARY_LLM_PROVIDER", "null")
     monkeypatch.setenv("LIBRARY_RECOMMENDATION_ML_ENABLED", "false")
-    monkeypatch.setenv("LIBRARY_TUTOR_STORAGE_DIR", str(tmp_path / "tutor-storage"))
+    monkeypatch.setenv("LIBRARY_LEARNING_STORAGE_DIR", str(tmp_path / "learning-storage"))
     get_settings.cache_clear()
     reset_engine()
     from app.main import create_app

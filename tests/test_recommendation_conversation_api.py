@@ -518,7 +518,7 @@ def test_context_snapshot_includes_reader_search_inventory_order_and_conversatio
                     (1, "cabinet-001", 1, 1, 0),
                 ),
                 (
-                    "INSERT INTO borrow_orders (reader_id, book_id, assigned_copy_id, order_mode, status) VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO borrow_orders (reader_id, requested_book_id, fulfilled_copy_id, fulfillment_mode, status) VALUES (?, ?, ?, ?, ?)",
                     (1, 1, None, "cabinet_pickup", "delivering"),
                 ),
                 ("INSERT INTO search_logs (reader_id, query_text, query_mode) VALUES (?, ?, ?)", (1, "matrix", "keyword")),

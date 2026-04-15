@@ -5,8 +5,9 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import NoInspectionAvailable
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import Settings, get_settings
@@ -104,6 +105,78 @@ def _has_alembic_version_table(engine: Engine) -> bool:
         return result.scalar() is not None
 
 
+def _repair_sqlite_legacy_schema(engine: Engine) -> None:
+    with engine.begin() as connection:
+        try:
+            inspector = inspect(connection)
+        except NoInspectionAvailable:
+            return
+
+        table_names = set(inspector.get_table_names())
+
+        if "reader_profiles" in table_names:
+            reader_columns = {column["name"] for column in inspector.get_columns("reader_profiles")}
+            if "restriction_status" not in reader_columns:
+                connection.exec_driver_sql("ALTER TABLE reader_profiles ADD COLUMN restriction_status VARCHAR(32)")
+            if "restriction_until" not in reader_columns:
+                connection.exec_driver_sql("ALTER TABLE reader_profiles ADD COLUMN restriction_until DATETIME")
+            if "risk_flags" not in reader_columns:
+                connection.exec_driver_sql("ALTER TABLE reader_profiles ADD COLUMN risk_flags JSON")
+            if "preference_profile_json" not in reader_columns:
+                connection.exec_driver_sql("ALTER TABLE reader_profiles ADD COLUMN preference_profile_json JSON")
+            if "segment_code" not in reader_columns:
+                connection.exec_driver_sql("ALTER TABLE reader_profiles ADD COLUMN segment_code VARCHAR(64)")
+
+            reader_indexes = {index["name"] for index in inspector.get_indexes("reader_profiles")}
+            if "ix_reader_profiles_restriction_status" not in reader_indexes:
+                connection.exec_driver_sql(
+                    "CREATE INDEX IF NOT EXISTS ix_reader_profiles_restriction_status ON reader_profiles (restriction_status)"
+                )
+            if "ix_reader_profiles_segment_code" not in reader_indexes:
+                connection.exec_driver_sql(
+                    "CREATE INDEX IF NOT EXISTS ix_reader_profiles_segment_code ON reader_profiles (segment_code)"
+                )
+
+        if "books" in table_names:
+            book_columns = {column["name"] for column in inspector.get_columns("books")}
+            if "author" not in book_columns:
+                connection.exec_driver_sql("ALTER TABLE books ADD COLUMN author VARCHAR(255)")
+            if "category_id" not in book_columns:
+                connection.exec_driver_sql("ALTER TABLE books ADD COLUMN category_id INTEGER")
+            if "category" not in book_columns:
+                connection.exec_driver_sql("ALTER TABLE books ADD COLUMN category VARCHAR(128)")
+            if "isbn" not in book_columns:
+                connection.exec_driver_sql("ALTER TABLE books ADD COLUMN isbn VARCHAR(32)")
+            if "barcode" not in book_columns:
+                connection.exec_driver_sql("ALTER TABLE books ADD COLUMN barcode VARCHAR(64)")
+            if "cover_url" not in book_columns:
+                connection.exec_driver_sql("ALTER TABLE books ADD COLUMN cover_url VARCHAR(512)")
+            if "keywords" not in book_columns:
+                connection.exec_driver_sql("ALTER TABLE books ADD COLUMN keywords TEXT")
+            if "summary" not in book_columns:
+                connection.exec_driver_sql("ALTER TABLE books ADD COLUMN summary TEXT")
+            if "shelf_status" not in book_columns:
+                connection.exec_driver_sql("ALTER TABLE books ADD COLUMN shelf_status VARCHAR(32)")
+            if "search_document" not in book_columns:
+                connection.exec_driver_sql("ALTER TABLE books ADD COLUMN search_document TEXT")
+            if "search_vector" not in book_columns:
+                connection.exec_driver_sql("ALTER TABLE books ADD COLUMN search_vector TEXT")
+            book_indexes = {index["name"] for index in inspector.get_indexes("books")}
+            if "ix_books_classification_code" in book_indexes:
+                connection.exec_driver_sql("DROP INDEX IF EXISTS ix_books_classification_code")
+            if "classification_code" in book_columns:
+                connection.exec_driver_sql("ALTER TABLE books DROP COLUMN classification_code")
+
+        if "borrow_orders" in table_names:
+            borrow_columns = {column["name"] for column in inspector.get_columns("borrow_orders")}
+            if "book_id" in borrow_columns and "requested_book_id" not in borrow_columns:
+                connection.exec_driver_sql("ALTER TABLE borrow_orders RENAME COLUMN book_id TO requested_book_id")
+            if "assigned_copy_id" in borrow_columns and "fulfilled_copy_id" not in borrow_columns:
+                connection.exec_driver_sql("ALTER TABLE borrow_orders RENAME COLUMN assigned_copy_id TO fulfilled_copy_id")
+            if "order_mode" in borrow_columns and "fulfillment_mode" not in borrow_columns:
+                connection.exec_driver_sql("ALTER TABLE borrow_orders RENAME COLUMN order_mode TO fulfillment_mode")
+
+
 def init_schema() -> None:
     import_model_modules()
     engine = get_engine()
@@ -118,6 +191,7 @@ def init_schema() -> None:
         _run_alembic_upgrade()
     else:
         Base.metadata.create_all(bind=engine)
+        _repair_sqlite_legacy_schema(engine)
     _seed_default_cabinet()
     from app.catalog.taxonomy import backfill_book_taxonomy, books_need_taxonomy_backfill
 

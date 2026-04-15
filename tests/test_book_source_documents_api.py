@@ -45,14 +45,7 @@ def seed_state() -> dict[str, int]:
     finally:
         session.close()
 
-
-def run_profile_job(profile_id: int) -> None:
-    from app.tutor.tasks import run_profile_generation_job
-
-    run_profile_generation_job(profile_id)
-
-
-def test_admin_can_upload_book_source_document_and_tutor_uses_primary_asset(client):
+def test_admin_can_upload_book_source_document_and_learning_uses_primary_asset(client):
     state = seed_state()
     admin_headers = auth_headers("admin", state["admin_account_id"])
     reader_headers = auth_headers("reader", state["reader_account_id"], state["reader_profile_id"])
@@ -79,30 +72,30 @@ def test_admin_can_upload_book_source_document_and_tutor_uses_primary_asset(clie
     assert upload_payload["sourceDocument"]["isPrimary"] is True
 
     profile_response = client.post(
-        "/api/v1/tutor/profiles",
+        "/api/v2/learning/profiles",
         headers=reader_headers,
         json={
-            "sourceType": "book",
-            "bookId": state["book_id"],
-            "title": "网络实验导学本",
-            "teachingGoal": "帮我做实验前预习和实验后复盘。",
+            "title": "网络实验导学空间",
+            "goalMode": "preview",
+            "difficultyMode": "guided",
+            "sources": [{"kind": "book", "bookId": state["book_id"]}],
         },
     )
 
     assert profile_response.status_code == 201
     profile_id = profile_response.json()["profile"]["id"]
-    run_profile_job(profile_id)
+    generate_response = client.post(f"/api/v2/learning/profiles/{profile_id}/generate", headers=reader_headers)
+    assert generate_response.status_code == 200
 
-    detail_response = client.get(f"/api/v1/tutor/profiles/{profile_id}", headers=reader_headers)
+    detail_response = client.get(f"/api/v2/learning/profiles/{profile_id}", headers=reader_headers)
     assert detail_response.status_code == 200
     detail_payload = detail_response.json()
-    assert detail_payload["profile"]["bookSourceDocumentId"] == source_document_id
     assert detail_payload["profile"]["status"] == "ready"
-    assert detail_payload["sources"][0]["kind"] == "book_asset"
-    assert detail_payload["sources"][0]["originBookSourceDocumentId"] == source_document_id
+    assert detail_payload["assets"][0]["assetKind"] == "book"
+    assert detail_payload["assets"][0]["bookSourceDocumentId"] == source_document_id
 
 
-def test_book_tutor_can_explicitly_target_specific_book_source_document(client):
+def test_learning_profile_can_explicitly_target_specific_book_source_document(client):
     state = seed_state()
     admin_headers = auth_headers("admin", state["admin_account_id"])
     reader_headers = auth_headers("reader", state["reader_account_id"], state["reader_profile_id"])
@@ -124,26 +117,33 @@ def test_book_tutor_can_explicitly_target_specific_book_source_document(client):
     secondary_id = secondary_response.json()["sourceDocument"]["id"]
 
     profile_response = client.post(
-        "/api/v1/tutor/profiles",
+        "/api/v2/learning/profiles",
         headers=reader_headers,
         json={
-            "sourceType": "book",
-            "bookId": state["book_id"],
-            "bookSourceDocumentId": secondary_id,
-            "title": "指定资料导学本",
+            "title": "指定资料导学空间",
+            "goalMode": "preview",
+            "difficultyMode": "guided",
+            "sources": [
+                {
+                    "kind": "book",
+                    "bookId": state["book_id"],
+                    "bookSourceDocumentId": secondary_id,
+                }
+            ],
         },
     )
 
     assert profile_response.status_code == 201
     profile_id = profile_response.json()["profile"]["id"]
-    run_profile_job(profile_id)
+    generate_response = client.post(f"/api/v2/learning/profiles/{profile_id}/generate", headers=reader_headers)
+    assert generate_response.status_code == 200
 
-    detail_response = client.get(f"/api/v1/tutor/profiles/{profile_id}", headers=reader_headers)
+    detail_response = client.get(f"/api/v2/learning/profiles/{profile_id}", headers=reader_headers)
     assert detail_response.status_code == 200
-    assert detail_response.json()["profile"]["bookSourceDocumentId"] == secondary_id
+    assert detail_response.json()["assets"][0]["bookSourceDocumentId"] == secondary_id
 
 
-def test_admin_can_promote_existing_book_source_document_to_primary_and_tutor_uses_it(client):
+def test_admin_can_promote_existing_book_source_document_to_primary_and_learning_uses_it(client):
     state = seed_state()
     admin_headers = auth_headers("admin", state["admin_account_id"])
     reader_headers = auth_headers("reader", state["reader_account_id"], state["reader_profile_id"])
@@ -185,19 +185,21 @@ def test_admin_can_promote_existing_book_source_document_to_primary_and_tutor_us
     assert listed_documents[second_id]["isPrimary"] is True
 
     profile_response = client.post(
-        "/api/v1/tutor/profiles",
+        "/api/v2/learning/profiles",
         headers=reader_headers,
         json={
-            "sourceType": "book",
-            "bookId": state["book_id"],
-            "title": "跟随主资源导学本",
+            "title": "跟随主资源导学空间",
+            "goalMode": "preview",
+            "difficultyMode": "guided",
+            "sources": [{"kind": "book", "bookId": state["book_id"]}],
         },
     )
 
     assert profile_response.status_code == 201
     profile_id = profile_response.json()["profile"]["id"]
-    run_profile_job(profile_id)
+    generate_response = client.post(f"/api/v2/learning/profiles/{profile_id}/generate", headers=reader_headers)
+    assert generate_response.status_code == 200
 
-    detail_response = client.get(f"/api/v1/tutor/profiles/{profile_id}", headers=reader_headers)
+    detail_response = client.get(f"/api/v2/learning/profiles/{profile_id}", headers=reader_headers)
     assert detail_response.status_code == 200
-    assert detail_response.json()["profile"]["bookSourceDocumentId"] == second_id
+    assert detail_response.json()["assets"][0]["bookSourceDocumentId"] == second_id

@@ -7,7 +7,7 @@ MODULE_NAMES = [
     "robot_sim",
     "recommendation",
     "conversation",
-    "tutor",
+    "learning",
     "voice",
     "analytics",
     "admin",

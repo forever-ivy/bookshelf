@@ -14,7 +14,6 @@ from app.orders.models import BorrowOrder, OrderFulfillment, ReturnRequest
 from app.readers.models import ReaderAccount, ReaderProfile
 from app.recommendation.models import RecommendationLog
 from app.robot_sim.models import RobotStatusEvent, RobotTask, RobotUnit
-from app.tutor.models import TutorProfile
 
 
 def _count(session, model) -> int:
@@ -81,27 +80,6 @@ def test_seed_demo_data_is_repeatable_without_duplicate_growth(app):
         assert _count(session, ReaderProfile) == 12
         assert _count(session, Book) == 24
         assert _count(session, BorrowOrder) == 36
-
-
-def test_seed_demo_data_clears_tutor_records_before_reset(app):
-    with get_session_factory()() as session:
-        seed_demo_data(session)
-
-        profile = TutorProfile(
-            reader_id=1,
-            source_type="book",
-            book_id=1,
-            title="待清理导学本",
-            status="ready",
-        )
-        session.add(profile)
-        session.commit()
-
-        assert _count(session, TutorProfile) == 1
-
-        seed_demo_data(session)
-
-        assert _count(session, TutorProfile) == 0
 
 
 def test_seeded_admin_can_log_in_and_fetch_orders(client):

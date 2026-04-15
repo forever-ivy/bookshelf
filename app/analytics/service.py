@@ -90,6 +90,21 @@ def _reader_ids_in_window(
     return {int(row[0]) for row in rows if row[0] is not None}
 
 
+def _reader_ids_since(
+    session: Session,
+    *,
+    reader_column,
+    timestamp_column,
+    since: datetime,
+) -> set[int]:
+    rows = session.execute(
+        select(reader_column)
+        .where(reader_column.is_not(None))
+        .where(or_(timestamp_column.is_(None), timestamp_column >= since))
+    ).all()
+    return {int(row[0]) for row in rows if row[0] is not None}
+
+
 def _grouped_counts(session: Session, *, value_column, label: str, limit: int) -> list[dict]:
     rows = session.execute(
         select(value_column.label(label), func.count().label("count"))

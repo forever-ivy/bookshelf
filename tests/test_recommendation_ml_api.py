@@ -100,10 +100,10 @@ def test_train_implicit_mf_model_learns_reader_book_preference(client):
                 ("INSERT INTO books (title, author, category, keywords, summary) VALUES (?, ?, ?, ?, ?)", ("Book B", "Author B", "C1", "b", "b")),
                 ("INSERT INTO books (title, author, category, keywords, summary) VALUES (?, ?, ?, ?, ?)", ("Book C", "Author C", "C2", "c", "c")),
                 ("INSERT INTO books (title, author, category, keywords, summary) VALUES (?, ?, ?, ?, ?)", ("Book D", "Author D", "C2", "d", "d")),
-                ("INSERT INTO borrow_orders (reader_id, book_id, assigned_copy_id, order_mode, status) VALUES (?, ?, ?, ?, ?)", (1, 1, None, "cabinet_pickup", "completed")),
-                ("INSERT INTO borrow_orders (reader_id, book_id, assigned_copy_id, order_mode, status) VALUES (?, ?, ?, ?, ?)", (1, 2, None, "cabinet_pickup", "completed")),
-                ("INSERT INTO borrow_orders (reader_id, book_id, assigned_copy_id, order_mode, status) VALUES (?, ?, ?, ?, ?)", (2, 3, None, "cabinet_pickup", "completed")),
-                ("INSERT INTO borrow_orders (reader_id, book_id, assigned_copy_id, order_mode, status) VALUES (?, ?, ?, ?, ?)", (2, 4, None, "cabinet_pickup", "completed")),
+                ("INSERT INTO borrow_orders (reader_id, requested_book_id, fulfilled_copy_id, fulfillment_mode, status) VALUES (?, ?, ?, ?, ?)", (1, 1, None, "cabinet_pickup", "completed")),
+                ("INSERT INTO borrow_orders (reader_id, requested_book_id, fulfilled_copy_id, fulfillment_mode, status) VALUES (?, ?, ?, ?, ?)", (1, 2, None, "cabinet_pickup", "completed")),
+                ("INSERT INTO borrow_orders (reader_id, requested_book_id, fulfilled_copy_id, fulfillment_mode, status) VALUES (?, ?, ?, ?, ?)", (2, 3, None, "cabinet_pickup", "completed")),
+                ("INSERT INTO borrow_orders (reader_id, requested_book_id, fulfilled_copy_id, fulfillment_mode, status) VALUES (?, ?, ?, ?, ?)", (2, 4, None, "cabinet_pickup", "completed")),
             ],
         )
 
@@ -180,7 +180,7 @@ def test_search_endpoint_applies_ml_rerank_when_model_available(tmp_path, monkey
                     ("INSERT INTO book_stock (book_id, cabinet_id, total_copies, available_copies, reserved_copies) VALUES (?, ?, ?, ?, ?)", (2, "cabinet-001", 1, 1, 0)),
                     ("INSERT INTO book_stock (book_id, cabinet_id, total_copies, available_copies, reserved_copies) VALUES (?, ?, ?, ?, ?)", (3, "cabinet-001", 1, 1, 0)),
                     ("INSERT INTO book_stock (book_id, cabinet_id, total_copies, available_copies, reserved_copies) VALUES (?, ?, ?, ?, ?)", (4, "cabinet-001", 1, 1, 0)),
-                    ("INSERT INTO borrow_orders (reader_id, book_id, assigned_copy_id, order_mode, status) VALUES (?, ?, ?, ?, ?)", (1, 1, None, "cabinet_pickup", "completed")),
+                    ("INSERT INTO borrow_orders (reader_id, requested_book_id, fulfilled_copy_id, fulfillment_mode, status) VALUES (?, ?, ?, ?, ?)", (1, 1, None, "cabinet_pickup", "completed")),
                 ],
             )
 
