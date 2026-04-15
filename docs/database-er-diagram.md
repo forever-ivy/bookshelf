@@ -1,12 +1,11 @@
 # Smart Bookshelf 数据库 ER 图
 
-这份文档按模块整理当前 `service` 后端的数据库结构，覆盖目前在 `app/*/models.py` 中注册到 SQLAlchemy `Base` 的数据表，并补充迁移期需要理解的 legacy 结构。
+这份文档按模块整理当前 `service` 后端的数据库结构，覆盖目前在 `app/*/models.py` 中注册到 SQLAlchemy `Base` 的数据表。
 
 说明：
 
 - 为保证可读性，ER 图中保留了每张表的主键、主要外键和核心业务字段。
 - 大部分表都还有 `created_at`、`updated_at` 一类审计字段，图中不再重复展开。
-- `Tutor` 已在 `20260415_01` 迁移并退场，文档里保留其结构只用于说明历史数据如何迁入 `Learning`。
 - `column_property`、部分 PostgreSQL 索引和检查约束未完全画入 ER 图，但在模型中仍然存在。
 
 ## 总览图
@@ -81,14 +80,6 @@ erDiagram
         string status "任务状态"
     }
 
-    TUTOR_PROFILES {
-        int id PK "旧版导学本主键"
-        int reader_id FK "所属读者"
-        int book_id FK "关联图书"
-        string title "导学标题"
-        string status "生成状态"
-    }
-
     LEARNING_PROFILES {
         int id PK "新版学习空间主键"
         int reader_id FK "所属读者"
@@ -109,14 +100,11 @@ erDiagram
 
     READER_ACCOUNTS ||--|| READER_PROFILES : "一对一"
     READER_PROFILES ||--o{ BORROW_ORDERS : "发起借阅"
-    READER_PROFILES ||--o{ TUTOR_PROFILES : "创建旧版导学本"
     READER_PROFILES ||--o{ LEARNING_PROFILES : "创建新版学习空间"
 
     BOOKS ||--o{ BOOK_SOURCE_DOCUMENTS : "拥有资料"
     BOOKS ||--o{ BOOK_COPIES : "拥有副本"
     BOOKS ||--o{ BORROW_ORDERS : "被借阅"
-    BOOKS ||--o{ TUTOR_PROFILES : "作为导学来源"
-
     CABINETS ||--o{ BOOK_COPIES : "容纳副本"
     BORROW_ORDERS ||--|| ORDER_FULFILLMENTS : "对应履约"
     ORDER_FULFILLMENTS ||--o{ ROBOT_TASKS : "驱动机器人任务"
@@ -131,7 +119,7 @@ erDiagram
 总览说明：
 
 - `Reader / Book / Inventory / Order` 是业务主线。
-- `Tutor` 和 `Learning` 共用 `Reader`、`Book`、`BookSourceDocument` 这些基础实体。
+- `Learning` 与借阅、目录、读者这些基础域共享 `Reader`、`Book`、`BookSourceDocument` 等核心实体。
 - `LearningSession` 已经支持 `Guide` 和 `Explore` 双模式，并能通过 `source_session_id` 实现桥接。
 
 ## 模块一：认证、后台与系统配置
@@ -539,83 +527,7 @@ erDiagram
 - `reading_events`：阅读和使用行为事件。
 - `conversation_sessions / conversation_messages`：通用问答/闲聊会话，不专属于导学。
 
-## 模块六：旧版导学域 Tutor（已退场，仅迁移参考）
-
-```mermaid
-erDiagram
-    TUTOR_PROFILES {
-        int id PK "导学本主键"
-        int reader_id FK "读者"
-        int book_id FK "图书"
-        int book_source_document_id FK "主资料"
-        string source_type "来源类型"
-        string title "导学标题"
-        string status "生成状态"
-    }
-
-    TUTOR_SOURCE_DOCUMENTS {
-        int id PK "导学资料"
-        int profile_id FK "导学本"
-        int origin_book_source_document_id FK "原始图书资料"
-        string kind "资料类型"
-        string parse_status "解析状态"
-    }
-
-    TUTOR_DOCUMENT_CHUNKS {
-        int id PK "导学切片"
-        int profile_id FK "导学本"
-        int document_id FK "导学资料"
-        int chunk_index "切片序号"
-    }
-
-    TUTOR_SESSIONS {
-        int id PK "导学会话"
-        int profile_id FK "导学本"
-        int current_step_index "当前步骤"
-        string status "会话状态"
-    }
-
-    TUTOR_SESSION_MESSAGES {
-        int id PK "导学消息"
-        int session_id FK "导学会话"
-        string role "消息角色"
-    }
-
-    TUTOR_STEP_COMPLETIONS {
-        int id PK "步骤完成记录"
-        int session_id FK "导学会话"
-        int message_id FK "关联消息"
-        int step_index "步骤序号"
-        float confidence "置信度"
-    }
-
-    TUTOR_GENERATION_JOBS {
-        int id PK "生成任务"
-        int profile_id FK "导学本"
-        string job_type "任务类型"
-        string status "状态"
-    }
-
-    READER_PROFILES ||--o{ TUTOR_PROFILES : "创建导学本"
-    BOOKS ||--o{ TUTOR_PROFILES : "作为导学主题"
-    BOOK_SOURCE_DOCUMENTS ||--o{ TUTOR_PROFILES : "作为主资料"
-    TUTOR_PROFILES ||--o{ TUTOR_SOURCE_DOCUMENTS : "拥有资料"
-    BOOK_SOURCE_DOCUMENTS ||--o{ TUTOR_SOURCE_DOCUMENTS : "映射原始资料"
-    TUTOR_PROFILES ||--o{ TUTOR_DOCUMENT_CHUNKS : "产生切片"
-    TUTOR_SOURCE_DOCUMENTS ||--o{ TUTOR_DOCUMENT_CHUNKS : "被切片"
-    TUTOR_PROFILES ||--o{ TUTOR_SESSIONS : "开启导学会话"
-    TUTOR_SESSIONS ||--o{ TUTOR_SESSION_MESSAGES : "包含消息"
-    TUTOR_SESSIONS ||--o{ TUTOR_STEP_COMPLETIONS : "记录步骤完成"
-    TUTOR_SESSION_MESSAGES ||--o{ TUTOR_STEP_COMPLETIONS : "触发步骤判定"
-    TUTOR_PROFILES ||--o{ TUTOR_GENERATION_JOBS : "产生生成任务"
-```
-
-中文注释：
-
-- `tutor_*` 是旧版导学实现，结构偏传统：资料入库、切片、会话、步骤完成。
-- 当前线上主域已经切到 `learning_*`；这部分只保留为历史结构说明，便于理解迁移脚本和旧数据来源。
-
-## 模块七：新版导学域 Learning V2
+## 模块六：新版导学域 Learning V2
 
 ```mermaid
 erDiagram
@@ -825,12 +737,10 @@ guide session
 ### 3. 导学域收敛策略
 
 ```text
-tutor_*    -> 已迁移并删除
 learning_* -> 当前唯一导学主域
 ```
 
 含义：
 
-- `tutor_*` 已完成迁移后删除，不再承担真实业务。
 - `learning_*` 现在是唯一导学主域，承载 `Guide / Explore / Bridge`。
-- 迁移脚本和 Alembic 仅用于把遗留 tutor 数据搬入 learning。
+- Alembic 基线已经切到 `learning_*`，新库初始化不再经过旧导学结构。

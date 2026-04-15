@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
 from sqlalchemy import func, inspect, select
 
 from app.analytics.models import ReadingEvent, SearchLog
+from app.admin.service import DEFAULT_ADMIN_PERMISSIONS
+from app.auth.models import AdminAccount
 from app.catalog.models import Book, BookSourceDocument
 from app.conversation.models import ConversationMessage, ConversationSession
 from app.core.database import get_engine, get_session_factory
+from app.core.security import verify_password
 from app.learning.models import (
     LearningAgentRun,
     LearningBridgeAction,
@@ -132,6 +136,87 @@ def test_seed_large_dataset_populates_full_flow_on_small_profile(app, tmp_path: 
         assert session.scalar(select(func.count()).select_from(LearningRemediationPlan)) > 0
         assert session.scalar(select(func.count()).select_from(LearningReport)) > 0
         assert session.scalar(select(func.count()).select_from(LearningJob)) > 0
+
+
+def test_seed_large_dataset_creates_loginable_admin_accounts(app, client, tmp_path: Path) -> None:
+    snapshot_path = _write_snapshot(tmp_path / "snapshot.jsonl")
+    config = LargeDatasetConfig(
+        snapshot_path=snapshot_path,
+        random_seed=19,
+        target_books=80,
+        target_readers=20,
+        target_book_source_documents=16,
+        target_book_copies=120,
+        target_borrow_orders=180,
+        target_search_logs=260,
+        target_recommendation_logs=320,
+        target_conversation_sessions=40,
+        target_conversation_messages=180,
+        target_learning_profiles=30,
+        target_learning_fragments=120,
+        target_learning_sessions=60,
+        target_learning_turns=240,
+    )
+
+    with get_session_factory()() as session:
+        seed_large_dataset(session, config)
+
+        admin = session.scalar(select(AdminAccount).where(AdminAccount.username == "admin"))
+        ops_admin = session.scalar(select(AdminAccount).where(AdminAccount.username == "admin_01"))
+
+        assert admin is not None
+        assert ops_admin is not None
+        assert verify_password("admin123", admin.password_hash)
+        assert verify_password("admin-password-1", ops_admin.password_hash)
+
+    admin_login = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "admin123", "role": "admin"},
+    )
+    assert admin_login.status_code == 200
+    expected_permission_codes = {item["code"] for item in DEFAULT_ADMIN_PERMISSIONS}
+    assert expected_permission_codes.issubset(set(admin_login.json()["account"]["permission_codes"]))
+
+    ops_login = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin_01", "password": "admin-password-1", "role": "admin"},
+    )
+    assert ops_login.status_code == 200
+
+
+def test_seed_large_dataset_uses_real_name_usernames(app, tmp_path: Path) -> None:
+    snapshot_path = _write_snapshot(tmp_path / "snapshot.jsonl")
+    config = LargeDatasetConfig(
+        snapshot_path=snapshot_path,
+        random_seed=23,
+        target_books=60,
+        target_readers=18,
+        target_book_source_documents=12,
+        target_book_copies=90,
+        target_borrow_orders=120,
+        target_search_logs=180,
+        target_recommendation_logs=240,
+        target_conversation_sessions=30,
+        target_conversation_messages=120,
+        target_learning_profiles=20,
+        target_learning_fragments=80,
+        target_learning_sessions=40,
+        target_learning_turns=160,
+    )
+
+    with get_session_factory()() as session:
+        seed_large_dataset(session, config)
+        rows = session.execute(
+            select(ReaderAccount.username, ReaderProfile.display_name)
+            .join(ReaderProfile, ReaderProfile.account_id == ReaderAccount.id)
+            .order_by(ReaderAccount.id.asc())
+        ).all()
+
+    assert len(rows) == 18
+    usernames = [row.username for row in rows]
+    assert len(set(usernames)) == 18
+    assert all(re.fullmatch(r"[\u4e00-\u9fff]{2,4}", username) for username in usernames)
+    assert all(row.username == row.display_name for row in rows)
 
 
 def test_build_large_dataset_report_summarizes_noise_and_thresholds(app, tmp_path: Path) -> None:

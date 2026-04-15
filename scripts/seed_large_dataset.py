@@ -11,6 +11,11 @@ from app.seed_factory.factory import LargeDatasetConfig, seed_large_dataset, val
 from scripts.init_postgres import ensure_database_exists
 
 
+def _count_snapshot_records(snapshot_path: Path) -> int:
+    with snapshot_path.open("r", encoding="utf-8") as fin:
+        return sum(1 for line in fin if line.strip())
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Seed a large noisy business dataset against the latest learning schema.")
     parser.add_argument("--snapshot", required=True, type=Path, help="Path to the normalized JSONL snapshot.")
@@ -18,8 +23,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--reset", action="store_true", help="Rebuild the database schema before seeding.")
     parser.add_argument("--no-purge", action="store_true", help="Skip table cleanup before inserting data.")
     parser.add_argument("--chunk-size", type=int, default=2_000, help="Chunk size for batched inserts.")
-    parser.add_argument("--target-books", type=int, default=100_000)
-    parser.add_argument("--target-readers", type=int, default=3_000)
+    parser.add_argument("--target-books", type=int, default=None)
+    parser.add_argument("--target-readers", type=int, default=1_284)
     parser.add_argument("--target-book-source-documents", type=int, default=24_000)
     parser.add_argument("--target-book-copies", type=int, default=135_000)
     parser.add_argument("--target-borrow-orders", type=int, default=80_000)
@@ -49,12 +54,14 @@ def main(argv: list[str] | None = None) -> None:
         init_schema()
         validate_large_dataset_schema(get_engine())
 
+    target_books = args.target_books or _count_snapshot_records(args.snapshot)
+
     config = LargeDatasetConfig(
         snapshot_path=args.snapshot,
         random_seed=args.random_seed,
         chunk_size=args.chunk_size,
         purge_existing_data=not args.no_purge,
-        target_books=args.target_books,
+        target_books=target_books,
         target_readers=args.target_readers,
         target_book_source_documents=args.target_book_source_documents,
         target_book_copies=args.target_book_copies,
@@ -77,6 +84,7 @@ def main(argv: list[str] | None = None) -> None:
             {
                 "database_url": settings.database_url,
                 "random_seed": args.random_seed,
+                "target_books": target_books,
                 "summary": summary,
             },
             ensure_ascii=False,

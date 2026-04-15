@@ -13,7 +13,7 @@ from app.core.security import hash_password
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Create or update a development admin account.")
     parser.add_argument("--username", default="admin", help="Admin username to create or update.")
-    parser.add_argument("--password", default="admin-pass", help="Admin password to set.")
+    parser.add_argument("--password", default="admin123", help="Admin password to set.")
     return parser.parse_args()
 
 

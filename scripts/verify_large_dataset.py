@@ -10,12 +10,17 @@ from app.seed_factory.factory import LargeDatasetConfig, validate_large_dataset_
 from app.seed_factory.verification import build_large_dataset_report
 
 
+def _count_snapshot_records(snapshot_path: Path) -> int:
+    with snapshot_path.open("r", encoding="utf-8") as fin:
+        return sum(1 for line in fin if line.strip())
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Verify large noisy dataset counts, thresholds, and noise ratios.")
     parser.add_argument("--snapshot", required=True, type=Path, help="Snapshot path used to derive target thresholds.")
     parser.add_argument("--random-seed", type=int, default=20260415)
-    parser.add_argument("--target-books", type=int, default=100_000)
-    parser.add_argument("--target-readers", type=int, default=3_000)
+    parser.add_argument("--target-books", type=int, default=None)
+    parser.add_argument("--target-readers", type=int, default=1_284)
     parser.add_argument("--target-book-source-documents", type=int, default=24_000)
     parser.add_argument("--target-book-copies", type=int, default=135_000)
     parser.add_argument("--target-borrow-orders", type=int, default=80_000)
@@ -39,10 +44,12 @@ def main(argv: list[str] | None = None) -> None:
     init_schema()
     validate_large_dataset_schema(get_engine())
 
+    target_books = args.target_books or _count_snapshot_records(args.snapshot)
+
     config = LargeDatasetConfig(
         snapshot_path=args.snapshot,
         random_seed=args.random_seed,
-        target_books=args.target_books,
+        target_books=target_books,
         target_readers=args.target_readers,
         target_book_source_documents=args.target_book_source_documents,
         target_book_copies=args.target_book_copies,

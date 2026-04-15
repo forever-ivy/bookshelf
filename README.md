@@ -385,7 +385,7 @@ uv run python scripts/generate_book_embeddings.py
 #### 9. 创建开发管理员
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\create_admin_account.py --username admin --password admin-pass
+.\.venv\Scripts\python.exe scripts\create_admin_account.py --username admin --password admin123
 ```
 
 ## token 获取方式
@@ -397,7 +397,7 @@ $login = Invoke-RestMethod `
   -Method Post `
   -Uri "http://127.0.0.1:8000/api/v1/auth/login" `
   -ContentType "application/json; charset=utf-8" `
-  -Body '{"username":"admin","password":"admin-pass","role":"admin"}'
+  -Body '{"username":"admin","password":"admin123","role":"admin"}'
 
 $adminToken = $login.access_token
 ```

@@ -16,6 +16,7 @@ from sqlalchemy import insert, inspect, text, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from app.admin.service import DEFAULT_ADMIN_PERMISSIONS
 from app.admin.models import (
     AdminPermission,
     AdminRole,
@@ -31,6 +32,7 @@ from app.analytics.models import ReadingEvent, SearchLog
 from app.auth.models import AdminAccount, AdminActionLog
 from app.catalog.models import Book, BookCategory, BookSourceDocument, BookTag, BookTagLink
 from app.conversation.models import ConversationMessage, ConversationSession
+from app.core.security import hash_password
 from app.db.base import Base, import_model_modules
 from app.inventory.models import BookCopy, BookStock, Cabinet, CabinetSlot, InventoryEvent
 from app.learning.models import (
@@ -63,22 +65,7 @@ from app.recommendation.models import RecommendationLog
 from app.robot_sim.models import RobotStatusEvent, RobotTask, RobotUnit
 from app.system.models import SystemSetting
 
-
-LEGACY_TUTOR_TABLES = {
-    "tutor_profiles",
-    "tutor_source_documents",
-    "tutor_document_chunks",
-    "tutor_sessions",
-    "tutor_session_messages",
-    "tutor_step_completions",
-    "tutor_generation_jobs",
-}
-
-DEFAULT_REQUIRED_TABLES = {
-    table_name
-    for table_name in Base.metadata.tables
-    if table_name not in LEGACY_TUTOR_TABLES
-}
+DEFAULT_REQUIRED_TABLES = set(Base.metadata.tables)
 PURGE_TABLE_ORDER = [
     LearningBridgeAction.__table__,
     LearningStepContextItem.__table__,
@@ -158,11 +145,31 @@ COLLEGES = {
     "医学院": ["临床医学", "护理学", "药学"],
     "建筑学院": ["建筑学", "城乡规划", "风景园林"],
 }
+COMMON_SURNAMES = (
+    "李", "王", "张", "刘", "陈", "杨", "黄", "赵", "周", "吴",
+    "徐", "孙", "胡", "朱", "高", "林", "何", "郭", "马", "罗",
+    "梁", "宋", "郑", "谢", "韩", "唐", "冯", "于", "董", "萧",
+    "程", "曹", "袁", "邓", "许", "傅", "沈", "曾", "彭", "吕",
+    "苏", "卢", "蒋", "蔡", "贾", "丁", "魏", "薛", "叶", "阎",
+    "余", "潘", "杜", "戴", "夏", "钟", "汪", "田", "任", "姜",
+)
+COMMON_GIVEN_NAMES = (
+    "子涵", "雨桐", "欣怡", "梓涵", "宇轩", "浩然", "若曦", "佳宁", "诗涵", "书宁",
+    "思远", "安然", "亦辰", "沐阳", "嘉言", "知夏", "可欣", "景行", "清妍", "泽宇",
+    "语彤", "星辰", "锦程", "思齐", "嘉禾", "初晴", "若宁", "明轩", "乐瑶", "沐宸",
+    "奕辰", "书瑶", "静姝", "景瑜", "安琪", "子墨", "芷晴", "辰逸", "怀瑾", "若彤",
+    "依诺", "柏言", "清越", "舒窈", "昭宁", "嘉树", "言希", "歆然", "慕言", "云舒",
+    "君浩", "晓彤", "楚涵", "瑾瑜", "嘉宁", "洛伊", "予安", "知远", "昕妍", "文博",
+    "诗琪", "亦凡", "安宁", "瑶华", "思睿", "清欢", "星月", "修远", "子衿", "雅宁",
+    "泽远", "念慈", "语晴", "景初", "承安", "心怡", "晏清", "书航", "明玥", "可心",
+    "映雪", "嘉怡", "若白", "启明", "青禾", "舒然", "嘉月", "晨曦", "思源", "南乔",
+)
+ALL_ADMIN_PERMISSION_CODES = tuple(permission["code"] for permission in DEFAULT_ADMIN_PERMISSIONS)
 ROLE_TEMPLATE = {
-    "super-admin": ["users.manage", "inventory.manage", "learning.manage", "system.manage", "alerts.handle"],
-    "ops-manager": ["inventory.manage", "orders.manage", "robot.manage", "alerts.handle"],
-    "content-editor": ["catalog.manage", "recommendation.manage", "learning.manage"],
-    "analyst": ["analytics.view", "recommendation.manage", "learning.view"],
+    "super-admin": ALL_ADMIN_PERMISSION_CODES,
+    "ops-manager": ("dashboard.view", "inventory.manage", "orders.manage", "robots.manage", "alerts.manage"),
+    "content-editor": ("dashboard.view", "books.manage", "recommendation.manage", "analytics.view"),
+    "analyst": ("dashboard.view", "analytics.view", "system.audit.view", "recommendation.manage"),
 }
 SYSTEM_SETTINGS_TEMPLATE = (
     ("inventory.default_pick_window", {"minutes": 90}),
@@ -203,7 +210,7 @@ class LargeDatasetConfig:
     chunk_size: int = 2_000
     purge_existing_data: bool = True
     target_books: int = 100_000
-    target_readers: int = 3_000
+    target_readers: int = 1_284
     target_book_source_documents: int = 24_000
     target_book_copies: int = 135_000
     target_borrow_orders: int = 80_000
@@ -295,6 +302,25 @@ class WeightedSampler:
         return self.values[index]
 
 
+def _build_real_name_pool(count: int, rng: random.Random) -> list[str]:
+    capacity = len(COMMON_SURNAMES) * len(COMMON_GIVEN_NAMES)
+    if count > capacity:
+        raise ValueError(f"cannot generate {count} unique real-name usernames from current name pool")
+
+    surnames = list(COMMON_SURNAMES)
+    given_names = list(COMMON_GIVEN_NAMES)
+    rng.shuffle(surnames)
+    rng.shuffle(given_names)
+
+    names: list[str] = []
+    for given_name in given_names:
+        for surname in surnames:
+            names.append(f"{surname}{given_name}")
+            if len(names) >= count:
+                return names
+    return names
+
+
 def validate_large_dataset_schema(
     engine: Engine,
     *,
@@ -303,15 +329,10 @@ def validate_large_dataset_schema(
     import_model_modules()
     actual_tables = available_tables or set(inspect(engine).get_table_names())
     missing_tables = sorted(DEFAULT_REQUIRED_TABLES - actual_tables)
-    legacy_tables = sorted(LEGACY_TUTOR_TABLES & actual_tables)
-    if missing_tables or legacy_tables:
-        parts: list[str] = []
-        if missing_tables:
-            parts.append(f"missing required tables: {', '.join(missing_tables)}")
-        if legacy_tables:
-            parts.append(f"legacy tutor tables still present: {', '.join(legacy_tables)}")
+    if missing_tables:
         raise RuntimeError(
-            "large dataset seeding requires the latest learning schema; " + "; ".join(parts)
+            "large dataset seeding requires the latest learning schema; "
+            f"missing required tables: {', '.join(missing_tables)}"
         )
 
 
@@ -661,14 +682,25 @@ def _build_admin_records(config: LargeDatasetConfig, rng: random.Random) -> list
     now = config.anchor_time
     admin_rows = [
         {
-            "id": index,
-            "username": f"admin_{index:02d}",
-            "password_hash": _stable_hash(f"admin-password-{index}")[:128],
-            "created_at": now - timedelta(days=180 - index),
-            "updated_at": now - timedelta(days=index % 9),
+            "id": 1,
+            "username": "admin",
+            "password_hash": hash_password("admin123"),
+            "created_at": now - timedelta(days=180),
+            "updated_at": now - timedelta(days=1),
         }
-        for index in range(1, 9)
     ]
+    admin_rows.extend(
+        [
+            {
+                "id": index + 1,
+                "username": f"admin_{index:02d}",
+                "password_hash": hash_password(f"admin-password-{index}"),
+                "created_at": now - timedelta(days=180 - index),
+                "updated_at": now - timedelta(days=index % 9),
+            }
+            for index in range(1, 9)
+        ]
+    )
     role_rows = []
     permission_rows = []
     role_permission_rows = []
@@ -676,6 +708,18 @@ def _build_admin_records(config: LargeDatasetConfig, rng: random.Random) -> list
     permission_ids: dict[str, int] = {}
     role_ids: dict[str, int] = {}
     permission_index = 1
+    for payload in DEFAULT_ADMIN_PERMISSIONS:
+        permission_ids[payload["code"]] = permission_index
+        permission_rows.append(
+            {
+                "id": permission_index,
+                "code": payload["code"],
+                "name": payload["name"],
+                "description": payload["description"],
+                "created_at": now - timedelta(days=120),
+            }
+        )
+        permission_index += 1
     for role_index, (role_code, permission_codes) in enumerate(ROLE_TEMPLATE.items(), start=1):
         role_ids[role_code] = role_index
         role_rows.append(
@@ -688,19 +732,9 @@ def _build_admin_records(config: LargeDatasetConfig, rng: random.Random) -> list
                 "updated_at": now - timedelta(days=1),
             }
         )
-        for code in permission_codes:
-            if code not in permission_ids:
-                permission_ids[code] = permission_index
-                permission_rows.append(
-                    {
-                        "id": permission_index,
-                        "code": code,
-                        "name": code.replace(".", " ").title(),
-                        "description": f"{code} permission",
-                        "created_at": now - timedelta(days=120),
-                    }
-                )
-                permission_index += 1
+        unknown_codes = [code for code in permission_codes if code not in permission_ids]
+        if unknown_codes:
+            raise RuntimeError(f"Seed role {role_code} references unknown admin permissions: {', '.join(unknown_codes)}")
     role_permission_id = 1
     for role_code, permission_codes in ROLE_TEMPLATE.items():
         for code in permission_codes:
@@ -713,14 +747,23 @@ def _build_admin_records(config: LargeDatasetConfig, rng: random.Random) -> list
                 }
             )
             role_permission_id += 1
-    for admin_id in range(1, len(admin_rows) + 1):
-        role_code = list(ROLE_TEMPLATE.keys())[(admin_id - 1) % len(ROLE_TEMPLATE)]
+    role_assignment_rows.append(
+        {
+            "id": 1,
+            "admin_id": 1,
+            "role_id": role_ids["super-admin"],
+            "created_at": now - timedelta(days=44),
+        }
+    )
+    noise_role_codes = [role_code for role_code in ROLE_TEMPLATE if role_code != "super-admin"] or list(ROLE_TEMPLATE)
+    for assignment_id, admin_row in enumerate(admin_rows[1:], start=2):
+        role_code = noise_role_codes[(assignment_id - 2) % len(noise_role_codes)]
         role_assignment_rows.append(
             {
-                "id": admin_id,
-                "admin_id": admin_id,
+                "id": assignment_id,
+                "admin_id": admin_row["id"],
                 "role_id": role_ids[role_code],
-                "created_at": now - timedelta(days=45 - admin_id),
+                "created_at": now - timedelta(days=45 - assignment_id),
             }
         )
 
@@ -844,15 +887,16 @@ def _build_reader_records(
     segment_sampler = WeightedSampler.from_weight_map([(name, weight) for name, weight, _activity in READER_SEGMENTS])
     segment_activity = {name: activity for name, _weight, activity in READER_SEGMENTS}
     college_names = list(COLLEGES.keys())
+    real_names = _build_real_name_pool(config.target_readers, rng)
 
     for reader_id in range(1, config.target_readers + 1):
         created_at = _random_datetime(now, config.history_days, rng)
-        username = f"reader_{reader_id:05d}"
+        username = real_names[reader_id - 1]
         affiliation = affiliation_sampler.sample(rng)
         segment = segment_sampler.sample(rng)
         college = college_names[rng.randrange(len(college_names))]
         major = COLLEGES[college][rng.randrange(len(COLLEGES[college]))]
-        display_name = f"{college[:2]}读者{reader_id:04d}"
+        display_name = username
         interest_count = rng.randint(2, 5)
         interest_tags = rng.sample(top_tags, k=min(interest_count, len(top_tags))) if top_tags else []
         restriction_status = _pick_weighted(rng, [("active", 0.93), ("watch", 0.04), ("blocked", 0.03)])
@@ -977,15 +1021,25 @@ def _build_reader_side_records(
         booklist_id += 1
 
     dismissed_rows: list[dict[str, Any]] = []
-    for dismiss_id in range(1, max(config.target_readers, config.target_readers // 2) + 1):
+    dismissed_pairs: set[tuple[int, str]] = set()
+    dismiss_id = 1
+    target_dismissed_rows = max(config.target_readers, config.target_readers // 2)
+    while len(dismissed_rows) < target_dismissed_rows:
+        reader_id = reader_sampler.sample(rng)
+        notification_id = f"notif-{rng.randint(1, config.target_readers * 8):06d}"
+        key = (reader_id, notification_id)
+        if key in dismissed_pairs:
+            continue
+        dismissed_pairs.add(key)
         dismissed_rows.append(
             {
                 "id": dismiss_id,
-                "reader_id": reader_sampler.sample(rng),
-                "notification_id": f"notif-{rng.randint(1, config.target_readers * 8):06d}",
+                "reader_id": reader_id,
+                "notification_id": notification_id,
                 "created_at": _random_datetime(config.anchor_time, config.history_days // 2, rng),
             }
         )
+        dismiss_id += 1
 
     topic_rows: list[dict[str, Any]] = []
     topic_item_rows: list[dict[str, Any]] = []

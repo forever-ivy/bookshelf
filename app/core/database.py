@@ -207,12 +207,18 @@ def init_schema() -> None:
 def rebuild_schema() -> None:
     import_model_modules()
     engine = get_engine()
+    backend_name = engine.url.get_backend_name()
     with engine.begin() as connection:
-        if engine.url.get_backend_name() == "postgresql":
+        if backend_name == "postgresql":
+            # Drop and recreate the public schema directly to avoid FK cycles
+            # between learning_profiles and learning_path_versions during reset.
+            connection.exec_driver_sql("DROP SCHEMA IF EXISTS public CASCADE")
+            connection.exec_driver_sql("CREATE SCHEMA public")
             connection.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS vector")
             connection.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS pg_trgm")
-    Base.metadata.drop_all(bind=engine)
-    if engine.url.get_backend_name() == "postgresql":
+        else:
+            Base.metadata.drop_all(bind=connection)
+    if backend_name == "postgresql":
         Base.metadata.create_all(bind=engine)
         _run_alembic_stamp(BASELINE_REVISION)
         _run_alembic_upgrade()

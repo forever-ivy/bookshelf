@@ -53,7 +53,7 @@ def _normalize_text(value: Any) -> str:
 
 
 def _normalize_key(value: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "", value.lower())
+    return re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "", value.lower())
 
 
 def _normalize_summary(value: Any) -> str | None:
@@ -178,6 +178,180 @@ def _build_search_text(title: str, author: str | None, category: str | None, tag
     return " ".join(part for part in parts if part).strip()
 
 
+def _split_keywords(value: Any) -> list[str]:
+    text = _normalize_text(value)
+    if not text:
+        return []
+    tokens = re.split(r"[\s,，;；/|]+", text)
+    result: list[str] = []
+    seen: set[str] = set()
+    for token in tokens:
+        normalized = _normalize_text(token)
+        if not normalized:
+            continue
+        dedupe_key = _normalize_key(normalized)
+        if not dedupe_key or dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        result.append(normalized[:128])
+        if len(result) >= MAX_TAGS_PER_BOOK:
+            break
+    return result
+
+
+def _normalize_source_record(
+    *,
+    title: Any,
+    author: Any,
+    category: Any = None,
+    keywords: Any = None,
+    summary: Any = None,
+    isbn: Any = None,
+    first_publish_year: Any = None,
+) -> dict[str, Any] | None:
+    normalized_title = _normalize_text(title)[:255]
+    if not normalized_title:
+        return None
+    normalized_author = _normalize_text(author)[:255] or None
+    work_key = f"/local/{_normalize_key(normalized_title)}|{_normalize_key(normalized_author or '')}"
+    normalized_category = _normalize_text(category)[:128] or None
+    normalized_summary = _normalize_text(summary) or None
+    normalized_isbn = _normalize_text(isbn)[:32] or None
+    tags = _split_keywords(keywords)
+    publish_year = _extract_first_publish_year({"first_publish_year": first_publish_year})
+    return {
+        "work_key": work_key,
+        "title": normalized_title,
+        "author": normalized_author,
+        "author_keys": [],
+        "category": normalized_category,
+        "tags": tags,
+        "summary": normalized_summary,
+        "isbn": normalized_isbn,
+        "cover_url": None,
+        "subjects": tags,
+        "search_text": _build_search_text(normalized_title, normalized_author, normalized_category, tags, normalized_summary),
+        "first_publish_year": publish_year,
+        "language": None,
+    }
+
+
+def _merge_snapshot_record(existing: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(existing)
+    if not merged.get("author") and candidate.get("author"):
+        merged["author"] = candidate["author"]
+    if not merged.get("category") and candidate.get("category"):
+        merged["category"] = candidate["category"]
+    if not merged.get("isbn") and candidate.get("isbn"):
+        merged["isbn"] = candidate["isbn"]
+    if not merged.get("cover_url") and candidate.get("cover_url"):
+        merged["cover_url"] = candidate["cover_url"]
+    existing_summary = merged.get("summary") or ""
+    candidate_summary = candidate.get("summary") or ""
+    if len(candidate_summary) > len(existing_summary):
+        merged["summary"] = candidate_summary or None
+
+    merged_tags = _extract_subjects(list(merged.get("tags") or []) + list(candidate.get("tags") or []))
+    merged["tags"] = merged_tags
+    merged["subjects"] = merged_tags
+    merged["search_text"] = _build_search_text(
+        merged["title"],
+        merged.get("author"),
+        merged.get("category"),
+        merged_tags,
+        merged.get("summary"),
+    )
+    if merged.get("first_publish_year") is None and candidate.get("first_publish_year") is not None:
+        merged["first_publish_year"] = candidate["first_publish_year"]
+    if merged.get("language") is None and candidate.get("language") is not None:
+        merged["language"] = candidate["language"]
+    return merged
+
+
+def build_snapshot_records_from_source_dir(*, source_dir: Path, limit: int | None = None) -> list[dict[str, Any]]:
+    import pandas as pd
+
+    if not source_dir.exists():
+        raise FileNotFoundError(f"source dir not found: {source_dir}")
+
+    csv_path = source_dir / "books_openlibrary_sample.csv"
+    chinese_path = source_dir / "中文图书数据集关键词分词.xlsx"
+    foreign_path = source_dir / "外文图书分类数据集.xlsx"
+    douban_path = source_dir / "豆瓣书籍汇总.xlsx"
+
+    records_by_key: dict[str, dict[str, Any]] = {}
+
+    def upsert(candidate: dict[str, Any] | None) -> None:
+        if candidate is None:
+            return
+        key = f"{_normalize_key(candidate['title'])}|{_normalize_key(candidate.get('author') or '')}"
+        current = records_by_key.get(key)
+        records_by_key[key] = candidate if current is None else _merge_snapshot_record(current, candidate)
+
+    if csv_path.exists():
+        df = pd.read_csv(csv_path)
+        for row in df.to_dict(orient="records"):
+            upsert(
+                _normalize_source_record(
+                    title=row.get("title"),
+                    author=row.get("author"),
+                    category=row.get("category"),
+                    keywords=row.get("keywords"),
+                    summary=row.get("summary"),
+                )
+            )
+
+    if chinese_path.exists():
+        df = pd.read_excel(chinese_path, sheet_name=0)
+        for row in df.to_dict(orient="records"):
+            upsert(
+                _normalize_source_record(
+                    title=row.get("书名"),
+                    author=row.get("作者"),
+                    category=row.get("中国图书分类号"),
+                    keywords=row.get("关键词"),
+                    summary=row.get("摘要"),
+                    first_publish_year=row.get("出版年月"),
+                )
+            )
+
+    if foreign_path.exists():
+        xls = pd.ExcelFile(foreign_path)
+        for sheet_name in xls.sheet_names:
+            df = pd.read_excel(foreign_path, sheet_name=sheet_name)
+            if df.empty:
+                continue
+            for row in df.to_dict(orient="records"):
+                upsert(
+                    _normalize_source_record(
+                        title=row.get("书名"),
+                        author=row.get("作者"),
+                        category=row.get("分类号"),
+                        summary=row.get("出版社"),
+                        first_publish_year=row.get("出版年"),
+                    )
+                )
+
+    if douban_path.exists():
+        df = pd.read_excel(douban_path, sheet_name=0)
+        for row in df.to_dict(orient="records"):
+            keyword_parts = [row.get("豆瓣成员常用的标签"), row.get("标签")]
+            upsert(
+                _normalize_source_record(
+                    title=row.get("书名"),
+                    author=row.get("作者"),
+                    keywords=" ".join(_normalize_text(part) for part in keyword_parts if _normalize_text(part)),
+                    summary=row.get("内容简介"),
+                    isbn=row.get("ISBN号"),
+                    first_publish_year=row.get("出版时间"),
+                )
+            )
+
+    records = list(records_by_key.values())
+    records.sort(key=lambda item: (_normalize_key(item["title"]), _normalize_key(item.get("author") or "")))
+    return records if limit is None else records[:limit]
+
+
 def _finalize_record(
     payload: dict[str, Any],
     *,
@@ -266,18 +440,24 @@ def build_snapshot_records(
 
 def build_snapshot_file(
     *,
-    works_dump_path: Path,
+    works_dump_path: Path | None,
     authors_dump_path: Path | None,
     editions_dump_path: Path | None,
+    source_dir: Path | None,
     output_path: Path,
-    limit: int = 100_000,
+    limit: int | None = 100_000,
 ) -> SnapshotBuildStats:
-    records = build_snapshot_records(
-        works_dump_path=works_dump_path,
-        authors_dump_path=authors_dump_path,
-        editions_dump_path=editions_dump_path,
-        limit=limit,
-    )
+    if source_dir is not None:
+        records = build_snapshot_records_from_source_dir(source_dir=source_dir, limit=limit)
+    else:
+        if works_dump_path is None:
+            raise ValueError("works_dump_path is required when source_dir is not provided")
+        records = build_snapshot_records(
+            works_dump_path=works_dump_path,
+            authors_dump_path=authors_dump_path,
+            editions_dump_path=editions_dump_path,
+            limit=limit,
+        )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8") as fout:
         for record in records:
