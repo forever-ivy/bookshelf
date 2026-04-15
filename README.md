@@ -1,44 +1,96 @@
-# Curated Archive Admin
+# Smart Bookshelf Admin
 
-面向图书馆管理员的 Web SaaS 管理端，运行在独立的 `admin` 分支中，用来对接本地 `service` 后端。
+`admin` 分支是智能书柜项目的 Web 管理后台，面向管理员和运营人员使用。它直接对接 `service` 分支提供的管理接口、库存接口、读者接口和分析接口，用来完成后台运营与设备管理工作。
+
+## 这个分支负责什么
+
+- 管理员登录与会话管理
+- Dashboard 与运营概览
+- 图书与库存管理
+- OCR 入库流程
+- 借阅单查看与状态纠正
+- 机器人与任务状态监控
+- 告警 / 事件流查看
+- 读者管理与读者详情
+- 系统设置与权限页框架
+
+如果你想看读者手机端，请切到 `app` 分支；如果你想看 API、数据库和推荐逻辑，请切到 `service` 分支。
 
 ## 技术栈
 
-- `React 19`
-- `Vite`
-- `TypeScript`
-- `Tailwind CSS v4`
-- `shadcn/ui` 风格组件 + `Radix UI`
-- `React Router`
-- `TanStack Query`
-- `TanStack Table`
-- `react-hook-form + zod`
-- `axios`
-- `sonner`
-- `Vitest + React Testing Library`
-- `Playwright`
+- React 19
+- Vite
+- TypeScript
+- Tailwind CSS v4
+- Radix UI
+- TanStack Query
+- TanStack Table
+- React Router
+- React Hook Form + Zod
+- Axios
+- Vitest
+- Playwright
 
 ## 目录结构
 
 ```text
 .
-├── public/                     # favicon 和静态图标
-├── references/stitch/          # Stitch 截图 / HTML / manifest / design notes
+├── public/                 # logo、背景图、仪表盘静态图
 ├── src/
-│   ├── components/             # layout、shared、ui 组件
-│   ├── constants/              # API_BASE_URL、错误文案、storage keys
-│   ├── hooks/                  # SSE 等页面级 hooks
-│   ├── lib/                    # api 封装、axios client、sse、utils
-│   ├── pages/                  # 登录、Dashboard、目录、库存、OCR、订单、机器人、事件、读者
-│   ├── providers/              # Query / Session providers
-│   ├── routes/                 # 路由守卫和应用壳子
-│   ├── test/                   # Vitest setup
-│   ├── types/                  # api / domain 类型
-│   └── utils/                  # storage 和通用格式化
-├── tests/e2e/                  # Playwright 端到端回归
-├── .env.example                # 前端环境变量示例
-└── playwright.config.ts        # Playwright 配置
+│   ├── components/         # layout、shared、ui 组件
+│   ├── constants/          # API 地址、错误文案、常量
+│   ├── hooks/              # SSE、sidebar、移动端检测等 hooks
+│   ├── lib/                # api 封装、http client、session store、utils
+│   ├── pages/              # 页面级组件
+│   ├── providers/          # Query / app providers
+│   ├── routes/             # 路由壳子与权限守卫
+│   └── types/              # API / domain 类型
+├── tests/e2e/              # Playwright 测试
+├── .env.example
+└── playwright.config.ts
 ```
+
+## 当前主要页面
+
+- `/login`
+- `/dashboard`
+- `/books`
+- `/analytics`
+- `/inventory`
+- `/inventory/cabinets/:cabinetId`
+- `/ocr`
+- `/orders`
+- `/orders/:orderId`
+- `/robots`
+- `/alerts`
+- `/readers`
+- `/readers/:readerId`
+- `/system`
+
+另外保留了部分过渡路由：
+
+- `/catalog`
+- `/events`
+- `/recommendation`
+- `/legacy/catalog`
+- `/legacy/events`
+
+## 与后端的关系
+
+这个分支默认通过 `VITE_API_BASE_URL` 连接 `service` 后端。
+
+默认本地地址：
+
+```env
+VITE_API_BASE_URL=http://127.0.0.1:8000
+```
+
+前端请求层位于 `src/lib/http/client.ts`，核心行为包括：
+
+- 自动注入 `Authorization: Bearer <token>`
+- `401` 时尝试刷新会话，失败则清空本地登录态并跳回登录页
+- `403` 时统一提示无权限
+- 页面统一消费标准化后的 `ApiResponse` / `ApiError`
 
 ## 快速开始
 
@@ -50,13 +102,11 @@ npm install
 
 ### 2. 配置环境变量
 
-复制一份环境变量：
-
 ```bash
 cp .env.example .env.local
 ```
 
-默认会请求本机后端：
+写入：
 
 ```env
 VITE_API_BASE_URL=http://127.0.0.1:8000
@@ -68,141 +118,145 @@ VITE_API_BASE_URL=http://127.0.0.1:8000
 npm run dev
 ```
 
-默认前端地址由 Vite 分配，通常是：
+默认开发地址通常是：
 
-- [http://127.0.0.1:5173](http://127.0.0.1:5173)
+- `http://127.0.0.1:5173`
 
 ## 常用命令
 
 ```bash
-npm run dev            # 本地开发
-npm run build          # 生产构建
-npm run preview        # 预览构建产物
-npm run lint           # ESLint
-npm test               # Vitest
-npm run test:coverage  # 覆盖率
-npm run e2e            # Playwright
+npm run dev
+npm run build
+npm run preview
+npm run lint
+npm test
+npm run test:coverage
+npm run e2e
 ```
 
-## 页面范围
+## 页面与接口对应关系
 
-已落地页面：
-
-- `/login`
-- `/dashboard`
-- `/catalog`
-- `/inventory`
-- `/ocr`
-- `/orders`
-- `/orders/:orderId`
-- `/robots`
-- `/events`
-- `/readers`
-- `/readers/:readerId`
-
-## 后端接口映射
-
-当前页面直接对接 `service` 后端，主要使用：
+### 登录与鉴权
 
 - `POST /api/v1/auth/login`
 - `POST /api/v1/auth/refresh`
 - `GET /api/v1/auth/admin/me`
-- `GET /api/v1/admin/orders`
-- `GET /api/v1/admin/orders/:id`
-- `PATCH /api/v1/admin/orders/:id/state`
-- `GET /api/v1/admin/tasks`
-- `GET /api/v1/admin/robots`
-- `GET /api/v1/admin/events`
-- `GET /api/v1/admin/events/stream`
+
+### 图书与库存
+
 - `GET /api/v1/catalog/books`
 - `GET /api/v1/catalog/books/search`
-- `GET /api/v1/catalog/books/:id`
+- `GET /api/v1/catalog/books/{id}`
 - `GET /api/v1/inventory/status`
 - `GET /api/v1/inventory/slots`
 - `GET /api/v1/inventory/events`
 - `POST /api/v1/inventory/ocr/ingest`
+
+### 订单与机器人
+
+- `GET /api/v1/admin/orders`
+- `GET /api/v1/admin/orders/{id}`
+- `PATCH /api/v1/admin/orders/{id}/state`
+- `GET /api/v1/admin/tasks`
+- `GET /api/v1/admin/robots`
+- `GET /api/v1/admin/events`
+- `GET /api/v1/admin/events/stream`
+
+### 读者与分析
+
 - `GET /api/v1/readers`
-- `GET /api/v1/readers/:readerId`
-- `GET /api/v1/readers/:readerId/overview`
-- `GET /api/v1/readers/:readerId/orders`
-- `GET /api/v1/readers/:readerId/conversations`
-- `GET /api/v1/readers/:readerId/recommendations`
+- `GET /api/v1/readers/{readerId}`
+- `GET /api/v1/readers/{readerId}/overview`
+- `GET /api/v1/readers/{readerId}/orders`
+- `GET /api/v1/readers/{readerId}/conversations`
+- `GET /api/v1/readers/{readerId}/recommendations`
+- `GET /api/v1/analytics/overview`
+- `GET /api/v1/analytics/trends`
 
-## HTTP 层说明
+## 权限与路由
 
-数据层采用自定义 `HttpClient`，底层是 `axios.create()`：
+应用入口在 `src/App.tsx`，当前已经按权限码做了页面级控制，例如：
 
-- 文件位置：`src/lib/http/client.ts`
-- 统一注入 `Authorization: Bearer <token>`
-- 成功返回统一标准化为：
+- `dashboard.view`
+- `books.manage`
+- `analytics.view`
+- `inventory.manage`
+- `orders.manage`
+- `robots.manage`
+- `alerts.manage`
+- `readers.manage`
+- `system.settings.manage`
+- `system.roles.manage`
 
-```ts
-type ApiResponse<T> = {
-  success: true
-  data: T
-  message?: string
-  meta?: Record<string, unknown>
-}
-```
+页面路由统一挂在：
 
-- 错误统一标准化为：
+- `ProtectedRoute`
+- `PermissionRoute`
+- `AppLayout`
 
-```ts
-type ApiError = {
-  success: false
-  status: number
-  code: string
-  message: string
-  details?: unknown
-}
-```
+之下，避免未登录和越权直接访问。
 
-默认行为：
+## 适合先读的代码
 
-- `401`：清空 token、toast 提示、跳转 `/login`
-- `403`：toast 无权限
-- 其他：统一错误提示
-- 支持 `upload()` 和 `download()`
+如果你第一次接这个分支，建议先看：
 
-## Stitch 参考资源
+1. `src/App.tsx`
+2. `src/main.tsx`
+3. `src/lib/http/client.ts`
+4. `src/lib/session-store.ts`
+5. `src/routes/`
+6. `src/pages/dashboard-page.tsx`
+7. `src/pages/orders-page.tsx`
+8. `src/hooks/use-admin-events-stream.ts`
 
-`references/stitch/` 里保存了本项目的设计参考：
+这样可以先把入口、鉴权、路由和实时事件流串起来。
 
-- `screenshots/`：页面截图
-- `html/`：Stitch 导出的 HTML
-- `manifest.json`：screen id、标题、文件路径
-- `design-system.md`：设计主题摘要
-
-这些文件只作为参考资产，不直接参与运行时代码。
-
-## 测试策略
+## 测试
 
 ### 单元与组件测试
 
-当前覆盖：
+```bash
+npm test
+```
 
-- `HttpClient` 的 token 注入、成功标准化、401 清会话、上传进度
-- 受保护路由的登录拦截
+当前重点覆盖：
 
-### 端到端测试
+- `HttpClient` 行为
+- 受保护路由
+- 数据表格与共享组件
+- 页面级交互
 
-Playwright 目前覆盖：
+### E2E
 
-- 管理员登录后进入 Dashboard
-- 订单详情页的状态纠正
-- 机器人监控页的 SSE 实时事件
+```bash
+npm run e2e
+```
 
-默认使用前端开发服务器，并通过路由 mock 模拟后端响应，不依赖真实后端在线。
+当前 Playwright 主要覆盖：
 
-## 设计约束
+- 登录进入 dashboard
+- 订单详情状态纠正
+- 机器人页 SSE 实时事件
 
-- `Design System` 不单独做页面，只沉淀为主题和组件规范
-- HTTP 层统一消费标准化结果，不在页面里处理 axios 原始响应
-- 登录态固定保存在 `localStorage`
-- 所有受保护页面必须通过 `ProtectedRoute`
+## 常见问题
 
-## 后续建议
+### 页面能打开，但没有数据
 
-- 为 Dashboard 和大表格页增加按路由拆包，降低首屏 bundle
-- 继续补 Playwright 用例：库存 OCR、读者详情、事件页筛选
-- 增加 `.env.production` 与部署说明
+通常先检查：
+
+- `service` 分支是否已经启动
+- `VITE_API_BASE_URL` 是否正确
+- 后端是否放行了当前前端地址的 CORS
+
+### 登录后立刻跳回登录页
+
+通常说明：
+
+- token 失效
+- refresh 失败
+- 后端地址错误
+- 当前账号没有管理员身份
+
+### 页面提示无权限
+
+这一般不是前端报错，而是后端返回了 `403`，需要检查当前管理员角色和对应权限码。
