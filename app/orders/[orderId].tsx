@@ -11,6 +11,7 @@ import {
 import { PillButton } from '@/components/base/pill-button';
 import { SectionTitle } from '@/components/base/section-title';
 import { StateMessageCard } from '@/components/base/state-message-card';
+import { DeliveryTrackingHero } from '@/components/borrowing/delivery-tracking-hero';
 import { DueStateChip } from '@/components/borrowing/due-state-chip';
 import { JourneyStageRail } from '@/components/borrowing/journey-stage-rail';
 import { PageShell } from '@/components/navigation/page-shell';
@@ -23,6 +24,7 @@ import {
 } from '@/hooks/use-library-app-data';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { getLibraryErrorMessage } from '@/lib/api/client';
+import { buildMockDeliveryTracking } from '@/lib/borrowing/order-delivery-tracking';
 import { buildBorrowOrderJourney } from '@/lib/borrowing/order-journey';
 import { getJourneyTonePalette } from '@/lib/borrowing/journey-palette';
 
@@ -64,6 +66,7 @@ export default function OrderDetailRoute() {
   const showSkeleton = !orderQuery.data && !orderQuery.isError && Boolean(orderQuery.isFetching);
   const order = orderQuery.data;
   const hasActions = order ? (order.renewable || order.returnable || order.cancellable) : false;
+  const deliveryTracking = order ? buildMockDeliveryTracking(order) : null;
   const journey = order ? buildBorrowOrderJourney(order) : null;
   const journeyPalette = journey ? getJourneyTonePalette(journey.tone, theme) : null;
 
@@ -123,70 +126,6 @@ export default function OrderDetailRoute() {
                   </View>
                 </View>
 
-                {journey && journeyPalette ? (
-                  <View
-                    style={{
-                      backgroundColor: journeyPalette.accentSoft,
-                      borderColor: journeyPalette.border,
-                      borderRadius: theme.radii.xl,
-                      borderWidth: 1,
-                      gap: theme.spacing.lg,
-                      overflow: 'hidden',
-                      padding: theme.spacing.xl,
-                    }}>
-                    <View style={{ gap: theme.spacing.xs }}>
-                      <Text
-                        style={{
-                          color: theme.colors.textSoft,
-                          ...theme.typography.semiBold,
-                          fontSize: 11,
-                          letterSpacing: 0.8,
-                          textTransform: 'uppercase',
-                        }}>
-                        Borrow Journey
-                      </Text>
-                      <Text
-                        style={{
-                          color: journey.variant === 'timeline' ? journeyPalette.accent : theme.colors.text,
-                          ...theme.typography.heading,
-                          fontSize: 28,
-                        }}>
-                        {journey.variant === 'timeline' ? journey.currentStageLabel : journey.label}
-                      </Text>
-                      <Text
-                        style={{
-                          color: theme.colors.textMuted,
-                          ...theme.typography.body,
-                          fontSize: 14,
-                          lineHeight: 21,
-                        }}>
-                        {journey.variant === 'timeline' ? journey.currentStageDescription : journey.description}
-                      </Text>
-                    </View>
-
-                    {journey.variant === 'timeline' ? (
-                      <JourneyStageRail accentColor={journeyPalette.accent} stages={journey.stages} />
-                    ) : (
-                      <View
-                        style={{
-                          backgroundColor: theme.colors.surfaceTint,
-                          borderColor: theme.colors.borderSoft,
-                          borderRadius: theme.radii.lg,
-                          borderWidth: 1,
-                          gap: theme.spacing.sm,
-                          padding: theme.spacing.lg,
-                        }}>
-                        <Text style={{ color: theme.colors.textSoft, ...theme.typography.semiBold, fontSize: 12 }}>
-                          状态说明
-                        </Text>
-                        <Text style={{ color: theme.colors.textMuted, ...theme.typography.body, fontSize: 13, lineHeight: 19 }}>
-                          你可以返回借阅列表，重新发起新的借阅订单。
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                ) : null}
-
                 {order.note ? (
                   <Text style={{ color: theme.colors.textSoft, ...theme.typography.body, fontSize: 13, lineHeight: 19 }}>
                     {order.note}
@@ -199,9 +138,75 @@ export default function OrderDetailRoute() {
               </View>
             </View>
 
+            {deliveryTracking ? <DeliveryTrackingHero tracking={deliveryTracking} /> : null}
+
+            {journey && journeyPalette ? (
+              <View
+                style={{
+                  backgroundColor: journeyPalette.accentSoft,
+                  borderColor: journeyPalette.border,
+                  borderRadius: theme.radii.xl,
+                  borderWidth: 1,
+                  gap: theme.spacing.lg,
+                  overflow: 'hidden',
+                  padding: theme.spacing.xl,
+                }}>
+                <View style={{ gap: theme.spacing.xs }}>
+                  <Text
+                    style={{
+                      color: theme.colors.textSoft,
+                      ...theme.typography.semiBold,
+                      fontSize: 11,
+                      letterSpacing: 0.8,
+                      textTransform: 'uppercase',
+                    }}>
+                    Borrow Journey
+                  </Text>
+                  <Text
+                    style={{
+                      color: journey.variant === 'timeline' ? journeyPalette.accent : theme.colors.text,
+                      ...theme.typography.heading,
+                      fontSize: 28,
+                    }}>
+                    {journey.variant === 'timeline' ? journey.currentStageLabel : journey.label}
+                  </Text>
+                  <Text
+                    style={{
+                      color: theme.colors.textMuted,
+                      ...theme.typography.body,
+                      fontSize: 14,
+                      lineHeight: 21,
+                    }}>
+                    {journey.variant === 'timeline' ? journey.currentStageDescription : journey.description}
+                  </Text>
+                </View>
+
+                {journey.variant === 'timeline' ? (
+                  <JourneyStageRail accentColor={journeyPalette.accent} stages={journey.stages} />
+                ) : (
+                  <View
+                    style={{
+                      backgroundColor: theme.colors.surfaceTint,
+                      borderColor: theme.colors.borderSoft,
+                      borderRadius: theme.radii.lg,
+                      borderWidth: 1,
+                      gap: theme.spacing.sm,
+                      padding: theme.spacing.lg,
+                    }}>
+                    <Text style={{ color: theme.colors.textSoft, ...theme.typography.semiBold, fontSize: 12 }}>
+                      状态说明
+                    </Text>
+                    <Text style={{ color: theme.colors.textMuted, ...theme.typography.body, fontSize: 13, lineHeight: 19 }}>
+                      你可以返回借阅列表，重新发起新的借阅订单。
+                    </Text>
+                  </View>
+                )}
+              </View>
+            ) : null}
+
             {hasActions ? (
               <View
-              style={{
+                style={{
                   backgroundColor: theme.colors.surface,
                   borderColor: theme.colors.borderStrong,
                   borderRadius: theme.radii.lg,

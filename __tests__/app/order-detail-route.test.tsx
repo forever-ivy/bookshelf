@@ -110,6 +110,9 @@ describe('order detail route', () => {
   it('renders a unified journey with a highlighted current borrowing stage', () => {
     render(<OrderDetailRoute />);
 
+    expect(screen.getByTestId('delivery-tracking-hero')).toBeTruthy();
+    expect(screen.getByText('剩余距离')).toBeTruthy();
+    expect(screen.getByText('预计送达')).toBeTruthy();
     expect(screen.getAllByText('借阅中').length).toBeGreaterThan(0);
     expect(screen.getByText('下单')).toBeTruthy();
     expect(screen.getByText('处理中')).toBeTruthy();
@@ -136,5 +139,22 @@ describe('order detail route', () => {
     expect(screen.getByText('借阅已取消')).toBeTruthy();
     expect(screen.getByText('该借阅订单已取消，没有进入后续借阅与归还流程。')).toBeTruthy();
     expect(screen.queryByText('已归还')).toBeNull();
+  });
+
+  it('does not render the delivery tracking hero for cabinet pickup orders', () => {
+    mockOrderData = {
+      ...mockOrderData,
+      mode: 'cabinet_pickup',
+      note: '请前往主馆一层书柜取书',
+      status: 'active',
+      statusLabel: '待取书',
+      timeline: [{ completed: true, label: '待取书', timestamp: '2026-03-20T12:00:00.000Z' }],
+    };
+
+    render(<OrderDetailRoute />);
+
+    expect(screen.queryByTestId('delivery-tracking-hero')).toBeNull();
+    expect(screen.queryByText('剩余距离')).toBeNull();
+    expect(screen.queryByText('预计送达')).toBeNull();
   });
 });
