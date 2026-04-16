@@ -75,6 +75,94 @@ EXPO_PUBLIC_LIBRARY_SERVICE_URL=http://127.0.0.1:8000
 
 ## 快速开始
 
+## 第一次 clone 推荐流程
+
+如果你是第一次在一台新机器上拉这个项目，并且要运行当前 `app` 分支，建议直接按下面顺序做。
+
+### 1. 拉代码并切到 `app` 分支
+
+```bash
+git clone <仓库地址> bookshelf-app
+cd bookshelf-app
+git checkout app
+```
+
+如果你已经在本地 clone 过仓库，只需要确认当前分支是 `app` 即可。
+
+### 2. 安装当前分支依赖
+
+```bash
+npm install
+```
+
+### 3. 准备 `service` 后端
+
+`app` 分支依赖 `service` 后端提供真实数据。如果你要联调真实接口，建议在另一个目录再准备一份 `service` 分支。
+
+```bash
+cd ..
+git clone <仓库地址> bookshelf-service
+cd bookshelf-service
+git checkout service
+uv sync
+docker compose -f docker-compose.pgvector.yml up -d
+```
+
+如果仓库里已经带了标准演示数据库快照 `data/demo/service-demo.dump`，推荐直接恢复：
+
+```bash
+uv run python scripts/bootstrap_demo_database.py --reset
+```
+
+如果当前没有快照文件，就先初始化空库：
+
+```bash
+uv run python scripts/init_postgres.py
+```
+
+然后启动后端：
+
+```bash
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+确认后端健康检查可访问：
+
+```bash
+curl http://127.0.0.1:8000/api/v1/health
+```
+
+### 4. 回到 `app` 分支配置环境变量
+
+```bash
+cd ../bookshelf-app
+```
+
+可以在 `.env` 中写入：
+
+```env
+EXPO_PUBLIC_LIBRARY_SERVICE_URL=http://127.0.0.1:8000
+```
+
+### 5. 启动当前分支
+
+```bash
+npx expo start
+```
+
+如果你需要直接跑原生工程，也可以用：
+
+```bash
+npx expo run:ios
+npx expo run:android
+```
+
+### 6. 第一次联调建议先验证这三条链路
+
+1. 登录是否能拿到真实账号会话
+2. 搜索页是否能返回真实图书数据
+3. 借阅/导学入口是否能拉到真实后端内容
+
 ### 1. 安装依赖
 
 ```bash
