@@ -94,6 +94,92 @@ VITE_API_BASE_URL=http://127.0.0.1:8000
 
 ## 快速开始
 
+## 第一次 clone 推荐流程
+
+如果你是第一次在一台新机器上拉这个项目，并且要运行当前 `admin` 分支，建议按下面顺序做。
+
+### 1. 拉代码并切到 `admin` 分支
+
+```bash
+git clone <仓库地址> bookshelf-admin
+cd bookshelf-admin
+git checkout admin
+```
+
+如果你已经在本地 clone 过仓库，只需要确认当前分支是 `admin` 即可。
+
+### 2. 安装当前分支依赖
+
+```bash
+npm install
+```
+
+### 3. 准备 `service` 后端
+
+`admin` 分支依赖 `service` 后端提供管理接口、库存接口和分析接口。第一次联调时，建议在另一个目录再准备一份 `service` 分支。
+
+```bash
+cd ..
+git clone <仓库地址> bookshelf-service
+cd bookshelf-service
+git checkout service
+uv sync
+docker compose -f docker-compose.pgvector.yml up -d
+```
+
+如果仓库里已经有标准演示数据库快照 `data/demo/service-demo.dump`，推荐直接恢复：
+
+```bash
+uv run python scripts/bootstrap_demo_database.py --reset
+```
+
+如果当前没有快照文件，就先初始化空库：
+
+```bash
+uv run python scripts/init_postgres.py
+```
+
+然后启动后端：
+
+```bash
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+确认后端健康检查可访问：
+
+```bash
+curl http://127.0.0.1:8000/api/v1/health
+```
+
+### 4. 回到 `admin` 分支配置环境变量
+
+```bash
+cd ../bookshelf-admin
+cp .env.example .env.local
+```
+
+写入：
+
+```env
+VITE_API_BASE_URL=http://127.0.0.1:8000
+```
+
+### 5. 启动当前分支
+
+```bash
+npm run dev
+```
+
+默认开发地址通常是：
+
+- `http://127.0.0.1:5173`
+
+### 6. 第一次联调建议先验证这三条链路
+
+1. 管理员登录是否正常
+2. Dashboard / 图书列表是否能返回真实数据
+3. 订单、机器人和 SSE 事件流是否能正常加载
+
 ### 1. 安装依赖
 
 ```bash
