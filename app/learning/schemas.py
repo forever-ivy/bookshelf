@@ -10,6 +10,9 @@ class LearningSourceInput(BaseModel):
     kind: Literal["book", "inline_text"] | str
     book_id: int | None = Field(default=None, alias="bookId")
     book_source_document_id: int | None = Field(default=None, alias="bookSourceDocumentId")
+    upload_id: int | None = Field(default=None, alias="uploadId")
+    url: str | None = None
+    title: str | None = None
     file_name: str | None = Field(default=None, alias="fileName")
     mime_type: str | None = Field(default=None, alias="mimeType")
     content: str | None = None
@@ -91,6 +94,22 @@ def serialize_asset(asset: Any) -> dict[str, Any]:
         "metadata": asset.metadata_json or {},
         "createdAt": _isoformat(asset.created_at),
         "updatedAt": _isoformat(asset.updated_at),
+    }
+
+
+def serialize_upload(upload: Any) -> dict[str, Any]:
+    return {
+        "id": upload.id,
+        "readerId": upload.reader_id,
+        "fileName": upload.file_name,
+        "mimeType": upload.mime_type,
+        "storagePath": upload.storage_path,
+        "contentHash": upload.content_hash,
+        "expiresAt": _isoformat(upload.expires_at),
+        "consumedAt": _isoformat(upload.consumed_at),
+        "metadata": upload.metadata_json or {},
+        "createdAt": _isoformat(upload.created_at),
+        "updatedAt": _isoformat(upload.updated_at),
     }
 
 

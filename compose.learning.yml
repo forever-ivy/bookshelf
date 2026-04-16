@@ -1,0 +1,127 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: service
+      POSTGRES_USER: library
+      POSTGRES_PASSWORD: library
+    ports:
+      - "55432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  neo4j:
+    image: neo4j:5
+    environment:
+      NEO4J_AUTH: neo4j/password
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j_data:/data
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  mineru:
+    image: python:3.12-slim
+    working_dir: /workspace/MinerU
+    volumes:
+      - /Users/Code/notebook/MinerU:/workspace/MinerU
+    command: >
+      sh -c "pip install uv &&
+             uv pip install -e .[all] &&
+             mineru-api --host 0.0.0.0 --port 8000"
+    ports:
+      - "18000:8000"
+
+  library-core-api:
+    build: .
+    command: uv run library-core-api
+    environment:
+      LIBRARY_DATABASE_URL: postgresql+psycopg://library:library@postgres:5432/service
+      LIBRARY_REDIS_URL: redis://redis:6379/0
+      LIBRARY_GRAPH_PROVIDER: neo4j
+      LIBRARY_GRAPH_URI: bolt://neo4j:7687
+      LIBRARY_GRAPH_USERNAME: neo4j
+      LIBRARY_GRAPH_PASSWORD: password
+      LIBRARY_OBJECT_STORE_PROVIDER: s3
+      LIBRARY_OBJECT_STORE_ENDPOINT: http://minio:9000
+      LIBRARY_OBJECT_STORE_ACCESS_KEY: minioadmin
+      LIBRARY_OBJECT_STORE_SECRET_KEY: minioadmin
+      LIBRARY_OBJECT_STORE_BUCKET: library-learning
+      LIBRARY_MINERU_BASE_URL: http://mineru:8000
+      LIBRARY_LEARNING_ORCHESTRATOR_URL: http://learning-orchestrator:8010
+    depends_on:
+      - postgres
+      - redis
+      - neo4j
+      - minio
+      - mineru
+    ports:
+      - "8000:8000"
+
+  learning-orchestrator:
+    build: .
+    command: uv run learning-orchestrator
+    environment:
+      LIBRARY_DATABASE_URL: postgresql+psycopg://library:library@postgres:5432/service
+      LIBRARY_REDIS_URL: redis://redis:6379/0
+      LIBRARY_GRAPH_PROVIDER: neo4j
+      LIBRARY_GRAPH_URI: bolt://neo4j:7687
+      LIBRARY_GRAPH_USERNAME: neo4j
+      LIBRARY_GRAPH_PASSWORD: password
+      LIBRARY_OBJECT_STORE_PROVIDER: s3
+      LIBRARY_OBJECT_STORE_ENDPOINT: http://minio:9000
+      LIBRARY_OBJECT_STORE_ACCESS_KEY: minioadmin
+      LIBRARY_OBJECT_STORE_SECRET_KEY: minioadmin
+      LIBRARY_OBJECT_STORE_BUCKET: library-learning
+    depends_on:
+      - postgres
+      - redis
+      - neo4j
+      - minio
+    ports:
+      - "8010:8010"
+
+  learning-worker:
+    build: .
+    command: uv run celery -A app.learning.tasks.celery_app worker -Q learning --loglevel=INFO
+    environment:
+      LIBRARY_DATABASE_URL: postgresql+psycopg://library:library@postgres:5432/service
+      LIBRARY_REDIS_URL: redis://redis:6379/0
+      LIBRARY_GRAPH_PROVIDER: neo4j
+      LIBRARY_GRAPH_URI: bolt://neo4j:7687
+      LIBRARY_GRAPH_USERNAME: neo4j
+      LIBRARY_GRAPH_PASSWORD: password
+      LIBRARY_OBJECT_STORE_PROVIDER: s3
+      LIBRARY_OBJECT_STORE_ENDPOINT: http://minio:9000
+      LIBRARY_OBJECT_STORE_ACCESS_KEY: minioadmin
+      LIBRARY_OBJECT_STORE_SECRET_KEY: minioadmin
+      LIBRARY_OBJECT_STORE_BUCKET: library-learning
+      LIBRARY_MINERU_BASE_URL: http://mineru:8000
+    depends_on:
+      - postgres
+      - redis
+      - neo4j
+      - minio
+      - mineru
+
+volumes:
+  postgres_data:
+  neo4j_data:
+  minio_data:

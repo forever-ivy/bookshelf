@@ -105,6 +105,38 @@ def _has_alembic_version_table(engine: Engine) -> bool:
         return result.scalar() is not None
 
 
+def _database_has_user_tables(engine: Engine) -> bool:
+    with engine.begin() as connection:
+        try:
+            inspector = inspect(connection)
+        except NoInspectionAvailable:
+            return False
+        tables = {name for name in inspector.get_table_names() if name != "alembic_version"}
+        return bool(tables)
+
+
+def _write_alembic_revision(engine: Engine, revision: str) -> None:
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)"
+        )
+        connection.exec_driver_sql("DELETE FROM alembic_version")
+        connection.execute(text("INSERT INTO alembic_version (version_num) VALUES (:revision)"), {"revision": revision})
+
+
+def bootstrap_empty_database_to_revision(engine: Engine, revision: str) -> bool:
+    import_model_modules()
+    if _database_has_user_tables(engine):
+        return False
+    with engine.begin() as connection:
+        if engine.url.get_backend_name() == "postgresql":
+            connection.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS vector")
+            connection.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+    Base.metadata.create_all(bind=engine)
+    _write_alembic_revision(engine, revision)
+    return True
+
+
 def _repair_sqlite_legacy_schema(engine: Engine) -> None:
     with engine.begin() as connection:
         try:
@@ -186,8 +218,11 @@ def init_schema() -> None:
             connection.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS pg_trgm")
     if engine.url.get_backend_name() == "postgresql":
         if not _has_alembic_version_table(engine):
-            Base.metadata.create_all(bind=engine)
-            _run_alembic_stamp(BASELINE_REVISION)
+            if not _database_has_user_tables(engine):
+                bootstrap_empty_database_to_revision(engine, BASELINE_REVISION)
+            else:
+                Base.metadata.create_all(bind=engine)
+                _run_alembic_stamp(BASELINE_REVISION)
         _run_alembic_upgrade()
     else:
         Base.metadata.create_all(bind=engine)

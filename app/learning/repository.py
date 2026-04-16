@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -20,6 +21,7 @@ from app.learning.models import (
     LearningReport,
     LearningSession,
     LearningStepContextItem,
+    LearningUpload,
     LearningSourceAsset,
     LearningSourceBundle,
     LearningTurn,
@@ -138,6 +140,45 @@ def create_source_asset(
     return asset
 
 
+def create_upload(
+    session: Session,
+    *,
+    reader_id: int,
+    file_name: str,
+    mime_type: str | None,
+    storage_path: str,
+    content_hash: str | None,
+    expires_at: datetime | None,
+    metadata_json: dict | None = None,
+) -> LearningUpload:
+    upload = LearningUpload(
+        reader_id=reader_id,
+        file_name=file_name,
+        mime_type=mime_type,
+        storage_path=storage_path,
+        content_hash=content_hash,
+        expires_at=expires_at,
+        consumed_at=None,
+        metadata_json=metadata_json,
+    )
+    session.add(upload)
+    session.flush()
+    return upload
+
+
+def get_upload(session: Session, *, upload_id: int) -> LearningUpload | None:
+    return session.get(LearningUpload, upload_id)
+
+
+def require_owned_upload(session: Session, *, upload_id: int, reader_id: int) -> LearningUpload:
+    upload = get_upload(session, upload_id=upload_id)
+    if upload is None:
+        raise ApiError(404, "learning_upload_not_found", "Learning upload not found")
+    if upload.reader_id != reader_id:
+        raise ApiError(403, "learning_upload_forbidden", "Learning upload does not belong to the current reader")
+    return upload
+
+
 def list_bundle_assets(session: Session, *, bundle_id: int) -> Sequence[LearningSourceAsset]:
     statement = (
         select(LearningSourceAsset)
@@ -226,6 +267,23 @@ def list_profile_fragments(session: Session, *, profile_id: int) -> Sequence[Lea
         .order_by(LearningFragment.asset_id.asc(), LearningFragment.chunk_index.asc())
     )
     return session.execute(statement).scalars().all()
+
+
+def list_profile_fragments_by_ids(
+    session: Session,
+    *,
+    profile_id: int,
+    fragment_ids: Sequence[int],
+) -> Sequence[LearningFragment]:
+    if not fragment_ids:
+        return []
+    statement = select(LearningFragment).where(
+        LearningFragment.profile_id == profile_id,
+        LearningFragment.id.in_(list(fragment_ids)),
+    )
+    rows = session.execute(statement).scalars().all()
+    row_by_id = {row.id: row for row in rows}
+    return [row_by_id[fragment_id] for fragment_id in fragment_ids if fragment_id in row_by_id]
 
 
 def create_path_version(

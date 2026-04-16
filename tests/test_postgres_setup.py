@@ -55,6 +55,14 @@ class FakeEngine:
         return FakeBeginContext(self.connection)
 
 
+class FakeSession:
+    def commit(self) -> None:
+        return None
+
+    def close(self) -> None:
+        return None
+
+
 def test_default_settings_target_postgres(monkeypatch):
     monkeypatch.delenv("LIBRARY_DATABASE_URL", raising=False)
     get_settings.cache_clear()
@@ -73,13 +81,17 @@ def test_init_schema_enables_pgvector_extension_on_postgres(monkeypatch):
     monkeypatch.setattr(database_module, "get_engine", lambda: fake_engine)
     monkeypatch.setattr(database_module, "import_model_modules", lambda: None)
     monkeypatch.setattr(database_module, "_has_alembic_version_table", lambda engine: False)
+    monkeypatch.setattr(database_module, "_database_has_user_tables", lambda engine: True)
     monkeypatch.setattr(database_module, "_run_alembic_stamp", lambda revision: stamped_revisions.append(revision))
     monkeypatch.setattr(database_module, "_run_alembic_upgrade", lambda: upgraded.append(True))
+    monkeypatch.setattr(database_module, "get_session_factory", lambda: (lambda: FakeSession()))
     monkeypatch.setattr(
         database_module.Base.metadata,
         "create_all",
         lambda bind: create_all_calls.append(bind),
     )
+    monkeypatch.setattr("app.catalog.taxonomy.books_need_taxonomy_backfill", lambda session: False)
+    monkeypatch.setattr("app.catalog.taxonomy.backfill_book_taxonomy", lambda session: None)
 
     database_module.init_schema()
 
@@ -97,17 +109,40 @@ def test_init_schema_skips_pgvector_extension_on_sqlite(monkeypatch):
 
     monkeypatch.setattr(database_module, "get_engine", lambda: fake_engine)
     monkeypatch.setattr(database_module, "import_model_modules", lambda: None)
+    monkeypatch.setattr(database_module, "get_session_factory", lambda: (lambda: FakeSession()))
     monkeypatch.setattr(
         database_module.Base.metadata,
         "create_all",
         lambda bind: create_all_calls.append(bind),
     )
+    monkeypatch.setattr("app.catalog.taxonomy.books_need_taxonomy_backfill", lambda session: False)
+    monkeypatch.setattr("app.catalog.taxonomy.backfill_book_taxonomy", lambda session: None)
 
     database_module.init_schema()
 
     assert len(fake_engine.connection.statements) == 1
     assert "INSERT INTO cabinets" in fake_engine.connection.statements[0][0]
     assert create_all_calls == [fake_engine]
+
+
+def test_bootstrap_empty_database_to_revision_creates_schema_and_stamps(monkeypatch):
+    fake_engine = FakeEngine("postgresql+psycopg://library:library@localhost:5432/service")
+    create_all_calls = []
+
+    monkeypatch.setattr(database_module, "import_model_modules", lambda: None)
+    monkeypatch.setattr(database_module, "_database_has_user_tables", lambda engine: False)
+    monkeypatch.setattr(database_module.Base.metadata, "create_all", lambda bind: create_all_calls.append(bind))
+
+    bootstrapped = database_module.bootstrap_empty_database_to_revision(fake_engine, "20260416_01")
+
+    assert bootstrapped is True
+    assert create_all_calls == [fake_engine]
+    assert fake_engine.connection.statements[0][0] == "CREATE EXTENSION IF NOT EXISTS vector"
+    assert fake_engine.connection.statements[1][0] == "CREATE EXTENSION IF NOT EXISTS pg_trgm"
+    assert fake_engine.connection.statements[2][0] == "CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)"
+    assert fake_engine.connection.statements[3][0] == "DELETE FROM alembic_version"
+    assert fake_engine.connection.statements[4][0] == "INSERT INTO alembic_version (version_num) VALUES (:revision)"
+    assert fake_engine.connection.statements[4][1] == {"revision": "20260416_01"}
 
 
 def test_book_model_has_pgvector_embedding_column():

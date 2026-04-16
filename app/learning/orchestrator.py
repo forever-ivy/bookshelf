@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.errors import ApiError
 from app.learning import repository
+from app.learning.llm_flow import LearningLLMWorkflow
 from app.learning.retrieval import LearningRetrievalService
 from app.learning.schemas import (
     serialize_checkpoint,
@@ -19,6 +20,12 @@ from app.learning.schemas import (
     serialize_turn,
     sse_event,
 )
+
+try:
+    from langgraph.graph import END, START, StateGraph  # type: ignore
+except Exception:  # pragma: no cover - optional during tests
+    END = START = None  # type: ignore[assignment]
+    StateGraph = None  # type: ignore[assignment]
 
 
 def _tokenize(value: str) -> list[str]:
@@ -33,21 +40,6 @@ def _tokenize(value: str) -> list[str]:
         .replace("？", " ")
     )
     return [token.lower() for token in normalized.split() if token]
-
-
-def _dedupe_strings(items: list[str]) -> list[str]:
-    seen: set[str] = set()
-    result: list[str] = []
-    for item in items:
-        normalized = (item or "").strip()
-        if not normalized:
-            continue
-        key = normalized.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        result.append(normalized)
-    return result
 
 
 def _build_teacher_reply(*, step: dict[str, Any], evidence: list[dict[str, Any]], user_content: str) -> str:
@@ -107,61 +99,6 @@ def _merge_assistant_reply(*, teacher_text: str, peer_text: str, evaluation: dic
     )
 
 
-def _context_item_to_citation(item: Any) -> dict[str, Any]:
-    snippet = (item.content or item.summary or "")[:180].replace("\n", " ").strip()
-    return {
-        "fragmentId": None,
-        "assetId": None,
-        "chunkIndex": None,
-        "chapterLabel": item.title,
-        "snippet": snippet,
-        "citationAnchor": {
-            "contextItemId": item.id,
-            "sourceSessionId": item.source_session_id,
-            "sourceTurnId": item.source_turn_id,
-        },
-    }
-
-
-def _combine_citations(*, priority: list[dict[str, Any]], fallback: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
-    seen: set[tuple[Any, Any, Any, str]] = set()
-    items: list[dict[str, Any]] = []
-    for candidate in [*priority, *fallback]:
-        key = (
-            candidate.get("fragmentId"),
-            candidate.get("assetId"),
-            candidate.get("chunkIndex"),
-            candidate.get("snippet", ""),
-        )
-        if key in seen:
-            continue
-        seen.add(key)
-        items.append(candidate)
-        if len(items) >= limit:
-            break
-    return items
-
-
-def _collect_related_concepts(
-    *,
-    profile: Any,
-    current_step: dict[str, Any] | None,
-    learning_session: Any,
-    user_content: str,
-    citations: list[dict[str, Any]],
-) -> list[str]:
-    profile_concepts = list((profile.metadata_json or {}).get("concepts") or [])
-    step_keywords = list((current_step or {}).get("keywords") or [])
-    focus_keywords = list((getattr(learning_session, "focus_context_json", None) or {}).get("keywords") or [])
-    snippet_tokens: list[str] = []
-    for citation in citations[:2]:
-        snippet_tokens.extend(_tokenize(citation.get("snippet") or ""))
-    query_tokens = _tokenize(user_content)
-    candidates = _dedupe_strings(profile_concepts + step_keywords + focus_keywords + snippet_tokens)
-    ranked = [concept for concept in candidates if any(token in concept.lower() for token in query_tokens)] or candidates
-    return ranked[:6]
-
-
 def _build_explore_answer(
     *,
     focus_context: dict[str, Any],
@@ -181,83 +118,180 @@ def _build_explore_answer(
     return f"{prefix}{focus_line}{evidence_line}{concept_line}围绕你的问题“{user_content.strip()}”，建议先抓住定义差异，再看实验或应用里的影响。"
 
 
+def _append_event(state: dict[str, Any], event_name: str, data: dict[str, Any]) -> dict[str, Any]:
+    state.setdefault("events", []).append(sse_event(event_name, data))
+    return state
+
+
 class GuideOrchestrator:
+    runtime_node_names = [
+        "load_session",
+        "retrieve_evidence",
+        "teacher_node",
+        "peer_node",
+        "examiner_node",
+        "progress_node",
+        "remediation_node",
+        "persist_turn_and_report",
+        "finalize",
+    ]
+
     def __init__(self) -> None:
         self.settings = get_settings()
         self.retrieval_service = LearningRetrievalService()
+        self.llm_workflow = LearningLLMWorkflow(self.settings)
+        self.runtime = self._build_runtime()
 
-    async def stream_session_reply(
-        self,
-        session: Session,
-        *,
-        reader_id: int,
-        learning_session: Any,
-        profile: Any,
-        user_content: str,
-    ) -> AsyncIterator[dict]:
+    def _build_runtime(self):
+        if StateGraph is None:
+            return None
+        graph = StateGraph(dict)
+        graph.add_node("load_session", self._load_session)
+        graph.add_node("retrieve_evidence", self._retrieve_evidence)
+        graph.add_node("teacher_node", self._teacher_node)
+        graph.add_node("peer_node", self._peer_node)
+        graph.add_node("examiner_node", self._examiner_node)
+        graph.add_node("progress_node", self._progress_node)
+        graph.add_node("remediation_node", self._remediation_node)
+        graph.add_node("persist_turn_and_report", self._persist_turn_and_report)
+        graph.add_node("finalize", self._finalize)
+        graph.add_edge(START, "load_session")
+        graph.add_edge("load_session", "retrieve_evidence")
+        graph.add_edge("retrieve_evidence", "teacher_node")
+        graph.add_edge("teacher_node", "peer_node")
+        graph.add_edge("peer_node", "examiner_node")
+        graph.add_conditional_edges(
+            "examiner_node",
+            lambda state: "progress_node" if state["evaluation"]["passed"] else "remediation_node",
+            {"progress_node": "progress_node", "remediation_node": "remediation_node"},
+        )
+        graph.add_edge("progress_node", "persist_turn_and_report")
+        graph.add_edge("remediation_node", "persist_turn_and_report")
+        graph.add_edge("persist_turn_and_report", "finalize")
+        graph.add_edge("finalize", END)
+        return graph.compile()
+
+    def _load_session(self, state: dict[str, Any]) -> dict[str, Any]:
+        session = state["db_session"]
+        learning_session = state["learning_session"]
+        profile = state["profile"]
         if profile.active_path_version_id is None:
             raise ApiError(409, "learning_path_missing", "Learning profile does not have an active path version")
         steps = [serialize_path_step(step) for step in repository.list_path_steps(session, path_version_id=profile.active_path_version_id)]
         if not steps:
             raise ApiError(409, "learning_path_missing_steps", "Learning path does not contain any steps")
-
-        started_at = time.perf_counter()
         current_index = min(learning_session.current_step_index, max(len(steps) - 1, 0))
-        current_step = steps[current_index]
+        state["steps"] = steps
+        state["current_index"] = current_index
+        state["current_step"] = steps[current_index]
+        _append_event(state, "status", {"phase": "retrieving", "sessionId": learning_session.id, "stepIndex": current_index})
+        return state
 
-        yield sse_event("status", {"phase": "retrieving", "sessionId": learning_session.id, "stepIndex": current_index})
-
-        context_items = repository.list_step_context_items(
-            session,
-            guide_session_id=learning_session.id,
-            step_index=current_index,
-        )
-        retrieved = self.retrieval_service.hybrid_search(
-            session,
-            profile_id=profile.id,
-            query=user_content.strip(),
+    def _retrieve_evidence(self, state: dict[str, Any]) -> dict[str, Any]:
+        bundle = self.retrieval_service.guide_search(
+            state["db_session"],
+            profile_id=state["profile"].id,
+            guide_session_id=state["learning_session"].id,
+            step_index=state["current_index"],
+            query=state["user_content"].strip(),
             top_k=self.settings.learning_retrieval_top_k,
+            preferred_keywords=state["current_step"].get("keywords") or [],
         )
-        citations = _combine_citations(
-            priority=[_context_item_to_citation(item) for item in context_items],
-            fallback=[item.citation for item in retrieved],
-            limit=self.settings.learning_retrieval_top_k,
-        )
-        yield sse_event("retrieval.evidence", {"items": citations})
+        state["citations"] = bundle.citations
+        state["related_concepts"] = bundle.related_concepts
+        _append_event(state, "retrieval.evidence", {"items": bundle.citations})
+        return state
 
-        evaluation = _evaluate_answer(step=current_step, user_content=user_content.strip())
-        teacher_text = _build_teacher_reply(step=current_step, evidence=citations, user_content=user_content.strip())
-        peer_text = _build_peer_reply(step=current_step, passed=bool(evaluation["passed"]))
+    def _teacher_node(self, state: dict[str, Any]) -> dict[str, Any]:
+        current_step = state["current_step"]
+        teacher_text = self.llm_workflow.teacher_reply(
+            step=current_step,
+            evidence=state["citations"],
+            user_content=state["user_content"].strip(),
+        ) or _build_teacher_reply(
+            step=current_step,
+            evidence=state["citations"],
+            user_content=state["user_content"].strip(),
+        )
+        state["teacher_text"] = teacher_text
+        _append_event(state, "agent.teacher.delta", {"delta": teacher_text})
+        return state
+
+    def _peer_node(self, state: dict[str, Any]) -> dict[str, Any]:
+        current_step = state["current_step"]
+        evaluation = self.llm_workflow.examine(step=current_step, user_content=state["user_content"].strip()) or _evaluate_answer(
+            step=current_step,
+            user_content=state["user_content"].strip(),
+        )
+        peer_text = self.llm_workflow.peer_reply(
+            step=current_step,
+            user_content=state["user_content"].strip(),
+            passed=bool(evaluation["passed"]),
+        ) or _build_peer_reply(step=current_step, passed=bool(evaluation["passed"]))
+        state["evaluation"] = evaluation
+        state["peer_text"] = peer_text
+        _append_event(state, "agent.peer.delta", {"delta": peer_text})
+        return state
+
+    def _examiner_node(self, state: dict[str, Any]) -> dict[str, Any]:
+        _append_event(state, "agent.examiner.result", state["evaluation"])
+        return state
+
+    def _progress_node(self, state: dict[str, Any]) -> dict[str, Any]:
+        learning_session = state["learning_session"]
+        current_index = state["current_index"]
+        steps = state["steps"]
+        evaluation = state["evaluation"]
+        learning_session.mastery_score = float(evaluation["masteryScore"])
+        learning_session.completed_steps_count = max(learning_session.completed_steps_count, current_index + 1)
+        learning_session.remediation_status = None
+        next_index = current_index + 1
+        if next_index >= len(steps):
+            learning_session.status = "completed"
+            learning_session.current_step_index = current_index
+            learning_session.current_step_title = state["current_step"]["title"]
+        else:
+            learning_session.current_step_index = next_index
+            learning_session.current_step_title = steps[next_index]["title"]
+        state["pending_progress"] = True
+        return state
+
+    def _remediation_node(self, state: dict[str, Any]) -> dict[str, Any]:
+        learning_session = state["learning_session"]
+        evaluation = state["evaluation"]
+        learning_session.mastery_score = float(evaluation["masteryScore"])
+        learning_session.remediation_status = "active"
+        state["pending_progress"] = False
+        return state
+
+    def _persist_turn_and_report(self, state: dict[str, Any]) -> dict[str, Any]:
+        session = state["db_session"]
+        learning_session = state["learning_session"]
+        current_step = state["current_step"]
+        current_index = state["current_index"]
+        evaluation = state["evaluation"]
+        teacher_text = state["teacher_text"]
+        peer_text = state["peer_text"]
         assistant_text = _merge_assistant_reply(
             teacher_text=teacher_text,
             peer_text=peer_text,
             evaluation=evaluation,
             step=current_step,
         )
-        related_concepts = _collect_related_concepts(
-            profile=profile,
-            current_step=current_step,
-            learning_session=learning_session,
-            user_content=user_content,
-            citations=citations,
-        )
-
-        yield sse_event("agent.teacher.delta", {"delta": teacher_text})
-        yield sse_event("agent.peer.delta", {"delta": peer_text})
-        yield sse_event("agent.examiner.result", evaluation)
+        state["assistant_text"] = assistant_text
 
         turn = repository.create_turn(
             session,
             session_id=learning_session.id,
             turn_kind="guide",
-            user_content=user_content.strip(),
+            user_content=state["user_content"].strip(),
             teacher_content=teacher_text,
             peer_content=peer_text,
             assistant_content=assistant_text,
-            citations_json=citations,
+            citations_json=state["citations"],
             evaluation_json=evaluation,
-            related_concepts_json=related_concepts,
-            latency_ms=int((time.perf_counter() - started_at) * 1000),
+            related_concepts_json=state["related_concepts"],
+            latency_ms=int((time.perf_counter() - state["started_at"]) * 1000),
             metadata_json={"stepIndex": current_index},
         )
         repository.create_agent_run(
@@ -286,11 +320,10 @@ class GuideOrchestrator:
             agent_name="Examiner",
             model_name=self.settings.llm_model,
             status="completed",
-            input_summary=user_content[:180],
+            input_summary=state["user_content"][:180],
             output_summary=evaluation["reasoning"],
             metadata_json={"stepIndex": current_index, "passed": bool(evaluation["passed"])},
         )
-
         checkpoint = repository.create_checkpoint(
             session,
             session_id=learning_session.id,
@@ -299,31 +332,21 @@ class GuideOrchestrator:
             mastery_score=float(evaluation["masteryScore"]),
             passed=bool(evaluation["passed"]),
             missing_concepts_json=list(evaluation["missingConcepts"]),
-            evidence_json={"citations": citations, "reasoning": evaluation["reasoning"]},
+            evidence_json={"citations": state["citations"], "reasoning": evaluation["reasoning"]},
         )
-        learning_session.mastery_score = float(evaluation["masteryScore"])
-
         if evaluation["passed"]:
-            learning_session.completed_steps_count = max(learning_session.completed_steps_count, current_index + 1)
-            learning_session.remediation_status = None
-            next_index = current_index + 1
-            if next_index >= len(steps):
-                learning_session.status = "completed"
-                learning_session.current_step_index = current_index
-                learning_session.current_step_title = current_step["title"]
-            else:
-                learning_session.current_step_index = next_index
-                learning_session.current_step_title = steps[next_index]["title"]
-            yield sse_event(
+            _append_event(
+                state,
                 "session.progress",
                 {
                     "checkpoint": serialize_checkpoint(checkpoint),
                     "session": serialize_session(learning_session),
-                    "nextStep": None if learning_session.status == "completed" else steps[learning_session.current_step_index],
+                    "nextStep": None
+                    if learning_session.status == "completed"
+                    else state["steps"][learning_session.current_step_index],
                 },
             )
         else:
-            learning_session.remediation_status = "active"
             remediation_plan = repository.create_remediation_plan(
                 session,
                 session_id=learning_session.id,
@@ -340,8 +363,7 @@ class GuideOrchestrator:
                     "recommendedMode": learning_session.learning_mode,
                 },
             )
-            yield sse_event("session.remediation", {"plan": serialize_remediation_plan(remediation_plan)})
-
+            _append_event(state, "session.remediation", {"plan": serialize_remediation_plan(remediation_plan)})
         report = repository.upsert_report(
             session,
             session_id=learning_session.id,
@@ -349,28 +371,40 @@ class GuideOrchestrator:
             summary=assistant_text,
             weak_points_json=list(evaluation["missingConcepts"]),
             suggested_next_action=(
-                f"进入下一步：{steps[learning_session.current_step_index]['title']}"
+                f"进入下一步：{state['steps'][learning_session.current_step_index]['title']}"
                 if evaluation["passed"] and learning_session.status != "completed"
                 else f"优先回补：{', '.join(evaluation['missingConcepts'] or [current_step['title']])}"
             ),
-            metadata_json={"currentStepTitle": current_step["title"], "relatedConcepts": related_concepts},
+            metadata_json={"currentStepTitle": current_step["title"], "relatedConcepts": state["related_concepts"]},
         )
         session.commit()
         agent_runs = [run.agent_name for run in repository.list_turn_agent_runs(session, turn_id=turn.id)]
-        yield sse_event(
-            "assistant.final",
-            {
-                "turn": serialize_turn(turn, agent_runs=[{"agentName": name} for name in agent_runs]),
-                "session": serialize_session(learning_session),
-                "report": serialize_report(report),
-            },
-        )
+        state["final_payload"] = {
+            "turn": serialize_turn(turn, agent_runs=[{"agentName": name} for name in agent_runs]),
+            "session": serialize_session(learning_session),
+            "report": serialize_report(report),
+        }
+        return state
 
+    def _finalize(self, state: dict[str, Any]) -> dict[str, Any]:
+        _append_event(state, "assistant.final", state["final_payload"])
+        return state
 
-class ExploreOrchestrator:
-    def __init__(self) -> None:
-        self.settings = get_settings()
-        self.retrieval_service = LearningRetrievalService()
+    def _run_without_langgraph(self, state: dict[str, Any]) -> dict[str, Any]:
+        for node in (
+            self._load_session,
+            self._retrieve_evidence,
+            self._teacher_node,
+            self._peer_node,
+            self._examiner_node,
+        ):
+            state = node(state)
+        if state["evaluation"]["passed"]:
+            state = self._progress_node(state)
+        else:
+            state = self._remediation_node(state)
+        state = self._persist_turn_and_report(state)
+        return self._finalize(state)
 
     async def stream_session_reply(
         self,
@@ -382,8 +416,65 @@ class ExploreOrchestrator:
         user_content: str,
     ) -> AsyncIterator[dict]:
         del reader_id
-        started_at = time.perf_counter()
-        focus_context = getattr(learning_session, "focus_context_json", None) or {}
+        initial_state = {
+            "db_session": session,
+            "learning_session": learning_session,
+            "profile": profile,
+            "user_content": user_content,
+            "started_at": time.perf_counter(),
+            "events": [],
+        }
+        final_state = self.runtime.invoke(initial_state) if self.runtime is not None else self._run_without_langgraph(initial_state)
+        for event in final_state["events"]:
+            yield event
+
+
+class ExploreOrchestrator:
+    runtime_node_names = [
+        "load_session",
+        "retrieve_evidence",
+        "answer_node",
+        "related_concepts_node",
+        "persist_turn_and_report",
+        "finalize",
+    ]
+
+    def __init__(self) -> None:
+        self.settings = get_settings()
+        self.retrieval_service = LearningRetrievalService()
+        self.llm_workflow = LearningLLMWorkflow(self.settings)
+        self.runtime = self._build_runtime()
+
+    def _build_runtime(self):
+        if StateGraph is None:
+            return None
+        graph = StateGraph(dict)
+        graph.add_node("load_session", self._load_session)
+        graph.add_node("retrieve_evidence", self._retrieve_evidence)
+        graph.add_node("answer_node", self._answer_node)
+        graph.add_node("related_concepts_node", self._related_concepts_node)
+        graph.add_node("persist_turn_and_report", self._persist_turn_and_report)
+        graph.add_node("finalize", self._finalize)
+        graph.add_edge(START, "load_session")
+        graph.add_edge("load_session", "retrieve_evidence")
+        graph.add_edge("retrieve_evidence", "answer_node")
+        graph.add_edge("answer_node", "related_concepts_node")
+        graph.add_edge("related_concepts_node", "persist_turn_and_report")
+        graph.add_edge("persist_turn_and_report", "finalize")
+        graph.add_edge("finalize", END)
+        return graph.compile()
+
+    def _load_session(self, state: dict[str, Any]) -> dict[str, Any]:
+        _append_event(
+            state,
+            "status",
+            {"phase": "retrieving", "sessionId": state["learning_session"].id, "mode": "explore"},
+        )
+        state["focus_context"] = getattr(state["learning_session"], "focus_context_json", None) or {}
+        return state
+
+    def _retrieve_evidence(self, state: dict[str, Any]) -> dict[str, Any]:
+        focus_context = state["focus_context"]
         focus_tokens = " ".join(
             [
                 *(focus_context.get("keywords") or []),
@@ -391,68 +482,70 @@ class ExploreOrchestrator:
                 focus_context.get("stepTitle") or "",
             ]
         ).strip()
-        retrieval_query = user_content.strip()
+        retrieval_query = state["user_content"].strip()
         if focus_tokens:
             retrieval_query = f"{retrieval_query} {focus_tokens}".strip()
-
-        yield sse_event("status", {"phase": "retrieving", "sessionId": learning_session.id, "mode": "explore"})
-
-        priority_citations: list[dict[str, Any]] = []
-        source_session_id = getattr(learning_session, "source_session_id", None)
-        focus_step_index = getattr(learning_session, "focus_step_index", None)
-        if source_session_id is not None and focus_step_index is not None:
-            context_items = repository.list_step_context_items(
-                session,
-                guide_session_id=source_session_id,
-                step_index=focus_step_index,
-            )
-            priority_citations = [_context_item_to_citation(item) for item in context_items]
-
-        retrieved = self.retrieval_service.hybrid_search(
-            session,
-            profile_id=profile.id,
+        bundle = self.retrieval_service.explore_search(
+            state["db_session"],
+            profile_id=state["profile"].id,
             query=retrieval_query,
             top_k=self.settings.learning_retrieval_top_k,
+            focus_keywords=focus_context.get("keywords") or [],
+            source_session_id=getattr(state["learning_session"], "source_session_id", None),
+            focus_step_index=getattr(state["learning_session"], "focus_step_index", None),
         )
-        citations = _combine_citations(
-            priority=priority_citations,
-            fallback=[item.citation for item in retrieved],
-            limit=self.settings.learning_retrieval_top_k,
-        )
-        related_concepts = _collect_related_concepts(
-            profile=profile,
-            current_step=None,
-            learning_session=learning_session,
-            user_content=user_content,
-            citations=citations,
-        )
-        answer_text = _build_explore_answer(
+        state["citations"] = bundle.citations
+        state["related_concepts"] = bundle.related_concepts
+        _append_event(state, "retrieval.evidence", {"items": bundle.citations})
+        return state
+
+    def _answer_node(self, state: dict[str, Any]) -> dict[str, Any]:
+        focus_context = state["focus_context"]
+        llm_answer = self.llm_workflow.explore_answer(
             focus_context=focus_context,
-            citations=citations,
-            user_content=user_content,
-            related_concepts=related_concepts,
+            citations=state["citations"],
+            user_content=state["user_content"],
         )
+        if llm_answer is not None:
+            answer_text = llm_answer["answer"]
+            if llm_answer["relatedConcepts"]:
+                state["related_concepts"] = llm_answer["relatedConcepts"]
+        else:
+            answer_text = _build_explore_answer(
+                focus_context=focus_context,
+                citations=state["citations"],
+                user_content=state["user_content"],
+                related_concepts=state["related_concepts"],
+            )
+        state["answer_text"] = answer_text
+        _append_event(state, "explore.answer.delta", {"delta": answer_text})
+        return state
 
-        yield sse_event("retrieval.evidence", {"items": citations})
-        yield sse_event("explore.answer.delta", {"delta": answer_text})
-        yield sse_event("explore.related_concepts", {"items": related_concepts})
+    def _related_concepts_node(self, state: dict[str, Any]) -> dict[str, Any]:
+        _append_event(state, "explore.related_concepts", {"items": state["related_concepts"]})
+        return state
 
+    def _persist_turn_and_report(self, state: dict[str, Any]) -> dict[str, Any]:
+        session = state["db_session"]
+        learning_session = state["learning_session"]
+        focus_context = state["focus_context"]
+        focus_step_index = getattr(learning_session, "focus_step_index", None)
         turn = repository.create_turn(
             session,
             session_id=learning_session.id,
             turn_kind="explore",
-            user_content=user_content.strip(),
+            user_content=state["user_content"].strip(),
             teacher_content=None,
             peer_content=None,
-            assistant_content=answer_text,
-            citations_json=citations,
+            assistant_content=state["answer_text"],
+            citations_json=state["citations"],
             evaluation_json=None,
-            related_concepts_json=related_concepts,
+            related_concepts_json=state["related_concepts"],
             bridge_metadata_json={
                 "focusStepIndex": focus_step_index,
                 "focusStepTitle": focus_context.get("stepTitle"),
             },
-            latency_ms=int((time.perf_counter() - started_at) * 1000),
+            latency_ms=int((time.perf_counter() - state["started_at"]) * 1000),
             metadata_json={"mode": "explore"},
         )
         repository.create_agent_run(
@@ -461,28 +554,64 @@ class ExploreOrchestrator:
             agent_name="Explore",
             model_name=self.settings.llm_model,
             status="completed",
-            input_summary=user_content[:180],
-            output_summary=answer_text[:180],
+            input_summary=state["user_content"][:180],
+            output_summary=state["answer_text"][:180],
             metadata_json={"focusStepIndex": focus_step_index},
         )
         report = repository.upsert_report(
             session,
             session_id=learning_session.id,
             report_type="session_summary",
-            summary=answer_text,
+            summary=state["answer_text"],
             weak_points_json=[],
             suggested_next_action="继续追问，或把这轮自由探索收编回导学步骤。",
-            metadata_json={"relatedConcepts": related_concepts},
+            metadata_json={"relatedConcepts": state["related_concepts"]},
         )
         session.commit()
-        yield sse_event(
-            "assistant.final",
-            {
-                "turn": serialize_turn(turn, agent_runs=[{"agentName": "Explore"}]),
-                "session": serialize_session(learning_session),
-                "report": serialize_report(report),
-            },
-        )
+        state["final_payload"] = {
+            "turn": serialize_turn(turn, agent_runs=[{"agentName": "Explore"}]),
+            "session": serialize_session(learning_session),
+            "report": serialize_report(report),
+        }
+        return state
+
+    def _finalize(self, state: dict[str, Any]) -> dict[str, Any]:
+        _append_event(state, "assistant.final", state["final_payload"])
+        return state
+
+    def _run_without_langgraph(self, state: dict[str, Any]) -> dict[str, Any]:
+        for node in (
+            self._load_session,
+            self._retrieve_evidence,
+            self._answer_node,
+            self._related_concepts_node,
+            self._persist_turn_and_report,
+            self._finalize,
+        ):
+            state = node(state)
+        return state
+
+    async def stream_session_reply(
+        self,
+        session: Session,
+        *,
+        reader_id: int,
+        learning_session: Any,
+        profile: Any,
+        user_content: str,
+    ) -> AsyncIterator[dict]:
+        del reader_id
+        initial_state = {
+            "db_session": session,
+            "learning_session": learning_session,
+            "profile": profile,
+            "user_content": user_content,
+            "started_at": time.perf_counter(),
+            "events": [],
+        }
+        final_state = self.runtime.invoke(initial_state) if self.runtime is not None else self._run_without_langgraph(initial_state)
+        for event in final_state["events"]:
+            yield event
 
 
 class LearningOrchestrator:

@@ -3,9 +3,11 @@ from __future__ import annotations
 from logging.config import fileConfig
 
 from alembic import context
+from alembic.script import ScriptDirectory
 from sqlalchemy import engine_from_config, pool
 
 from app.core.config import get_settings
+from app.core.database import bootstrap_empty_database_to_revision
 from app.db.base import Base, import_model_modules
 
 config = context.config
@@ -36,6 +38,10 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        script_dir = ScriptDirectory.from_config(config)
+        head_revision = script_dir.get_current_head()
+        if head_revision and bootstrap_empty_database_to_revision(connection.engine, head_revision):
+            return
         context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():

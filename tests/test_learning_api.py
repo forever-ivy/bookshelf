@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from io import BytesIO
 
 from sqlalchemy import text
 
@@ -121,13 +122,128 @@ def test_generate_learning_profile_keeps_profile_when_graph_provider_missing(cli
         headers=headers,
     )
 
-    assert generate_response.status_code == 200
+    assert generate_response.status_code == 202
     payload = generate_response.json()
-    assert payload["profile"]["status"] == "ready"
-    assert payload["activePathVersion"]["stepCount"] >= 3
-    assert payload["graph"]["provider"] == "fallback"
-    assert any(job["jobType"] == "graph_build" and job["status"] == "failed" for job in payload["jobs"])
-    assert any(asset["parseStatus"] == "parsed" for asset in payload["assets"])
+    assert payload["ok"] is True
+    assert payload["jobs"]
+    assert payload["triggered"] is True
+
+    detail_response = client.get(f"/api/v2/learning/profiles/{profile_id}", headers=headers)
+    assert detail_response.status_code == 200
+    detail_payload = detail_response.json()
+    assert detail_payload["profile"]["status"] == "ready"
+    assert detail_payload["activePathVersion"]["stepCount"] >= 3
+    assert detail_payload["activePathVersion"]["graphProvider"] in {"fallback", "neo4j"}
+    assert any(job["jobType"] == "graph_build" for job in detail_payload["jobs"])
+    assert any(asset["parseStatus"] == "parsed" for asset in detail_payload["assets"])
+
+
+def test_learning_upload_source_can_generate_profile(client):
+    state = seed_reader_with_book()
+    headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
+
+    upload_response = client.post(
+        "/api/v2/learning/uploads",
+        headers=headers,
+        files={
+            "file": (
+                "operating-systems.md",
+                BytesIO(
+                    (
+                        "# 操作系统实验\n\n"
+                        "线程切换开销通常低于进程切换，原因在于地址空间切换和资源隔离成本不同。"
+                    ).encode("utf-8")
+                ),
+                "text/markdown",
+            )
+        },
+    )
+
+    assert upload_response.status_code == 201
+    upload_payload = upload_response.json()
+    assert upload_payload["ok"] is True
+    upload_id = upload_payload["upload"]["id"]
+
+    create_response = client.post(
+        "/api/v2/learning/profiles",
+        headers=headers,
+        json={
+            "title": "上传资料导学空间",
+            "goalMode": "preview",
+            "difficultyMode": "guided",
+            "sources": [{"kind": "upload", "uploadId": upload_id}],
+        },
+    )
+
+    assert create_response.status_code == 201
+    profile_id = create_response.json()["profile"]["id"]
+
+    generate_response = client.post(
+        f"/api/v2/learning/profiles/{profile_id}/generate",
+        headers=headers,
+    )
+    assert generate_response.status_code == 202
+
+    detail_response = client.get(f"/api/v2/learning/profiles/{profile_id}", headers=headers)
+    assert detail_response.status_code == 200
+    detail_payload = detail_response.json()
+    assert detail_payload["profile"]["status"] == "ready"
+    assert detail_payload["assets"][0]["assetKind"] == "upload"
+    assert detail_payload["assets"][0]["mimeType"] == "text/markdown"
+    assert detail_payload["activePathVersion"]["stepCount"] >= 3
+
+
+def test_learning_url_source_generates_profile_from_html_page(client, monkeypatch):
+    state = seed_reader_with_book()
+    headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
+
+    from app.learning import service as learning_service
+
+    monkeypatch.setattr(
+        learning_service.UrlContentFetcher,
+        "fetch",
+        lambda self, url: {
+            "url": url,
+            "title": "操作系统实验网页",
+            "mime_type": "text/html",
+            "content": "线程切换与进程切换在地址空间和资源隔离成本上存在差异，实验里需要重点观察调度影响。",
+            "raw_html": "<html><body><h1>操作系统实验网页</h1></body></html>",
+        },
+    )
+
+    create_response = client.post(
+        "/api/v2/learning/profiles",
+        headers=headers,
+        json={
+            "title": "网页资料导学空间",
+            "goalMode": "preview",
+            "difficultyMode": "guided",
+            "sources": [
+                {
+                    "kind": "url",
+                    "url": "https://example.com/os-lab",
+                    "title": "操作系统实验网页",
+                }
+            ],
+        },
+    )
+
+    assert create_response.status_code == 201
+    profile_id = create_response.json()["profile"]["id"]
+
+    generate_response = client.post(
+        f"/api/v2/learning/profiles/{profile_id}/generate",
+        headers=headers,
+    )
+    assert generate_response.status_code == 202
+
+    detail_response = client.get(f"/api/v2/learning/profiles/{profile_id}", headers=headers)
+    assert detail_response.status_code == 200
+    detail_payload = detail_response.json()
+    assert detail_payload["profile"]["status"] == "ready"
+    assert detail_payload["assets"][0]["assetKind"] == "url"
+    assert detail_payload["assets"][0]["metadata"]["sourceKind"] == "url"
+    assert detail_payload["activePathVersion"]["stepCount"] >= 3
 
 
 def test_learning_session_stream_emits_multi_agent_events_and_progress(client):

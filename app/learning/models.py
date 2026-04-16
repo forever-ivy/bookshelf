@@ -59,6 +59,22 @@ class LearningSourceAsset(Base):
     updated_at: Mapped[datetime | None] = mapped_column(default=utc_now, onupdate=utc_now, nullable=True)
 
 
+class LearningUpload(Base):
+    __tablename__ = "learning_uploads"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    reader_id: Mapped[int] = mapped_column(ForeignKey("reader_profiles.id"), index=True)
+    file_name: Mapped[str] = mapped_column(String(255))
+    mime_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    storage_path: Mapped[str] = mapped_column(String(1024))
+    content_hash: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    expires_at: Mapped[datetime | None] = mapped_column(nullable=True, index=True)
+    consumed_at: Mapped[datetime | None] = mapped_column(nullable=True, index=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON_VARIANT, nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(default=utc_now, nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(default=utc_now, onupdate=utc_now, nullable=True)
+
+
 class LearningFragment(Base):
     __tablename__ = "learning_fragments"
     __table_args__ = (
@@ -127,6 +143,10 @@ class LearningPathStep(Base):
 
 class LearningSession(Base):
     __tablename__ = "learning_sessions"
+    __table_args__ = (
+        Index("ix_learning_sessions_profile_kind", "profile_id", "session_kind"),
+        Index("ix_learning_sessions_source_focus", "source_session_id", "focus_step_index"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     profile_id: Mapped[int] = mapped_column(ForeignKey("learning_profiles.id"), index=True)
@@ -169,6 +189,9 @@ class LearningTurn(Base):
 
 class LearningStepContextItem(Base):
     __tablename__ = "learning_step_context_items"
+    __table_args__ = (
+        Index("ix_learning_step_context_items_session_step", "guide_session_id", "step_index"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     guide_session_id: Mapped[int] = mapped_column(ForeignKey("learning_sessions.id"), index=True)
@@ -187,6 +210,9 @@ class LearningStepContextItem(Base):
 
 class LearningBridgeAction(Base):
     __tablename__ = "learning_bridge_actions"
+    __table_args__ = (
+        Index("ix_learning_bridge_actions_from_action", "from_session_id", "action_type"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     action_type: Mapped[str] = mapped_column(String(48), index=True)

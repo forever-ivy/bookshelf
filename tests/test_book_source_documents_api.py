@@ -85,7 +85,7 @@ def test_admin_can_upload_book_source_document_and_learning_uses_primary_asset(c
     assert profile_response.status_code == 201
     profile_id = profile_response.json()["profile"]["id"]
     generate_response = client.post(f"/api/v2/learning/profiles/{profile_id}/generate", headers=reader_headers)
-    assert generate_response.status_code == 200
+    assert generate_response.status_code == 202
 
     detail_response = client.get(f"/api/v2/learning/profiles/{profile_id}", headers=reader_headers)
     assert detail_response.status_code == 200
@@ -136,7 +136,7 @@ def test_learning_profile_can_explicitly_target_specific_book_source_document(cl
     assert profile_response.status_code == 201
     profile_id = profile_response.json()["profile"]["id"]
     generate_response = client.post(f"/api/v2/learning/profiles/{profile_id}/generate", headers=reader_headers)
-    assert generate_response.status_code == 200
+    assert generate_response.status_code == 202
 
     detail_response = client.get(f"/api/v2/learning/profiles/{profile_id}", headers=reader_headers)
     assert detail_response.status_code == 200
@@ -198,7 +198,7 @@ def test_admin_can_promote_existing_book_source_document_to_primary_and_learning
     assert profile_response.status_code == 201
     profile_id = profile_response.json()["profile"]["id"]
     generate_response = client.post(f"/api/v2/learning/profiles/{profile_id}/generate", headers=reader_headers)
-    assert generate_response.status_code == 200
+    assert generate_response.status_code == 202
 
     detail_response = client.get(f"/api/v2/learning/profiles/{profile_id}", headers=reader_headers)
     assert detail_response.status_code == 200

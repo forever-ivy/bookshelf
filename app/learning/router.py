@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+import httpx
+from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.auth_context import require_reader
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.errors import ApiError
 from app.core.security import AuthIdentity
@@ -26,11 +29,33 @@ from app.learning.schemas import (
     serialize_step_context_item,
     serialize_source_bundle,
     serialize_turn,
+    serialize_upload,
 )
 from app.learning.service import LearningBridgeService, LearningService
 
 
 router = APIRouter(prefix="/api/v2/learning", tags=["learning"])
+
+
+@router.post("/uploads", status_code=201)
+async def create_learning_upload(
+    file: UploadFile = File(...),
+    identity: AuthIdentity = Depends(require_reader),
+    db: Session = Depends(get_db),
+) -> dict:
+    raw_bytes = await file.read()
+    if not raw_bytes:
+        raise ApiError(400, "learning_upload_empty", "Uploaded file is empty")
+    service = LearningService()
+    upload = service.create_upload(
+        db,
+        reader_id=identity.profile_id,
+        file_name=file.filename or "upload.bin",
+        mime_type=file.content_type,
+        raw_bytes=raw_bytes,
+    )
+    db.commit()
+    return {"ok": True, "upload": serialize_upload(upload)}
 
 
 @router.post("/profiles", status_code=201)
@@ -88,6 +113,10 @@ def get_learning_profile_graph(
     db: Session = Depends(get_db),
 ) -> dict:
     profile = repository.require_owned_profile(db, profile_id=profile_id, reader_id=identity.profile_id)
+    service = LearningService()
+    live_graph = service.graph_service.get_profile_subgraph(profile_id=profile.id)
+    if live_graph is not None:
+        return {"ok": True, "graph": live_graph}
     if profile.active_path_version_id is None:
         return {"ok": True, "graph": {"provider": "fallback", "nodes": [], "edges": []}}
     active_path_version = repository.get_path_version(db, path_version_id=profile.active_path_version_id)
@@ -97,23 +126,19 @@ def get_learning_profile_graph(
     return {"ok": True, "graph": graph}
 
 
-@router.post("/profiles/{profile_id}/generate")
+@router.post("/profiles/{profile_id}/generate", status_code=202)
 def generate_learning_profile(
     profile_id: int,
     identity: AuthIdentity = Depends(require_reader),
     db: Session = Depends(get_db),
 ) -> dict:
     service = LearningService()
-    result = service.run_generation_pipeline(db, reader_id=identity.profile_id, profile_id=profile_id)
+    result = service.queue_generation(db, reader_id=identity.profile_id, profile_id=profile_id)
     db.commit()
     return {
         "ok": True,
-        "profile": serialize_profile(result["profile"]),
-        "assets": [serialize_asset(asset) for asset in result["assets"]],
+        "triggered": result["triggered"],
         "jobs": [serialize_job(job) for job in result["jobs"]],
-        "activePathVersion": serialize_path_version(result["active_path_version"], step_count=len(result["steps"])),
-        "steps": [serialize_path_step(step) for step in result["steps"]],
-        "graph": result["graph"],
     }
 
 
@@ -166,6 +191,25 @@ async def stream_learning_session(
     identity: AuthIdentity = Depends(require_reader),
     db: Session = Depends(get_db),
 ):
+    settings = get_settings()
+    if settings.learning_orchestrator_url:
+        base_url = settings.learning_orchestrator_url.rstrip("/")
+
+        async def proxy_stream():
+            async with httpx.AsyncClient(timeout=None) as client:
+                async with client.stream(
+                    "POST",
+                    f"{base_url}/internal/learning/sessions/{session_id}/stream",
+                    params={"reader_id": identity.profile_id},
+                    json={"content": payload.content},
+                ) as response:
+                    response.raise_for_status()
+                    async for chunk in response.aiter_bytes():
+                        if chunk:
+                            yield chunk
+
+        return StreamingResponse(proxy_stream(), media_type="text/event-stream")
+
     orchestrator = LearningOrchestrator()
     return sse_response(
         orchestrator.stream_session_reply(

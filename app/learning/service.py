@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -9,9 +10,14 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.errors import ApiError
+from app.db.base import utc_now
 from app.learning import repository
 from app.learning.graph import LearningGraphService
+from app.learning.llm_flow import LearningLLMWorkflow
+from app.learning.mineru import MinerUClient
 from app.learning.schemas import serialize_asset, serialize_fragment, serialize_path_step
+from app.learning.storage import LearningBlobStore
+from app.learning.web_fetch import UrlContentFetcher
 from app.recommendation.embeddings import build_book_embedding_text, build_embedding_provider
 
 try:
@@ -227,6 +233,38 @@ class LearningService:
         self.settings = settings or get_settings()
         self.embedding_provider = build_embedding_provider(self.settings)
         self.graph_service = LearningGraphService(self.settings)
+        self.llm_workflow = LearningLLMWorkflow(self.settings)
+        self.blob_store = LearningBlobStore(self.settings)
+        self.url_fetcher = UrlContentFetcher(self.settings)
+        self.mineru_client = MinerUClient(self.settings)
+
+    def create_upload(
+        self,
+        session: Session,
+        *,
+        reader_id: int,
+        file_name: str,
+        mime_type: str | None,
+        raw_bytes: bytes,
+    ):
+        safe_name = _safe_filename(file_name, fallback="upload.bin")
+        content_hash = hashlib.sha256(raw_bytes).hexdigest()
+        storage_path = self.blob_store.write_bytes(
+            key=f"uploads/reader_{reader_id}/{content_hash}/{safe_name}",
+            data=raw_bytes,
+            content_type=mime_type,
+        )
+        expires_at = utc_now() + timedelta(seconds=self.settings.learning_upload_ttl_seconds)
+        return repository.create_upload(
+            session,
+            reader_id=reader_id,
+            file_name=safe_name,
+            mime_type=mime_type,
+            storage_path=storage_path,
+            content_hash=content_hash,
+            expires_at=expires_at,
+            metadata_json={"size": len(raw_bytes)},
+        )
 
     def create_profile(
         self,
@@ -265,6 +303,39 @@ class LearningService:
         session.flush()
         return {"profile": profile, "source_bundle": bundle, "assets": assets, "jobs": jobs}
 
+    def queue_generation(
+        self,
+        session: Session,
+        *,
+        reader_id: int,
+        profile_id: int,
+    ) -> dict[str, Any]:
+        profile = repository.require_owned_profile(session, profile_id=profile_id, reader_id=reader_id)
+        jobs = list(repository.list_profile_jobs(session, profile_id=profile.id))
+        active_jobs = [job for job in jobs if job.status == "processing"]
+        if active_jobs:
+            return {"triggered": False, "jobs": jobs}
+
+        for job in jobs:
+            job.status = "processing"
+            job.error_message = None
+        profile.status = "queued"
+        session.flush()
+
+        if self.settings.learning_tasks_eager:
+            session.commit()
+            from app.learning.tasks import generate_learning_profile_task
+
+            generate_learning_profile_task(profile.id, reader_id)
+            session.expire_all()
+            refreshed_jobs = list(repository.list_profile_jobs(session, profile_id=profile.id))
+            return {"triggered": True, "jobs": refreshed_jobs}
+
+        from app.learning.tasks import generate_learning_profile_task
+
+        generate_learning_profile_task.delay(profile.id, reader_id)
+        return {"triggered": True, "jobs": jobs}
+
     def _create_asset(
         self,
         session: Session,
@@ -299,16 +370,12 @@ class LearningService:
             content = (source.get("content") or "").strip()
             if not content:
                 raise ApiError(400, "inline_text_empty", "Inline text content is required")
-            base_dir = ensure_learning_profile_storage_dir(
-                settings=self.settings,
-                reader_id=reader_id,
-                profile_id=profile_id,
-            )
-            uploads_dir = base_dir / "uploads"
-            uploads_dir.mkdir(parents=True, exist_ok=True)
             file_name = _safe_filename(source.get("fileName"), fallback="source.md")
-            target = uploads_dir / file_name
-            target.write_text(content, encoding="utf-8")
+            target = self.blob_store.write_text(
+                key=f"profiles/reader_{reader_id}/profile_{profile_id}/uploads/{file_name}",
+                text=content,
+                content_type=source.get("mimeType") or "text/markdown",
+            )
             return repository.create_source_asset(
                 session,
                 bundle_id=bundle_id,
@@ -318,6 +385,39 @@ class LearningService:
                 storage_path=str(target),
                 content_hash=hashlib.sha256(content.encode("utf-8")).hexdigest(),
                 metadata_json={"sourceKind": "inline_text", "size": len(content)},
+            )
+
+        if kind == "upload":
+            upload_id = source.get("uploadId")
+            if upload_id is None:
+                raise ApiError(400, "upload_id_required", "Upload source requires uploadId")
+            upload = repository.require_owned_upload(session, upload_id=int(upload_id), reader_id=reader_id)
+            upload.consumed_at = utc_now()
+            return repository.create_source_asset(
+                session,
+                bundle_id=bundle_id,
+                asset_kind="upload",
+                mime_type=upload.mime_type,
+                file_name=upload.file_name,
+                storage_path=upload.storage_path,
+                content_hash=upload.content_hash,
+                metadata_json={"sourceKind": "upload", "uploadId": upload.id},
+            )
+
+        if kind == "url":
+            url = str(source.get("url") or "").strip()
+            if not url:
+                raise ApiError(400, "learning_url_required", "URL source requires url")
+            title = (source.get("title") or source.get("fileName") or "web-page").strip()
+            return repository.create_source_asset(
+                session,
+                bundle_id=bundle_id,
+                asset_kind="url",
+                mime_type="text/html",
+                file_name=_safe_filename(title, fallback="web-page") + ".html",
+                storage_path=url,
+                content_hash=hashlib.sha256(url.encode("utf-8")).hexdigest(),
+                metadata_json={"sourceKind": "url", "title": title, "url": url},
             )
 
         raise ApiError(400, "unsupported_learning_source", f"Unsupported learning source kind: {kind}")
@@ -366,7 +466,7 @@ class LearningService:
                 chunk_job.error_message = None
 
             combined_text = "\n\n".join(combined_texts)
-            planned = plan_learning_path(
+            planned = self._plan_learning_path(
                 title=profile.title,
                 goal_mode=profile.goal_mode,
                 difficulty_mode=profile.difficulty_mode,
@@ -374,6 +474,7 @@ class LearningService:
             )
             steps = planned["steps"]
             graph_result = self.graph_service.build_snapshot(
+                profile_id=profile.id,
                 profile_title=profile.title,
                 assets=[serialize_asset(asset) for asset in assets],
                 fragments=all_fragments,
@@ -426,6 +527,29 @@ class LearningService:
             session.flush()
             raise
 
+    def _plan_learning_path(
+        self,
+        *,
+        title: str,
+        goal_mode: str,
+        difficulty_mode: str,
+        combined_text: str,
+    ) -> dict[str, Any]:
+        llm_plan = self.llm_workflow.plan_path(
+            title=title,
+            goal_mode=goal_mode,
+            difficulty_mode=difficulty_mode,
+            combined_text=combined_text,
+        )
+        if llm_plan is not None:
+            return llm_plan
+        return plan_learning_path(
+            title=title,
+            goal_mode=goal_mode,
+            difficulty_mode=difficulty_mode,
+            combined_text=combined_text,
+        )
+
     def _prepare_asset_text(self, session: Session, *, profile, asset) -> str:
         if asset.asset_kind == "book":
             if asset.book_id is None:
@@ -453,26 +577,54 @@ class LearningService:
         if asset.asset_kind == "inline_text":
             if not asset.storage_path:
                 raise RuntimeError("Inline text asset is missing storage_path")
-            path = Path(asset.storage_path)
-            if not path.exists():
-                raise RuntimeError("Inline text source file not found")
-            text = path.read_text(encoding="utf-8")
+            text = self.blob_store.read_text(asset.storage_path)
             self._persist_asset_text(profile=profile, asset=asset, text=text)
+            asset.parse_status = "parsed"
+            return text
+
+        if asset.asset_kind == "upload":
+            if not asset.storage_path:
+                raise RuntimeError("Upload asset is missing storage_path")
+            text = self._extract_text_from_blob(
+                storage_path=asset.storage_path,
+                file_name=asset.file_name,
+                mime_type=asset.mime_type,
+            )
+            self._persist_asset_text(profile=profile, asset=asset, text=text)
+            asset.parse_status = "parsed"
+            return text
+
+        if asset.asset_kind == "url":
+            url = asset.storage_path or (asset.metadata_json or {}).get("url")
+            if not url:
+                raise RuntimeError("URL asset is missing source URL")
+            fetched = self.url_fetcher.fetch(url)
+            title = ((asset.metadata_json or {}).get("title") or fetched.get("title") or asset.file_name or "网页资料").strip()
+            text = "\n".join(
+                [
+                    f"# {title}",
+                    "",
+                    fetched["content"],
+                ]
+            ).strip()
+            self._persist_asset_text(profile=profile, asset=asset, text=text)
+            asset.metadata_json = {
+                **(asset.metadata_json or {}),
+                "title": title,
+                "finalUrl": fetched["url"],
+                "sourceMimeType": fetched["mime_type"],
+            }
             asset.parse_status = "parsed"
             return text
 
         raise RuntimeError(f"Unsupported asset kind: {asset.asset_kind}")
 
     def _persist_asset_text(self, *, profile, asset, text: str) -> None:
-        base_dir = ensure_learning_profile_storage_dir(
-            settings=self.settings,
-            reader_id=profile.reader_id,
-            profile_id=profile.id,
+        target = self.blob_store.write_text(
+            key=f"profiles/reader_{profile.reader_id}/profile_{profile.id}/sources/extracted_{asset.id}.md",
+            text=text,
+            content_type="text/markdown",
         )
-        target_dir = base_dir / "sources"
-        target_dir.mkdir(parents=True, exist_ok=True)
-        target = target_dir / f"extracted_{asset.id}.md"
-        target.write_text(text, encoding="utf-8")
         asset.extracted_text_path = str(target)
 
     def _build_book_source_text(self, book) -> str:
@@ -492,15 +644,67 @@ class LearningService:
 
     def _extract_text_from_book_source_document(self, source_document) -> str:
         if source_document.extracted_text_path:
-            extracted_path = Path(source_document.extracted_text_path)
-            if extracted_path.exists():
-                return extracted_path.read_text(encoding="utf-8")
+            return self.blob_store.read_text(source_document.extracted_text_path)
         if source_document.storage_path:
-            raw_path = Path(source_document.storage_path)
-            if raw_path.exists():
-                if raw_path.suffix.lower() in {".txt", ".md", ".markdown"}:
-                    return raw_path.read_text(encoding="utf-8")
+            return self._extract_text_from_blob(
+                storage_path=source_document.storage_path,
+                file_name=source_document.file_name,
+                mime_type=source_document.mime_type,
+            )
         raise RuntimeError("Book source document does not have readable extracted text")
+
+    def _extract_text_from_blob(
+        self,
+        *,
+        storage_path: str,
+        file_name: str | None,
+        mime_type: str | None,
+    ) -> str:
+        suffix = Path(file_name or storage_path).suffix.lower()
+        if suffix in {".md", ".markdown", ".txt"}:
+            return self.blob_store.read_text(storage_path)
+        if suffix in {".html", ".htm"}:
+            html = self.blob_store.read_text(storage_path)
+            return html
+        if suffix == ".pdf":
+            try:
+                from pypdf import PdfReader  # type: ignore
+
+                raw_path = storage_path
+                if raw_path.startswith("s3://"):
+                    temp_path = ensure_learning_profile_storage_dir(
+                        settings=self.settings,
+                        reader_id=0,
+                        profile_id=0,
+                    ) / "tmp_source.pdf"
+                    temp_path.write_bytes(self.blob_store.read_bytes(raw_path))
+                    reader = PdfReader(str(temp_path))
+                else:
+                    reader = PdfReader(str(raw_path))
+                page_texts = [(page.extract_text() or "").strip() for page in reader.pages]
+                text = "\n\n".join(item for item in page_texts if item)
+                if text:
+                    return text
+            except Exception:
+                pass
+        if suffix in {".docx", ".pptx", ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".pdf"} and self.mineru_client.is_enabled():
+            local_path = self._materialize_local_source(storage_path=storage_path, file_name=file_name)
+            parsed = self.mineru_client.parse_path(local_path)
+            results = parsed.get("results") or {}
+            first_payload = next(iter(results.values()), {})
+            md_content = first_payload.get("md_content")
+            if md_content:
+                return str(md_content)
+        raise RuntimeError(f"Unsupported source type for extraction: {mime_type or suffix or 'unknown'}")
+
+    def _materialize_local_source(self, *, storage_path: str, file_name: str | None) -> str:
+        if not storage_path.startswith("s3://"):
+            return storage_path
+        temp_dir = ensure_learning_profile_storage_dir(settings=self.settings, reader_id=0, profile_id=0) / "tmp"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        target = temp_dir / _safe_filename(file_name, fallback="source.bin")
+        target.write_bytes(self.blob_store.read_bytes(storage_path))
+        return str(target)
 
     def _build_fragments(self, text: str) -> list[dict[str, Any]]:
         chunks = chunk_text(
@@ -537,6 +741,7 @@ class LearningService:
 class LearningBridgeService:
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
+        self.embedding_provider = build_embedding_provider(self.settings)
 
     def expand_step_to_explore(
         self,
@@ -649,6 +854,7 @@ class LearningBridgeService:
             content=content or summary or title,
             citations_json=turn.citations_json or [],
             related_concepts_json=turn.related_concepts_json or [],
+            embedding=self.embedding_provider.embed_texts([content or summary or title])[0],
             metadata_json={
                 "bridgeSource": "explore",
                 "focusContext": getattr(explore_session, "focus_context_json", None) or {},

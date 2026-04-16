@@ -56,6 +56,9 @@ class NullLLMProvider:
         }
 
     def chat(self, *, text: str, context: dict) -> str:
+        instruction = (context or {}).get("instruction")
+        if instruction:
+            return f"根据当前资料，我先给出一个保守回答：{text[:80]}。"
         available_titles = context.get("inventory", {}).get("available_titles", [])
         if available_titles:
             return f"可以先看看这些书：{'、'.join(available_titles[:3])}。"
@@ -208,16 +211,18 @@ class OpenAICompatibleLLMProvider:
         return text.strip() or candidate.explanation
 
     def chat(self, *, text: str, context: dict) -> str:
+        system_prompt = context.get("systemPrompt") or "You are a helpful library assistant. Reply in Chinese."
+        instruction = context.get("instruction") or "Reply in Chinese with one concise helpful sentence for a library reader."
         prompt = {
             "text": text,
-            "context": context,
-            "instruction": "Reply in Chinese with one concise helpful sentence for a library reader.",
+            "context": {key: value for key, value in context.items() if key not in {"systemPrompt", "instruction"}},
+            "instruction": instruction,
         }
         reply = self._chat(
             [
                 {
                     "role": "system",
-                    "content": "You are a helpful library assistant. Reply in Chinese.",
+                    "content": system_prompt,
                 },
                 {
                     "role": "user",
