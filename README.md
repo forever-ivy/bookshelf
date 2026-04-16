@@ -70,6 +70,81 @@
 
 ## 快速开始
 
+## 第一次 clone 推荐流程
+
+如果你是第一次在一台新机器上拉这个项目，并且要运行当前 `service` 分支，建议按下面顺序做。
+
+### 1. 拉代码并切到 `service` 分支
+
+```bash
+git clone <仓库地址> bookshelf-service
+cd bookshelf-service
+git checkout service
+```
+
+如果你已经在本地 clone 过仓库，只需要确认当前分支是 `service` 即可。
+
+### 2. 安装依赖
+
+```bash
+uv sync
+```
+
+### 3. 启动 PostgreSQL + pgvector
+
+```bash
+docker compose -f docker-compose.pgvector.yml up -d
+```
+
+默认数据库：
+
+- host: `127.0.0.1`
+- port: `55432`
+- db: `service`
+- user: `library`
+- password: `library`
+
+默认连接串：
+
+```text
+postgresql+psycopg://library:library@localhost:55432/service
+```
+
+### 4. 恢复标准演示数据库，或初始化空库
+
+如果仓库里已经带了标准演示数据库快照 `data/demo/service-demo.dump`，第一次 clone 推荐直接恢复，这样你的数据库内容会和当前标准演示库保持一致：
+
+```bash
+uv run python scripts/bootstrap_demo_database.py --reset
+```
+
+如果当前没有快照文件，就先初始化空库：
+
+```bash
+uv run python scripts/init_postgres.py
+```
+
+### 5. 启动后端服务
+
+```bash
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### 6. 验证第一次启动是否成功
+
+至少先检查下面三个地址：
+
+- `http://127.0.0.1:8000/api/v1/health`
+- `http://127.0.0.1:8000/docs`
+- `http://127.0.0.1:8000/openapi.json`
+
+### 7. 如果后面要联调前端
+
+- `admin` 分支默认访问 `http://127.0.0.1:8000`
+- `app` 分支默认也访问 `http://127.0.0.1:8000`
+
+也就是说，只要这个分支先跑起来，两个前端分支就可以继续往下接。
+
 ### 1. 安装依赖
 
 ```bash
@@ -102,13 +177,33 @@ postgresql+psycopg://library:library@localhost:55432/service
 uv run python scripts/init_postgres.py
 ```
 
-### 4. 启动服务
+### 4. 导出当前演示数据库快照（可选）
+
+如果你想把**当前这份 PostgreSQL 数据**原样带到另一台机器，而不是重新 seed 一份近似数据，可以先导出标准快照：
+
+```bash
+uv run python scripts/export_demo_snapshot.py
+```
+
+默认输出路径：
+
+```text
+data/demo/service-demo.dump
+```
+
+如果 `pg_dump` 不在 `PATH` 里，可以额外指定 PostgreSQL 客户端目录：
+
+```bash
+LIBRARY_POSTGRES_BIN_DIR=/opt/homebrew/opt/libpq/bin uv run python scripts/export_demo_snapshot.py
+```
+
+### 5. 启动服务
 
 ```bash
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 5. 验证服务
+### 6. 验证服务
 
 - Swagger UI: `http://127.0.0.1:8000/docs`
 - OpenAPI: `http://127.0.0.1:8000/openapi.json`
@@ -134,6 +229,7 @@ uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 | `LIBRARY_EMBEDDING_BASE_URL` | embedding base URL | 空 |
 | `LIBRARY_BOOK_SOURCE_STORAGE_DIR` | 图书源文件存储目录 | `artifacts/book-sources` |
 | `LIBRARY_LEARNING_STORAGE_DIR` | 学习资料存储目录 | `artifacts/learning` |
+| `LIBRARY_POSTGRES_BIN_DIR` | `pg_dump/pg_restore/psql` 所在目录 | 自动探测 |
 
 补充说明：
 
@@ -148,6 +244,36 @@ uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```bash
 uv run python scripts/init_postgres.py
 ```
+
+### 导出当前演示数据库快照
+
+```bash
+uv run python scripts/export_demo_snapshot.py
+```
+
+### 一键恢复当前演示数据库快照
+
+```bash
+uv run python scripts/bootstrap_demo_database.py --reset
+```
+
+这条命令会：
+
+1. 确保目标数据库存在
+2. 清理现有对象
+3. 从 `data/demo/service-demo.dump` 恢复完整结构和数据
+
+如果你只想手动恢复，也可以：
+
+```bash
+uv run python scripts/restore_demo_snapshot.py --reset
+```
+
+说明：
+
+- 这套流程恢复的是**当前 PostgreSQL 的精确快照**，不是重新 seed 的近似数据。
+- 要让远端 clone 后可以直接一键恢复，仓库里需要先有 `data/demo/service-demo.dump` 这份标准快照。
+- 推荐做法是：在拥有当前数据库的机器上先执行 `export_demo_snapshot.py`，再把生成的 dump 文件一并分发。
 
 ### 导入图书数据
 
