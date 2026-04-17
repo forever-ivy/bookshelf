@@ -16,3 +16,7 @@ tmp_*.db
 !.env.example
 !.env.*.example
 .wake.lock
+.DS_Store
+
+# generated runtime artifacts
+artifacts/learning/

@@ -227,6 +227,7 @@ async def stream_learning_session(
     identity: AuthIdentity = Depends(require_reader),
     db: Session = Depends(get_db),
 ):
+    repository.require_owned_session(db, session_id=session_id, reader_id=identity.profile_id)
     settings = get_settings()
     if settings.learning_orchestrator_url:
         base_url = settings.learning_orchestrator_url.rstrip("/")

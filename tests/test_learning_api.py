@@ -35,6 +35,14 @@ def seed_reader_with_book() -> dict[str, int]:
         session.add(owner_profile)
         session.flush()
 
+        other_account = ReaderAccount(username="learning-other", password_hash=hash_password("other-pass"))
+        session.add(other_account)
+        session.flush()
+
+        other_profile = ReaderProfile(account_id=other_account.id, display_name="Learning Other")
+        session.add(other_profile)
+        session.flush()
+
         book = Book(
             title="操作系统实验导学",
             author="林老师",
@@ -47,6 +55,8 @@ def seed_reader_with_book() -> dict[str, int]:
         return {
             "owner_account_id": owner_account.id,
             "owner_profile_id": owner_profile.id,
+            "other_account_id": other_account.id,
+            "other_profile_id": other_profile.id,
             "book_id": book.id,
         }
     finally:
@@ -486,6 +496,41 @@ def test_learning_session_stream_emits_multi_agent_events_and_progress(client):
     turns_response = client.get(f"/api/v2/learning/sessions/{learning_session_id}/turns", headers=headers)
     assert turns_response.status_code == 200
     assert len(turns_response.json()["items"]) == 1
+
+
+def test_learning_session_stream_forbidden_reader_returns_403_before_stream_starts(client):
+    state = seed_reader_with_book()
+    owner_headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
+    other_headers = reader_headers(state["other_account_id"], state["other_profile_id"])
+
+    create_response = client.post(
+        "/api/v2/learning/profiles",
+        headers=owner_headers,
+        json={
+            "title": "操作系统导学空间",
+            "goalMode": "preview",
+            "difficultyMode": "guided",
+            "sources": [{"kind": "book", "bookId": state["book_id"]}],
+        },
+    )
+    profile_id = create_response.json()["profile"]["id"]
+    client.post(f"/api/v2/learning/profiles/{profile_id}/generate", headers=owner_headers)
+
+    session_response = client.post(
+        "/api/v2/learning/sessions",
+        headers=owner_headers,
+        json={"profileId": profile_id, "learningMode": "preview"},
+    )
+    learning_session_id = session_response.json()["session"]["id"]
+
+    response = client.post(
+        f"/api/v2/learning/sessions/{learning_session_id}/stream",
+        headers=other_headers,
+        json={"content": "我想问一个问题。"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "learning_session_forbidden"
 
 
 def test_learning_session_creates_remediation_plan_for_weak_answer(client):
