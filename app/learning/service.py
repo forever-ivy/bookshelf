@@ -15,6 +15,7 @@ from app.learning import repository
 from app.learning.graph import LearningGraphService
 from app.learning.llm_flow import LearningLLMWorkflow
 from app.learning.mineru import MinerUClient
+from app.learning.runtime import LearningRuntimeProbe
 from app.learning.schemas import serialize_asset, serialize_fragment, serialize_path_step
 from app.learning.storage import LearningBlobStore
 from app.learning.web_fetch import UrlContentFetcher
@@ -237,6 +238,7 @@ class LearningService:
         self.blob_store = LearningBlobStore(self.settings)
         self.url_fetcher = UrlContentFetcher(self.settings)
         self.mineru_client = MinerUClient(self.settings)
+        self.runtime_probe = LearningRuntimeProbe(self.settings)
 
     def create_upload(
         self,
@@ -315,6 +317,7 @@ class LearningService:
         active_jobs = [job for job in jobs if job.status == "processing"]
         if active_jobs:
             return {"triggered": False, "jobs": jobs}
+        self.runtime_probe.assert_generation_runtime_available()
 
         for job in jobs:
             job.status = "processing"

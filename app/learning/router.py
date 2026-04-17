@@ -83,6 +83,33 @@ def create_learning_profile(
     }
 
 
+@router.get("/profiles")
+def list_learning_profiles(
+    identity: AuthIdentity = Depends(require_reader),
+    db: Session = Depends(get_db),
+) -> dict:
+    items = []
+    for profile in repository.list_owned_profiles(db, reader_id=identity.profile_id):
+        assets = list(repository.list_bundle_assets(db, bundle_id=profile.source_bundle_id))
+        jobs = list(repository.list_profile_jobs(db, profile_id=profile.id))
+        active_path_version = (
+            None
+            if profile.active_path_version_id is None
+            else repository.get_path_version(db, path_version_id=profile.active_path_version_id)
+        )
+        steps = [] if active_path_version is None else repository.list_path_steps(db, path_version_id=active_path_version.id)
+        latest_job = max(jobs, key=lambda job: (job.updated_at or job.created_at, job.id), default=None)
+        items.append(
+            {
+                "profile": serialize_profile(profile),
+                "latestJob": None if latest_job is None else serialize_job(latest_job),
+                "primaryAsset": None if not assets else serialize_asset(assets[0]),
+                "stepCount": len(steps),
+            }
+        )
+    return {"ok": True, "items": items}
+
+
 @router.get("/profiles/{profile_id}")
 def get_learning_profile(
     profile_id: int,
@@ -172,6 +199,15 @@ def create_learning_session(
         "session": serialize_session(learning_session),
         "firstStep": None if first_step is None else serialize_path_step(first_step),
     }
+
+
+@router.get("/sessions")
+def list_learning_sessions(
+    identity: AuthIdentity = Depends(require_reader),
+    db: Session = Depends(get_db),
+) -> dict:
+    sessions = repository.list_owned_sessions(db, reader_id=identity.profile_id)
+    return {"ok": True, "items": [serialize_session(item) for item in sessions]}
 
 
 @router.get("/sessions/{session_id}")

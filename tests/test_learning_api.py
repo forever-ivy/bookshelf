@@ -3,9 +3,13 @@ from __future__ import annotations
 import json
 from io import BytesIO
 
+from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from app.catalog.models import Book
+from app.core.database import init_engine, init_schema, reset_engine
+from app.core.errors import ApiError
+from app.core.config import get_settings
 from app.core.database import get_session_factory
 from app.core.security import AuthIdentity, create_token, hash_password
 from app.readers.models import ReaderAccount, ReaderProfile
@@ -57,6 +61,8 @@ def parse_sse_lines(lines: list[str]) -> list[dict]:
             continue
         events.append(json.loads(line[6:]))
     return events
+
+
 def test_create_learning_profile_from_book_returns_bundle_and_jobs(client):
     state = seed_reader_with_book()
     headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
@@ -244,6 +250,127 @@ def test_learning_url_source_generates_profile_from_html_page(client, monkeypatc
     assert detail_payload["assets"][0]["assetKind"] == "url"
     assert detail_payload["assets"][0]["metadata"]["sourceKind"] == "url"
     assert detail_payload["activePathVersion"]["stepCount"] >= 3
+
+
+def test_generate_learning_profile_returns_503_when_runtime_unavailable(monkeypatch, tmp_path):
+    db_path = tmp_path / "learning-runtime.db"
+    monkeypatch.setenv("LIBRARY_DATABASE_URL", f"sqlite+pysqlite:///{db_path}")
+    monkeypatch.setenv("LIBRARY_AUTO_CREATE_SCHEMA", "true")
+    monkeypatch.setenv("LIBRARY_LLM_PROVIDER", "null")
+    monkeypatch.setenv("LIBRARY_RECOMMENDATION_ML_ENABLED", "false")
+    monkeypatch.setenv("LIBRARY_LEARNING_TASKS_EAGER", "false")
+    monkeypatch.setenv("LIBRARY_LEARNING_STORAGE_DIR", str(tmp_path / "learning-storage"))
+    get_settings.cache_clear()
+    reset_engine()
+
+    from app.main import create_app
+
+    settings = get_settings()
+    init_engine(settings)
+    init_schema()
+    test_client = TestClient(create_app())
+
+    monkeypatch.setattr(
+        "app.learning.runtime.LearningRuntimeProbe.assert_generation_runtime_available",
+        lambda self: (_ for _ in ()).throw(
+            ApiError(
+                503,
+                "learning_runtime_unavailable",
+                "Learning runtime is unavailable: redis queue unavailable; celery worker unavailable",
+            )
+        ),
+    )
+
+    state = seed_reader_with_book()
+    headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
+
+    create_response = test_client.post(
+        "/api/v2/learning/profiles",
+        headers=headers,
+        json={
+            "title": "运行时异常导学空间",
+            "goalMode": "preview",
+            "difficultyMode": "guided",
+            "sources": [{"kind": "book", "bookId": state["book_id"]}],
+        },
+    )
+    profile_id = create_response.json()["profile"]["id"]
+
+    generate_response = test_client.post(
+        f"/api/v2/learning/profiles/{profile_id}/generate",
+        headers=headers,
+    )
+
+    assert generate_response.status_code == 503
+    assert generate_response.json()["error"]["code"] == "learning_runtime_unavailable"
+
+    detail_response = test_client.get(f"/api/v2/learning/profiles/{profile_id}", headers=headers)
+    detail_payload = detail_response.json()
+    assert detail_payload["profile"]["status"] == "queued"
+    assert all(job["attemptCount"] == 0 for job in detail_payload["jobs"])
+    assert all(job["status"] == "queued" for job in detail_payload["jobs"])
+
+
+def test_list_learning_profiles_returns_latest_job_primary_asset_and_step_count(client):
+    state = seed_reader_with_book()
+    headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
+
+    create_response = client.post(
+        "/api/v2/learning/profiles",
+        headers=headers,
+        json={
+            "title": "资料列表导学空间",
+            "goalMode": "preview",
+            "difficultyMode": "guided",
+            "sources": [{"kind": "book", "bookId": state["book_id"]}],
+        },
+    )
+    profile_id = create_response.json()["profile"]["id"]
+    client.post(f"/api/v2/learning/profiles/{profile_id}/generate", headers=headers)
+
+    response = client.get("/api/v2/learning/profiles", headers=headers)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    item = next(entry for entry in payload["items"] if entry["profile"]["id"] == profile_id)
+    assert item["profile"]["title"] == "资料列表导学空间"
+    assert item["latestJob"]["jobType"] in {"parse", "chunk", "graph_build", "plan_generate"}
+    assert item["primaryAsset"]["assetKind"] == "book"
+    assert item["stepCount"] >= 3
+
+
+def test_list_learning_sessions_returns_owned_sessions(client):
+    state = seed_reader_with_book()
+    headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
+
+    create_response = client.post(
+        "/api/v2/learning/profiles",
+        headers=headers,
+        json={
+            "title": "会话列表导学空间",
+            "goalMode": "preview",
+            "difficultyMode": "guided",
+            "sources": [{"kind": "book", "bookId": state["book_id"]}],
+        },
+    )
+    profile_id = create_response.json()["profile"]["id"]
+    client.post(f"/api/v2/learning/profiles/{profile_id}/generate", headers=headers)
+    session_response = client.post(
+        "/api/v2/learning/sessions",
+        headers=headers,
+        json={"profileId": profile_id, "learningMode": "preview"},
+    )
+    created_session = session_response.json()["session"]
+
+    response = client.get("/api/v2/learning/sessions", headers=headers)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    item = next(entry for entry in payload["items"] if entry["id"] == created_session["id"])
+    assert item["profileId"] == profile_id
+    assert item["sessionKind"] == "guide"
 
 
 def test_learning_session_stream_emits_multi_agent_events_and_progress(client):

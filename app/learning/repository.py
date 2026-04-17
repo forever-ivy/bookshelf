@@ -110,6 +110,15 @@ def require_owned_profile(session: Session, *, profile_id: int, reader_id: int) 
     return profile
 
 
+def list_owned_profiles(session: Session, *, reader_id: int) -> Sequence[LearningProfile]:
+    statement = (
+        select(LearningProfile)
+        .where(LearningProfile.reader_id == reader_id)
+        .order_by(LearningProfile.updated_at.desc(), LearningProfile.id.desc())
+    )
+    return session.execute(statement).scalars().all()
+
+
 def create_source_asset(
     session: Session,
     *,
@@ -405,6 +414,16 @@ def require_owned_session(session: Session, *, session_id: int, reader_id: int) 
     if profile is None or profile.reader_id != reader_id:
         raise ApiError(403, "learning_session_forbidden", "Learning session does not belong to the current reader")
     return learning_session
+
+
+def list_owned_sessions(session: Session, *, reader_id: int) -> Sequence[LearningSession]:
+    statement = (
+        select(LearningSession)
+        .join(LearningProfile, LearningProfile.id == LearningSession.profile_id)
+        .where(LearningProfile.reader_id == reader_id)
+        .order_by(LearningSession.updated_at.desc(), LearningSession.id.desc())
+    )
+    return session.execute(statement).scalars().all()
 
 
 def create_turn(

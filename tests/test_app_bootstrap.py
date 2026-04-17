@@ -5,6 +5,7 @@ from pathlib import Path
 from sqlalchemy import create_engine, inspect, text
 
 from app.core.database import init_engine, init_schema, reset_engine
+from app.learning.runtime import LearningRuntimeStatus
 
 
 def test_healthcheck_reports_database_and_modules(client):
@@ -15,6 +16,28 @@ def test_healthcheck_reports_database_and_modules(client):
     assert response.json()["database"] == "ok"
     assert "auth" in response.json()["modules"]
     assert "robot_sim" in response.json()["modules"]
+
+
+def test_healthcheck_includes_learning_runtime_diagnostics(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.system.router.LearningRuntimeProbe.snapshot",
+        lambda self: LearningRuntimeStatus(
+            mode="async",
+            queue="ok",
+            worker="ok",
+            orchestrator="not_configured",
+        ),
+    )
+
+    response = client.get("/api/v1/health")
+
+    assert response.status_code == 200
+    assert response.json()["learning"] == {
+        "mode": "async",
+        "queue": "ok",
+        "worker": "ok",
+        "orchestrator": "not_configured",
+    }
 
 
 def test_root_page_provides_entry_links(client):
