@@ -162,9 +162,9 @@ export function DashboardPage() {
         description="看送书、机器人和书柜现在是什么状态。"
       />
 
-      <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+      <div className="space-y-6">
         <WorkspacePanel title="送书和机器人" description="先看机器人是否在线，以及现在还有多少异常没处理。">
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
             <div className="rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.3)] px-5 py-5">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">在线机器人</p>
               <p className="mt-3 text-[2.6rem] font-semibold tracking-[-0.07em] text-[var(--foreground)]">{overview.robots.online}</p>
@@ -186,29 +186,39 @@ export function DashboardPage() {
           {cabinets.length === 0 ? (
             <EmptyState title="没有找到内容" description="换个条件再试试。" />
           ) : (
-            <div className="space-y-3">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {cabinets.map((cabinet) => (
                 <div
                   key={cabinet.id}
-                  className="rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.3)] px-5 py-4"
+                  className="flex flex-col justify-between rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.3)] px-5 py-5"
                 >
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex items-start justify-between gap-4">
                     <div className="flex items-start gap-3">
-                      <Flame className="mt-1 size-4 text-[var(--primary)]" />
+                      <Flame className="mt-0.5 size-4 flex-shrink-0 text-[var(--primary)]" />
                       <div>
                         <p className="font-semibold text-[var(--foreground)]">{cabinet.name}</p>
-                        <p className="mt-1 text-sm leading-6 text-[var(--muted-foreground)]">
+                        <p className="mt-1 text-[13px] leading-6 text-[var(--muted-foreground)]">
                           {cabinet.location ?? '还没填写位置'}
                         </p>
                       </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-3 lg:justify-end">
+                    <div className="flex-shrink-0">
                       <StatusBadge status={cabinet.status} />
-                      <span className="rounded-full border border-[var(--line-subtle)] bg-[var(--surface-panel)] px-3 py-1.5 text-sm font-medium text-[var(--foreground)]">
-                        已占用 {cabinet.occupied_slots}/{cabinet.slot_total}
-                      </span>
-                      <span className="text-sm text-[var(--muted-foreground)]">异常 {cabinet.open_alert_count}</span>
                     </div>
+                  </div>
+                  <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-[var(--line-subtle)] pt-4">
+                    <span className="rounded-full border border-[var(--line-subtle)] bg-[var(--surface-panel)] px-3 py-1.5 text-[13px] font-medium text-[var(--foreground)]">
+                      已占用 {cabinet.occupied_slots}/{cabinet.slot_total}
+                    </span>
+                    {cabinet.open_alert_count > 0 ? (
+                      <span className="rounded-full border border-[var(--destructive)/20] bg-[calc(var(--destructive)*0.1)] px-3 py-1.5 text-[13px] font-medium text-[var(--destructive)]">
+                        异常 {cabinet.open_alert_count}
+                      </span>
+                    ) : (
+                      <span className="rounded-full border border-[var(--line-subtle)] bg-[var(--surface-panel)] px-3 py-1.5 text-[13px] font-medium text-[var(--muted-foreground)]">
+                        异常 0
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}

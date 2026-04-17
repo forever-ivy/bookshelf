@@ -11,7 +11,6 @@ import { LoadingState } from '@/components/shared/loading-state'
 import { PageShell } from '@/components/shared/page-shell'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -65,16 +64,18 @@ function SummaryBlock({
   label,
   value,
   meta,
+  className = '',
 }: {
   label: string
   value: React.ReactNode
   meta?: string
+  className?: string
 }) {
   return (
-    <div className="rounded-[1.5rem] border border-[var(--line-subtle)] bg-[var(--surface-bright)] p-5">
-      <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">{label}</p>
-      <div className="mt-3">{value}</div>
-      {meta ? <p className="mt-3 text-sm text-[var(--muted-foreground)]">{meta}</p> : null}
+    <div className={`rounded-[1.25rem] border border-[var(--line-subtle)] bg-white p-5 shadow-sm transition-colors hover:border-[var(--line-strong)] flex flex-col ${className}`}>
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-3 shrink-0">{label}</p>
+      <div className="text-[14px] font-semibold text-[var(--foreground)]">{value}</div>
+      {meta ? <p className="mt-auto pt-4 text-[12px] text-[var(--muted-foreground)] leading-relaxed">{meta}</p> : null}
     </div>
   )
 }
@@ -87,9 +88,9 @@ function DataBlock({
   value: React.ReactNode
 }) {
   return (
-    <div className="space-y-2 rounded-[1.5rem] border border-[var(--line-subtle)] bg-[var(--surface-bright)] p-5">
-      <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">{label}</p>
-      <div className="text-base font-medium text-[var(--foreground)]">{value}</div>
+    <div className="space-y-2 rounded-[1.25rem] border border-[var(--line-subtle)] bg-white p-5 shadow-sm transition-colors hover:border-[var(--line-strong)]">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">{label}</p>
+      <div className="text-[14px] font-bold text-[var(--foreground)] pt-1">{value}</div>
     </div>
   )
 }
@@ -240,46 +241,46 @@ export function OrderDetailPage() {
       description="查看这个订单现在到哪一步了。"
       statusLine="订单详情"
     >
-      <div className="flex flex-wrap gap-3">
+      <div className="mb-6 flex flex-wrap gap-2.5">
         <Button
           asChild
-          variant="default"
-          className={filledPrimaryActionButtonClassName}
+          variant="secondary"
+          className="h-8 rounded-full bg-[var(--foreground)] text-[var(--background)] px-4 font-medium text-[12px] hover:opacity-90 hover:bg-[var(--foreground)] transition-opacity shadow-none [&>a]:text-[var(--background)]"
         >
           <Link to="/orders">返回订单列表</Link>
         </Button>
         <Button
-          variant="outline"
-          className={tonalPrimaryActionButtonClassName}
+          variant="secondary"
+          className="h-8 rounded-full bg-white border border-[var(--line-subtle)] px-4 font-medium text-[12px] text-[var(--foreground)] hover:bg-[var(--surface-container)] transition-colors shadow-none"
           onClick={() => setActiveDialog('status')}
         >
           改状态
         </Button>
         <Button
-          variant="outline"
-          className={tonalPrimaryActionButtonClassName}
+          variant="secondary"
+          className="h-8 rounded-full bg-white border border-[var(--line-subtle)] px-4 font-medium text-[12px] text-[var(--foreground)] hover:bg-[var(--surface-container)] transition-colors shadow-none"
           onClick={() => setActiveDialog('priority')}
         >
           调整优先级
         </Button>
         <Button
-          variant="outline"
-          className={tonalPrimaryActionButtonClassName}
+          variant="secondary"
+          className="h-8 rounded-full bg-white border border-[var(--line-subtle)] px-4 font-medium text-[12px] text-[var(--foreground)] hover:bg-[var(--surface-container)] transition-colors shadow-none"
           onClick={() => setActiveDialog('intervention')}
         >
           人工跟进
         </Button>
         <Button
-          variant="outline"
-          className={tonalPrimaryActionButtonClassName}
+          variant="secondary"
+          className="h-8 rounded-full bg-white border border-[var(--line-subtle)] px-4 font-medium text-[12px] text-[var(--foreground)] hover:bg-[var(--surface-container)] transition-colors shadow-none"
           onClick={() => setActiveDialog('retry')}
         >
           重新处理
         </Button>
         {returnRequests.length > 0 ? (
           <Button
-            variant="outline"
-            className={tonalPrimaryActionButtonClassName}
+            variant="secondary"
+            className="h-8 rounded-full bg-white border border-[var(--line-subtle)] px-4 font-medium text-[12px] text-[var(--foreground)] hover:bg-[var(--surface-container)] transition-colors shadow-none"
             onClick={() => openReturnDialog()}
           >
             处理还书
@@ -287,121 +288,125 @@ export function OrderDetailPage() {
         ) : null}
       </div>
 
-      <Card>
-        <CardHeader className="gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-2">
-            <CardTitle>当前状态</CardTitle>
-            <CardDescription>把订单、送书、任务和机器人状态放在一起，方便先看清情况。</CardDescription>
-          </div>
-          <div className="text-sm text-[var(--muted-foreground)]">
-            创建时间：{formatDateTime(bundle.borrow_order.created_at)}
-          </div>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <SummaryBlock label="借阅状态" value={<StatusBadge status={bundle.borrow_order.status} />} />
-          <SummaryBlock
-            label="运营摘要"
-            value={
-              <span className="text-base font-semibold text-[var(--foreground)]">
-                {formatFulfillmentPhaseLabel(bundle.fulfillment_phase)}
-              </span>
-            }
-            meta="给运营侧看的当前配送进展。"
-          />
-          <SummaryBlock
-            label="配送状态"
-            value={<StatusBadge status={bundle.delivery_order?.status ?? 'none'} />}
-            meta={`目标：${bundle.delivery_order?.delivery_target ?? '柜前自取'}`}
-          />
-          <SummaryBlock
-            label="任务状态"
-            value={<StatusBadge status={bundle.robot_task?.status ?? 'none'} />}
-            meta={`任务号：${bundle.robot_task?.id ?? '—'}`}
-          />
-          <SummaryBlock
-            label="机器人状态"
-            value={<StatusBadge status={bundle.robot_unit?.status ?? 'none'} />}
-            meta={`机器人：${bundle.robot_unit?.code ?? '—'}`}
-          />
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>订单信息</CardTitle>
-            <CardDescription>查看这笔订单的基本信息和送书位置。</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
-            <DataBlock label="取书方式" value={formatOrderModeLabel(bundle.borrow_order.order_mode)} />
-            <DataBlock label="送书位置" value={snapshotValue(bundle.delivery_order?.delivery_target ?? '柜前自取')} />
-            <DataBlock label="读者编号" value={snapshotValue(bundle.borrow_order.reader_id)} />
-            <DataBlock label="图书编号" value={snapshotValue(bundle.borrow_order.book_id)} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>处理情况</CardTitle>
-            <CardDescription>这里会显示优先级、人工跟进情况和最近的异常说明。</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
-            <DataBlock label="优先级" value={formatPriorityLabel(bundle.borrow_order.priority ?? bundle.delivery_order?.priority)} />
-            <DataBlock label="重试次数" value={snapshotValue(bundle.borrow_order.attempt_count ?? 0)} />
-            <DataBlock label="人工跟进情况" value={formatInterventionStatusLabel(bundle.borrow_order.intervention_status)} />
-            <DataBlock
-              label="异常说明"
-              value={
-                <p className="text-sm leading-6 text-[var(--muted-foreground)]">
-                  {snapshotValue(bundle.borrow_order.failure_reason ?? bundle.delivery_order?.failure_reason)}
-                </p>
-              }
-            />
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader className="gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-2">
-            <CardTitle>还书申请</CardTitle>
-            <CardDescription>这里集中显示还书申请，需要处理时再打开单独窗口。</CardDescription>
-          </div>
-          {returnRequests.length > 0 ? (
-            <Button variant="secondary" onClick={() => openReturnDialog()}>
-              处理还书
-            </Button>
-          ) : null}
-        </CardHeader>
-        <CardContent>
-          {returnRequests.length === 0 ? (
-            <EmptyState title="没有找到记录" description="换个条件再试试。" />
-          ) : (
-            <div className="space-y-4">
-              {returnRequests.map((returnRequest) => (
-                <div
-                  key={returnRequest.id}
-                  className="flex flex-col gap-4 rounded-[1.5rem] border border-[var(--line-subtle)] bg-[var(--surface-bright)] p-5 lg:flex-row lg:items-center lg:justify-between"
-                >
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <p className="text-base font-semibold text-[var(--foreground)]">还书申请 #{returnRequest.id}</p>
-                      <StatusBadge status={returnRequest.status} />
-                    </div>
-                    <p className="text-sm text-[var(--muted-foreground)]">
-                      提交时间：{formatDateTime(returnRequest.created_at)}
-                    </p>
-                    <p className="text-sm text-[var(--muted-foreground)]">备注：{snapshotValue(returnRequest.note)}</p>
-                  </div>
-                  <Button variant="outline" onClick={() => openReturnDialog(returnRequest.id)}>
-                    处理还书
-                  </Button>
-                </div>
-              ))}
+      <div className="space-y-6 lg:space-y-8 pb-12">
+        <div className="rounded-[1.75rem] border border-[var(--line-subtle)] bg-[var(--surface-bright)] p-6 sm:p-8">
+          <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div className="space-y-1">
+              <h2 className="text-lg font-bold tracking-tight text-[var(--foreground)]">当前状态</h2>
+              <p className="text-[13px] text-[var(--muted-foreground)]">把订单、送书、任务和机器人状态放在一起，方便先看清情况。</p>
             </div>
-          )}
-        </CardContent>
-      </Card>
+            <div className="text-[12px] text-[var(--muted-foreground)] font-medium">
+              创建时间：{formatDateTime(bundle.borrow_order.created_at)}
+            </div>
+          </div>
+          <div className="flex gap-4 overflow-x-auto pb-2 pt-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            <SummaryBlock className="w-[260px] sm:w-[300px] shrink-0" label="借阅状态" value={<StatusBadge status={bundle.borrow_order.status} />} />
+            <SummaryBlock
+              className="w-[260px] sm:w-[300px] shrink-0"
+              label="运营摘要"
+              value={formatFulfillmentPhaseLabel(bundle.fulfillment_phase)}
+              meta="给运营侧看的当前配送进展。"
+            />
+            <SummaryBlock
+              className="w-[260px] sm:w-[300px] shrink-0"
+              label="配送状态"
+              value={<StatusBadge status={bundle.delivery_order?.status ?? 'none'} />}
+              meta={`目标：${bundle.delivery_order?.delivery_target ?? '柜前自取'}`}
+            />
+            <SummaryBlock
+              className="w-[260px] sm:w-[300px] shrink-0"
+              label="任务状态"
+              value={<StatusBadge status={bundle.robot_task?.status ?? 'none'} />}
+              meta={`任务号：${bundle.robot_task?.id ?? '—'}`}
+            />
+            <SummaryBlock
+              className="w-[260px] sm:w-[300px] shrink-0"
+              label="机器人状态"
+              value={<StatusBadge status={bundle.robot_unit?.status ?? 'none'} />}
+              meta={`机器人：${bundle.robot_unit?.code ?? '—'}`}
+            />
+          </div>
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className="rounded-[1.75rem] border border-[var(--line-subtle)] bg-[var(--surface-bright)] p-6 sm:p-8">
+            <div className="mb-6 space-y-1">
+              <h2 className="text-lg font-bold tracking-tight text-[var(--foreground)]">订单信息</h2>
+              <p className="text-[13px] text-[var(--muted-foreground)]">查看这笔订单的基本信息和送书位置。</p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <DataBlock label="取书方式" value={formatOrderModeLabel(bundle.borrow_order.order_mode)} />
+              <DataBlock label="送书位置" value={snapshotValue(bundle.delivery_order?.delivery_target ?? '柜前自取')} />
+              <DataBlock label="读者编号" value={snapshotValue(bundle.borrow_order.reader_id)} />
+              <DataBlock label="图书编号" value={snapshotValue(bundle.borrow_order.book_id)} />
+            </div>
+          </div>
+
+          <div className="rounded-[1.75rem] border border-[var(--line-subtle)] bg-[var(--surface-bright)] p-6 sm:p-8">
+            <div className="mb-6 space-y-1">
+              <h2 className="text-lg font-bold tracking-tight text-[var(--foreground)]">处理情况</h2>
+              <p className="text-[13px] text-[var(--muted-foreground)]">这里会显示优先级、人工跟进情况和最近的异常说明。</p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <DataBlock label="优先级" value={formatPriorityLabel(bundle.borrow_order.priority ?? bundle.delivery_order?.priority)} />
+              <DataBlock label="重试次数" value={snapshotValue(bundle.borrow_order.attempt_count ?? 0)} />
+              <DataBlock label="人工跟进情况" value={formatInterventionStatusLabel(bundle.borrow_order.intervention_status)} />
+              <DataBlock
+                label="异常说明"
+                value={
+                  <span className="text-[13px] font-medium leading-relaxed text-[var(--muted-foreground)]">
+                    {snapshotValue(bundle.borrow_order.failure_reason ?? bundle.delivery_order?.failure_reason)}
+                  </span>
+                }
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-[1.75rem] border border-[var(--line-subtle)] bg-[var(--surface-bright)] p-6 sm:p-8">
+          <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div className="space-y-1">
+              <h2 className="text-lg font-bold tracking-tight text-[var(--foreground)]">还书申请</h2>
+              <p className="text-[13px] text-[var(--muted-foreground)]">这里集中显示还书申请，需要处理时再打开单独窗口。</p>
+            </div>
+            {returnRequests.length > 0 ? (
+              <Button type="button" size="sm" variant="secondary" className="h-8 rounded-full bg-white border border-[var(--line-subtle)] text-[12px] font-medium px-4 shadow-none" onClick={() => openReturnDialog()}>
+                处理还书
+              </Button>
+            ) : null}
+          </div>
+          <div>
+            {returnRequests.length === 0 ? (
+              <div className="rounded-2xl border border-[var(--line-subtle)] bg-white/50 py-10">
+                <EmptyState title="没有找到记录" description="换个条件再试试。" />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {returnRequests.map((returnRequest) => (
+                  <div
+                    key={returnRequest.id}
+                    className="flex flex-col gap-4 rounded-2xl border border-[var(--line-subtle)] bg-[var(--surface-container-lowest)] p-5 transition-colors hover:border-[var(--line-strong)] lg:flex-row lg:items-center lg:justify-between shadow-sm"
+                  >
+                    <div className="space-y-2.5">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <p className="text-[14px] font-bold text-[var(--foreground)]">还书申请 #{returnRequest.id}</p>
+                        <StatusBadge status={returnRequest.status} />
+                      </div>
+                      <p className="text-[12px] text-[var(--muted-foreground)]">
+                        提交时间：{formatDateTime(returnRequest.created_at)}
+                      </p>
+                      <p className="text-[12px] text-[var(--muted-foreground)]">备注：{snapshotValue(returnRequest.note)}</p>
+                    </div>
+                    <Button type="button" size="sm" variant="secondary" className="h-8 rounded-full bg-white border border-[var(--line-subtle)] text-[12px] font-medium px-4 shadow-none" onClick={() => openReturnDialog(returnRequest.id)}>
+                      处理还书
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       <Dialog open={activeDialog === 'status'} onOpenChange={(open) => setActiveDialog(open ? 'status' : null)}>
         <DialogContent>

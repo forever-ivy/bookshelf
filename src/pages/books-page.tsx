@@ -1,12 +1,34 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createColumnHelper, type ColumnDef } from '@tanstack/react-table'
-import { ChevronLeft, ChevronRight, FolderTree, Plus } from 'lucide-react'
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsUpDown,
+  FolderTree,
+  Plus,
+  Book,
+  BookOpen,
+  Layers,
+  Library,
+  Hash,
+  Key,
+  FileText,
+  Sparkles,
+  Box,
+  LayoutGrid,
+  Search,
+  Filter,
+  Tags,
+  Settings2
+} from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { DataTable } from '@/components/shared/data-table'
 import { EmptyState } from '@/components/shared/empty-state'
 import { LoadingState } from '@/components/shared/loading-state'
 import { MetricStrip } from '@/components/shared/metric-strip'
+import { filledPrimaryActionButtonClassName } from '@/components/shared/action-button-styles'
 import { PageShell } from '@/components/shared/page-shell'
 import { StatusBadge, formatStatusLabel } from '@/components/shared/status-badge'
 import { WorkspacePanel } from '@/components/shared/workspace-panel'
@@ -28,8 +50,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { getAdminPageHero } from '@/lib/page-hero'
+import { cn } from '@/lib/utils'
 import {
   createAdminBook,
   createAdminCategory,
@@ -156,6 +180,151 @@ function formatSnapshotValue(value?: string | number | null) {
   }
 
   return String(value)
+}
+
+function MultiTagSelect({
+  tags,
+  value,
+  onChange,
+}: {
+  tags: AdminBookTag[]
+  value: string[]
+  onChange: (value: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const selectedTags = tags.filter((t) => value.includes(String(t.id)))
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="h-auto min-h-[2.5rem] w-full justify-between font-normal bg-[var(--surface-container-low)] hover:bg-[var(--surface-container-low)] border-[var(--line-subtle)] px-4 py-2 text-sm"
+        >
+          {selectedTags.length > 0 ? (
+            <div className="flex flex-wrap gap-1 pr-2 text-[var(--foreground)]">
+              {selectedTags.map((t) => t.name).join(' · ')}
+            </div>
+          ) : (
+            <span className="text-[var(--muted-foreground)]">请选择标签...</span>
+          )}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="搜索标签..." />
+          <CommandList>
+            <CommandEmpty>没有找到相关标签</CommandEmpty>
+            <CommandGroup>
+              {tags.map((tag) => {
+                const tagId = String(tag.id)
+                const isSelected = value.includes(tagId)
+                return (
+                  <CommandItem
+                    key={tag.id}
+                    value={tag.name}
+                    onSelect={() => {
+                      if (isSelected) {
+                        onChange(value.filter((v) => v !== tagId))
+                      } else {
+                        onChange([...value, tagId])
+                      }
+                    }}
+                  >
+                    <div className={cn("mr-3 flex size-4 shrink-0 items-center justify-center rounded-sm border", isSelected ? "border-[var(--primary)] bg-[var(--primary)] text-white" : "border-[var(--line-subtle)] opacity-50")}>
+                      {isSelected ? <Check className="size-3 shrink-0" /> : null}
+                    </div>
+                    {tag.name}
+                  </CommandItem>
+                )
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function CategorySelect({
+  categories,
+  value,
+  onChange,
+}: {
+  categories: AdminBookCategory[]
+  value: string
+  onChange: (value: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const selectedCategory = categories.find((c) => String(c.id) === value)
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="h-auto min-h-[2.5rem] w-full justify-between font-normal bg-[var(--surface-container-low)] hover:bg-[var(--surface-container-low)] border-[var(--line-subtle)] px-4 py-2 text-sm"
+        >
+          {selectedCategory ? (
+            <span className="truncate text-[var(--foreground)]">{selectedCategory.name}</span>
+          ) : value === 'unclassified' || !value ? (
+            <span className="truncate text-[var(--foreground)]">未分类</span>
+          ) : (
+            <span className="text-[var(--muted-foreground)]">请选择分类...</span>
+          )}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="搜索分类..." />
+          <CommandList>
+            <CommandEmpty>没有找到相关分类</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value="未分类"
+                onSelect={() => {
+                  onChange('')
+                  setOpen(false)
+                }}
+              >
+                <div className={cn("mr-3 flex size-4 shrink-0 items-center justify-center rounded-sm border", !value ? "border-[var(--primary)] bg-[var(--primary)] text-white" : "border-[var(--line-subtle)] opacity-50")}>
+                  {!value ? <Check className="size-3 shrink-0" /> : null}
+                </div>
+                未分类
+              </CommandItem>
+              {categories.map((category) => {
+                const categoryId = String(category.id)
+                const isSelected = value === categoryId
+                return (
+                  <CommandItem
+                    key={category.id}
+                    value={category.name}
+                    onSelect={() => {
+                      onChange(categoryId)
+                      setOpen(false)
+                    }}
+                  >
+                    <div className={cn("mr-3 flex size-4 shrink-0 items-center justify-center rounded-sm border", isSelected ? "border-[var(--primary)] bg-[var(--primary)] text-white" : "border-[var(--line-subtle)] opacity-50")}>
+                      {isSelected ? <Check className="size-3 shrink-0" /> : null}
+                    </div>
+                    {category.name}
+                  </CommandItem>
+                )
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  )
 }
 
 export function BooksPage() {
@@ -514,69 +683,42 @@ export function BooksPage() {
   const bookColumns: Array<ColumnDef<AdminBook, any>> = [
     bookColumnHelper.accessor('title', {
       header: '书名',
-      meta: {
-        headClassName: 'w-[18rem] min-w-[14rem]',
-        cellClassName: 'w-[18rem] min-w-[14rem]',
-      },
       cell: (info) => (
-        <div className="min-w-0 max-w-[18rem] space-y-1">
-          <p className="truncate font-semibold text-[var(--foreground)]">{info.getValue()}</p>
-          <p className="truncate text-xs text-[var(--muted-foreground)]">{info.row.original.author ?? '暂未填写作者'}</p>
+        <div className="space-y-1">
+          <p className="font-semibold text-[var(--foreground)]">{info.getValue()}</p>
+          <p className="text-xs text-[var(--muted-foreground)]">
+            {info.row.original.author ?? '暂无作者'}
+          </p>
         </div>
       ),
     }),
     bookColumnHelper.accessor('category', {
       header: '分类',
-      meta: {
-        headClassName: 'w-[12rem]',
-        cellClassName: 'w-[12rem]',
-      },
-      cell: (info) => <span className="block max-w-[12rem] truncate">{info.getValue() ?? '—'}</span>,
+      cell: (info) => info.getValue() ?? '—',
     }),
     bookColumnHelper.accessor('isbn', {
       header: 'ISBN',
-      meta: {
-        headClassName: 'w-[9rem]',
-        cellClassName: 'w-[9rem]',
-      },
-      cell: (info) => <span className="block max-w-[9rem] truncate">{info.getValue() ?? '—'}</span>,
+      cell: (info) => info.getValue() ?? '—',
     }),
     bookColumnHelper.accessor('shelf_status', {
       header: '上架状态',
-      meta: {
-        headClassName: 'w-[7rem]',
-        cellClassName: 'w-[7rem]',
-      },
       cell: (info) => <StatusBadge status={info.getValue()} />,
     }),
     bookColumnHelper.display({
       id: 'tags',
       header: '标签',
-      meta: {
-        headClassName: 'w-[11rem]',
-        cellClassName: 'w-[11rem]',
+      cell: (info) => {
+        const tags = info.row.original.tags ?? []
+        if (tags.length === 0) return '—'
+        return tags.map((t) => t.name).join(', ')
       },
-      cell: (info) => (
-        <div className="flex max-w-[11rem] flex-wrap gap-2">
-          {(info.row.original.tags ?? []).slice(0, 3).map((tag) => (
-            <Badge key={tag.id} variant="secondary">
-              {tag.name}
-            </Badge>
-          ))}
-        </div>
-      ),
     }),
     bookColumnHelper.display({
       id: 'actions',
       header: '操作',
-      meta: {
-        headClassName: 'w-[11rem] min-w-[11rem] text-right',
-        cellClassName: 'w-[11rem] min-w-[11rem]',
-      },
       cell: (info) => (
-        <div className="flex min-w-[11rem] items-center justify-end gap-2">
+        <div className="flex items-center gap-2">
           <Button
-            type="button"
             size="sm"
             variant="secondary"
             onClick={() => {
@@ -587,11 +729,10 @@ export function BooksPage() {
             编辑此书
           </Button>
           <Button
-            type="button"
             size="sm"
+            variant="secondary"
             onClick={() => openBookEntityCatalog(info.row.original.id)}
           >
-            <ChevronRight className="size-4" />
             查看详情
           </Button>
         </div>
@@ -624,71 +765,110 @@ export function BooksPage() {
     const sourceDocuments = book.source_documents ?? []
 
     return (
-      <div className="space-y-8">
-        <section className="space-y-6 border-b border-[var(--line-subtle)] pb-6">
-          <div className="space-y-1">
-            <p className="text-xs uppercase tracking-[0.16em] text-[var(--muted-foreground)]">图书信息</p>
-            <p className="text-sm leading-6 text-[var(--muted-foreground)]">
-              先看这本书的基础信息，再继续查看每个实体副本的存放位置和借阅状态。
-            </p>
-          </div>
-
-          <dl className="grid gap-4 md:grid-cols-3">
-            {[
-              { label: '作者', value: formatSnapshotValue(book.author) },
-              { label: 'ISBN', value: formatSnapshotValue(book.isbn) },
-              { label: '条码', value: formatSnapshotValue(book.barcode) },
-            ].map((item) => (
-              <div key={item.label} className="border-b border-[var(--line-subtle)] pb-3">
-                <dt className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">{item.label}</dt>
-                <dd className="mt-2 break-words text-base font-medium text-[var(--foreground)]">{item.value}</dd>
+      <div className="space-y-4 pb-12">
+        <section className="grid gap-6 lg:grid-cols-[1fr_320px] items-stretch">
+          <div className="flex flex-col rounded-[1.2rem] border border-[var(--line-subtle)] bg-[var(--surface-bright)] p-6 sm:p-8 h-full">
+            <div className="mb-6 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--surface-panel)] border border-[var(--line-subtle)] text-[var(--muted-foreground)]">
+                <Book className="size-5" />
               </div>
-            ))}
-          </dl>
+              <div>
+                <h3 className="text-xl font-bold tracking-tight text-[var(--foreground)]">基本信息</h3>
+                <p className="text-[12px] text-[var(--muted-foreground)] mt-0.5">查看图书的基础数据与分类属性</p>
+              </div>
+            </div>
+            
+            <div className="grid gap-6 sm:grid-cols-3">
+              <div className="space-y-1.5">
+                <p className="flex items-center gap-2 text-[11px] font-medium tracking-wider text-[var(--muted-foreground)]">
+                  <BookOpen className="size-3.5 opacity-70" />
+                  作者
+                </p>
+                <p className="text-[14px] font-medium text-[var(--foreground)]">{formatSnapshotValue(book.author)}</p>
+              </div>
+              <div className="space-y-1.5">
+                <p className="flex items-center gap-2 text-[11px] font-medium tracking-wider text-[var(--muted-foreground)]">
+                  <Hash className="size-3.5 opacity-70" />
+                  ISBN
+                </p>
+                <p className="text-[14px] font-medium text-[var(--foreground)]">{formatSnapshotValue(book.isbn)}</p>
+              </div>
+              <div className="space-y-1.5">
+                <p className="flex items-center gap-2 text-[11px] font-medium tracking-wider text-[var(--muted-foreground)]">
+                  <Key className="size-3.5 opacity-70" />
+                  条码
+                </p>
+                <p className="text-[14px] font-medium text-[var(--foreground)]">{formatSnapshotValue(book.barcode)}</p>
+              </div>
+            </div>
 
-          <div className="space-y-2">
-            <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">简介</p>
-            <p className="max-w-[56rem] text-sm leading-7 text-[var(--foreground)]">
-              {book.summary?.trim() || '暂无简介'}
-            </p>
+            <div className="mt-8 space-y-3 border-t border-[var(--line-subtle)] pt-6">
+              <p className="text-[11px] font-medium tracking-wider text-[var(--muted-foreground)]">简介</p>
+              <p className="text-[13px] leading-relaxed text-[var(--foreground)]">
+                {book.summary?.trim() || '暂无简介'}
+              </p>
+            </div>
           </div>
 
-          <div className="flex flex-wrap gap-6 border-t border-[var(--line-subtle)] pt-4">
-            <div className="space-y-1">
-              <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">实体副本</p>
-              <p className="text-lg font-semibold tracking-[-0.03em] text-[var(--foreground)]">{copies.length}</p>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between rounded-[1.2rem] border border-[var(--line-subtle)] bg-[var(--surface-bright)] p-5 transition-shadow hover:shadow-sm">
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-medium tracking-wider text-[var(--muted-foreground)]">实体副本</p>
+                <p className="text-2xl font-semibold text-[var(--foreground)]">{copies.length}</p>
+              </div>
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--surface-panel)] border border-[var(--line-subtle)] text-[var(--muted-foreground)]">
+                <Layers className="size-6" />
+              </div>
             </div>
-            <div className="space-y-1">
-              <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">可借副本</p>
-              <p className="text-lg font-semibold tracking-[-0.03em] text-[var(--foreground)]">
-                {book.stock_summary?.available_copies ?? book.available_copies ?? 0}
-              </p>
+
+            <div className="flex items-center justify-between rounded-[1.2rem] border border-[var(--line-subtle)] bg-[var(--surface-bright)] p-5 transition-shadow hover:shadow-sm">
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-medium tracking-wider text-[var(--muted-foreground)]">可借副本</p>
+                <p className="text-2xl font-semibold text-[var(--foreground)]">
+                  {book.stock_summary?.available_copies ?? book.available_copies ?? 0}
+                </p>
+              </div>
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--surface-panel)] border border-[var(--line-subtle)] text-[var(--muted-foreground)]">
+                <Library className="size-6" />
+              </div>
             </div>
-            <div className="space-y-1">
-              <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">总库存</p>
-              <p className="text-lg font-semibold tracking-[-0.03em] text-[var(--foreground)]">
-                {book.stock_summary?.total_copies ?? book.total_copies ?? copies.length}
-              </p>
+
+            <div className="flex items-center justify-between rounded-[1.2rem] border border-[var(--line-subtle)] bg-[var(--surface-bright)] p-5 transition-shadow hover:shadow-sm">
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-medium tracking-wider text-[var(--muted-foreground)]">总库存</p>
+                <p className="text-2xl font-semibold text-[var(--foreground)]">
+                  {book.stock_summary?.total_copies ?? book.total_copies ?? copies.length}
+                </p>
+              </div>
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--surface-panel)] border border-[var(--line-subtle)] text-[var(--muted-foreground)]">
+                <Box className="size-6" />
+              </div>
             </div>
           </div>
         </section>
 
-        <section className="space-y-4 border-b border-[var(--line-subtle)] pb-6">
-          <div className="space-y-1">
-            <h4 className="text-[1.15rem] font-semibold tracking-[-0.03em] text-[var(--foreground)]">数字资源</h4>
-            <p className="text-sm text-[var(--muted-foreground)]">
-              导学系统会优先使用这里的主资源 PDF / 文本文件；如果没有上传数字资源，才会退回到书目元数据摘要。
-            </p>
+        <section className="mt-10 space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1]">
+              <h4 className="flex items-center gap-2 text-[1.15rem] font-bold tracking-tight text-[var(--foreground)]">
+                <Sparkles className="size-5 text-[var(--primary)]" />
+                数字资源
+              </h4>
+              <p className="text-sm text-[var(--muted-foreground)]">
+                导学系统会优先使用这里的主资源；如果没有，才会退回到书目元数据。
+              </p>
+            </div>
           </div>
 
-          <div className="rounded-[1.25rem] border border-[var(--line-subtle)] bg-[var(--surface-container-low)] p-4">
-            <div className="grid gap-4 lg:grid-cols-[1.3fr_auto] lg:items-end">
-              <div className="space-y-3">
-                <div className="space-y-2">
-                  <Label htmlFor="book-source-upload">上传 PDF / 文本资源</Label>
+          <div className="rounded-[1.4rem] border border-[var(--line-subtle)] bg-gradient-to-br from-[var(--surface-panel-strong)] to-white p-6 shadow-sm">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+              <div className="space-y-4 flex-1 max-w-xl">
+                <div className="space-y-2.5">
+                  <Label htmlFor="book-source-upload" className="font-semibold">上传 PDF / 文本资源</Label>
                   <Input
                     id="book-source-upload"
                     type="file"
+                    className="h-11 cursor-pointer rounded-xl bg-white/60 pt-2 transition-colors hover:bg-white"
                     accept=".pdf,.txt,.md,.markdown"
                     onChange={(event) => {
                       const nextFile = event.target.files?.[0] ?? null
@@ -696,16 +876,18 @@ export function BooksPage() {
                     }}
                   />
                 </div>
-                <label className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
+                <label className="flex w-max cursor-pointer items-center gap-2.5 text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]">
                   <input
                     checked={bookSourceIsPrimary}
+                    className="size-4 rounded-sm border-[var(--line-strong)] text-[var(--primary)] text-white focus:ring-[var(--primary)] transition-all"
                     type="checkbox"
                     onChange={(event) => setBookSourceIsPrimary(event.target.checked)}
                   />
-                  上传后设为导学主资源
+                  <span>上传后设为导学主资源</span>
                 </label>
               </div>
               <Button
+                className="w-full sm:w-auto rounded-xl px-8 shadow-sm"
                 disabled={!bookSourceFile || uploadBookSourceMutation.isPending}
                 onClick={() => uploadBookSourceMutation.mutate()}
               >
@@ -715,120 +897,149 @@ export function BooksPage() {
           </div>
 
           {sourceDocuments.length === 0 ? (
-            <div className="rounded-[1.2rem] border border-dashed border-[var(--line-subtle)] bg-white/70 px-4 py-4 text-sm text-[var(--muted-foreground)]">
-              这本书还没有上传数字资源，导学只能退回到书名、作者、摘要等元数据。
+            <div className="flex h-36 flex-col items-center justify-center space-y-2 rounded-[1.4rem] border border-dashed border-[var(--line-strong)] bg-white/40 text-center text-[var(--muted-foreground)]">
+              <FileText className="size-6 opacity-40" />
+              <p className="text-sm">这本书还没有上传数字资源</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="grid gap-4 xl:grid-cols-2">
               {sourceDocuments.map((document) => (
-                <section
+                <div
                   key={document.id}
-                  className="rounded-[1.25rem] border border-[var(--line-subtle)] bg-white/80 px-4 py-4"
+                  className="group relative flex flex-col justify-between overflow-hidden rounded-[1.4rem] border border-[var(--line-subtle)] bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <p className="font-semibold text-[var(--foreground)]">{document.file_name}</p>
-                      <p className="text-sm text-[var(--muted-foreground)]">
-                        {document.source_kind.toUpperCase()} · {document.mime_type ?? '未知类型'}
-                      </p>
+                  <div className="absolute -right-4 -top-4 opacity-[0.02] transition-opacity group-hover:opacity-[0.05]">
+                    <FileText className="size-32" />
+                  </div>
+                  <div className="relative z-10 space-y-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <p className="font-bold text-[var(--foreground)] leading-tight">{document.file_name}</p>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                          {document.source_kind} · {document.mime_type ?? '未知类型'}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <div className="flex items-center gap-2">
+                          <StatusBadge status={document.parse_status} />
+                          {document.is_primary ? <StatusBadge status="active" label="主资源" /> : null}
+                        </div>
+                        {!document.is_primary ? (
+                          <Button
+                            disabled={promoteBookSourceMutation.isPending}
+                            variant="secondary"
+                            size="sm"
+                            className="h-7 text-xs rounded-lg px-2.5"
+                            onClick={() => promoteBookSourceMutation.mutate(document.id)}
+                          >
+                            设为主资源
+                          </Button>
+                        ) : null}
+                      </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      <StatusBadge status={document.parse_status} />
-                      {document.is_primary ? <StatusBadge status="active" label="主资源" /> : null}
-                      {!document.is_primary ? (
-                        <Button
-                          disabled={promoteBookSourceMutation.isPending}
-                          size="sm"
-                          variant="outline"
-                          onClick={() => promoteBookSourceMutation.mutate(document.id)}
-                        >
-                          设为主资源
-                        </Button>
-                      ) : null}
+
+                    <div className="grid grid-cols-2 gap-4 rounded-[1.1rem] bg-[var(--surface-container-lowest)] p-4 text-[0.8rem] mix-blend-multiply">
+                      <div className="space-y-1.5">
+                        <p className="text-[0.65rem] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">资源编号</p>
+                        <p className="font-medium text-[var(--foreground)]">#{document.id}</p>
+                      </div>
+                      <div className="space-y-1.5">
+                        <p className="text-[0.65rem] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">解析文本</p>
+                        <p className="truncate font-medium text-[var(--foreground)]" title={String(document.extracted_text_path || '')}>
+                          {formatSnapshotValue(document.extracted_text_path)}
+                        </p>
+                      </div>
+                      <div className="space-y-1.5 col-span-2">
+                        <p className="text-[0.65rem] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">哈希</p>
+                        <p className="truncate font-medium text-[var(--foreground)]" title={String(document.content_hash || '')}>
+                          {formatSnapshotValue(document.content_hash)}
+                        </p>
+                      </div>
+                      <div className="space-y-1.5 col-span-2">
+                        <p className="text-[0.65rem] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">更新时间</p>
+                        <p className="font-medium text-[var(--foreground)]">
+                          {formatDateTime(document.updated_at ?? document.created_at)}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                  <dl className="mt-4 grid gap-3 border-t border-[var(--line-subtle)] pt-4 text-sm md:grid-cols-2 xl:grid-cols-4">
-                    <div className="space-y-1">
-                      <dt className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">资源编号</dt>
-                      <dd className="font-medium text-[var(--foreground)]">#{document.id}</dd>
-                    </div>
-                    <div className="space-y-1">
-                      <dt className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">解析文本</dt>
-                      <dd className="font-medium text-[var(--foreground)]">{formatSnapshotValue(document.extracted_text_path)}</dd>
-                    </div>
-                    <div className="space-y-1">
-                      <dt className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">哈希</dt>
-                      <dd className="break-all font-medium text-[var(--foreground)]">{formatSnapshotValue(document.content_hash)}</dd>
-                    </div>
-                    <div className="space-y-1">
-                      <dt className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">更新时间</dt>
-                      <dd className="font-medium text-[var(--foreground)]">
-                        {formatDateTime(document.updated_at ?? document.created_at)}
-                      </dd>
-                    </div>
-                  </dl>
-                </section>
+                </div>
               ))}
             </div>
           )}
         </section>
 
-        <section className="space-y-4">
-          <div className="space-y-1 border-b border-[var(--line-subtle)] pb-4">
-            <h4 className="text-[1.15rem] font-semibold tracking-[-0.03em] text-[var(--foreground)]">实体目录</h4>
-            <p className="text-sm text-[var(--muted-foreground)]">查看每个副本当前所在书柜、槽位和可借状态。</p>
+        <section className="mt-10 space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <h4 className="flex items-center gap-2 text-[1.15rem] font-bold tracking-tight text-[var(--foreground)]">
+                <LayoutGrid className="size-5 text-[var(--primary)]" />
+                实体目录
+              </h4>
+              <p className="text-sm text-[var(--muted-foreground)]">查看每个副本当前所在书柜、槽位和可借状态。</p>
+            </div>
           </div>
 
           {copies.length === 0 ? (
-            <div className="rounded-[1.2rem] border border-dashed border-[var(--line-subtle)] bg-white/70 px-4 py-4 text-sm text-[var(--muted-foreground)]">
-              当前还没有登记实体副本，后续可在库存台补录书柜、槽位和库存状态。
+            <div className="flex h-36 flex-col items-center justify-center space-y-2 rounded-[1.4rem] border border-dashed border-[var(--line-strong)] bg-white/40 text-center text-[var(--muted-foreground)]">
+              <Library className="size-6 opacity-40" />
+              <p className="text-sm">当前还没有登记实体副本</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="grid gap-4 xl:grid-cols-2">
               {copies.map((copy) => (
-                <section
+                <div
                   key={copy.id}
-                  className="rounded-[1.25rem] border border-[var(--line-subtle)] bg-white/80 px-4 py-4"
+                  className="group relative overflow-hidden rounded-[1.4rem] border border-[var(--line-subtle)] bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <p className="font-semibold text-[var(--foreground)]">
-                        {(copy.cabinet_name ?? '未分配书柜') + ' · ' + (copy.slot_code ?? '未分配位置')}
-                      </p>
-                      <p className="text-sm text-[var(--muted-foreground)]">{copy.cabinet_location ?? '位置待补充'}</p>
+                  <div className="absolute -right-4 -bottom-4 opacity-[0.02] transition-opacity group-hover:opacity-[0.05]">
+                    <Box className="size-32" />
+                  </div>
+                  <div className="relative z-10 flex flex-col gap-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1.5">
+                        <p className="font-bold text-[var(--foreground)] flex items-center gap-2">
+                          <Library className="size-4 text-[var(--muted-foreground)]" />
+                          {(copy.cabinet_name ?? '未分配书柜') + ' · ' + (copy.slot_code ?? '未分配位置')}
+                        </p>
+                        <p className="text-xs font-medium text-[var(--muted-foreground)] pl-6">
+                          {copy.cabinet_location ?? '位置待补充'}
+                        </p>
+                      </div>
+                      <div className="flex flex-col gap-2 items-end">
+                        <StatusBadge
+                          status={copy.inventory_status}
+                          label={formatCopyInventoryStatusLabel(copy.inventory_status)}
+                        />
+                        <StatusBadge
+                          status={copy.available_for_borrow ? 'available' : 'none'}
+                          label={copy.available_for_borrow ? '可借' : '不可借'}
+                        />
+                      </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      <StatusBadge
-                        status={copy.inventory_status}
-                        label={formatCopyInventoryStatusLabel(copy.inventory_status)}
-                      />
-                      <StatusBadge
-                        status={copy.available_for_borrow ? 'available' : 'none'}
-                        label={copy.available_for_borrow ? '可借' : '不可借'}
-                      />
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 rounded-[1.1rem] bg-[var(--surface-container-lowest)] p-4 text-[0.8rem] mix-blend-multiply">
+                      <div className="space-y-1.5">
+                        <p className="text-[0.65rem] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">编号</p>
+                        <p className="font-medium text-[var(--foreground)]">#{copy.id}</p>
+                      </div>
+                      <div className="space-y-1.5">
+                        <p className="text-[0.65rem] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">柜ID</p>
+                        <p className="font-medium text-[var(--foreground)]">{formatSnapshotValue(copy.cabinet_id)}</p>
+                      </div>
+                      <div className="space-y-1.5">
+                        <p className="text-[0.65rem] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">槽位</p>
+                        <p className="font-medium text-[var(--foreground)]">{formatSnapshotValue(copy.slot_code)}</p>
+                      </div>
+                      <div className="space-y-1.5">
+                        <p className="text-[0.65rem] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">更新于</p>
+                        <p className="font-medium text-[var(--foreground)] whitespace-nowrap">
+                          {formatDateTime(copy.updated_at ?? copy.created_at)}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                  <dl className="mt-4 grid gap-3 border-t border-[var(--line-subtle)] pt-4 text-sm md:grid-cols-2 xl:grid-cols-4">
-                    <div className="space-y-1">
-                      <dt className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">副本编号</dt>
-                      <dd className="font-medium text-[var(--foreground)]">#{copy.id}</dd>
-                    </div>
-                    <div className="space-y-1">
-                      <dt className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">书柜编号</dt>
-                      <dd className="font-medium text-[var(--foreground)]">{formatSnapshotValue(copy.cabinet_id)}</dd>
-                    </div>
-                    <div className="space-y-1">
-                      <dt className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">槽位</dt>
-                      <dd className="font-medium text-[var(--foreground)]">{formatSnapshotValue(copy.slot_code)}</dd>
-                    </div>
-                    <div className="space-y-1">
-                      <dt className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">更新时间</dt>
-                      <dd className="font-medium text-[var(--foreground)]">
-                        {formatDateTime(copy.updated_at ?? copy.created_at)}
-                      </dd>
-                    </div>
-                  </dl>
-                </section>
+                </div>
               ))}
             </div>
           )}
@@ -838,28 +1049,33 @@ export function BooksPage() {
   }
 
   const booksAction = (
-    <div className="flex w-full flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:justify-end">
-      <Input
-        className="w-full md:w-80"
-        placeholder="按书名、作者、ISBN 搜索..."
-        value={search}
-        onChange={(event) => {
-          const nextValue = event.target.value
-          setSearch(nextValue)
-          if (!isBookSearchComposingRef.current) {
+    <div className="flex w-full flex-col gap-3 py-1 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+      <div className="relative flex-1 sm:max-w-xs md:max-w-[22rem]">
+        <div className="pointer-events-none absolute inset-y-0 left-0 pl-3.5 flex items-center">
+          <Search className="size-4.5 text-slate-400" />
+        </div>
+        <Input
+          className="h-10 w-full rounded-[1.25rem] border-slate-200 bg-white/70 pl-10 pr-4 shadow-sm transition-all focus:bg-white focus:ring-2 focus:ring-[var(--primary)]/20 font-medium placeholder:font-normal"
+          placeholder="按书名、作者、ISBN 搜索..."
+          value={search}
+          onChange={(event) => {
+            const nextValue = event.target.value
+            setSearch(nextValue)
+            if (!isBookSearchComposingRef.current) {
+              commitBookSearch(nextValue)
+            }
+          }}
+          onCompositionStart={() => {
+            isBookSearchComposingRef.current = true
+          }}
+          onCompositionEnd={(event) => {
+            isBookSearchComposingRef.current = false
+            const nextValue = event.currentTarget.value
+            setSearch(nextValue)
             commitBookSearch(nextValue)
-          }
-        }}
-        onCompositionStart={() => {
-          isBookSearchComposingRef.current = true
-        }}
-        onCompositionEnd={(event) => {
-          isBookSearchComposingRef.current = false
-          const nextValue = event.currentTarget.value
-          setSearch(nextValue)
-          commitBookSearch(nextValue)
-        }}
-      />
+          }}
+        />
+      </div>
       <Select
         value={shelfStatusFilter ?? 'all'}
         onValueChange={(value) => {
@@ -872,13 +1088,16 @@ export function BooksPage() {
           )
         }}
       >
-        <SelectTrigger aria-label="上架状态筛选" className="md:w-[10rem]">
-          <SelectValue placeholder="全部状态" />
+        <SelectTrigger aria-label="上架状态筛选" className="h-10 rounded-[1.25rem] border-slate-200 bg-white/70 shadow-sm transition-all hover:bg-white md:w-[11rem] font-medium text-slate-700">
+          <div className="flex items-center gap-2">
+            <Filter className="size-4 text-slate-400" />
+            <SelectValue placeholder="全部状态" />
+          </div>
         </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">全部状态</SelectItem>
+        <SelectContent className="rounded-2xl">
+          <SelectItem value="all" className="rounded-xl">全部状态</SelectItem>
           {BOOK_SHELF_STATUS_OPTIONS.map((value) => (
-            <SelectItem key={value} value={value}>
+            <SelectItem key={value} value={value} className="rounded-xl">
               {formatStatusLabel(value)}
             </SelectItem>
           ))}
@@ -896,19 +1115,22 @@ export function BooksPage() {
           )
         }}
       >
-        <SelectTrigger aria-label="分类筛选" className="md:w-[11rem]" onClick={ensureFullCategoryList}>
-          <SelectValue placeholder="全部分类" />
+        <SelectTrigger aria-label="分类筛选" className="h-10 rounded-[1.25rem] border-slate-200 bg-white/70 shadow-sm transition-all hover:bg-white md:w-[11rem] font-medium text-slate-700" onClick={ensureFullCategoryList}>
+          <div className="flex items-center gap-2">
+            <Layers className="size-4 text-slate-400" />
+            <SelectValue placeholder="全部分类" />
+          </div>
         </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">全部分类</SelectItem>
+        <SelectContent className="rounded-2xl">
+          <SelectItem value="all" className="rounded-xl">全部分类</SelectItem>
           {categories.map((category) => (
-            <SelectItem key={category.id} value={String(category.id)}>
+            <SelectItem key={category.id} value={String(category.id)} className="rounded-xl">
               {category.name}
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2.5">
         <Dialog
           open={isCreateDialogOpen}
           onOpenChange={(open) => {
@@ -920,8 +1142,8 @@ export function BooksPage() {
           }}
         >
           <DialogTrigger asChild>
-            <Button size="sm">
-              <Plus className="size-4" />
+            <Button size="sm" variant="default" className={cn("h-10 rounded-[1.25rem] px-5 font-semibold transition-colors", filledPrimaryActionButtonClassName)}>
+              <Plus className="mr-1.5 size-4" />
               新增图书
             </Button>
           </DialogTrigger>
@@ -942,53 +1164,26 @@ export function BooksPage() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label id="new-book-category-label">分类</Label>
-                  <Select
+                  <CategorySelect
+                    categories={categories}
                     value={bookCreateForm.categoryId}
-                    onValueChange={(value) =>
-                      setBookCreateForm((current) => ({
-                        ...current,
-                        categoryId: value === 'unclassified' ? '' : value,
-                      }))
-                    }
-                  >
-                    <SelectTrigger aria-labelledby="new-book-category-label">
-                      <SelectValue placeholder="未分类" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="unclassified">未分类</SelectItem>
-                      {categories.map((category) => (
-                        <SelectItem key={category.id} value={String(category.id)}>
-                          {category.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    onChange={(value) => setBookCreateForm((current) => ({ ...current, categoryId: value }))}
+                  />
                   {!hasCategories ? <p className="text-xs text-[var(--muted-foreground)]">还没有分类，可以先去创建。</p> : null}
                 </div>
                 <div className="space-y-2">
                   <Label id="new-book-tags-label">标签</Label>
-                  <div className="rounded-[1.1rem] border border-[var(--line-subtle)] bg-[var(--surface-panel-strong)] p-3">
+                  <div>
                     {hasTags ? (
-                      <ToggleGroup
-                        type="multiple"
-                        aria-labelledby="new-book-tags-label"
+                      <MultiTagSelect
+                        tags={tags}
                         value={bookCreateForm.tagIds}
-                        onValueChange={(value) => setBookCreateForm((current) => ({ ...current, tagIds: value }))}
-                      >
-                        {tags.map((tag) => {
-                          return (
-                            <ToggleGroupItem
-                              key={tag.id}
-                              value={String(tag.id)}
-                              aria-label={tag.name}
-                            >
-                              {tag.name}
-                            </ToggleGroupItem>
-                          )
-                        })}
-                      </ToggleGroup>
+                        onChange={(value) => setBookCreateForm((current) => ({ ...current, tagIds: value }))}
+                      />
                     ) : (
-                      <p className="text-xs text-[var(--muted-foreground)]">还没有标签，可以先去创建。</p>
+                      <div className="rounded-[1.1rem] border border-[var(--line-subtle)] bg-[var(--surface-panel-strong)] p-4">
+                        <p className="text-xs text-[var(--muted-foreground)]">还没有标签，可以先去创建。</p>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1032,8 +1227,8 @@ export function BooksPage() {
           }}
         >
           <DialogTrigger asChild>
-            <Button size="sm" variant="outline">
-              <FolderTree className="size-4" />
+            <Button size="sm" variant="outline" className="h-10 rounded-[1.25rem] px-5 shadow-sm font-semibold border border-slate-200 bg-white/70 hover:bg-white text-slate-700 hover:text-slate-900 transition-colors">
+              <Settings2 className="mr-1.5 size-4 text-slate-500" />
               管理分类和标签
             </Button>
           </DialogTrigger>
@@ -1057,7 +1252,7 @@ export function BooksPage() {
                     </div>
                     <ScrollArea
                       data-testid="taxonomy-categories-list"
-                      className="min-h-0 max-h-[min(52vh,32rem)] pr-2"
+                      className="h-[min(52vh,32rem)] pr-3"
                     >
                       {categoriesQuery.isLoading ? (
                         <p className="text-sm text-[var(--muted-foreground)]">正在载入</p>
@@ -1122,7 +1317,7 @@ export function BooksPage() {
                     </div>
                     <ScrollArea
                       data-testid="taxonomy-tags-list"
-                      className="min-h-0 max-h-[min(52vh,32rem)] pr-2"
+                      className="h-[min(52vh,32rem)] pr-3"
                     >
                       {tagsQuery.isLoading ? (
                         <p className="text-sm text-[var(--muted-foreground)]">正在载入</p>
@@ -1180,28 +1375,33 @@ export function BooksPage() {
   )
 
   const categoriesAction = (
-    <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-end">
-      <Input
-        className="w-full md:w-72"
-        placeholder="搜索分类名称"
-        value={categorySearch}
-        onChange={(event) => {
-          const nextValue = event.target.value
-          setCategorySearch(nextValue)
-          if (!isCategorySearchComposingRef.current) {
+    <div className="flex w-full flex-col gap-3 py-1 sm:flex-row sm:items-center sm:justify-end">
+      <div className="relative flex-1 sm:max-w-xs md:max-w-64">
+        <div className="pointer-events-none absolute inset-y-0 left-0 pl-3.5 flex items-center">
+          <Search className="size-4.5 text-slate-400" />
+        </div>
+        <Input
+          className="h-10 w-full rounded-[1.25rem] border-slate-200 bg-white/70 pl-10 pr-4 shadow-sm transition-all focus:bg-white focus:ring-2 focus:ring-[var(--primary)]/20 font-medium placeholder:font-normal"
+          placeholder="搜索分类名称"
+          value={categorySearch}
+          onChange={(event) => {
+            const nextValue = event.target.value
+            setCategorySearch(nextValue)
+            if (!isCategorySearchComposingRef.current) {
+              commitCategorySearch(nextValue)
+            }
+          }}
+          onCompositionStart={() => {
+            isCategorySearchComposingRef.current = true
+          }}
+          onCompositionEnd={(event) => {
+            isCategorySearchComposingRef.current = false
+            const nextValue = event.currentTarget.value
+            setCategorySearch(nextValue)
             commitCategorySearch(nextValue)
-          }
-        }}
-        onCompositionStart={() => {
-          isCategorySearchComposingRef.current = true
-        }}
-        onCompositionEnd={(event) => {
-          isCategorySearchComposingRef.current = false
-          const nextValue = event.currentTarget.value
-          setCategorySearch(nextValue)
-          commitCategorySearch(nextValue)
-        }}
-      />
+          }}
+        />
+      </div>
       <Select
         value={categoryStatusFilter ?? 'all'}
         onValueChange={(value) => {
@@ -1214,55 +1414,70 @@ export function BooksPage() {
           )
         }}
       >
-        <SelectTrigger aria-label="分类状态筛选" className="md:w-[10rem]">
-          <SelectValue placeholder="全部状态" />
+        <SelectTrigger aria-label="分类状态筛选" className="h-10 rounded-[1.25rem] border-slate-200 bg-white/70 shadow-sm transition-all hover:bg-white md:w-[10rem] font-medium text-slate-700">
+          <div className="flex items-center gap-2">
+            <Filter className="size-4 text-slate-400" />
+            <SelectValue placeholder="全部状态" />
+          </div>
         </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">全部状态</SelectItem>
-          <SelectItem value="active">启用</SelectItem>
-          <SelectItem value="inactive">停用</SelectItem>
+        <SelectContent className="rounded-2xl">
+          <SelectItem value="all" className="rounded-xl">全部状态</SelectItem>
+          <SelectItem value="active" className="rounded-xl">启用</SelectItem>
+          <SelectItem value="inactive" className="rounded-xl">停用</SelectItem>
         </SelectContent>
       </Select>
     </div>
   )
 
   const tagsAction = (
-    <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-end">
-      <Input
-        className="w-full md:w-72"
-        placeholder="搜索标签名称"
-        value={tagSearch}
-        onChange={(event) => {
-          const nextValue = event.target.value
-          setTagSearch(nextValue)
-          if (!isTagSearchComposingRef.current) {
+    <div className="flex w-full flex-col gap-3 py-1 sm:flex-row sm:items-center sm:justify-end">
+      <div className="relative flex-1 sm:max-w-xs md:max-w-[18rem]">
+        <div className="pointer-events-none absolute inset-y-0 left-0 pl-3.5 flex items-center">
+          <Search className="size-4.5 text-slate-400" />
+        </div>
+        <Input
+          className="h-10 w-full rounded-[1.25rem] border-slate-200 bg-white/70 pl-10 pr-4 shadow-sm transition-all focus:bg-white focus:ring-2 focus:ring-[var(--primary)]/20 font-medium placeholder:font-normal"
+          placeholder="搜索标签名称"
+          value={tagSearch}
+          onChange={(event) => {
+            const nextValue = event.target.value
+            setTagSearch(nextValue)
+            if (!isTagSearchComposingRef.current) {
+              commitTagSearch(nextValue)
+            }
+          }}
+          onCompositionStart={() => {
+            isTagSearchComposingRef.current = true
+          }}
+          onCompositionEnd={(event) => {
+            isTagSearchComposingRef.current = false
+            const nextValue = event.currentTarget.value
+            setTagSearch(nextValue)
             commitTagSearch(nextValue)
-          }
-        }}
-        onCompositionStart={() => {
-          isTagSearchComposingRef.current = true
-        }}
-        onCompositionEnd={(event) => {
-          isTagSearchComposingRef.current = false
-          const nextValue = event.currentTarget.value
-          setTagSearch(nextValue)
-          commitTagSearch(nextValue)
-        }}
-      />
+          }}
+        />
+      </div>
     </div>
   )
 
   const entityCatalogAction = (
-    <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-end">
-      <Button type="button" size="sm" variant="default" onClick={closeBookEntityCatalog}>
-        <ChevronLeft className="size-4" />
-        返回图书列表
+    <div className="flex w-full flex-col gap-3 py-1 sm:flex-row sm:items-center sm:justify-end">
+      <Button
+        type="button"
+        size="sm"
+        variant="default"
+        className="h-10 rounded-[1.25rem] px-5 shadow-sm font-semibold bg-slate-800 hover:bg-slate-900 text-white transition-colors"
+        onClick={closeBookEntityCatalog}
+      >
+        <ChevronLeft className="mr-1.5 size-4" />
+        返回列表
       </Button>
       {entityCatalogBook ? (
         <Button
           type="button"
           size="sm"
           variant="secondary"
+          className="h-10 rounded-[1.25rem] px-5 shadow-sm font-semibold border border-slate-200 bg-white/70 hover:bg-white text-slate-700 transition-colors"
           onClick={() => {
             setSelectedBookId(entityCatalogBook.id)
             setIsEditDialogOpen(true)
@@ -1435,123 +1650,142 @@ export function BooksPage() {
           ) : (
             <>
               <ScrollArea className="max-h-[calc(100vh-18rem)] pr-1">
-                <div className="space-y-5">
-                <div className="rounded-[1.35rem] border border-[var(--line-subtle)] bg-[var(--surface-panel-strong)] p-4">
-                  <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">当前图书</p>
-                  <p className="mt-2 text-lg font-semibold text-[var(--foreground)]">{selectedBook.title}</p>
-                  <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                    可借 {selectedBook.stock_summary?.available_copies ?? selectedBook.available_copies ?? 0} / 总库存 {selectedBook.stock_summary?.total_copies ?? selectedBook.total_copies ?? 0}
-                  </p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      disabled={setBookStatusMutation.isPending || (selectedBook.shelf_status ?? 'draft') === 'draft'}
-                      onClick={() => setBookStatusMutation.mutate('draft')}
-                    >
-                      回到草稿
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      disabled={setBookStatusMutation.isPending || selectedBook.shelf_status === 'on_shelf'}
-                      onClick={() => setBookStatusMutation.mutate('on_shelf')}
-                    >
-                      快速上架
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      disabled={setBookStatusMutation.isPending || selectedBook.shelf_status === 'off_shelf'}
-                      onClick={() => setBookStatusMutation.mutate('off_shelf')}
-                    >
-                      快速下架
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="grid gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-book-title">书名</Label>
-                    <Input id="edit-book-title" value={bookEditForm.title} onChange={(event) => setBookEditForm((current) => ({ ...current, title: event.target.value }))} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-book-author">作者</Label>
-                    <Input id="edit-book-author" value={bookEditForm.author} onChange={(event) => setBookEditForm((current) => ({ ...current, author: event.target.value }))} />
-                  </div>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label id="edit-book-category-label">分类</Label>
-                      <Select
-                        value={bookEditForm.categoryId}
-                        onValueChange={(value) =>
-                          setBookEditForm((current) => ({
-                            ...current,
-                            categoryId: value === 'unclassified' ? '' : value,
-                          }))
-                        }
-                      >
-                        <SelectTrigger aria-labelledby="edit-book-category-label">
-                          <SelectValue placeholder="未分类" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="unclassified">未分类</SelectItem>
-                          {categories.map((category) => (
-                            <SelectItem key={category.id} value={String(category.id)}>
-                              {category.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label id="edit-book-tags-label">标签</Label>
-                      <div className="rounded-[1.1rem] border border-[var(--line-subtle)] bg-[var(--surface-panel-strong)] p-3">
-                        {hasTags ? (
-                          <ToggleGroup
-                            type="multiple"
-                            aria-labelledby="edit-book-tags-label"
-                            value={bookEditForm.tagIds}
-                            onValueChange={(value) => setBookEditForm((current) => ({ ...current, tagIds: value }))}
-                          >
-                            {tags.map((tag) => {
-                              return (
-                                <ToggleGroupItem
-                                  key={tag.id}
-                                  value={String(tag.id)}
-                                  aria-label={tag.name}
-                                >
-                                  {tag.name}
-                                </ToggleGroupItem>
-                              )
-                            })}
-                          </ToggleGroup>
-                        ) : (
-                          <p className="text-xs text-[var(--muted-foreground)]">还没有标签，可以先去创建。</p>
-                        )}
+                <div className="space-y-8 px-1 pb-6">
+                  {/* Status Banner */}
+                  <div className="rounded-[1.2rem] border border-[var(--line-subtle)] bg-[var(--surface-bright)] p-5">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="rounded-full bg-[var(--primary)]/10 px-2.5 py-0.5 text-[11px] font-semibold text-[var(--primary)]">
+                            当前管控对象
+                          </div>
+                        </div>
+                        <p className="text-lg font-bold text-[var(--foreground)]">{selectedBook.title}</p>
+                        <p className="text-[13px] font-medium text-[var(--muted-foreground)] flex items-center gap-1.5">
+                          <Library className="size-3.5 opacity-70" />
+                          可借 {selectedBook.stock_summary?.available_copies ?? selectedBook.available_copies ?? 0} / 
+                          总库 {selectedBook.stock_summary?.total_copies ?? selectedBook.total_copies ?? 0}
+                        </p>
                       </div>
                     </div>
-                  </div>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-book-isbn">ISBN</Label>
-                      <Input id="edit-book-isbn" value={bookEditForm.isbn} onChange={(event) => setBookEditForm((current) => ({ ...current, isbn: event.target.value }))} />
+                    <div className="mt-5 flex flex-wrap gap-2 pt-4 border-t border-[var(--line-subtle)]">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        className="h-8 rounded-full px-4 text-[12px] shadow-none bg-[var(--surface-container)] text-[var(--foreground)] border border-[var(--line-subtle)] hover:bg-[var(--line-subtle)] transition-colors"
+                        disabled={setBookStatusMutation.isPending || (selectedBook.shelf_status ?? 'draft') === 'draft'}
+                        onClick={() => setBookStatusMutation.mutate('draft')}
+                      >
+                        回到草稿
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        className="h-8 rounded-full px-4 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-100 shadow-none text-[12px] transition-colors"
+                        disabled={setBookStatusMutation.isPending || selectedBook.shelf_status === 'on_shelf'}
+                        onClick={() => setBookStatusMutation.mutate('on_shelf')}
+                      >
+                        快速上架
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        className="h-8 rounded-full px-4 bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-100 shadow-none text-[12px] transition-colors"
+                        disabled={setBookStatusMutation.isPending || selectedBook.shelf_status === 'off_shelf'}
+                        onClick={() => setBookStatusMutation.mutate('off_shelf')}
+                      >
+                        执行下架
+                      </Button>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-book-barcode">条码</Label>
-                      <Input id="edit-book-barcode" value={bookEditForm.barcode} onChange={(event) => setBookEditForm((current) => ({ ...current, barcode: event.target.value }))} />
+                  </div>
+
+                  {/* Form Container */}
+                  <div className="space-y-6">
+                    <div className="space-y-2.5">
+                      <Label htmlFor="edit-book-title" className="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)]">书名</Label>
+                      <Input
+                        id="edit-book-title"
+                        className="h-11 rounded-xl bg-[var(--surface-container-lowest)] shadow-sm font-medium"
+                        value={bookEditForm.title}
+                        onChange={(event) => setBookEditForm((current) => ({ ...current, title: event.target.value }))}
+                      />
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-book-summary">简介</Label>
-                    <Textarea id="edit-book-summary" value={bookEditForm.summary} onChange={(event) => setBookEditForm((current) => ({ ...current, summary: event.target.value }))} />
-                  </div>
-                  <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
-                    <div className="space-y-2 md:max-w-sm">
-                      <Label id="book-status-switch-label">上架状态</Label>
+                    
+                    <div className="space-y-2.5">
+                      <Label htmlFor="edit-book-author" className="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)]">作者</Label>
+                      <Input
+                        id="edit-book-author"
+                        className="h-11 rounded-xl bg-[var(--surface-container-lowest)] shadow-sm font-medium"
+                        value={bookEditForm.author}
+                        onChange={(event) => setBookEditForm((current) => ({ ...current, author: event.target.value }))}
+                      />
+                    </div>
+                    
+                    <div className="grid gap-5 md:grid-cols-2">
+                      <div className="space-y-2.5">
+                        <Label id="edit-book-category-label" className="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)]">分类</Label>
+                        <div className="h-11">
+                          <CategorySelect
+                            categories={categories}
+                            value={bookEditForm.categoryId}
+                            onChange={(value) => setBookEditForm((current) => ({ ...current, categoryId: value }))}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2.5">
+                        <Label id="edit-book-tags-label" className="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)]">标签</Label>
+                        <div className="min-h-11">
+                          {hasTags ? (
+                            <MultiTagSelect
+                              tags={tags}
+                              value={bookEditForm.tagIds}
+                              onChange={(value) => setBookEditForm((current) => ({ ...current, tagIds: value }))}
+                            />
+                          ) : (
+                            <div className="flex h-11 items-center rounded-xl border border-dashed border-[var(--line-strong)] bg-white/40 px-4">
+                              <p className="text-xs text-[var(--muted-foreground)]">无可用标签</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="grid gap-5 md:grid-cols-2">
+                      <div className="space-y-2.5">
+                        <Label htmlFor="edit-book-isbn" className="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)]">ISBN</Label>
+                        <Input
+                          id="edit-book-isbn"
+                          className="h-11 rounded-xl bg-[var(--surface-container-lowest)] shadow-sm font-medium"
+                          value={bookEditForm.isbn}
+                          onChange={(event) => setBookEditForm((current) => ({ ...current, isbn: event.target.value }))}
+                        />
+                      </div>
+                      <div className="space-y-2.5">
+                        <Label htmlFor="edit-book-barcode" className="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)]">条码</Label>
+                        <Input
+                          id="edit-book-barcode"
+                          className="h-11 rounded-xl bg-[var(--surface-container-lowest)] shadow-sm font-mono text-sm"
+                          value={bookEditForm.barcode}
+                          onChange={(event) => setBookEditForm((current) => ({ ...current, barcode: event.target.value }))}
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2.5">
+                      <Label htmlFor="edit-book-summary" className="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)]">简介</Label>
+                      <Textarea
+                        id="edit-book-summary"
+                        className="min-h-[100px] resize-none rounded-xl bg-[var(--surface-container-lowest)] p-4 leading-relaxed shadow-sm font-medium"
+                        value={bookEditForm.summary}
+                        onChange={(event) => setBookEditForm((current) => ({ ...current, summary: event.target.value }))}
+                      />
+                    </div>
+                    
+                    <div className="space-y-2.5 pt-2">
+                      <Label id="book-status-switch-label" className="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)]">全站上架状态</Label>
                       <Select
                         value={bookEditForm.shelfStatus}
                         onValueChange={(value) =>
@@ -1561,12 +1795,12 @@ export function BooksPage() {
                           }))
                         }
                       >
-                        <SelectTrigger aria-labelledby="book-status-switch-label">
+                        <SelectTrigger aria-labelledby="book-status-switch-label" className="h-11 rounded-xl bg-[var(--surface-container-lowest)] shadow-sm font-medium">
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="rounded-[1rem]">
                           {BOOK_SHELF_STATUS_OPTIONS.map((value) => (
-                            <SelectItem key={value} value={value}>
+                            <SelectItem key={value} value={value} className="rounded-xl">
                               {formatStatusLabel(value)}
                             </SelectItem>
                           ))}
@@ -1575,12 +1809,11 @@ export function BooksPage() {
                     </div>
                   </div>
                 </div>
-                </div>
               </ScrollArea>
-              <SheetFooter>
+              <SheetFooter className="pt-4 pb-2">
                 <Button
                   type="button"
-                  className="min-w-32"
+                  className="min-w-32 rounded-xl h-12 px-8 shadow-sm font-bold text-base"
                   disabled={updateBookMutation.isPending || !bookEditForm.title.trim()}
                   onClick={() => updateBookMutation.mutate()}
                 >

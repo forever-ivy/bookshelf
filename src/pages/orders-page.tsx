@@ -45,7 +45,6 @@ const columnHelper = createColumnHelper<OrderBundle>()
 const pageHero = getAdminPageHero('orders')
 type ActiveQuickDialog = 'detail' | 'priority' | 'intervention' | 'retry' | null
 const ORDERS_PAGE_SIZE = 20
-const toolbarSelectTriggerClassName = 'h-8 w-[7.5rem] rounded-lg bg-[var(--surface-container-low)] px-3 text-[13px] font-medium text-[var(--foreground)] border-0 shadow-none focus:ring-0'
 
 const ORDER_RELEVANT_EVENT_TYPES = new Set(['order_created'])
 const ORDER_RELEVANT_PHASES = new Set(['dispatch_started', 'in_transit', 'pickup_pending', 'delivered'])
@@ -315,58 +314,61 @@ export function OrdersPage() {
       <WorkspacePanel
         title="订单列表"
         action={
-          <div className="w-full xl:ml-auto xl:max-w-[38rem]" data-testid="orders-toolbar">
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 xl:justify-items-end" data-testid="orders-toolbar-filter-grid">
-              <div className="space-y-1">
-                <span className="text-xs text-[var(--muted-foreground)]">状态</span>
+          <div className="w-full xl:ml-auto xl:max-w-fit" data-testid="orders-toolbar">
+            <div className="flex flex-wrap items-center justify-end gap-2.5" data-testid="orders-toolbar-filter-grid">
+              <div className="flex h-8 items-center gap-2 rounded-full border border-[var(--line-subtle)] bg-[var(--surface-bright)] pl-3 pr-1 transition-colors hover:bg-[var(--surface-container)] focus-within:border-[var(--line-strong)] focus-within:ring-1 focus-within:ring-[var(--line-strong)]">
+                <span className="text-[12px] text-[var(--muted-foreground)] whitespace-nowrap">状态</span>
+                <div className="h-3 w-[1px] bg-[var(--line-subtle)]" />
                 <Select
                   value={statusFilter}
                   onValueChange={(value) => {
                     updateFilters({ status: value === 'all' ? undefined : value })
                   }}
                 >
-                  <SelectTrigger aria-label="订单状态筛选" className={toolbarSelectTriggerClassName}>
+                  <SelectTrigger aria-label="订单状态筛选" className="h-full w-auto min-w-[3.5rem] border-0 bg-transparent px-1.5 py-0 text-[12px] font-medium text-[var(--foreground)] shadow-none focus:ring-0">
                     <SelectValue placeholder="全部" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="rounded-[1rem]">
                     {statusFilterOptions.map(([value, label]) => (
-                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                      <SelectItem key={value} value={value} className="text-[12px] rounded-lg">{label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1">
-                <span className="text-xs text-[var(--muted-foreground)]">优先级</span>
+              <div className="flex h-8 items-center gap-2 rounded-full border border-[var(--line-subtle)] bg-[var(--surface-bright)] pl-3 pr-1 transition-colors hover:bg-[var(--surface-container)] focus-within:border-[var(--line-strong)] focus-within:ring-1 focus-within:ring-[var(--line-strong)]">
+                <span className="text-[12px] text-[var(--muted-foreground)] whitespace-nowrap">优先级</span>
+                <div className="h-3 w-[1px] bg-[var(--line-subtle)]" />
                 <Select
                   value={priorityFilter}
                   onValueChange={(value) => {
                     updateFilters({ priority: value === 'all' ? undefined : value })
                   }}
                 >
-                  <SelectTrigger aria-label="优先级筛选" className={toolbarSelectTriggerClassName}>
+                  <SelectTrigger aria-label="优先级筛选" className="h-full w-auto min-w-[3.5rem] border-0 bg-transparent px-1.5 py-0 text-[12px] font-medium text-[var(--foreground)] shadow-none focus:ring-0">
                     <SelectValue placeholder="全部" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="rounded-[1rem]">
                     {priorityFilterOptions.map(([value, label]) => (
-                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                      <SelectItem key={value} value={value} className="text-[12px] rounded-lg">{label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1">
-                <span className="text-xs text-[var(--muted-foreground)]">人工跟进</span>
+              <div className="flex h-8 items-center gap-2 rounded-full border border-[var(--line-subtle)] bg-[var(--surface-bright)] pl-3 pr-1 transition-colors hover:bg-[var(--surface-container)] focus-within:border-[var(--line-strong)] focus-within:ring-1 focus-within:ring-[var(--line-strong)]">
+                <span className="text-[12px] text-[var(--muted-foreground)] whitespace-nowrap">人工跟进</span>
+                <div className="h-3 w-[1px] bg-[var(--line-subtle)]" />
                 <Select
                   value={interventionFilter}
                   onValueChange={(value) => {
                     updateFilters({ intervention_status: value === 'all' ? undefined : value })
                   }}
                 >
-                  <SelectTrigger aria-label="人工跟进筛选" className={toolbarSelectTriggerClassName}>
+                  <SelectTrigger aria-label="人工跟进筛选" className="h-full w-auto min-w-[3.5rem] border-0 bg-transparent px-1.5 py-0 text-[12px] font-medium text-[var(--foreground)] shadow-none focus:ring-0">
                     <SelectValue placeholder="全部" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="rounded-[1rem]">
                     {interventionFilterOptions.map(([value, label]) => (
-                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                      <SelectItem key={value} value={value} className="text-[12px] rounded-lg">{label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -412,37 +414,37 @@ export function OrdersPage() {
             <>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="rounded-[1.5rem] border border-[var(--line-subtle)] bg-[var(--surface-bright)] p-5">
-                  <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">当前状态</p>
-                  <div className="mt-4 space-y-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-4">当前状态</p>
+                  <div className="space-y-3">
                     <div className="flex items-center justify-between gap-3 border-b border-[var(--line-subtle)] pb-3">
-                      <span className="text-sm text-[var(--muted-foreground)]">借阅</span>
+                      <span className="text-[13px] font-medium text-[var(--muted-foreground)]">借阅</span>
                       <StatusBadge status={detailBundle.borrow_order.status} />
                     </div>
                     <div className="flex items-center justify-between gap-3 border-b border-[var(--line-subtle)] pb-3">
-                      <span className="text-sm text-[var(--muted-foreground)]">配送</span>
+                      <span className="text-[13px] font-medium text-[var(--muted-foreground)]">配送</span>
                       <StatusBadge status={detailBundle.delivery_order?.status ?? 'none'} />
                     </div>
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm text-[var(--muted-foreground)]">任务</span>
+                      <span className="text-[13px] font-medium text-[var(--muted-foreground)]">任务</span>
                       <StatusBadge status={detailBundle.robot_task?.status ?? 'none'} />
                     </div>
                   </div>
-                  <p className="mt-3 text-sm text-[var(--muted-foreground)]">
+                  <p className="mt-4 text-[12px] text-[var(--muted-foreground)]">
                     模式 {formatOrderModeLabel(detailBundle.borrow_order.order_mode)} · 创建于 {formatDateTime(detailBundle.borrow_order.created_at)}
                   </p>
                 </div>
                 <div className="rounded-[1.5rem] border border-[var(--line-subtle)] bg-[var(--surface-bright)] p-5">
-                  <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">送书位置和机器人</p>
-                  <p className="mt-3 text-lg font-semibold text-[var(--foreground)]">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-4">送书位置和机器人</p>
+                  <p className="mt-3 text-lg font-bold text-[var(--foreground)]">
                     {detailBundle.delivery_order?.delivery_target ?? '柜前自取'}
                   </p>
-                  <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+                  <p className="mt-2 text-[13px] text-[var(--muted-foreground)]">
                     机器人 {detailBundle.robot_unit?.code ?? '未分配'} · 任务 #{snapshotValue(detailBundle.robot_task?.id)}
                   </p>
                 </div>
                 <div className="rounded-[1.5rem] border border-[var(--line-subtle)] bg-[var(--surface-bright)] p-5">
-                  <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">处理情况</p>
-                  <div className="mt-3 space-y-2 text-sm text-[var(--muted-foreground)]">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-3">处理情况</p>
+                  <div className="mt-3 space-y-2.5 text-[13px] font-medium text-[var(--muted-foreground)]">
                     <p>运营摘要：{formatFulfillmentPhaseLabel(detailBundle.fulfillment_phase)}</p>
                     <p>优先级：{formatPriorityLabel(detailBundle.borrow_order.priority ?? detailBundle.delivery_order?.priority)}</p>
                     <p>人工跟进：{formatInterventionStatusLabel(detailBundle.borrow_order.intervention_status)}</p>
@@ -450,42 +452,49 @@ export function OrdersPage() {
                   </div>
                 </div>
                 <div className="rounded-[1.5rem] border border-[var(--line-subtle)] bg-[var(--surface-bright)] p-5">
-                  <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">异常原因</p>
-                  <p className="mt-3 text-sm leading-6 text-[var(--muted-foreground)]">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-3">异常原因</p>
+                  <p className="mt-3 text-[13px] leading-relaxed text-[var(--muted-foreground)]">
                     {snapshotValue(detailBundle.borrow_order.failure_reason ?? detailBundle.delivery_order?.failure_reason)}
                   </p>
                 </div>
               </div>
 
-              <div className="rounded-[1.5rem] border border-[var(--line-subtle)] bg-[var(--surface-container-low)] p-5">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+
+              <div className="rounded-[1.5rem] border border-[var(--line-subtle)] bg-[var(--surface-container-low)] p-5 mt-4">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div className="space-y-1">
-                    <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">快速操作</p>
-                    <p className="text-sm text-[var(--muted-foreground)]">常用操作放在这里，更细的内容再打开完整页面。</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">快速操作</p>
+                    <p className="text-[12px] font-medium text-[var(--muted-foreground)]">常用操作放在这里，更细的内容再打开完整页面。</p>
                   </div>
                   <div className="flex flex-wrap gap-2 lg:justify-end">
                     <Button
-                      variant="outline"
-                      className={tonalPrimaryActionButtonClassName}
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="h-8 rounded-full bg-white border border-[var(--line-subtle)] text-[12px] font-medium text-[var(--foreground)] shadow-none transition-colors hover:bg-[var(--surface-container)] px-4"
                       onClick={() => openActionDialog('priority')}
                     >
                       调整优先级
                     </Button>
                     <Button
-                      variant="outline"
-                      className={tonalPrimaryActionButtonClassName}
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="h-8 rounded-full bg-white border border-[var(--line-subtle)] text-[12px] font-medium text-[var(--foreground)] shadow-none transition-colors hover:bg-[var(--surface-container)] px-4"
                       onClick={() => openActionDialog('intervention')}
                     >
                       人工跟进
                     </Button>
                     <Button
-                      variant="outline"
-                      className={tonalPrimaryActionButtonClassName}
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="h-8 rounded-full bg-white border border-[var(--line-subtle)] text-[12px] font-medium text-[var(--foreground)] shadow-none transition-colors hover:bg-[var(--surface-container)] px-4"
                       onClick={() => openActionDialog('retry')}
                     >
                       重新处理
                     </Button>
-                    <Button asChild variant="ghost" className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
+                    <Button asChild variant="ghost" className="h-8 rounded-full text-[12px] font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--line-subtle)]/50 px-4">
                       <Link to={`/orders/${detailBundle.borrow_order.id}`}>打开完整页面</Link>
                     </Button>
                   </div>

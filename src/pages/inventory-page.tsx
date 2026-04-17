@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createColumnHelper, type ColumnDef } from '@tanstack/react-table'
+import { Server, MapPin, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 
@@ -345,35 +347,56 @@ export function InventoryPage() {
             {cabinets.map((cabinet) => (
               <div
                 key={cabinet.id}
-                className="rounded-[1.65rem] border border-[var(--line-subtle)] bg-[var(--surface-bright)] px-5 py-5"
+                className="group flex flex-col justify-between rounded-[1.65rem] border border-[var(--line-subtle)] bg-[var(--surface-bright)] p-5 transition-all hover:shadow-sm"
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-1">
-                    <p className="font-semibold text-[var(--foreground)]">{cabinet.name}</p>
-                    <p className="text-sm text-[var(--muted-foreground)]">{cabinet.location ?? '还没填写位置'}</p>
+                <div className="space-y-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <Server className="size-4 text-[var(--foreground)] opacity-80" />
+                        <p className="font-semibold text-[var(--foreground)]">{cabinet.name}</p>
+                      </div>
+                      <p className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
+                        <MapPin className="size-3.5 opacity-70" />
+                        {cabinet.location ?? '还没填写位置'}
+                      </p>
+                    </div>
+                    <StatusBadge status={cabinet.status} label={formatInventoryCabinetLabel(cabinet.status)} />
                   </div>
-                  <StatusBadge status={cabinet.status} label={formatInventoryCabinetLabel(cabinet.status)} />
+
+                  <div className="grid gap-3 grid-cols-2">
+                    <div className="flex flex-col space-y-1.5 rounded-xl bg-[var(--surface-panel)] p-4 border border-[var(--line-subtle)]">
+                      <p className="text-[12px] font-medium text-[var(--muted-foreground)]">位置数</p>
+                      <p className="text-xl font-semibold text-[var(--foreground)]">{cabinet.slot_total}</p>
+                    </div>
+                    <div className="flex flex-col space-y-1.5 rounded-xl bg-[var(--surface-panel)] p-4 border border-[var(--line-subtle)]">
+                      <p className="text-[12px] font-medium text-[var(--muted-foreground)]">可借库存</p>
+                      <p className="text-xl font-semibold text-[var(--foreground)]">{cabinet.available_copies}</p>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <SummaryTile
-                    label="位置数"
-                    value={<p className="text-2xl font-semibold tracking-[-0.05em] text-[var(--foreground)]">{cabinet.slot_total}</p>}
-                  />
-                  <SummaryTile
-                    label="可借库存"
-                    value={
-                      <p className="text-2xl font-semibold tracking-[-0.05em] text-[var(--foreground)]">{cabinet.available_copies}</p>
-                    }
-                  />
-                </div>
+                <div className="mt-5 flex items-center justify-between gap-2 border-t border-[var(--line-subtle)] pt-4">
+                  <div className="flex items-center gap-3">
+                    <span className="text-[12px] text-[var(--muted-foreground)]">
+                      {cabinet.open_alert_count > 0 ? (
+                        <span className="flex items-center gap-1 font-medium text-red-600/90">
+                          <AlertTriangle className="size-3.5" />
+                          异常 {cabinet.open_alert_count}
+                        </span>
+                      ) : (
+                        <span>无异常</span>
+                      )}
+                    </span>
+                    <span className="text-[12px] text-[var(--muted-foreground)]">
+                      ·
+                    </span>
+                    <span className="text-[12px] text-[var(--muted-foreground)]">
+                      已占用 {cabinet.occupied_slots}
+                    </span>
+                  </div>
 
-                <p className="mt-4 text-sm text-[var(--muted-foreground)]">
-                  异常 {cabinet.open_alert_count} · 已占用 {cabinet.occupied_slots}
-                </p>
-
-                <div className="mt-5 flex items-center justify-between gap-3 border-t border-[var(--line-subtle)] pt-4">
-                  <Button asChild type="button" variant="default" className={filledPrimaryActionButtonClassName}>
+                  <Button asChild type="button" variant="default" className={cn("h-8 rounded-full px-4 text-xs font-semibold transition-all shadow-none", filledPrimaryActionButtonClassName)}>
                     <Link to={`/inventory/cabinets/${cabinet.id}`}>查看书柜</Link>
                   </Button>
                 </div>
@@ -511,33 +534,90 @@ export function InventoryPage() {
         </p>
 
         <Tabs value={activeBoardTab} onValueChange={updateBoardTab} className="mt-6 space-y-5 border-t border-[var(--line-subtle)] pt-5">
-          <TabsList className="grid w-full max-w-[20rem] grid-cols-3">
-            <TabsTrigger value="slots">格口</TabsTrigger>
-            <TabsTrigger value="records">记录</TabsTrigger>
-            <TabsTrigger value="alerts">异常</TabsTrigger>
-          </TabsList>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <TabsList className="grid w-full max-w-[20rem] grid-cols-3">
+              <TabsTrigger value="slots">格口</TabsTrigger>
+              <TabsTrigger value="records">记录</TabsTrigger>
+              <TabsTrigger value="alerts">异常</TabsTrigger>
+            </TabsList>
+            
+            <div className="flex items-center">
+              {activeBoardTab === 'slots' && (
+                <div className="flex h-8 items-center gap-2 rounded-full border border-[var(--line-subtle)] bg-[var(--surface-bright)] pl-3 pr-1 transition-colors hover:bg-[var(--surface-container)] focus-within:border-[var(--line-strong)] focus-within:ring-1 focus-within:ring-[var(--line-strong)]">
+                  <span className="text-[12px] text-[var(--muted-foreground)] whitespace-nowrap">按状态</span>
+                  <div className="h-3 w-[1px] bg-[var(--line-subtle)]" />
+                  <Select
+                    value={slotStatusFilter ?? 'all'}
+                    onValueChange={(value) =>
+                      updateBoardFilters({
+                        slot_status: value === 'all' ? undefined : value,
+                      })
+                    }
+                  >
+                    <SelectTrigger aria-label="位置状态筛选" className="h-full w-auto min-w-[5.5rem] border-0 bg-transparent px-1.5 py-0 text-[12px] font-medium text-[var(--foreground)] shadow-none focus:ring-0">
+                      <SelectValue placeholder="全部位置" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-[1rem]">
+                      <SelectItem value="all" className="text-[12px] rounded-lg">全部位置</SelectItem>
+                      <SelectItem value="occupied" className="text-[12px] rounded-lg">已占用</SelectItem>
+                      <SelectItem value="empty" className="text-[12px] rounded-lg">空位</SelectItem>
+                      <SelectItem value="locked" className="text-[12px] rounded-lg">锁定</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {activeBoardTab === 'records' && (
+                <div className="flex h-8 items-center gap-2 rounded-full border border-[var(--line-subtle)] bg-[var(--surface-bright)] pl-3 pr-1 transition-colors hover:bg-[var(--surface-container)] focus-within:border-[var(--line-strong)] focus-within:ring-1 focus-within:ring-[var(--line-strong)]">
+                  <span className="text-[12px] text-[var(--muted-foreground)] whitespace-nowrap">按类型</span>
+                  <div className="h-3 w-[1px] bg-[var(--line-subtle)]" />
+                  <Select
+                    value={recordEventTypeFilter ?? 'all'}
+                    onValueChange={(value) =>
+                      updateBoardFilters({
+                        event_type: value === 'all' ? undefined : value,
+                      })
+                    }
+                  >
+                    <SelectTrigger aria-label="记录类型筛选" className="h-full w-auto min-w-[5.5rem] border-0 bg-transparent px-1.5 py-0 text-[12px] font-medium text-[var(--foreground)] shadow-none focus:ring-0">
+                      <SelectValue placeholder="全部记录" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-[1rem]">
+                      <SelectItem value="all" className="text-[12px] rounded-lg">全部记录</SelectItem>
+                      <SelectItem value="book_stored" className="text-[12px] rounded-lg">入柜记录</SelectItem>
+                      <SelectItem value="book_removed" className="text-[12px] rounded-lg">出柜记录</SelectItem>
+                      <SelectItem value="manual_correction" className="text-[12px] rounded-lg">手动修正记录</SelectItem>
+                      <SelectItem value="inventory_adjustment" className="text-[12px] rounded-lg">库存调整记录</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {activeBoardTab === 'alerts' && (
+                <div className="flex h-8 items-center gap-2 rounded-full border border-[var(--line-subtle)] bg-[var(--surface-bright)] pl-3 pr-1 transition-colors hover:bg-[var(--surface-container)] focus-within:border-[var(--line-strong)] focus-within:ring-1 focus-within:ring-[var(--line-strong)]">
+                  <span className="text-[12px] text-[var(--muted-foreground)] whitespace-nowrap">按阶段</span>
+                  <div className="h-3 w-[1px] bg-[var(--line-subtle)]" />
+                  <Select
+                    value={alertStatusFilter}
+                    onValueChange={(value) =>
+                      updateBoardFilters({
+                        alert_status: value === 'open' ? undefined : value,
+                      })
+                    }
+                  >
+                    <SelectTrigger aria-label="库存警告状态筛选" className="h-full w-auto min-w-[5.5rem] border-0 bg-transparent px-1.5 py-0 text-[12px] font-medium text-[var(--foreground)] shadow-none focus:ring-0">
+                      <SelectValue placeholder="待处理异常" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-[1rem]">
+                      <SelectItem value="open" className="text-[12px] rounded-lg">待处理异常</SelectItem>
+                      <SelectItem value="acknowledged" className="text-[12px] rounded-lg">已确认异常</SelectItem>
+                      <SelectItem value="resolved" className="text-[12px] rounded-lg">已处理异常</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          </div>
 
           <TabsContent value="slots" className="mt-0">
-            <div className="mb-4 flex flex-wrap gap-3">
-              <Select
-                value={slotStatusFilter ?? 'all'}
-                onValueChange={(value) =>
-                  updateBoardFilters({
-                    slot_status: value === 'all' ? undefined : value,
-                  })
-                }
-              >
-                <SelectTrigger aria-label="位置状态筛选" className="w-[10rem]">
-                  <SelectValue placeholder="全部位置" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部位置</SelectItem>
-                  <SelectItem value="occupied">已占用</SelectItem>
-                  <SelectItem value="empty">空位</SelectItem>
-                  <SelectItem value="locked">锁定</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
             {slotsQuery.isLoading ? (
               <LoadingState label="正在载入" />
             ) : (
@@ -557,27 +637,6 @@ export function InventoryPage() {
           </TabsContent>
 
           <TabsContent value="records" className="mt-0">
-            <div className="mb-4 flex flex-wrap gap-3">
-              <Select
-                value={recordEventTypeFilter ?? 'all'}
-                onValueChange={(value) =>
-                  updateBoardFilters({
-                    event_type: value === 'all' ? undefined : value,
-                  })
-                }
-              >
-                <SelectTrigger aria-label="记录类型筛选" className="w-[11rem]">
-                  <SelectValue placeholder="全部记录" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部记录</SelectItem>
-                  <SelectItem value="book_stored">入柜记录</SelectItem>
-                  <SelectItem value="book_removed">出柜记录</SelectItem>
-                  <SelectItem value="manual_correction">手动修正记录</SelectItem>
-                  <SelectItem value="inventory_adjustment">库存调整记录</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
             {recordsQuery.isLoading ? (
               <LoadingState label="正在载入" />
             ) : (
@@ -597,25 +656,6 @@ export function InventoryPage() {
           </TabsContent>
 
           <TabsContent value="alerts" className="mt-0">
-            <div className="mb-4 flex flex-wrap gap-3">
-              <Select
-                value={alertStatusFilter}
-                onValueChange={(value) =>
-                  updateBoardFilters({
-                    alert_status: value === 'open' ? undefined : value,
-                  })
-                }
-              >
-                <SelectTrigger aria-label="库存警告状态筛选" className="w-[11rem]">
-                  <SelectValue placeholder="待处理异常" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="open">待处理异常</SelectItem>
-                  <SelectItem value="acknowledged">已确认异常</SelectItem>
-                  <SelectItem value="resolved">已处理异常</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
             {alertsQuery.isLoading ? (
               <LoadingState label="正在载入" />
             ) : alerts.length === 0 ? (
