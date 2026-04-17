@@ -2,9 +2,13 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { toast } from 'sonner-native';
 
-import LearningWorkspaceGuideRoute from '@/app/learning/[profileId]/guide';
-import LearningWorkspaceOverviewRoute from '@/app/learning/[profileId]/index';
+import LearningWorkspaceExploreLegacyRoute from '@/app/learning/[profileId]/explore';
+import LearningWorkspaceGuideLegacyRoute from '@/app/learning/[profileId]/guide';
+import LearningWorkspaceEntryRoute from '@/app/learning/[profileId]/index';
+import LearningWorkspaceOverviewRoute from '@/app/learning/[profileId]/overview';
+import LearningWorkspaceStudyRoute from '@/app/learning/[profileId]/(workspace)/study';
 import {
   LearningWorkspaceProvider,
   useLearningWorkspaceScreen,
@@ -16,7 +20,7 @@ const mockRouter = {
   push: jest.fn(),
   replace: jest.fn(),
 };
-const mockUseLocalSearchParams = jest.fn(() => ({ profileId: '101' }));
+const mockUseLocalSearchParams = jest.fn<any, any>(() => ({ profileId: '101' }));
 const mockUsePathname = jest.fn(() => '/learning/101');
 const mockStartSessionMutateAsync = jest.fn();
 const mockGenerateProfileMutateAsync = jest.fn();
@@ -259,21 +263,29 @@ function renderWithWorkspaceProvider(ui: React.ReactElement) {
 
 function WorkspaceProbe() {
   const {
+    activeTab,
     handleSend,
     latestEvaluation,
     latestSessionSignal,
     renderedMessages,
+    studyMode,
+    navigateToStudyMode,
+    navigateToTab,
     workspaceGate,
   } = useLearningWorkspaceScreen();
 
   return (
     <View>
       <Text>{workspaceGate.title}</Text>
+      <Text>{`active-tab:${activeTab}`}</Text>
+      <Text>{`study-mode:${studyMode}`}</Text>
       {renderedMessages.map((message) => (
         <Text key={message.id}>{message.text}</Text>
       ))}
       {latestEvaluation ? <Text>{latestEvaluation.reasoning}</Text> : null}
       {latestSessionSignal ? <Text>{latestSessionSignal.transitionLabel}</Text> : null}
+      <Pressable onPress={() => navigateToStudyMode('guide')} testID="workspace-probe-go-guide" />
+      <Pressable onPress={() => navigateToTab('graph')} testID="workspace-probe-go-graph" />
       <Pressable
         onPress={() => {
           void handleSend('帮我总结这一节的核心线索');
@@ -326,17 +338,32 @@ describe('learning workspace routes', () => {
   });
 
   it('redirects the entry route to guide by default', () => {
-    renderWithWorkspaceProvider(<LearningWorkspaceOverviewRoute />);
+    renderWithWorkspaceProvider(<LearningWorkspaceEntryRoute />);
 
     expect(screen.getByTestId('route-redirect').props.href).toBe('/learning/101/guide');
+  });
+
+  it('redirects the legacy guide and explore routes into study mode routes', () => {
+    renderWithWorkspaceProvider(
+      <>
+        <LearningWorkspaceGuideLegacyRoute />
+        <LearningWorkspaceExploreLegacyRoute />
+      </>
+    );
+
+    const redirects = screen.getAllByTestId('route-redirect').map((node) => node.props.href);
+
+    expect(redirects).toContain('/learning/101/study?mode=guide');
+    expect(redirects).toContain('/learning/101/study?mode=explore');
   });
 
   it('starts a session automatically when the profile is ready but no active session exists', async () => {
     mockSessionsData = [];
 
-    mockUsePathname.mockReturnValue('/learning/101/guide');
+    mockUsePathname.mockReturnValue('/learning/101/study');
+    mockUseLocalSearchParams.mockReturnValue({ mode: 'guide', profileId: '101' });
 
-    renderWithWorkspaceProvider(<LearningWorkspaceGuideRoute />);
+    renderWithWorkspaceProvider(<LearningWorkspaceStudyRoute />);
 
     await waitFor(() => {
       expect(mockStartSessionMutateAsync).toHaveBeenCalledWith(101);
@@ -358,9 +385,10 @@ describe('learning workspace routes', () => {
     };
     mockSessionsData = [];
 
-    mockUsePathname.mockReturnValue('/learning/101/guide');
+    mockUsePathname.mockReturnValue('/learning/101/study');
+    mockUseLocalSearchParams.mockReturnValue({ mode: 'guide', profileId: '101' });
 
-    renderWithWorkspaceProvider(<LearningWorkspaceGuideRoute />);
+    renderWithWorkspaceProvider(<LearningWorkspaceStudyRoute />);
 
     expect(screen.getByText('还未真正开始处理')).toBeTruthy();
     expect(screen.getByText('重新触发生成')).toBeTruthy();
@@ -384,9 +412,10 @@ describe('learning workspace routes', () => {
     };
     mockSessionsData = [];
 
-    mockUsePathname.mockReturnValue('/learning/101/guide');
+    mockUsePathname.mockReturnValue('/learning/101/study');
+    mockUseLocalSearchParams.mockReturnValue({ mode: 'guide', profileId: '101' });
 
-    renderWithWorkspaceProvider(<LearningWorkspaceGuideRoute />);
+    renderWithWorkspaceProvider(<LearningWorkspaceStudyRoute />);
 
     expect(screen.getByText('后台处理中')).toBeTruthy();
     expect(screen.getByText('资料正在后台解析和整理，完成后会自动进入工作区。')).toBeTruthy();
@@ -406,9 +435,10 @@ describe('learning workspace routes', () => {
     };
     mockSessionsData = [];
 
-    mockUsePathname.mockReturnValue('/learning/101/guide');
+    mockUsePathname.mockReturnValue('/learning/101/study');
+    mockUseLocalSearchParams.mockReturnValue({ mode: 'guide', profileId: '101' });
 
-    renderWithWorkspaceProvider(<LearningWorkspaceGuideRoute />);
+    renderWithWorkspaceProvider(<LearningWorkspaceStudyRoute />);
 
     expect(screen.getByText('生成失败')).toBeTruthy();
     expect(screen.getByText('学习任务没有真正启动，请检查后台 worker。')).toBeTruthy();
@@ -436,7 +466,10 @@ describe('learning workspace routes', () => {
     };
     mockSessionsData = [];
 
-    const view = renderWithWorkspaceProvider(<LearningWorkspaceGuideRoute />);
+    mockUsePathname.mockReturnValue('/learning/101/study');
+    mockUseLocalSearchParams.mockReturnValue({ mode: 'guide', profileId: '101' });
+
+    const view = renderWithWorkspaceProvider(<LearningWorkspaceStudyRoute />);
 
     await act(async () => {
       fireEvent.press(screen.getByText('重新触发生成'));
@@ -471,7 +504,7 @@ describe('learning workspace routes', () => {
     ];
 
     view.rerender(
-      <QueryClientProvider
+        <QueryClientProvider
         client={
           new QueryClient({
             defaultOptions: {
@@ -482,28 +515,41 @@ describe('learning workspace routes', () => {
           })
         }>
         <LearningWorkspaceProvider profileId={101}>
-          <LearningWorkspaceGuideRoute />
+          <LearningWorkspaceStudyRoute />
         </LearningWorkspaceProvider>
       </QueryClientProvider>
     );
 
     expect(screen.getByText('用自己的话解释概念')).toBeTruthy();
-    expect(screen.getByText('深度探索 (Explore)')).toBeTruthy();
+    expect(screen.getByText('深度探索')).toBeTruthy();
   });
 
-  it('uses replace-based mode switching and a direct close action inside the workspace', () => {
-    mockUsePathname.mockReturnValue('/learning/101/guide');
+  it('tracks active tab and study mode separately and uses replace-based study/tab navigation', () => {
+    mockUsePathname.mockReturnValue('/learning/101/study');
+    mockUseLocalSearchParams.mockReturnValue({ mode: 'explore', profileId: '101' });
 
-    renderWithWorkspaceProvider(<LearningWorkspaceGuideRoute />);
+    renderWithWorkspaceProvider(
+      <>
+        <LearningWorkspaceStudyRoute />
+        <WorkspaceProbe />
+      </>
+    );
 
-    fireEvent.press(screen.getByTestId('learning-workspace-tab-explore'));
+    expect(screen.getByText('active-tab:study')).toBeTruthy();
+    expect(screen.getByText('study-mode:explore')).toBeTruthy();
 
-    expect(mockRouter.replace).toHaveBeenCalledWith('/learning/101/explore');
-    expect(mockRouter.push).not.toHaveBeenCalledWith('/learning/101/explore');
+    fireEvent.press(screen.getByTestId('workspace-probe-go-guide'));
+    expect(mockRouter.replace).toHaveBeenCalledWith('/learning/101/study?mode=guide');
 
-    fireEvent.press(screen.getByTestId('learning-workspace-tab-guide'));
+    fireEvent.press(screen.getByTestId('workspace-probe-go-graph'));
+    expect(mockRouter.replace).toHaveBeenCalledWith('/learning/101/graph');
+  });
 
-    expect(mockRouter.replace).toHaveBeenCalledTimes(1);
+  it('uses a direct close action inside the workspace', () => {
+    mockUsePathname.mockReturnValue('/learning/101/study');
+    mockUseLocalSearchParams.mockReturnValue({ mode: 'guide', profileId: '101' });
+
+    renderWithWorkspaceProvider(<LearningWorkspaceStudyRoute />);
 
     fireEvent.press(screen.getByTestId('learning-workspace-close-button'));
 
@@ -560,7 +606,7 @@ describe('learning workspace routes', () => {
 
     renderWithWorkspaceProvider(
       <>
-        <LearningWorkspaceGuideRoute />
+        <LearningWorkspaceStudyRoute />
         <WorkspaceProbe />
       </>
     );
@@ -576,6 +622,84 @@ describe('learning workspace routes', () => {
     );
     expect(screen.getAllByText('先抓住模型、数据和目标。').length).toBeGreaterThan(0);
     expect(screen.getByText('回答已经覆盖当前步骤的关键线索。')).toBeTruthy();
-    expect(screen.getByText('当前导学本的所有步骤都已完成。')).toBeTruthy();
+    expect(screen.getAllByText('当前导学本的所有步骤都已完成。').length).toBeGreaterThan(0);
+  });
+
+  it('does not show a failure toast when the stream errors after assistant.final already arrived', async () => {
+    (streamLearningSessionReply as jest.Mock).mockImplementation(async function* () {
+      yield { phase: 'retrieving', type: 'status' };
+      yield {
+        message: {
+          content: '这是已经完整返回的导师总结。',
+          createdAt: '2026-04-08T08:31:00Z',
+          id: 881,
+          role: 'assistant',
+          learningSessionId: 301,
+        },
+        type: 'assistant.final',
+      };
+      throw new Error('stream tail closed unexpectedly');
+    });
+
+    renderWithWorkspaceProvider(
+      <>
+        <LearningWorkspaceStudyRoute />
+        <WorkspaceProbe />
+      </>
+    );
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('workspace-probe-send'));
+    });
+
+    expect(screen.getAllByText('这是已经完整返回的导师总结。').length).toBeGreaterThan(0);
+    expect(toast.error).not.toHaveBeenCalledWith('导学回复失败，请稍后再试。');
+  });
+
+  it('does not show a failure toast when the stream breaks before assistant.final but the synced history already contains a new assistant reply', async () => {
+    (streamLearningSessionReply as jest.Mock).mockImplementation(async function* () {
+      yield { phase: 'retrieving', type: 'status' };
+      yield { delta: '导师正在组织回答…', type: 'assistant.delta' };
+      mockSessionMessagesData = [
+        ...mockSessionMessagesData,
+        {
+          content: '帮我总结这一节的核心线索',
+          createdAt: '2026-04-08T08:31:00Z',
+          id: 803,
+          role: 'user',
+          learningSessionId: 301,
+        },
+        {
+          content: '这是后端已经落库的导师总结。',
+          createdAt: '2026-04-08T08:31:01Z',
+          id: 804,
+          role: 'assistant',
+          learningSessionId: 301,
+        },
+      ];
+      throw new Error('native stream interrupted before final frame arrived');
+    });
+
+    renderWithWorkspaceProvider(
+      <>
+        <LearningWorkspaceStudyRoute />
+        <WorkspaceProbe />
+      </>
+    );
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('workspace-probe-send'));
+    });
+
+    expect(toast.error).not.toHaveBeenCalledWith('导学回复失败，请稍后再试。');
+  });
+
+  it('renders overview as a secondary workspace summary route', () => {
+    mockUsePathname.mockReturnValue('/learning/101/overview');
+    mockUseLocalSearchParams.mockReturnValue({ profileId: '101' });
+
+    renderWithWorkspaceProvider(<LearningWorkspaceOverviewRoute />);
+
+    expect(screen.getByText('机器学习从零到一')).toBeTruthy();
   });
 });

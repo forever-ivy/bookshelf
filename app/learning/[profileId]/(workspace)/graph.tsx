@@ -27,7 +27,7 @@ export default function LearningWorkspaceGraphScreen() {
   });
 
   return (
-    <LearningWorkspaceScaffold mode="graph">
+    <LearningWorkspaceScaffold subtitle="知识图谱">
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -230,9 +230,9 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   scrollContent: {
+    paddingBottom: 24,
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 24,
   },
   section: {
     marginBottom: 36,
@@ -258,12 +258,13 @@ const styles = StyleSheet.create({
   sourceMeta: {
     fontSize: 12,
     letterSpacing: 0.5,
-    marginBottom: 6,
+    marginBottom: 4,
+    textTransform: 'uppercase',
   },
   sourceTitle: {
-    fontSize: 17,
+    fontSize: 16,
   },
   sourcesList: {
-    flexDirection: 'column',
+    gap: 0,
   },
 });

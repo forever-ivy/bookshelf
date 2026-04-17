@@ -632,4 +632,43 @@ describe('learning contract', () => {
       type: 'assistant.final',
     });
   });
+
+  it('ignores remediation plan events that do not include a session snapshot', async () => {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            [
+              'data: {"event":"status","data":{"phase":"retrieving","sessionId":301}}',
+              '',
+              'data: {"event":"session.remediation","data":{"plan":{"id":91,"sessionId":301,"status":"active"}}}',
+              '',
+              'data: {"event":"assistant.final","data":{"turn":{"id":801,"sessionId":301,"assistantContent":"我们先回到模型、数据和目标这三者的关系。","createdAt":"2026-04-08T08:22:00Z"}}}',
+              '',
+            ].join('\n')
+          )
+        );
+        controller.close();
+      },
+    });
+
+    (global.fetch as jest.Mock).mockResolvedValue({
+      body: stream,
+      headers: { get: () => 'text/event-stream' },
+      ok: true,
+      status: 200,
+    });
+
+    const events = [];
+    for await (const event of streamLearningSessionReply(
+      301,
+      { content: '帮我总结这一节的核心线索' },
+      'reader-token'
+    )) {
+      events.push(event);
+    }
+
+    expect(events.map((event) => event.type)).toEqual(['status', 'assistant.final']);
+  });
 });

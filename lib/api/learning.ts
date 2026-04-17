@@ -515,7 +515,6 @@ function normalizeLearningStreamEvents(raw: { data?: any; event?: string }): Lea
         },
       ];
     case 'session.progress':
-    case 'session.remediation':
       return raw.data?.session
         ? [
             {
@@ -527,10 +526,19 @@ function normalizeLearningStreamEvents(raw: { data?: any; event?: string }): Lea
           ? [
               {
                 session: normalizeLearningSession(raw.data),
-                type: 'session.updated',
-              },
-            ]
+              type: 'session.updated',
+            },
+          ]
           : [];
+    case 'session.remediation':
+      return raw.data?.session
+        ? [
+            {
+              session: normalizeLearningSession(raw.data.session),
+              type: 'session.updated',
+            },
+          ]
+        : [];
     case 'assistant.final':
     case 'assistant.done':
       return [

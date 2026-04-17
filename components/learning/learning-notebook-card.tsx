@@ -12,9 +12,19 @@ type LearningNotebookPalette = {
   coverBackground: string;
   coverGlow: string;
   coverTone: BookCoverTone;
-  metaBackground: string;
-  metaColor: string;
-  secondaryMetaColor: string;
+  infoBackground: string;
+  infoColor: string;
+  mutedColor: string;
+  statusBackground: string;
+};
+
+type LearningNotebookMeta = {
+  previewText: string;
+  primaryMeta: string;
+  secondaryMeta: string;
+  sourceLabel: string;
+  statusLabel: string;
+  tertiaryMeta: string;
 };
 
 function isLearningProfilePending(profile: LearningProfile) {
@@ -26,6 +36,20 @@ function hasStartedGeneration(profile: LearningProfile) {
 }
 
 function resolveNotebookPalette(profile: LearningProfile): LearningNotebookPalette {
+  if (profile.status === 'failed') {
+    return {
+      cardBackground: '#FFFFFF',
+      coverAccent: '#F0DDD8',
+      coverBackground: '#FBF4F1',
+      coverGlow: 'rgba(238, 214, 206, 0.7)',
+      coverTone: 'apricot',
+      infoBackground: '#FBF2EF',
+      infoColor: '#8C5A4E',
+      mutedColor: '#A07669',
+      statusBackground: '#FDE8E4',
+    };
+  }
+
   if (isLearningProfilePending(profile)) {
     return {
       cardBackground: '#FFFFFF',
@@ -33,9 +57,10 @@ function resolveNotebookPalette(profile: LearningProfile): LearningNotebookPalet
       coverBackground: '#EEF4F9',
       coverGlow: 'rgba(221, 231, 242, 0.65)',
       coverTone: 'lavender',
-      metaBackground: '#F6F9FB',
-      metaColor: '#4E6379',
-      secondaryMetaColor: '#73869A',
+      infoBackground: '#F4F8FB',
+      infoColor: '#4E6379',
+      mutedColor: '#73869A',
+      statusBackground: '#EDF4FB',
     };
   }
 
@@ -46,9 +71,10 @@ function resolveNotebookPalette(profile: LearningProfile): LearningNotebookPalet
       coverBackground: '#F8F2EC',
       coverGlow: 'rgba(233, 214, 201, 0.66)',
       coverTone: 'apricot',
-      metaBackground: '#FBF6F1',
-      metaColor: '#8B6442',
-      secondaryMetaColor: '#A07D60',
+      infoBackground: '#FBF6F1',
+      infoColor: '#8B6442',
+      mutedColor: '#A07D60',
+      statusBackground: '#F7EFE7',
     };
   }
 
@@ -58,18 +84,26 @@ function resolveNotebookPalette(profile: LearningProfile): LearningNotebookPalet
     coverBackground: '#F1F6F2',
     coverGlow: 'rgba(214, 226, 216, 0.68)',
     coverTone: 'mint',
-    metaBackground: '#F5F8F5',
-    metaColor: '#4D6758',
-    secondaryMetaColor: '#6B8575',
+    infoBackground: '#F5F8F5',
+    infoColor: '#4D6758',
+    mutedColor: '#6B8575',
+    statusBackground: '#EEF5EF',
   };
 }
 
-function resolveMeta(profile: LearningProfile, session?: LearningSession | null) {
+function resolveNotebookMeta(
+  profile: LearningProfile,
+  session?: LearningSession | null
+): LearningNotebookMeta {
+  const sourceLabel = profile.sourceType === 'upload' ? '上传资料' : '馆藏书';
+
   if (profile.status === 'failed') {
     return {
       previewText: profile.failureMessage ?? profile.latestJob?.errorMessage ?? '这次生成失败了，请稍后重试。',
       primaryMeta: '生成失败，可重试',
       secondaryMeta: profile.latestJob?.errorMessage ?? '返回导学本库后可以重新生成',
+      sourceLabel,
+      statusLabel: '失败',
       tertiaryMeta: '生成失败',
     };
   }
@@ -79,27 +113,64 @@ function resolveMeta(profile: LearningProfile, session?: LearningSession | null)
       previewText: '导学任务还没有真正开始，你可以重新触发生成。',
       primaryMeta: '等待触发',
       secondaryMeta: '可重试',
+      sourceLabel,
+      statusLabel: '待启动',
       tertiaryMeta: '尚未启动',
     };
   }
 
+  if (isLearningProfilePending(profile)) {
+    return {
+      previewText: '正在解析文档，请稍后。',
+      primaryMeta: '正在解析',
+      secondaryMeta: '请稍后',
+      sourceLabel,
+      statusLabel: '处理中',
+      tertiaryMeta: '后台处理中',
+    };
+  }
+
   return {
-    previewText:
-      isLearningProfilePending(profile)
-        ? '正在解析文档，请稍后'
-        : session?.lastMessagePreview ?? profile.persona.greeting,
-    primaryMeta:
-      isLearningProfilePending(profile)
-        ? '正在解析'
-        : session?.progressLabel ?? `${Math.max(profile.curriculum.length, 1)} 个学习步骤`,
-    secondaryMeta:
-      isLearningProfilePending(profile)
-        ? '请稍后'
-        : session?.currentStepTitle ?? profile.curriculum[0]?.title ?? profile.persona.name,
-    tertiaryMeta: isLearningProfilePending(profile)
-      ? '后台处理中'
-      : profile.persona.name,
+    previewText: session?.lastMessagePreview ?? profile.persona.greeting,
+    primaryMeta: session?.progressLabel ?? `${Math.max(profile.curriculum.length, 1)} 个学习步骤`,
+    secondaryMeta: session?.currentStepTitle ?? profile.curriculum[0]?.title ?? profile.persona.name,
+    sourceLabel,
+    statusLabel: session ? '最近继续' : '已就绪',
+    tertiaryMeta: profile.persona.name,
   };
+}
+
+function NotebookChip({
+  backgroundColor,
+  color,
+  label,
+}: {
+  backgroundColor: string;
+  color: string;
+  label: string;
+}) {
+  const { theme } = useAppTheme();
+
+  return (
+    <View
+      style={{
+        alignItems: 'center',
+        alignSelf: 'flex-start',
+        backgroundColor,
+        borderRadius: theme.radii.pill,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+      }}>
+      <Text
+        style={{
+          color,
+          ...theme.typography.medium,
+          fontSize: 11,
+        }}>
+        {label}
+      </Text>
+    </View>
+  );
 }
 
 function LearningPosterCard({
@@ -114,7 +185,7 @@ function LearningPosterCard({
   session?: LearningSession | null;
 }) {
   const { theme } = useAppTheme();
-  const meta = resolveMeta(profile, session);
+  const meta = resolveNotebookMeta(profile, session);
 
   return (
     <Link asChild href={href}>
@@ -131,148 +202,126 @@ function LearningPosterCard({
             borderRadius: 30,
             borderWidth: 1,
             boxShadow: theme.shadows.card,
-            height: 380,
+            height: 362,
             overflow: 'hidden',
+            padding: theme.spacing.lg,
           }}
           testID="learning-notebook-poster-card">
+          <View style={{ alignItems: 'flex-start', flexDirection: 'row', justifyContent: 'space-between' }}>
+            <NotebookChip
+              backgroundColor={theme.colors.surfaceTint}
+              color={theme.colors.textSoft}
+              label={meta.sourceLabel}
+            />
+            <NotebookChip
+              backgroundColor={palette.statusBackground}
+              color={palette.infoColor}
+              label={meta.statusLabel}
+            />
+          </View>
+
           <View
             style={{
+              alignItems: 'center',
               backgroundColor: palette.coverBackground,
-              height: 172,
+              borderRadius: 26,
+              height: 142,
               justifyContent: 'center',
+              marginTop: 16,
               overflow: 'hidden',
-              paddingHorizontal: theme.spacing.xl,
-              paddingTop: theme.spacing.lg,
+              position: 'relative',
             }}>
             <View
               style={{
                 backgroundColor: palette.coverAccent,
-                borderRadius: 40,
-                height: 118,
-                left: 24,
-                opacity: 0.82,
+                borderRadius: 30,
+                height: 96,
+                left: 20,
+                opacity: 0.8,
                 position: 'absolute',
-                right: 112,
-                top: 30,
-                transform: [{ rotate: '-9deg' }],
+                right: 108,
+                top: 18,
+                transform: [{ rotate: '-8deg' }],
               }}
             />
             <View
               style={{
                 backgroundColor: palette.coverGlow,
                 borderRadius: 999,
-                height: 156,
-                left: 42,
+                height: 132,
                 position: 'absolute',
-                right: 42,
-                top: 16,
+                width: 132,
               }}
             />
-            <View style={{ alignItems: 'center', justifyContent: 'center', marginTop: 12 }}>
-              <View
-                style={{
-                  backgroundColor: theme.colors.surface,
-                  borderColor: theme.colors.borderSoft,
-                  borderRadius: 28,
-                  borderWidth: 1,
-                  boxShadow: theme.shadows.float,
-                  padding: 12,
-                }}>
-                <BookCover
-                  borderRadius={theme.radii.lg}
-                  height={132}
-                  seed={profile.title}
-                  shellTestID="learning-notebook-poster-cover"
-                  tone={palette.coverTone}
-                  width={102}
-                />
-              </View>
-            </View>
+            <BookCover
+              borderRadius={theme.radii.lg}
+              height={108}
+              seed={profile.title}
+              shellTestID="learning-notebook-poster-cover"
+              tone={palette.coverTone}
+              width={82}
+            />
+          </View>
+
+          <View style={{ flex: 1, gap: 12, marginTop: 18 }}>
+            <Text
+              numberOfLines={2}
+              style={{
+                color: theme.colors.text,
+                ...theme.typography.heading,
+                fontSize: 22,
+                lineHeight: 28,
+              }}>
+              {profile.title}
+            </Text>
+            <Text
+              numberOfLines={3}
+              style={{
+                color: theme.colors.textMuted,
+                ...theme.typography.body,
+                fontSize: 14,
+                lineHeight: 21,
+              }}>
+              {meta.previewText}
+            </Text>
           </View>
 
           <View
             style={{
-              flex: 1,
-              justifyContent: 'space-between',
-              paddingBottom: theme.spacing.lg,
-              paddingHorizontal: theme.spacing.lg,
-              paddingTop: 18,
+              backgroundColor: palette.infoBackground,
+              borderRadius: 22,
+              gap: 6,
+              marginTop: 16,
+              paddingHorizontal: 14,
+              paddingVertical: 14,
             }}>
-            <View style={{ gap: 10 }}>
-              <Text
-                numberOfLines={2}
-                style={{
-                  color: theme.colors.text,
-                  ...theme.typography.heading,
-                  fontSize: 22,
-                  lineHeight: 28,
-                }}>
-                {profile.title}
-              </Text>
-              <Text
-                numberOfLines={2}
-                style={{
-                  color: theme.colors.textMuted,
-                  ...theme.typography.body,
-                  fontSize: 14,
-                  lineHeight: 21,
-                }}>
-                {meta.previewText}
-              </Text>
-            </View>
-
-            <View
+            <Text
+              numberOfLines={1}
               style={{
-                borderTopColor: theme.colors.borderSoft,
-                borderTopWidth: 1,
-                minHeight: 60,
-                paddingTop: 12,
+                color: palette.infoColor,
+                ...theme.typography.semiBold,
+                fontSize: 14,
               }}>
-              <View
-                style={{
-                  alignItems: 'flex-end',
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                }}>
-                <View style={{ flex: 1, gap: 4, paddingRight: 10 }}>
-                  <Text
-                    numberOfLines={1}
-                    style={{
-                      color: theme.colors.text,
-                      ...theme.typography.semiBold,
-                      fontSize: 14,
-                    }}>
-                    {meta.primaryMeta}
-                  </Text>
-                  <Text
-                    numberOfLines={1}
-                    style={{
-                      color: theme.colors.textSoft,
-                      ...theme.typography.medium,
-                      fontSize: 12,
-                    }}>
-                    {meta.secondaryMeta}
-                  </Text>
-                </View>
-
-                <View
-                  style={{
-                    backgroundColor: palette.metaBackground,
-                    borderRadius: theme.radii.pill,
-                    paddingHorizontal: 12,
-                    paddingVertical: 8,
-                  }}>
-                  <Text
-                    style={{
-                      color: palette.metaColor,
-                      ...theme.typography.medium,
-                      fontSize: 11,
-                    }}>
-                    {meta.tertiaryMeta}
-                  </Text>
-                </View>
-              </View>
-            </View>
+              {meta.primaryMeta}
+            </Text>
+            <Text
+              numberOfLines={1}
+              style={{
+                color: palette.mutedColor,
+                ...theme.typography.medium,
+                fontSize: 12,
+              }}>
+              {meta.secondaryMeta}
+            </Text>
+            <Text
+              numberOfLines={1}
+              style={{
+                color: palette.mutedColor,
+                ...theme.typography.medium,
+                fontSize: 11,
+              }}>
+              {meta.tertiaryMeta}
+            </Text>
           </View>
         </View>
       </Pressable>
@@ -292,7 +341,7 @@ function LearningListCard({
   session?: LearningSession | null;
 }) {
   const { theme } = useAppTheme();
-  const meta = resolveMeta(profile, session);
+  const meta = resolveNotebookMeta(profile, session);
 
   return (
     <Link asChild href={href}>
@@ -304,7 +353,6 @@ function LearningListCard({
         })}>
         <View
           style={{
-            alignItems: 'center',
             backgroundColor: palette.cardBackground,
             borderColor: theme.colors.borderStrong,
             borderRadius: theme.radii.xl,
@@ -312,7 +360,7 @@ function LearningListCard({
             boxShadow: theme.shadows.card,
             flexDirection: 'row',
             gap: theme.spacing.lg,
-            minHeight: 136,
+            minHeight: 164,
             overflow: 'hidden',
             padding: theme.spacing.lg,
           }}
@@ -321,32 +369,45 @@ function LearningListCard({
             style={{
               alignItems: 'center',
               backgroundColor: palette.coverBackground,
-              borderRadius: 22,
-              height: 102,
+              borderRadius: 24,
+              height: 112,
               justifyContent: 'center',
               overflow: 'hidden',
-              width: 92,
+              width: 94,
             }}>
             <View
               style={{
                 backgroundColor: palette.coverGlow,
                 borderRadius: 999,
-                height: 74,
+                height: 78,
                 position: 'absolute',
-                width: 74,
+                width: 78,
               }}
             />
             <BookCover
               borderRadius={theme.radii.md}
-              height={84}
+              height={88}
               seed={profile.title}
               shellTestID="learning-notebook-list-cover"
               tone={palette.coverTone}
-              width={62}
+              width={64}
             />
           </View>
 
-          <View style={{ flex: 1, gap: 10 }}>
+          <View style={{ flex: 1, gap: 12 }}>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              <NotebookChip
+                backgroundColor={theme.colors.surfaceTint}
+                color={theme.colors.textSoft}
+                label={meta.sourceLabel}
+              />
+              <NotebookChip
+                backgroundColor={palette.statusBackground}
+                color={palette.infoColor}
+                label={meta.statusLabel}
+              />
+            </View>
+
             <View style={{ gap: 6 }}>
               <Text
                 numberOfLines={2}
@@ -372,16 +433,17 @@ function LearningListCard({
 
             <View
               style={{
-                backgroundColor: palette.metaBackground,
+                backgroundColor: palette.infoBackground,
                 borderRadius: 18,
-                gap: 3,
+                gap: 4,
+                marginTop: 'auto',
                 paddingHorizontal: 12,
                 paddingVertical: 10,
               }}>
               <Text
                 numberOfLines={1}
                 style={{
-                  color: palette.metaColor,
+                  color: palette.infoColor,
                   ...theme.typography.semiBold,
                   fontSize: 13,
                 }}>
@@ -390,7 +452,7 @@ function LearningListCard({
               <Text
                 numberOfLines={1}
                 style={{
-                  color: palette.secondaryMetaColor,
+                  color: palette.mutedColor,
                   ...theme.typography.medium,
                   fontSize: 12,
                 }}>

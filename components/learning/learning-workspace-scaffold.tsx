@@ -1,61 +1,32 @@
-import { EllipsisVertical, Network, BookOpen, Compass, History, X } from 'lucide-react-native';
+import { EllipsisVertical, X } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LearningWorkspaceLoadingState } from '@/components/learning/learning-workspace-loading-state';
-import {
-  useLearningWorkspaceScreen,
-  type LearningWorkspaceInfoPanel,
-  type LearningWorkspaceMode,
-} from '@/components/learning/learning-workspace-provider';
+import { useLearningWorkspaceScreen } from '@/components/learning/learning-workspace-provider';
 import { useAppTheme } from '@/hooks/use-app-theme';
 
 type IconComponent = React.ComponentType<Record<string, unknown>>;
 
-const MODE_ITEMS: Array<{
-  icon: IconComponent;
-  label: string;
-  mode: LearningWorkspaceMode;
-}> = [
-  { icon: BookOpen as IconComponent, label: 'Guide', mode: 'guide' },
-  { icon: Compass as IconComponent, label: 'Explore', mode: 'explore' },
-  { icon: Network as IconComponent, label: '图谱', mode: 'graph' },
-  { icon: History as IconComponent, label: '复盘', mode: 'review' },
-];
-
 const CloseIcon = X as IconComponent;
 const MenuIcon = EllipsisVertical as IconComponent;
-
-function resolveInfoPanelForMode(mode: LearningWorkspaceMode): LearningWorkspaceInfoPanel {
-  if (mode === 'graph') {
-    return 'sources';
-  }
-
-  if (mode === 'review') {
-    return 'path';
-  }
-
-  return 'highlights';
-}
 
 export function LearningWorkspaceScaffold({
   children,
   footer,
-  mode,
+  subtitle,
 }: {
   children: React.ReactNode;
   footer?: React.ReactNode;
-  mode: LearningWorkspaceMode;
+  subtitle?: string;
 }) {
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
   const {
-    activeMode,
     closeWorkspace,
     isRetryPending,
-    navigateToMode,
-    openInfoSheet,
+    openOverview,
     profile,
     retryGenerate,
     workspaceGate,
@@ -128,7 +99,7 @@ export function LearningWorkspaceScaffold({
               styles.progressLabel,
               { color: theme.colors.textSoft, fontFamily: theme.typography.semiBold.fontFamily },
             ]}>
-            {workspaceSession.progressLabel}
+            {subtitle ?? workspaceSession.progressLabel}
           </Text>
           <Text
             numberOfLines={1}
@@ -141,10 +112,10 @@ export function LearningWorkspaceScaffold({
         </View>
 
         <Pressable
-          accessibilityLabel="打开导学详情"
+          accessibilityLabel="打开导学概览"
           accessibilityRole="button"
           hitSlop={8}
-          onPress={() => openInfoSheet(resolveInfoPanelForMode(mode))}
+          onPress={openOverview}
           style={({ pressed }) => [
             styles.iconButton,
             {
@@ -160,60 +131,18 @@ export function LearningWorkspaceScaffold({
 
       <View style={styles.content}>{children}</View>
 
-      {footer ? <View style={styles.footer}>{footer}</View> : null}
-
-      <View
-        style={[
-          styles.modeBarOuter,
-          {
-            backgroundColor: theme.colors.backgroundWorkspace,
-            paddingBottom: Math.max(insets.bottom, theme.spacing.md),
-          },
-        ]}>
+      {footer ? (
         <View
           style={[
-            styles.modeBar,
+            styles.footer,
             {
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.borderSoft,
+              backgroundColor: theme.colors.backgroundWorkspace,
+              paddingBottom: Math.max(insets.bottom, theme.spacing.md),
             },
           ]}>
-          {MODE_ITEMS.map((item) => {
-            const isActive = activeMode === item.mode;
-            const Icon = item.icon;
-
-            return (
-              <Pressable
-                key={item.mode}
-                accessibilityLabel={`切换到${item.label}`}
-                accessibilityRole="button"
-                onPress={() => navigateToMode(item.mode)}
-                style={({ pressed }) => [
-                  styles.modeButton,
-                  {
-                    backgroundColor: isActive ? theme.colors.primarySoft : 'transparent',
-                    opacity: pressed && !isActive ? 0.7 : 1,
-                  },
-                ]}
-                testID={`learning-workspace-tab-${item.mode}`}>
-                <Icon
-                  color={isActive ? theme.colors.primaryStrong : theme.colors.textSoft}
-                  size={18}
-                  strokeWidth={2.15}
-                />
-                <Text
-                  style={{
-                    color: isActive ? theme.colors.primaryStrong : theme.colors.textSoft,
-                    ...theme.typography.medium,
-                    fontSize: 12,
-                  }}>
-                  {item.label}
-                </Text>
-              </Pressable>
-            );
-          })}
+          {footer}
         </View>
-      </View>
+      ) : null}
     </View>
   );
 }
@@ -247,27 +176,6 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: 'center',
     width: 40,
-  },
-  modeBar: {
-    borderRadius: 24,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 6,
-    padding: 6,
-  },
-  modeBarOuter: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-  },
-  modeButton: {
-    alignItems: 'center',
-    borderRadius: 18,
-    flex: 1,
-    gap: 6,
-    justifyContent: 'center',
-    minHeight: 58,
-    paddingHorizontal: 8,
-    paddingVertical: 10,
   },
   progressLabel: {
     fontSize: 12,

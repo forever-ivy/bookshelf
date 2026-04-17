@@ -74,6 +74,23 @@ describe('LearningWorkspaceStackLayout', () => {
     );
     expect(mockRecordedChildScreens).toContainEqual(
       expect.objectContaining({
+        name: '(workspace)',
+        options: expect.objectContaining({
+          headerShown: false,
+        }),
+      })
+    );
+    expect(mockRecordedChildScreens).toContainEqual(
+      expect.objectContaining({
+        name: 'overview',
+        options: expect.objectContaining({
+          animation: 'slide_from_right',
+          headerShown: false,
+        }),
+      })
+    );
+    expect(mockRecordedChildScreens).toContainEqual(
+      expect.objectContaining({
         name: 'info-sheet',
         options: expect.objectContaining({
           contentStyle: expect.objectContaining({

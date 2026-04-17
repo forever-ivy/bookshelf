@@ -29,10 +29,16 @@ export default function LearningWorkspaceStackLayout() {
           headerTransparent: false,
         }}>
         <Stack.Screen name="index" options={{ headerShown: false, animation: 'fade' }} />
+        <Stack.Screen name="(workspace)" options={{ headerShown: false }} />
         <Stack.Screen name="guide" options={{ headerShown: false, animation: 'slide_from_right' }} />
         <Stack.Screen name="explore" options={{ headerShown: false, animation: 'slide_from_right' }} />
-        <Stack.Screen name="graph" options={{ headerShown: false, animation: 'slide_from_bottom' }} />
-        <Stack.Screen name="review" options={{ headerShown: false, animation: 'slide_from_bottom' }} />
+        <Stack.Screen
+          name="overview"
+          options={{
+            headerShown: false,
+            animation: 'slide_from_right',
+          }}
+        />
         <Stack.Screen
           name="info-sheet"
           options={{

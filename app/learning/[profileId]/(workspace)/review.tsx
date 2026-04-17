@@ -1,6 +1,6 @@
 import { CheckCircle2, ChevronRight, Target } from 'lucide-react-native';
 import React from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, Pressable, View } from 'react-native';
 
 import { useQuery } from '@tanstack/react-query';
 
@@ -20,7 +20,7 @@ const TargetIcon = Target as IconComponent;
 export default function LearningWorkspaceReviewScreen() {
   const { theme } = useAppTheme();
   const { token } = useAppSession();
-  const { navigateToMode, profile, workspaceSession } = useLearningWorkspaceScreen();
+  const { navigateToStudyMode, profile, workspaceSession } = useLearningWorkspaceScreen();
 
   const { data: reportData } = useQuery({
     queryKey: ['learning', 'report', workspaceSession?.id],
@@ -34,7 +34,7 @@ export default function LearningWorkspaceReviewScreen() {
   const progressRatio = sessionMastery != null ? sessionMastery / 100 : completedSteps / totalSteps;
 
   return (
-    <LearningWorkspaceScaffold mode="review">
+    <LearningWorkspaceScaffold subtitle="阶段复盘">
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.summaryContainer}>
           <Text
@@ -160,7 +160,9 @@ export default function LearningWorkspaceReviewScreen() {
           ]}>
           Next Recommended Action
         </Text>
-        <TouchableOpacity activeOpacity={0.82} onPress={() => navigateToMode('guide')}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => navigateToStudyMode('guide')}>
           <GlassSurface
             style={[
               styles.nextActionCard,
@@ -190,7 +192,7 @@ export default function LearningWorkspaceReviewScreen() {
               <ChevronRightIcon color="#FFF" size={24} />
             </View>
           </GlassSurface>
-        </TouchableOpacity>
+        </Pressable>
       </ScrollView>
     </LearningWorkspaceScaffold>
   );
@@ -257,45 +259,43 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   scrollContent: {
+    paddingBottom: 24,
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 24,
   },
   sectionTitle: {
     fontSize: 22,
-    letterSpacing: -0.5,
-    marginBottom: 16,
+    marginBottom: 18,
   },
   stepIcon: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 40,
+    marginTop: 2,
   },
   stepInfo: {
     flex: 1,
   },
   stepRow: {
-    alignItems: 'center',
     flexDirection: 'row',
+    gap: 14,
     paddingVertical: 16,
   },
   stepsCard: {
     borderRadius: 24,
-    paddingHorizontal: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
   },
   stepTitleText: {
-    fontSize: 16,
+    fontSize: 15,
+    lineHeight: 22,
   },
   summaryContainer: {
     marginBottom: 40,
   },
   summaryTitle: {
-    fontSize: 13,
+    fontSize: 12,
     letterSpacing: 0.5,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   weakPointsSection: {
-    marginTop: 24,
-    paddingHorizontal: 4,
+    marginTop: 12,
   },
 });

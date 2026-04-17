@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { usePathname, useRouter } from 'expo-router';
+import { useLocalSearchParams, usePathname, useRouter } from 'expo-router';
 import React from 'react';
 import { toast } from 'sonner-native';
 
@@ -13,7 +13,7 @@ import {
 } from '@/hooks/use-learning-workspace';
 import { getLibraryErrorMessage } from '@/lib/api/client';
 import { streamLearningSessionReply } from '@/lib/api/learning';
-import type { LearningStepEvaluation } from '@/lib/api/types';
+import type { LearningSessionMessage, LearningStepEvaluation } from '@/lib/api/types';
 import {
   buildSyntheticCompletedSteps,
   buildLearningSessionTransitionLabel,
@@ -28,11 +28,12 @@ import {
   type LearningWorkspaceStatusSignal,
 } from '@/lib/learning/workspace';
 
-export type LearningWorkspaceMode = 'guide' | 'explore' | 'graph' | 'review';
+export type LearningWorkspaceTab = 'study' | 'graph' | 'review';
+export type LearningStudyMode = 'guide' | 'explore';
 export type LearningWorkspaceInfoPanel = 'highlights' | 'path' | 'sources';
 
 type LearningWorkspaceContextValue = {
-  activeMode: LearningWorkspaceMode;
+  activeTab: LearningWorkspaceTab;
   closeWorkspace: () => void;
   draft: string;
   footerInset: number;
@@ -41,8 +42,10 @@ type LearningWorkspaceContextValue = {
   latestEvaluation: LearningStepEvaluation | null;
   latestSessionSignal: LearningWorkspaceSessionSignal | null;
   latestStatus: LearningWorkspaceStatusSignal | null;
-  navigateToMode: (mode: LearningWorkspaceMode) => void;
+  navigateToStudyMode: (mode: LearningStudyMode) => void;
+  navigateToTab: (tab: LearningWorkspaceTab) => void;
   openInfoSheet: (panel?: LearningWorkspaceInfoPanel) => void;
+  openOverview: () => void;
   profile: ReturnType<typeof useLearningWorkspace>['profile'];
   renderedMessages: LearningWorkspaceRenderedMessage[];
   retryGenerate: (profileId?: number) => Promise<void>;
@@ -51,6 +54,7 @@ type LearningWorkspaceContextValue = {
   sourceCards: LearningWorkspaceSourceCard[];
   sourceSummary: string;
   starterPrompts: string[];
+  studyMode: LearningStudyMode;
   workspaceGate: LearningWorkspaceGate;
   workspaceSession: ReturnType<typeof useLearningWorkspace>['workspaceSession'];
   isRetryPending: boolean;
@@ -58,23 +62,34 @@ type LearningWorkspaceContextValue = {
 
 const LearningWorkspaceContext = React.createContext<LearningWorkspaceContextValue | null>(null);
 
-export function resolveLearningWorkspaceActiveMode(pathname: string): LearningWorkspaceMode {
-  if (pathname.endsWith('/explore')) {
-    return 'explore';
-  }
-
+export function resolveLearningWorkspaceNavigationState(
+  pathname: string,
+  modeParam?: string | string[]
+) {
   if (pathname.endsWith('/graph')) {
-    return 'graph';
+    return {
+      activeTab: 'graph' as const,
+      studyMode: 'guide' as const,
+    };
   }
 
   if (pathname.endsWith('/review')) {
-    return 'review';
+    return {
+      activeTab: 'review' as const,
+      studyMode: 'guide' as const,
+    };
   }
 
-  return 'guide';
+  const normalizedMode = Array.isArray(modeParam) ? modeParam[0] : modeParam;
+
+  return {
+    activeTab: 'study' as const,
+    studyMode:
+      normalizedMode === 'explore' || pathname.endsWith('/explore') ? ('explore' as const) : ('guide' as const),
+  };
 }
 
-function resolveLearningWorkspaceFooterInset(_mode: LearningWorkspaceMode) {
+function resolveLearningWorkspaceFooterInset(_tab: LearningWorkspaceTab) {
   return 24;
 }
 
@@ -116,6 +131,7 @@ export function LearningWorkspaceProvider({
   profileId: number;
 }) {
   const pathname = usePathname();
+  const { mode } = useLocalSearchParams<{ mode?: string | string[] }>();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { token } = useAppSession();
@@ -247,6 +263,11 @@ export function LearningWorkspaceProvider({
       return;
     }
 
+    const previousLatestMessageId = Math.max(
+      0,
+      ...(sessionMessagesQuery.data ?? []).map((message) => Number(message.id) || 0)
+    );
+
     const userMessageId = `local-user-${Date.now()}`;
     const assistantMessageId = `local-assistant-${Date.now()}`;
     const optimisticUserMessage: LearningWorkspaceRenderedMessage = {
@@ -271,9 +292,9 @@ export function LearningWorkspaceProvider({
     ]);
     setIsSending(true);
 
-    try {
-      let finalAssistantMessage: LearningWorkspaceRenderedMessage | null = null;
+    let finalAssistantMessage: LearningWorkspaceRenderedMessage | null = null;
 
+    try {
       for await (const event of streamLearningSessionReply(
         workspaceSession.id,
         { content: normalized },
@@ -342,13 +363,28 @@ export function LearningWorkspaceProvider({
         setLocalMessages([]);
       }
     } catch (error) {
-      setLocalMessages([]);
-      setLatestStatus({
-        label: '这一轮导学没有成功返回，正在和后端重新同步。',
-        tone: 'warning',
-      });
-      toast.error(getLibraryErrorMessage(error, '导学回复失败，请稍后再试。'));
-      await Promise.allSettled([sessionMessagesQuery.refetch(), sessionsQuery.refetch()]);
+      const [messagesResult] = await Promise.allSettled([sessionMessagesQuery.refetch(), sessionsQuery.refetch()]);
+      const syncedMessages =
+        messagesResult.status === 'fulfilled' && Array.isArray(messagesResult.value.data)
+          ? (messagesResult.value.data as LearningSessionMessage[])
+          : (sessionMessagesQuery.data ?? []);
+      const recoveredAssistantReply =
+        !finalAssistantMessage &&
+        syncedMessages.some(
+          (message) => message.role === 'assistant' && (Number(message.id) || 0) > previousLatestMessageId
+        );
+
+      if (recoveredAssistantReply) {
+        setLocalMessages([]);
+        setLatestStatus(null);
+      } else if (!finalAssistantMessage) {
+        setLocalMessages([]);
+        setLatestStatus({
+          label: '这一轮导学没有成功返回，正在和后端重新同步。',
+          tone: 'warning',
+        });
+        toast.error(getLibraryErrorMessage(error, '导学回复失败，请稍后再试。'));
+      }
     } finally {
       setIsSending(false);
     }
@@ -356,7 +392,6 @@ export function LearningWorkspaceProvider({
     draft,
     isSending,
     profile,
-    queryClient,
     sessionMessagesQuery,
     sessionsQuery,
     setWorkspaceSession,
@@ -366,20 +401,54 @@ export function LearningWorkspaceProvider({
     workspaceSession,
   ]);
 
-  const activeMode = resolveLearningWorkspaceActiveMode(pathname);
-  const navigateToMode = React.useCallback(
-    (mode: LearningWorkspaceMode) => {
-      if (mode === activeMode || !Number.isFinite(profileId) || profileId <= 0) {
+  const { activeTab, studyMode } = React.useMemo(
+    () => resolveLearningWorkspaceNavigationState(pathname, mode),
+    [mode, pathname]
+  );
+
+  const navigateToTab = React.useCallback(
+    (tab: LearningWorkspaceTab) => {
+      if (!Number.isFinite(profileId) || profileId <= 0) {
         return;
       }
 
-      router.replace(`/learning/${profileId}/${mode}`);
+      if (tab === 'study') {
+        router.replace(`/learning/${profileId}/study?mode=${studyMode}`);
+        return;
+      }
+
+      if (tab === activeTab) {
+        return;
+      }
+
+      router.replace(`/learning/${profileId}/${tab}`);
     },
-    [activeMode, profileId, router]
+    [activeTab, profileId, router, studyMode]
+  );
+  const navigateToStudyMode = React.useCallback(
+    (nextMode: LearningStudyMode) => {
+      if (!Number.isFinite(profileId) || profileId <= 0) {
+        return;
+      }
+
+      if (activeTab === 'study' && studyMode === nextMode) {
+        return;
+      }
+
+      router.replace(`/learning/${profileId}/study?mode=${nextMode}`);
+    },
+    [activeTab, profileId, router, studyMode]
   );
   const closeWorkspace = React.useCallback(() => {
     router.replace('/learning');
   }, [router]);
+  const openOverview = React.useCallback(() => {
+    if (!Number.isFinite(profileId) || profileId <= 0) {
+      return;
+    }
+
+    router.push(`/learning/${profileId}/overview`);
+  }, [profileId, router]);
   const openInfoSheet = React.useCallback(
     (panel: LearningWorkspaceInfoPanel = 'highlights') => {
       if (!Number.isFinite(profileId) || profileId <= 0) {
@@ -393,17 +462,19 @@ export function LearningWorkspaceProvider({
 
   const value = React.useMemo<LearningWorkspaceContextValue>(
     () => ({
-      activeMode,
+      activeTab,
       closeWorkspace,
       draft,
-      footerInset: resolveLearningWorkspaceFooterInset(activeMode),
+      footerInset: resolveLearningWorkspaceFooterInset(activeTab),
       handleSend,
       highlightCards,
       latestEvaluation,
       latestSessionSignal,
       latestStatus,
-      navigateToMode,
+      navigateToStudyMode,
+      navigateToTab,
       openInfoSheet,
+      openOverview,
       profile,
       renderedMessages,
       retryGenerate,
@@ -412,12 +483,13 @@ export function LearningWorkspaceProvider({
       sourceCards,
       sourceSummary: profile ? resolveLearningWorkspaceSourceSummary(profile) : '',
       starterPrompts,
+      studyMode,
       workspaceGate,
       workspaceSession,
       isRetryPending,
     }),
     [
-      activeMode,
+      activeTab,
       closeWorkspace,
       draft,
       handleSend,
@@ -426,13 +498,16 @@ export function LearningWorkspaceProvider({
       latestEvaluation,
       latestSessionSignal,
       latestStatus,
-      navigateToMode,
+      navigateToStudyMode,
+      navigateToTab,
       openInfoSheet,
+      openOverview,
       profile,
       renderedMessages,
       retryGenerate,
       sourceCards,
       starterPrompts,
+      studyMode,
       workspaceGate,
       workspaceSession,
     ]
