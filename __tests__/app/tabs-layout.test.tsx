@@ -60,11 +60,11 @@ jest.mock('@/components/navigation/app-session-gate', () => ({
 import TabsLayout from '@/app/(tabs)/_layout';
 
 describe('tabs layout', () => {
-  it('adds tutor as a first-class bottom tab', () => {
+  it('adds learning as a first-class bottom tab', () => {
     render(<TabsLayout />);
 
     expect(screen.getByTestId('native-tab-(home)')).toBeTruthy();
-    expect(screen.getByTestId('native-tab-tutor')).toBeTruthy();
+    expect(screen.getByTestId('native-tab-learning')).toBeTruthy();
     expect(screen.getByTestId('native-tab-borrowing')).toBeTruthy();
     expect(screen.getByTestId('native-tab-search')).toBeTruthy();
     expect(screen.getByText('导学')).toBeTruthy();

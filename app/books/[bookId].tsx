@@ -35,7 +35,7 @@ import {
   useCollaborativeBooksQuery,
   useCreateBooklistMutation,
   useCreateBorrowOrderMutation,
-  useCreateTutorProfileMutation,
+  useCreateLearningProfileMutation,
   useFavoritesQuery,
   useHybridBooksQuery,
   useSimilarBooksQuery,
@@ -533,7 +533,7 @@ export default function BookDetailRoute() {
   const addBookToBooklistMutation = useAddBookToBooklistMutation();
   const createBooklistMutation = useCreateBooklistMutation();
   const borrowMutation = useCreateBorrowOrderMutation();
-  const createTutorProfileMutation = useCreateTutorProfileMutation();
+  const createLearningProfileMutation = useCreateLearningProfileMutation();
   const favoriteMutation = useToggleFavoriteMutation();
   const [isBorrowModalMounted, setIsBorrowModalMounted] = React.useState(false);
   const [isBooklistModalVisible, setIsBooklistModalVisible] = React.useState(false);
@@ -565,18 +565,18 @@ export default function BookDetailRoute() {
     setIsBorrowModalMounted(false);
   };
 
-  const handleCreateTutor = async () => {
+  const handleCreateLearning = async () => {
     if (!book) {
       return;
     }
 
     try {
-      const profile = await createTutorProfileMutation.mutateAsync({
+      const profile = await createLearningProfileMutation.mutateAsync({
         bookId: book.id,
         sourceType: 'book',
         title: book.title,
       });
-      router.push(`/tutor/${profile.id}`);
+      router.push(`/learning/${profile.id}/guide`);
     } catch (error) {
       toast.error(getLibraryErrorMessage(error, '创建学习导师失败，请稍后再试。'));
     }
@@ -824,13 +824,13 @@ export default function BookDetailRoute() {
                       fullWidth
                       href={undefined}
                       icon="spark"
-                      label={createTutorProfileMutation.isPending ? '创建中…' : '创建学习导师'}
+                      label={createLearningProfileMutation.isPending ? '创建中…' : '创建学习导师'}
                       onPress={() => {
-                        void handleCreateTutor();
+                        void handleCreateLearning();
                       }}
                       size="hero"
-                      surfaceTestID="book-detail-decision-tutor-surface"
-                      testID="book-detail-create-tutor"
+                      surfaceTestID="book-detail-decision-learning-surface"
+                      testID="book-detail-create-learning"
                       variant="accent"
                     />
                   </View>

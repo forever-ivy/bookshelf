@@ -6,7 +6,7 @@ import {
   createBooklist,
   createBorrowOrder,
   createReturnRequest,
-  createTutorProfile,
+  createLearningProfile,
   deleteBooklist,
   dismissNotification,
   getAchievements,
@@ -21,9 +21,9 @@ import {
   getRecommendationDashboard,
   getReturnRequest,
   getSimilarBooks,
-  getTutorDashboard,
-  getTutorProfile,
-  getTutorSession,
+  getLearningDashboard,
+  getLearningProfile,
+  getLearningSession,
   getMyOverview,
   listActiveOrders,
   listBooklists,
@@ -35,20 +35,21 @@ import {
   listNotifications,
   listOrderHistory,
   listReturnRequests,
-  listTutorProfiles,
-  listTutorSessionMessages,
-  listTutorSessions,
+  listLearningProfiles,
+  listLearningSessionMessages,
+  listLearningSessions,
   login,
+  retryGenerateLearningProfile,
   searchBooksExplicit,
   registerReader,
   removeBookFromBooklist,
   renewBorrowOrder,
   searchRecommendations,
-  startTutorSession,
+  startLearningSession,
   toggleFavorite,
-  uploadTutorProfile,
+  uploadLearningProfile,
   updateMyProfile,
-  type CreateTutorProfileInput,
+  type CreateLearningProfileInput,
   type LoginInput,
   type ProfileUpdateInput,
   type RegisterInput,
@@ -59,7 +60,7 @@ function withToken<T>(token: string | null | undefined, callback: (token?: strin
   return callback(token);
 }
 
-function hasPendingTutorProfileStatus(
+function hasPendingLearningProfileStatus(
   status: string | null | undefined
 ): status is 'processing' | 'queued' {
   return status === 'queued' || status === 'processing';
@@ -340,70 +341,70 @@ export function useBooklistsQuery() {
   });
 }
 
-export function useTutorDashboardQuery() {
+export function useLearningDashboardQuery() {
   const { token } = useAppSession();
 
   return useQuery({
-    queryFn: () => getTutorDashboard(token),
-    queryKey: ['tutor', 'dashboard', token],
+    queryFn: () => getLearningDashboard(token),
+    queryKey: ['learning', 'dashboard', token],
     refetchInterval: (query) =>
-      (query.state.data?.recentProfiles ?? []).some((profile) => hasPendingTutorProfileStatus(profile.status))
+      (query.state.data?.recentProfiles ?? []).some((profile) => hasPendingLearningProfileStatus(profile.status))
         ? 3000
         : false,
   });
 }
 
-export function useTutorProfilesQuery() {
+export function useLearningProfilesQuery() {
   const { token } = useAppSession();
 
   return useQuery({
-    queryFn: () => listTutorProfiles(token),
-    queryKey: ['tutor', 'profiles', token],
+    queryFn: () => listLearningProfiles(token),
+    queryKey: ['learning', 'profiles', token],
     refetchInterval: (query) =>
-      (query.state.data ?? []).some((profile) => hasPendingTutorProfileStatus(profile.status))
+      (query.state.data ?? []).some((profile) => hasPendingLearningProfileStatus(profile.status))
         ? 3000
         : false,
   });
 }
 
-export function useTutorProfileQuery(profileId: number) {
+export function useLearningProfileQuery(profileId: number) {
   const { token } = useAppSession();
 
   return useQuery({
     enabled: Number.isFinite(profileId),
-    queryFn: () => getTutorProfile(profileId, token),
-    queryKey: ['tutor', 'profiles', 'detail', profileId, token],
+    queryFn: () => getLearningProfile(profileId, token),
+    queryKey: ['learning', 'profiles', 'detail', profileId, token],
     refetchInterval: (query) =>
-      hasPendingTutorProfileStatus(query.state.data?.status) ? 3000 : false,
+      hasPendingLearningProfileStatus(query.state.data?.status) ? 3000 : false,
   });
 }
 
-export function useTutorSessionsQuery() {
+export function useLearningSessionsQuery() {
   const { token } = useAppSession();
 
   return useQuery({
-    queryFn: () => listTutorSessions(token),
-    queryKey: ['tutor', 'sessions', token],
+    queryFn: () => listLearningSessions(token),
+    queryKey: ['learning', 'sessions', token],
   });
 }
 
-export function useTutorSessionQuery(sessionId: number) {
-  const { token } = useAppSession();
-
-  return useQuery({
-    enabled: Number.isFinite(sessionId),
-    queryFn: () => getTutorSession(sessionId, token),
-    queryKey: ['tutor', 'sessions', 'detail', sessionId, token],
-  });
-}
-
-export function useTutorSessionMessagesQuery(sessionId: number) {
+export function useLearningSessionQuery(sessionId: number) {
   const { token } = useAppSession();
 
   return useQuery({
     enabled: Number.isFinite(sessionId),
-    queryFn: () => listTutorSessionMessages(sessionId, token),
-    queryKey: ['tutor', 'sessions', 'messages', sessionId, token],
+    queryFn: () => getLearningSession(sessionId, token),
+    queryKey: ['learning', 'sessions', 'detail', sessionId, token],
+  });
+}
+
+export function useLearningSessionMessagesQuery(sessionId: number) {
+  const { token } = useAppSession();
+
+  return useQuery({
+    enabled: Number.isFinite(sessionId),
+    queryFn: () => listLearningSessionMessages(sessionId, token),
+    queryKey: ['learning', 'sessions', 'messages', sessionId, token],
   });
 }
 
@@ -553,40 +554,52 @@ export function useCreateBooklistMutation() {
   });
 }
 
-export function useCreateTutorProfileMutation() {
+export function useCreateLearningProfileMutation() {
   const queryClient = useQueryClient();
   const { token } = useAppSession();
 
   return useMutation({
-    mutationFn: (input: CreateTutorProfileInput) => createTutorProfile(input, token),
+    mutationFn: (input: CreateLearningProfileInput) => createLearningProfile(input, token),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tutor'] });
+      queryClient.invalidateQueries({ queryKey: ['learning'] });
     },
   });
 }
 
-export function useUploadTutorProfileMutation() {
+export function useUploadLearningProfileMutation() {
   const queryClient = useQueryClient();
   const { token } = useAppSession();
 
   return useMutation({
-    mutationFn: (formData: FormData) => uploadTutorProfile(formData, token),
+    mutationFn: (formData: FormData) => uploadLearningProfile(formData, token),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tutor'] });
+      queryClient.invalidateQueries({ queryKey: ['learning'] });
     },
   });
 }
 
-export function useStartTutorSessionMutation() {
+export function useGenerateLearningProfileMutation() {
   const queryClient = useQueryClient();
   const { token } = useAppSession();
 
   return useMutation({
-    mutationFn: (profileId: number) => startTutorSession(profileId, token),
+    mutationFn: (profileId: number) => retryGenerateLearningProfile(profileId, token),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['learning'] });
+    },
+  });
+}
+
+export function useStartLearningSessionMutation() {
+  const queryClient = useQueryClient();
+  const { token } = useAppSession();
+
+  return useMutation({
+    mutationFn: (profileId: number) => startLearningSession(profileId, token),
     onSuccess: (payload) => {
-      queryClient.invalidateQueries({ queryKey: ['tutor'] });
-      queryClient.setQueryData(['tutor', 'sessions', 'detail', payload.session.id, token], payload.session);
-      queryClient.setQueryData(['tutor', 'sessions', 'messages', payload.session.id, token], (previous: unknown) => {
+      queryClient.invalidateQueries({ queryKey: ['learning'] });
+      queryClient.setQueryData(['learning', 'sessions', 'detail', payload.session.id, token], payload.session);
+      queryClient.setQueryData(['learning', 'sessions', 'messages', payload.session.id, token], (previous: unknown) => {
         const items = Array.isArray(previous) ? previous : [];
 
         if (items.length > 0 || !payload.welcomeMessage?.content) {

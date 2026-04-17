@@ -121,7 +121,7 @@ describe('RootLayout', () => {
     );
     expect(mockRecordedScreens).toContainEqual(
       expect.objectContaining({
-        name: 'tutor/[profileId]',
+        name: 'learning/[profileId]',
         options: expect.objectContaining({
           headerShown: false,
         }),

@@ -48,15 +48,24 @@ export function GlassSurface({
 
   if (canUseLiquidGlass) {
     return (
-      <GlassView
-        colorScheme="light"
-        glassEffectStyle={glassEffectStyle}
-        isInteractive={interactive}
-        style={surfaceStyle}
-        testID={glassViewTestID}
-        tintColor={tintColor ?? theme.colors.glassTint}>
-        {children}
-      </GlassView>
+      <View style={surfaceStyle}>
+        <GlassView
+          colorScheme="light"
+          glassEffectStyle={glassEffectStyle}
+          isInteractive={interactive}
+          pointerEvents={interactive ? 'auto' : 'none'}
+          style={StyleSheet.absoluteFill}
+          testID={glassViewTestID}
+          tintColor={tintColor ?? theme.colors.glassTint}
+        />
+        <View
+          pointerEvents={interactive ? 'box-none' : 'auto'}
+          style={{
+            flex: 1,
+          }}>
+          {children}
+        </View>
+      </View>
     );
   }
 

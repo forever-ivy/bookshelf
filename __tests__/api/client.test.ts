@@ -180,7 +180,7 @@ describe('libraryRequest', () => {
         })
     ) as unknown as typeof fetch;
 
-    await libraryRequest('/api/v1/tutor/profiles/upload', {
+    await libraryRequest('/api/v1/learning/profiles/upload', {
       body: formData,
       fallback: () => ({ ok: false }),
       method: 'POST',

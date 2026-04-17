@@ -9,5 +9,5 @@ export * from './notifications';
 export * from './orders';
 export * from './readers';
 export * from './recommendation';
-export * from './tutor';
+export * from './learning';
 export * from './mock';

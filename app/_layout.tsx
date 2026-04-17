@@ -61,7 +61,7 @@ export default function RootLayout() {
               <Stack.Screen name="orders/[orderId]" options={createSecondaryHeaderOptions()} />
               <Stack.Screen name="returns/[returnRequestId]" options={createSecondaryHeaderOptions()} />
               <Stack.Screen name="profile" options={createSecondaryHeaderOptions()} />
-              <Stack.Screen name="tutor/[profileId]" options={{ headerShown: false }} />
+              <Stack.Screen name="learning/[profileId]" options={{ headerShown: false }} />
               <Stack.Screen name="marker-examples" options={createSecondaryHeaderOptions()} />
             </Stack>
           </ProfileSheetProvider>

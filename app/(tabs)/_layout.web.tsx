@@ -48,9 +48,9 @@ export default function WebTabsLayout() {
           }}
         />
         <Tabs.Screen
-          name="tutor"
+          name="learning"
           options={{
-            tabBarIcon: ({ color }) => <AppIcon color={color} name="tutor" />,
+            tabBarIcon: ({ color }) => <AppIcon color={color} name="learning" />,
             title: '导学',
           }}
         />

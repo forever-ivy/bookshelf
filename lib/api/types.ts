@@ -228,20 +228,20 @@ export type ReaderOverview = {
   stats: ReaderOverviewStats;
 };
 
-export type TutorSourceType = 'book' | 'upload';
+export type LearningSourceType = 'book' | 'upload';
 
-export type TutorProfileStatus = 'failed' | 'processing' | 'queued' | 'ready';
+export type LearningProfileStatus = 'failed' | 'processing' | 'queued' | 'ready';
 
-export type TutorSessionStatus = 'active' | 'archived' | 'completed';
+export type LearningSessionStatus = 'active' | 'archived' | 'completed';
 
-export type TutorPersona = {
+export type LearningPersona = {
   coachingFocus?: string | null;
   greeting: string;
   name: string;
   style?: string | null;
 };
 
-export type TutorCurriculumStep = {
+export type LearningCurriculumStep = {
   goal?: string | null;
   guidingQuestion?: string | null;
   id: string;
@@ -252,13 +252,13 @@ export type TutorCurriculumStep = {
   title: string;
 };
 
-export type TutorCitation = {
+export type LearningCitation = {
   chunkId?: number | null;
   excerpt?: string | null;
   sourceTitle?: string | null;
 } & Record<string, unknown>;
 
-export type TutorSourceDocument = {
+export type LearningSourceDocument = {
   contentHash?: string | null;
   fileName: string;
   id: number;
@@ -270,7 +270,7 @@ export type TutorSourceDocument = {
   profileId: number;
 };
 
-export type TutorGenerationJob = {
+export type LearningGenerationJob = {
   attemptCount?: number;
   createdAt?: string | null;
   errorMessage?: string | null;
@@ -281,33 +281,33 @@ export type TutorGenerationJob = {
   updatedAt?: string | null;
 };
 
-export type TutorProfile = {
+export type LearningProfile = {
   bookId: number | null;
   bookSourceDocumentId?: number | null;
   createdAt: string;
-  curriculum: TutorCurriculumStep[];
+  curriculum: LearningCurriculumStep[];
   failureCode?: string | null;
   failureMessage?: string | null;
   id: number;
-  latestJob?: TutorGenerationJob | null;
-  persona: TutorPersona;
+  latestJob?: LearningGenerationJob | null;
+  persona: LearningPersona;
   sourceSummary?: string | null;
-  sourceType: TutorSourceType;
-  sources: TutorSourceDocument[];
-  status: TutorProfileStatus;
+  sourceType: LearningSourceType;
+  sources: LearningSourceDocument[];
+  status: LearningProfileStatus;
   teachingGoal?: string | null;
   title: string;
   updatedAt: string;
 };
 
-export type TutorCompletedStep = {
+export type LearningCompletedStep = {
   completedAt: string;
   confidence: number;
   stepIndex: number;
 };
 
-export type TutorSession = {
-  completedSteps: TutorCompletedStep[];
+export type LearningSession = {
+  completedSteps: LearningCompletedStep[];
   completedStepsCount: number;
   conversationSessionId: number;
   createdAt: string;
@@ -316,21 +316,21 @@ export type TutorSession = {
   id: number;
   lastMessagePreview?: string | null;
   progressLabel: string;
-  status: TutorSessionStatus;
-  tutorProfileId: number;
+  status: LearningSessionStatus;
+  learningProfileId: number;
   updatedAt: string;
 };
 
-export type TutorSessionMessage = {
-  citations?: TutorCitation[];
+export type LearningSessionMessage = {
+  citations?: LearningCitation[];
   content: string;
   createdAt: string;
   id: number;
   role: 'assistant' | 'user';
-  tutorSessionId: number;
+  learningSessionId: number;
 };
 
-export type TutorSuggestion = {
+export type LearningSuggestion = {
   bookId?: number | null;
   description: string;
   id: string;
@@ -345,19 +345,19 @@ export type TutorSuggestion = {
   title: string;
 };
 
-export type TutorDashboardContinueSession = TutorSession & {
+export type LearningDashboardContinueSession = LearningSession & {
   personaName?: string | null;
   profileId: number;
   title: string;
 };
 
-export type TutorDashboard = {
-  continueSession: TutorDashboardContinueSession | null;
-  recentProfiles: TutorProfile[];
-  suggestions: TutorSuggestion[];
+export type LearningDashboard = {
+  continueSession: LearningDashboardContinueSession | null;
+  recentProfiles: LearningProfile[];
+  suggestions: LearningSuggestion[];
 };
 
-export type CreateTutorProfileInput = {
+export type CreateLearningProfileInput = {
   bookId: number;
   bookSourceDocumentId?: number;
   sourceType: 'book';
@@ -365,30 +365,34 @@ export type CreateTutorProfileInput = {
   title?: string;
 };
 
-export type StartTutorSessionResult = {
-  firstStep: TutorCurriculumStep | null;
-  session: TutorSession;
-  welcomeMessage: TutorSessionMessage;
+export type StartLearningSessionResult = {
+  firstStep: LearningCurriculumStep | null;
+  session: LearningSession;
+  welcomeMessage: LearningSessionMessage;
 };
 
-export type TutorStepEvaluation = {
-  confidence: number;
-  meetsCriteria: boolean;
+export type LearningStepEvaluation = {
+  confidence?: number;
+  meetsCriteria?: boolean;
+  passed: boolean;
+  masteryScore: number;
+  missingConcepts: string[];
   reasoning?: string | null;
+  feedback?: string | null;
   stepIndex: number;
 };
 
-export type TutorStreamEvent =
+export type LearningStreamEvent =
   | {
       delta: string;
       type: 'assistant.delta';
     }
   | {
-      message: TutorSessionMessage;
-      type: 'assistant.done';
+      message: LearningSessionMessage;
+      type: 'assistant.final';
     }
   | {
-      evaluation: TutorStepEvaluation;
+      evaluation: LearningStepEvaluation;
       type: 'evaluation';
     }
   | {
@@ -396,7 +400,7 @@ export type TutorStreamEvent =
       type: 'status';
     }
   | {
-      session: TutorSession;
+      session: LearningSession;
       type: 'session.updated';
     }
   | {

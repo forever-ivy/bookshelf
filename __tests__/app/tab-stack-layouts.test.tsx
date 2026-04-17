@@ -45,7 +45,7 @@ jest.mock('@/providers/profile-sheet-provider', () => ({
 import HomeTabLayout from '@/app/(tabs)/(home)/_layout';
 import BorrowingTabLayout from '@/app/(tabs)/borrowing/_layout';
 import SearchTabLayout from '@/app/(tabs)/search/_layout';
-import TutorTabLayout from '@/app/(tabs)/tutor/_layout';
+import LearningTabLayout from '@/app/(tabs)/learning/_layout';
 
 describe('tab stack layouts', () => {
   beforeEach(() => {
@@ -130,8 +130,8 @@ describe('tab stack layouts', () => {
     );
   });
 
-  it('keeps the tutor tab stack aligned with the home-style transparent header structure', () => {
-    render(<TutorTabLayout />);
+  it('keeps the learning tab stack aligned with the home-style transparent header structure', () => {
+    render(<LearningTabLayout />);
 
     expect(screen.getByTestId('mock-stack')).toBeTruthy();
     expect(mockRecordedScreenOptions).toEqual(
