@@ -94,6 +94,7 @@ uv sync
 
 ```bash
 docker compose -f docker-compose.pgvector.yml up -d
+until docker exec bookshelf pg_isready -U library -d service >/dev/null 2>&1; do sleep 1; done
 ```
 
 默认数据库：
@@ -118,19 +119,39 @@ postgresql+psycopg://library:library@localhost:55432/service
 uv run python scripts/bootstrap_demo_database.py --reset
 ```
 
+如果数据库里已经有旧数据、又想重新恢复 demo 快照，也请继续带 `--reset`；不要直接对非空库执行不带 `--reset` 的恢复命令。
+
 如果当前没有快照文件，就先初始化空库：
 
 ```bash
 uv run python scripts/init_postgres.py
 ```
 
-### 5. 启动后端服务
+### 5. 终端 1：准备数据库、Redis 和 demo 数据
 
 ```bash
+cd /Volumes/Disk/Code/bookshelf
+docker compose -f docker-compose.pgvector.yml up -d
+until docker exec bookshelf pg_isready -U library -d service >/dev/null 2>&1; do sleep 1; done
+docker start bookshelf-redis 2>/dev/null || docker run -d --name bookshelf-redis -p 6379:6379 redis:7
+uv run python scripts/bootstrap_demo_database.py --reset
+```
+
+### 6. 终端 2：启动 API
+
+```bash
+cd /Volumes/Disk/Code/bookshelf
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 6. 验证第一次启动是否成功
+### 7. 终端 3：启动 learning worker
+
+```bash
+cd /Volumes/Disk/Code/bookshelf
+uv run celery -A app.learning.tasks.celery_app worker -Q learning --loglevel=INFO
+```
+
+### 8. 验证第一次启动是否成功
 
 至少先检查下面三个地址：
 
@@ -138,7 +159,19 @@ uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - `http://127.0.0.1:8000/docs`
 - `http://127.0.0.1:8000/openapi.json`
 
-### 7. 如果后面要联调前端
+更直接的命令行校验：
+
+```bash
+curl http://127.0.0.1:8000/api/v1/health
+```
+
+如果要联调导学异步链路，health 里至少应看到：
+
+- `database = ok`
+- `learning.queue = ok`
+- `learning.worker = ok`
+
+### 9. 如果后面要联调前端
 
 - `admin` 分支默认访问 `http://127.0.0.1:8000`
 - `app` 分支默认也访问 `http://127.0.0.1:8000`
@@ -201,6 +234,13 @@ LIBRARY_POSTGRES_BIN_DIR=/opt/homebrew/opt/libpq/bin uv run python scripts/expor
 
 ```bash
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+如果你还要跑 `learning` 的异步生成链路，请额外启动 Redis 和 Celery worker：
+
+```bash
+docker start bookshelf-redis 2>/dev/null || docker run -d --name bookshelf-redis -p 6379:6379 redis:7
+uv run celery -A app.learning.tasks.celery_app worker -Q learning --loglevel=INFO
 ```
 
 ### 6. 验证服务

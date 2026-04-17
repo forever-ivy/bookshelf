@@ -315,7 +315,8 @@ class LearningService:
         profile = repository.require_owned_profile(session, profile_id=profile_id, reader_id=reader_id)
         jobs = list(repository.list_profile_jobs(session, profile_id=profile.id))
         active_jobs = [job for job in jobs if job.status == "processing"]
-        if active_jobs:
+        retryable_jobs = [job for job in active_jobs if int(job.attempt_count or 0) == 0]
+        if active_jobs and len(retryable_jobs) != len(active_jobs):
             return {"triggered": False, "jobs": jobs}
         self.runtime_probe.assert_generation_runtime_available()
 

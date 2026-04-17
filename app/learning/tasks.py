@@ -4,6 +4,7 @@ from celery import Celery
 
 from app.core.config import Settings, get_settings
 from app.core.database import get_session_factory, init_engine, reset_engine
+from app.db.base import import_model_modules
 from app.learning.service import LearningService
 
 
@@ -22,9 +23,16 @@ def _build_celery_app(settings: Settings) -> Celery:
 celery_app = _build_celery_app(get_settings())
 
 
+def prepare_learning_worker_runtime() -> None:
+    # Celery workers can import learning models without having loaded the
+    # reader/catalog modules that satisfy foreign-key table lookups.
+    import_model_modules()
+
+
 @celery_app.task(name="learning.generate_profile")
 def generate_learning_profile_task(profile_id: int, reader_id: int) -> dict:
     settings = get_settings()
+    prepare_learning_worker_runtime()
     reset_engine()
     init_engine(settings)
     session = get_session_factory()()

@@ -144,6 +144,71 @@ def test_generate_learning_profile_keeps_profile_when_graph_provider_missing(cli
     assert any(asset["parseStatus"] == "parsed" for asset in detail_payload["assets"])
 
 
+def test_generate_learning_profile_retries_processing_jobs_that_never_started(client):
+    state = seed_reader_with_book()
+    headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
+
+    create_response = client.post(
+        "/api/v2/learning/profiles",
+        headers=headers,
+        json={
+            "title": "重试导学空间",
+            "goalMode": "preview",
+            "difficultyMode": "guided",
+            "sources": [
+                {
+                    "kind": "inline_text",
+                    "fileName": "retry.md",
+                    "mimeType": "text/markdown",
+                    "content": "# 重试\n\n这个导学空间应该允许重新触发生成。",
+                }
+            ],
+        },
+    )
+    profile_id = create_response.json()["profile"]["id"]
+
+    session = get_session_factory()()
+    try:
+        session.execute(
+            text(
+                """
+                UPDATE learning_jobs
+                SET status = 'processing', attempt_count = 0, error_message = NULL
+                WHERE profile_id = :profile_id
+                """
+            ),
+            {"profile_id": profile_id},
+        )
+        session.execute(
+            text(
+                """
+                UPDATE learning_profiles
+                SET status = 'queued'
+                WHERE id = :profile_id
+                """
+            ),
+            {"profile_id": profile_id},
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    generate_response = client.post(
+        f"/api/v2/learning/profiles/{profile_id}/generate",
+        headers=headers,
+    )
+
+    assert generate_response.status_code == 202
+    payload = generate_response.json()
+    assert payload["ok"] is True
+    assert payload["triggered"] is True
+
+    detail_response = client.get(f"/api/v2/learning/profiles/{profile_id}", headers=headers)
+    detail_payload = detail_response.json()
+    assert detail_payload["profile"]["status"] == "ready"
+    assert any(job["attemptCount"] >= 1 for job in detail_payload["jobs"])
+
+
 def test_learning_upload_source_can_generate_profile(client):
     state = seed_reader_with_book()
     headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
