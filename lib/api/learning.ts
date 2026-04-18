@@ -16,7 +16,6 @@ import type {
   LearningSourceType,
   LearningStepEvaluation,
   LearningStreamEvent,
-  LearningSuggestion,
   StartLearningSessionResult,
 } from '@/lib/api/types';
 import {
@@ -534,17 +533,6 @@ function normalizeLearningTurnMessages(turn: any): LearningSessionMessage[] {
   return messages;
 }
 
-function normalizeLearningSuggestion(raw: any): LearningSuggestion {
-  return {
-    bookId: raw?.bookId ?? raw?.book_id ?? null,
-    description: raw?.description ?? '',
-    id: String(raw?.id ?? `suggestion-${Math.random().toString(36).slice(2, 8)}`),
-    kind: raw?.kind ?? 'next_step',
-    profileId: raw?.profileId ?? raw?.profile_id ?? null,
-    title: raw?.title ?? '继续学习',
-  };
-}
-
 function normalizeLearningDashboardContinueSession(
   session: LearningSession,
   profile: LearningProfile | null
@@ -778,7 +766,7 @@ function extractFormDataValue(formData: FormData, fieldName: string) {
     return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
   }
 
-  const parts = (formData as FormData & { _parts?: Array<[string, unknown]> })._parts;
+  const parts = (formData as FormData & { _parts?: [string, unknown][] })._parts;
   if (!Array.isArray(parts)) {
     return null;
   }

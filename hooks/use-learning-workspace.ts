@@ -178,6 +178,15 @@ export function useLearningWorkspace(profileId: number) {
       return;
     }
 
+    if (
+      workspaceSession &&
+      workspaceSession.learningProfileId === profileId &&
+      workspaceSession.sessionKind === 'explore' &&
+      workspaceSession.status !== 'completed'
+    ) {
+      return;
+    }
+
     if (defaultSession) {
       setWorkspaceSession(defaultSession);
       return;
@@ -186,7 +195,7 @@ export function useLearningWorkspace(profileId: number) {
     if (profile?.status !== 'ready') {
       setWorkspaceSession(null);
     }
-  }, [activeSessions, defaultSession, profile?.status, workspaceSession]);
+  }, [activeSessions, defaultSession, profile?.status, profileId, workspaceSession]);
 
   React.useEffect(() => {
     if (!profile || profile.status !== 'ready' || workspaceSession || startSessionMutation.isPending) {

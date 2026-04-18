@@ -628,14 +628,18 @@ export default function LearningWorkspaceStudyRoute() {
     if (
       !pendingDraft ||
       studyMode !== 'explore' ||
-      workspaceSession?.sessionKind !== 'explore'
+      workspaceSession?.sessionKind !== 'explore' ||
+      !workspaceSession
     ) {
       return;
     }
 
     pendingExploreDraftRef.current = null;
-    void handleSend(pendingDraft);
-  }, [handleSend, studyMode, workspaceSession?.id, workspaceSession?.sessionKind]);
+    void handleSend(pendingDraft, {
+      mode: 'explore',
+      session: workspaceSession,
+    });
+  }, [handleSend, studyMode, workspaceSession]);
 
   const handleExpandToExplore = React.useCallback(async () => {
     if (!workspaceSession?.id) {

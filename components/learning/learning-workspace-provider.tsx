@@ -20,6 +20,7 @@ import {
   buildLearningWorkspaceHighlights,
   buildLearningWorkspaceSources,
   createLearningRenderedMessages,
+  resolveLearningRedirectStatusSignal,
   resolveLearningStreamStatusSignal,
   type LearningWorkspaceInsightCard,
   type LearningWorkspaceRenderedMessage,
@@ -32,13 +33,17 @@ import { useLearningConversationStore } from '@/stores/learning-conversation-sto
 export type LearningWorkspaceTab = 'study' | 'graph' | 'review';
 export type LearningStudyMode = 'guide' | 'explore';
 export type LearningWorkspaceInfoPanel = 'highlights' | 'path' | 'sources';
+type LearningSendOptions = {
+  mode?: LearningStudyMode;
+  session?: NonNullable<ReturnType<typeof useLearningWorkspace>['workspaceSession']>;
+};
 
 type LearningWorkspaceContextValue = {
   activeTab: LearningWorkspaceTab;
   closeWorkspace: () => void;
   draft: string;
   footerInset: number;
-  handleSend: (nextDraft?: string) => Promise<void>;
+  handleSend: (nextDraft?: string, options?: LearningSendOptions) => Promise<void>;
   highlightCards: LearningWorkspaceInsightCard[];
   latestEvaluation: LearningStepEvaluation | null;
   latestSessionSignal: LearningWorkspaceSessionSignal | null;
@@ -165,6 +170,10 @@ export function LearningWorkspaceProvider({
   const setConversationLatestEvaluation = useLearningConversationStore(
     (state) => state.setLatestEvaluation
   );
+  const pendingRedirectReplayRef = React.useRef<{
+    content: string;
+    session: NonNullable<ReturnType<typeof useLearningWorkspace>['workspaceSession']>;
+  } | null>(null);
 
   const baseRenderedMessages = React.useMemo(
     () => createLearningRenderedMessages(sessionMessagesQuery.data ?? []),
@@ -270,9 +279,11 @@ export function LearningWorkspaceProvider({
     [mode, pathname]
   );
 
-  const handleSend = React.useCallback(async (nextDraft?: string) => {
+  const handleSend = React.useCallback(async (nextDraft?: string, options?: LearningSendOptions) => {
     const normalized = (nextDraft ?? draft).trim();
-    if (!normalized || !profile || !workspaceSession || !token || isSending) {
+    const activeSession = options?.session ?? workspaceSession;
+    const activeMode = options?.mode ?? studyMode;
+    if (!normalized || !profile || !activeSession || !token || isSending) {
       return;
     }
 
@@ -298,20 +309,18 @@ export function LearningWorkspaceProvider({
     setConversationLatestStatus(resolveLearningStreamStatusSignal());
     startConversationDraft({
       assistantMessageId,
-      mode: studyMode,
+      mode: activeMode,
       userMessageId,
       userText: normalized,
     });
     setIsSending(true);
 
+    let currentStreamSession = activeSession;
     let finalAssistantMessage: LearningSessionMessage | null = null;
+    let redirected = false;
 
     try {
-      for await (const event of streamLearningSessionReply(
-        workspaceSession.id,
-        { content: normalized },
-        token
-      )) {
+      for await (const event of streamLearningSessionReply(activeSession.id, { content: normalized }, token)) {
         if (event.type === 'status') {
           setConversationLatestStatus(resolveLearningStreamStatusSignal(event.phase));
           continue;
@@ -332,9 +341,24 @@ export function LearningWorkspaceProvider({
           applyConversationEvent(event);
           if (event.type === 'assistant.final') {
             finalAssistantMessage = event.message;
-            updateMessagesCache(workspaceSession.id, optimisticUserMessage, event.message);
+            updateMessagesCache(activeSession.id, optimisticUserMessage, event.message);
           }
           continue;
+        }
+
+        if (event.type === 'session.redirect') {
+          const nextSession = profile ? mergeLearningSessionWithProfile(profile, event.session) : event.session;
+          pendingRedirectReplayRef.current = {
+            content: normalized,
+            session: nextSession,
+          };
+          redirected = true;
+          clearConversationDraft();
+          setConversationLatestStatus(resolveLearningRedirectStatusSignal());
+          setWorkspaceSession(nextSession);
+          updateSessionCaches(nextSession);
+          router.replace(`/learning/${profileId}/study?mode=explore`);
+          break;
         }
 
         if (event.type === 'session.updated') {
@@ -345,8 +369,9 @@ export function LearningWorkspaceProvider({
             currentStepTitle: nextSession.currentStepTitle,
             progressLabel: nextSession.progressLabel,
             status: nextSession.status,
-            transitionLabel: buildLearningSessionTransitionLabel(workspaceSession, nextSession),
+            transitionLabel: buildLearningSessionTransitionLabel(currentStreamSession, nextSession),
           };
+          currentStreamSession = nextSession;
           setConversationLatestSessionSignal(nextSignal);
           setWorkspaceSession(nextSession);
           updateSessionCaches(nextSession);
@@ -358,7 +383,7 @@ export function LearningWorkspaceProvider({
         }
       }
 
-      if (!finalAssistantMessage) {
+      if (!finalAssistantMessage && !redirected) {
         clearConversationDraft();
       }
     } catch (error) {
@@ -388,24 +413,44 @@ export function LearningWorkspaceProvider({
       setIsSending(false);
     }
   }, [
+    applyConversationEvent,
+    clearConversationDraft,
     draft,
     isSending,
     profile,
+    profileId,
+    router,
     sessionMessagesQuery,
     sessionsQuery,
+    setConversationLatestEvaluation,
+    setConversationLatestSessionSignal,
+    setConversationLatestStatus,
     setWorkspaceSession,
+    startConversationDraft,
+    studyMode,
     token,
     updateMessagesCache,
     updateSessionCaches,
     workspaceSession,
-    studyMode,
-    applyConversationEvent,
-    clearConversationDraft,
-    setConversationLatestEvaluation,
-    setConversationLatestSessionSignal,
-    setConversationLatestStatus,
-    startConversationDraft,
   ]);
+
+  React.useEffect(() => {
+    const pendingReplay = pendingRedirectReplayRef.current;
+    if (
+      !pendingReplay ||
+      isSending ||
+      studyMode !== 'explore' ||
+      workspaceSession?.id !== pendingReplay.session.id
+    ) {
+      return;
+    }
+
+    pendingRedirectReplayRef.current = null;
+    void handleSend(pendingReplay.content, {
+      mode: 'explore',
+      session: pendingReplay.session,
+    });
+  }, [handleSend, isSending, studyMode, workspaceSession]);
 
   const navigateToTab = React.useCallback(
     (tab: LearningWorkspaceTab) => {

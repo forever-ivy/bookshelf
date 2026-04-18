@@ -91,7 +91,10 @@ function EvidenceCard({ card }: { card: Extract<LearningWorkspaceMessageCard, { 
 function PillListCard({
   card,
 }: {
-  card: Extract<LearningWorkspaceMessageCard, { kind: 'followups' | 'related_concepts' }>;
+  card: Extract<
+    LearningWorkspaceMessageCard,
+    { kind: 'followups' | 'related_concepts' | 'remediation' }
+  >;
 }) {
   const { theme } = useAppTheme();
 
@@ -129,7 +132,7 @@ function BridgeActionsCard({
   card,
   onAction,
 }: {
-  card: Extract<LearningWorkspaceMessageCard, { kind: 'bridge_actions' }>;
+  card: Extract<LearningWorkspaceMessageCard, { kind: 'bridge_actions' | 'redirect' }>;
   onAction?: (action: LearningBridgeAction) => void;
 }) {
   const { theme } = useAppTheme();
@@ -184,6 +187,7 @@ function renderCard(
   onAction?: (action: LearningBridgeAction) => void
 ) {
   switch (card.kind) {
+    case 'coach':
     case 'teacher':
     case 'peer':
     case 'answer':
@@ -206,9 +210,11 @@ function renderCard(
     }
     case 'evidence':
       return <EvidenceCard key={`${card.kind}-${card.title}`} card={card} />;
+    case 'remediation':
     case 'followups':
     case 'related_concepts':
       return <PillListCard key={`${card.kind}-${card.title}`} card={card} />;
+    case 'redirect':
     case 'bridge_actions':
       return (
         <BridgeActionsCard

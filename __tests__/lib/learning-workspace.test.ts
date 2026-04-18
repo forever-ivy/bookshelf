@@ -68,7 +68,7 @@ describe('learning workspace helpers', () => {
             reasoning: '回答已经覆盖当前步骤的关键线索。',
             stepIndex: 0,
           },
-          followups: ['继续说明数据和模型之间的关系'],
+          followups: [],
           kind: 'guide',
           peer: {
             content: '如果继续往下学，你觉得下一步最该澄清哪个概念？',
@@ -82,24 +82,50 @@ describe('learning workspace helpers', () => {
     ]);
 
     expect(messages[0]).toMatchObject({
-      cards: expect.arrayContaining([
-        expect.objectContaining({
-          kind: 'teacher',
-          title: '导师主讲',
-        }),
-        expect.objectContaining({
-          kind: 'examiner',
-          title: '考官判断',
-        }),
-        expect.objectContaining({
-          kind: 'followups',
-        }),
-      ]),
       presentation: expect.objectContaining({
         kind: 'guide',
       }),
       role: 'assistant',
     });
+    expect(messages[0].cards.map((card) => card.kind)).toEqual([
+      'coach',
+      'teacher',
+      'peer',
+      'examiner',
+      'evidence',
+      'redirect',
+    ]);
+  });
+
+  it('keeps guide coach card stable and skips examiner on unevaluated turns', () => {
+    const messages = createLearningRenderedMessages([
+      {
+        content: '先把这一步真正要解释的问题说清楚，再继续往下追。',
+        createdAt: '2026-04-08T08:06:00Z',
+        id: 804,
+        learningSessionId: 301,
+        presentation: {
+          bridgeActions: [],
+          evidence: [],
+          examiner: {
+            masteryScore: 0,
+            missingConcepts: [],
+            passed: false,
+            reasoning: null,
+            stepIndex: 0,
+          },
+          followups: [],
+          kind: 'guide',
+          peer: null,
+          teacher: {
+            content: '先把这一步真正要解释的问题说清楚，再继续往下追。',
+          },
+        },
+        role: 'assistant',
+      },
+    ]);
+
+    expect(messages[0].cards.map((card) => card.kind)).toEqual(['coach']);
   });
 
   it('builds workspace source cards from backend profile sources', () => {

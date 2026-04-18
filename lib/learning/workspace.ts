@@ -26,12 +26,12 @@ export type LearningWorkspaceInsightCard = {
 export type LearningWorkspaceMessageCard =
   | {
       content: string;
-      kind: 'answer' | 'peer' | 'teacher';
+      kind: 'answer' | 'coach' | 'peer' | 'teacher';
       title: string;
     }
   | {
       actions: LearningBridgeAction[];
-      kind: 'bridge_actions';
+      kind: 'bridge_actions' | 'redirect';
       title: string;
     }
   | {
@@ -46,7 +46,7 @@ export type LearningWorkspaceMessageCard =
     }
   | {
       items: string[];
-      kind: 'followups' | 'related_concepts';
+      kind: 'followups' | 'related_concepts' | 'remediation';
       title: string;
     };
 
@@ -188,13 +188,37 @@ export function buildLearningWorkspaceMessageCards(
   }
 
   if (presentation.kind === 'guide') {
-    const cards: LearningWorkspaceMessageCard[] = [
-      {
+    const cards: LearningWorkspaceMessageCard[] = [];
+    const coachContent =
+      presentation.teacher.content.trim() ||
+      presentation.peer?.content?.trim() ||
+      presentation.examiner.reasoning?.trim() ||
+      '';
+    const hasEvaluation =
+      Boolean(presentation.examiner.reasoning?.trim()) ||
+      Boolean(presentation.examiner.feedback?.trim()) ||
+      Number(presentation.examiner.masteryScore ?? 0) > 0 ||
+      Number(presentation.examiner.confidence ?? 0) > 0 ||
+      presentation.examiner.passed ||
+      presentation.examiner.missingConcepts.length > 0;
+    const shouldShowTeacherCard =
+      Boolean(presentation.peer?.content?.trim()) || hasEvaluation;
+
+    if (coachContent) {
+      cards.push({
+        content: coachContent,
+        kind: 'coach',
+        title: '教练反馈',
+      });
+    }
+
+    if (shouldShowTeacherCard && presentation.teacher.content.trim()) {
+      cards.push({
         content: presentation.teacher.content,
         kind: 'teacher',
         title: '导师主讲',
-      },
-    ];
+      });
+    }
 
     if (presentation.peer?.content) {
       cards.push({
@@ -204,11 +228,13 @@ export function buildLearningWorkspaceMessageCards(
       });
     }
 
-    cards.push({
-      evaluation: presentation.examiner,
-      kind: 'examiner',
-      title: '考官判断',
-    });
+    if (hasEvaluation) {
+      cards.push({
+        evaluation: presentation.examiner,
+        kind: 'examiner',
+        title: '考官判断',
+      });
+    }
 
     if (presentation.evidence.length > 0) {
       cards.push({
@@ -221,8 +247,8 @@ export function buildLearningWorkspaceMessageCards(
     if (presentation.followups.length > 0) {
       cards.push({
         items: presentation.followups,
-        kind: 'followups',
-        title: '继续推进',
+        kind: hasEvaluation && !presentation.examiner.passed ? 'remediation' : 'followups',
+        title: hasEvaluation && !presentation.examiner.passed ? '补强建议' : '继续推进',
       });
     }
 
@@ -237,8 +263,8 @@ export function buildLearningWorkspaceMessageCards(
     if (presentation.bridgeActions.length > 0) {
       cards.push({
         actions: presentation.bridgeActions,
-        kind: 'bridge_actions',
-        title: '延展动作',
+        kind: 'redirect',
+        title: '转向 Explore',
       });
     }
 
@@ -363,6 +389,13 @@ export function resolveLearningStreamStatusSignal(phase?: string | null): Learni
 
   return {
     label: '导师正在组织这一轮回应…',
+    tone: 'info',
+  };
+}
+
+export function resolveLearningRedirectStatusSignal(): LearningWorkspaceStatusSignal {
+  return {
+    label: '已切到 Explore，正在继续这次提问…',
     tone: 'info',
   };
 }

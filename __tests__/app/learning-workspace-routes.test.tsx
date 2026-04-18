@@ -859,6 +859,101 @@ describe('learning workspace routes', () => {
     });
   });
 
+  it('follows backend session redirects by switching to explore and replaying the original input', async () => {
+    const originalInput = '我理解这一步了，想顺手看一个真实应用场景';
+    const redirectedSession = {
+      completedSteps: [{ completedAt: '2026-04-08T08:00:00Z', confidence: 0.82, stepIndex: 0 }],
+      completedStepsCount: 1,
+      conversationSessionId: 402,
+      createdAt: '2026-04-08T08:32:00Z',
+      currentStepIndex: 1,
+      currentStepTitle: '用自己的话解释概念',
+      focusContext: { stepTitle: '用自己的话解释概念' },
+      id: 302,
+      lastMessagePreview: null,
+      learningProfileId: 101,
+      progressLabel: '1 / 2 步',
+      sessionKind: 'explore' as const,
+      sourceSessionId: 301,
+      status: 'active' as const,
+      updatedAt: '2026-04-08T08:32:00Z',
+    };
+
+    mockUsePathname.mockReturnValue('/learning/101/study');
+    mockUseLocalSearchParams.mockReturnValue({ mode: 'guide', profileId: '101' });
+    mockRouter.replace.mockImplementation((href: string) => {
+      if (href === '/learning/101/study?mode=explore') {
+        mockUsePathname.mockReturnValue('/learning/101/study');
+        mockUseLocalSearchParams.mockReturnValue({ mode: 'explore', profileId: '101' });
+      }
+    });
+    (streamLearningSessionReply as jest.Mock).mockImplementation(
+      async function* (sessionId: number, input: { content: string }) {
+        if (sessionId === 301) {
+          yield {
+            session: redirectedSession,
+            targetMode: 'explore' as const,
+            type: 'session.redirect' as const,
+          };
+          return;
+        }
+
+        yield {
+          message: {
+            content: `explore:${input.content}`,
+            createdAt: '2026-04-08T08:33:00Z',
+            id: 883,
+            learningSessionId: sessionId,
+            presentation: {
+              answer: { content: `explore:${input.content}` },
+              bridgeActions: [],
+              evidence: [],
+              followups: [],
+              kind: 'explore' as const,
+              relatedConcepts: [],
+            },
+            role: 'assistant',
+          },
+          type: 'assistant.final' as const,
+        };
+      }
+    );
+
+    renderWithWorkspaceProvider(
+      <>
+        <LearningWorkspaceStudyRoute />
+        <WorkspaceProbe />
+      </>
+    );
+
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('learning-study-native-search-bar'), originalInput);
+      fireEvent(screen.getByTestId('learning-study-native-search-bar'), 'submitEditing', {
+        nativeEvent: { text: originalInput },
+      });
+    });
+
+    await waitFor(() => {
+      expect(streamLearningSessionReply).toHaveBeenNthCalledWith(
+        1,
+        301,
+        { content: originalInput },
+        'reader-token'
+      );
+    });
+    await waitFor(() => {
+      expect(streamLearningSessionReply).toHaveBeenNthCalledWith(
+        2,
+        302,
+        { content: originalInput },
+        'reader-token'
+      );
+    });
+    expect(mockRouter.replace).toHaveBeenCalledWith('/learning/101/study?mode=explore');
+    expect(screen.getByText('study-mode:explore')).toBeTruthy();
+    expect(screen.getAllByText(`explore:${originalInput}`).length).toBeGreaterThan(0);
+  });
+
   it('does not show a failure toast when the stream errors after assistant.final already arrived', async () => {
     (streamLearningSessionReply as jest.Mock).mockImplementation(async function* () {
       yield { phase: 'retrieving', type: 'status' };
