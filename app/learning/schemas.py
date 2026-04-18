@@ -199,10 +199,14 @@ def serialize_session(learning_session: Any) -> dict[str, Any]:
 
 
 def serialize_turn(turn: Any, *, agent_runs: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    metadata = turn.metadata_json or {}
     return {
         "id": turn.id,
         "sessionId": turn.session_id,
         "turnKind": getattr(turn, "turn_kind", "guide"),
+        "intentKind": getattr(turn, "intent_kind", None),
+        "responseMode": getattr(turn, "response_mode", None),
+        "redirectedSessionId": getattr(turn, "redirected_session_id", None),
         "userContent": turn.user_content,
         "teacherContent": turn.teacher_content,
         "peerContent": turn.peer_content,
@@ -213,7 +217,8 @@ def serialize_turn(turn: Any, *, agent_runs: list[dict[str, Any]] | None = None)
         "bridgeMetadata": getattr(turn, "bridge_metadata_json", None) or {},
         "tokenUsage": turn.token_usage_json or {},
         "latencyMs": turn.latency_ms,
-        "metadata": turn.metadata_json or {},
+        "metadata": metadata,
+        "presentation": metadata.get("presentation"),
         "agentRuns": agent_runs or [],
         "createdAt": _isoformat(turn.created_at),
     }

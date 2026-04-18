@@ -435,6 +435,9 @@ def create_turn(
     peer_content: str | None,
     assistant_content: str | None,
     turn_kind: str = "guide",
+    intent_kind: str | None = None,
+    response_mode: str | None = None,
+    redirected_session_id: int | None = None,
     citations_json: list[dict] | None = None,
     evaluation_json: dict | None = None,
     related_concepts_json: list[str] | None = None,
@@ -443,9 +446,18 @@ def create_turn(
     latency_ms: int | None = None,
     metadata_json: dict | None = None,
 ) -> LearningTurn:
+    resolved_intent_kind = intent_kind
+    resolved_response_mode = response_mode
+    if turn_kind == "guide" and evaluation_json is not None:
+        resolved_intent_kind = resolved_intent_kind or "step_answer"
+        resolved_response_mode = resolved_response_mode or "evaluation"
+
     turn = LearningTurn(
         session_id=session_id,
         turn_kind=turn_kind,
+        intent_kind=resolved_intent_kind,
+        response_mode=resolved_response_mode,
+        redirected_session_id=redirected_session_id,
         user_content=user_content,
         teacher_content=teacher_content,
         peer_content=peer_content,

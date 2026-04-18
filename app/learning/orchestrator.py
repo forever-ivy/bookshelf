@@ -123,6 +123,142 @@ def _append_event(state: dict[str, Any], event_name: str, data: dict[str, Any]) 
     return state
 
 
+def _dedupe_strings(values: list[str]) -> list[str]:
+    deduped: list[str] = []
+    for value in values:
+        normalized = value.strip()
+        if normalized and normalized not in deduped:
+            deduped.append(normalized)
+    return deduped
+
+
+def _build_guide_followups(*, step: dict[str, Any], evaluation: dict[str, Any]) -> list[str]:
+    if evaluation["passed"]:
+        followups = [
+            f"试着把“{step.get('title')}”和后续应用场景连起来。",
+            step.get("guidingQuestion") or "",
+            f"如果要向同学解释“{step.get('title')}”，你会先讲哪一个关键词？",
+        ]
+    else:
+        missing_concepts = evaluation.get("missingConcepts") or []
+        followups = [
+            f"请先用自己的话解释“{concept}”在这一部分里的作用。"
+            for concept in missing_concepts[:2]
+        ]
+        followups.extend(
+            [
+                step.get("guidingQuestion") or "",
+                f"结合资料，再说明“{step.get('title')}”为什么重要。",
+            ]
+        )
+    return _dedupe_strings([item for item in followups if item])
+
+
+def _build_guide_bridge_actions(*, step: dict[str, Any], step_index: int) -> list[dict[str, Any]]:
+    return [
+        {
+            "actionType": "expand_step_to_explore",
+            "label": "转去 Explore 深挖",
+            "description": f"围绕“{step.get('title')}”做一轮自由探索，再把结果收回主线。",
+            "targetStepIndex": step_index,
+        }
+    ]
+
+
+def _build_guide_presentation(
+    *,
+    step: dict[str, Any],
+    step_index: int,
+    teacher_text: str,
+    peer_text: str,
+    evaluation: dict[str, Any],
+    citations: list[dict[str, Any]],
+    related_concepts: list[str],
+    followups: list[str],
+    bridge_actions: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "kind": "guide",
+        "step": {
+            "index": step_index,
+            "title": step.get("title"),
+            "objective": step.get("objective"),
+            "guidingQuestion": step.get("guidingQuestion"),
+            "successCriteria": step.get("successCriteria"),
+        },
+        "teacher": {"content": teacher_text},
+        "peer": {"content": peer_text} if peer_text else None,
+        "examiner": {
+            **evaluation,
+            "label": "通过当前步骤" if evaluation["passed"] else "还需要再打磨",
+        },
+        "evidence": citations,
+        "relatedConcepts": related_concepts,
+        "followups": followups,
+        "bridgeActions": bridge_actions,
+    }
+
+
+def _build_explore_followups(*, focus_context: dict[str, Any], related_concepts: list[str]) -> list[str]:
+    step_title = focus_context.get("stepTitle") or "当前主题"
+    followups = [
+        f"如果回到“{step_title}”，这个问题最值得继续追问哪一层？",
+        f"给我一个和“{step_title}”相关的更具体例子。",
+    ]
+    followups.extend([f"继续解释“{concept}”和当前问题的关系。" for concept in related_concepts[:1]])
+    return _dedupe_strings([item for item in followups if item])
+
+
+def _build_explore_bridge_actions(
+    *,
+    focus_context: dict[str, Any],
+    guide_session_id: int | None,
+    step_index: int | None,
+    turn_id: int | None = None,
+) -> list[dict[str, Any]]:
+    step_title = focus_context.get("stepTitle") or "当前步骤"
+    payload: dict[str, Any] = {}
+    if turn_id is not None:
+        payload["turnId"] = turn_id
+    if guide_session_id is not None:
+        payload["targetGuideSessionId"] = guide_session_id
+    if step_index is not None:
+        payload["targetStepIndex"] = step_index
+    return [
+        {
+            "actionType": "attach_explore_turn_to_guide_step",
+            "label": "收编回 Guide",
+            "description": f"把这轮围绕“{step_title}”的探索结果挂回当前主线步骤。",
+            **payload,
+        }
+    ]
+
+
+def _build_explore_presentation(
+    *,
+    focus_context: dict[str, Any],
+    answer_text: str,
+    citations: list[dict[str, Any]],
+    related_concepts: list[str],
+    followups: list[str],
+    bridge_actions: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "kind": "explore",
+        "focus": {
+            "stepIndex": focus_context.get("stepIndex"),
+            "stepTitle": focus_context.get("stepTitle"),
+            "objective": focus_context.get("objective"),
+            "guidingQuestion": focus_context.get("guidingQuestion"),
+        },
+        "answer": {"content": answer_text},
+        "evidence": citations,
+        "relatedConcepts": related_concepts,
+        "followups": followups,
+        "bridgeActions": bridge_actions,
+    }
+
+
 class GuideOrchestrator:
     runtime_node_names = [
         "load_session",
@@ -200,6 +336,7 @@ class GuideOrchestrator:
         state["citations"] = bundle.citations
         state["related_concepts"] = bundle.related_concepts
         _append_event(state, "retrieval.evidence", {"items": bundle.citations})
+        _append_event(state, "evidence.items", {"items": bundle.citations})
         return state
 
     def _teacher_node(self, state: dict[str, Any]) -> dict[str, Any]:
@@ -215,6 +352,7 @@ class GuideOrchestrator:
         )
         state["teacher_text"] = teacher_text
         _append_event(state, "agent.teacher.delta", {"delta": teacher_text})
+        _append_event(state, "teacher.delta", {"delta": teacher_text})
         return state
 
     def _peer_node(self, state: dict[str, Any]) -> dict[str, Any]:
@@ -231,10 +369,24 @@ class GuideOrchestrator:
         state["evaluation"] = evaluation
         state["peer_text"] = peer_text
         _append_event(state, "agent.peer.delta", {"delta": peer_text})
+        _append_event(state, "peer.delta", {"delta": peer_text})
         return state
 
     def _examiner_node(self, state: dict[str, Any]) -> dict[str, Any]:
+        followups = _build_guide_followups(
+            step=state["current_step"],
+            evaluation=state["evaluation"],
+        )
+        bridge_actions = _build_guide_bridge_actions(
+            step=state["current_step"],
+            step_index=state["current_index"],
+        )
+        state["followups"] = followups
+        state["bridge_actions"] = bridge_actions
         _append_event(state, "agent.examiner.result", state["evaluation"])
+        _append_event(state, "examiner.result", state["evaluation"])
+        _append_event(state, "followups.items", {"items": followups})
+        _append_event(state, "bridge.actions", {"items": bridge_actions})
         return state
 
     def _progress_node(self, state: dict[str, Any]) -> dict[str, Any]:
@@ -272,6 +424,8 @@ class GuideOrchestrator:
         evaluation = state["evaluation"]
         teacher_text = state["teacher_text"]
         peer_text = state["peer_text"]
+        followups = state.get("followups", [])
+        bridge_actions = state.get("bridge_actions", [])
         assistant_text = _merge_assistant_reply(
             teacher_text=teacher_text,
             peer_text=peer_text,
@@ -279,6 +433,18 @@ class GuideOrchestrator:
             step=current_step,
         )
         state["assistant_text"] = assistant_text
+        presentation = _build_guide_presentation(
+            step=current_step,
+            step_index=current_index,
+            teacher_text=teacher_text,
+            peer_text=peer_text,
+            evaluation=evaluation,
+            citations=state["citations"],
+            related_concepts=state["related_concepts"],
+            followups=followups,
+            bridge_actions=bridge_actions,
+        )
+        state["presentation"] = presentation
 
         turn = repository.create_turn(
             session,
@@ -292,7 +458,7 @@ class GuideOrchestrator:
             evaluation_json=evaluation,
             related_concepts_json=state["related_concepts"],
             latency_ms=int((time.perf_counter() - state["started_at"]) * 1000),
-            metadata_json={"stepIndex": current_index},
+            metadata_json={"stepIndex": current_index, "presentation": presentation},
         )
         repository.create_agent_run(
             session,
@@ -497,6 +663,7 @@ class ExploreOrchestrator:
         state["citations"] = bundle.citations
         state["related_concepts"] = bundle.related_concepts
         _append_event(state, "retrieval.evidence", {"items": bundle.citations})
+        _append_event(state, "evidence.items", {"items": bundle.citations})
         return state
 
     def _answer_node(self, state: dict[str, Any]) -> dict[str, Any]:
@@ -522,7 +689,20 @@ class ExploreOrchestrator:
         return state
 
     def _related_concepts_node(self, state: dict[str, Any]) -> dict[str, Any]:
+        followups = _build_explore_followups(
+            focus_context=state["focus_context"],
+            related_concepts=state["related_concepts"],
+        )
+        bridge_actions = _build_explore_bridge_actions(
+            focus_context=state["focus_context"],
+            guide_session_id=getattr(state["learning_session"], "source_session_id", None),
+            step_index=getattr(state["learning_session"], "focus_step_index", None),
+        )
+        state["followups"] = followups
+        state["bridge_actions"] = bridge_actions
         _append_event(state, "explore.related_concepts", {"items": state["related_concepts"]})
+        _append_event(state, "followups.items", {"items": followups})
+        _append_event(state, "bridge.actions", {"items": bridge_actions})
         return state
 
     def _persist_turn_and_report(self, state: dict[str, Any]) -> dict[str, Any]:
@@ -530,6 +710,15 @@ class ExploreOrchestrator:
         learning_session = state["learning_session"]
         focus_context = state["focus_context"]
         focus_step_index = getattr(learning_session, "focus_step_index", None)
+        followups = state.get("followups", [])
+        presentation = _build_explore_presentation(
+            focus_context=focus_context,
+            answer_text=state["answer_text"],
+            citations=state["citations"],
+            related_concepts=state["related_concepts"],
+            followups=followups,
+            bridge_actions=[],
+        )
         turn = repository.create_turn(
             session,
             session_id=learning_session.id,
@@ -546,8 +735,20 @@ class ExploreOrchestrator:
                 "focusStepTitle": focus_context.get("stepTitle"),
             },
             latency_ms=int((time.perf_counter() - state["started_at"]) * 1000),
-            metadata_json={"mode": "explore"},
+            metadata_json={"mode": "explore", "presentation": presentation},
         )
+        bridge_actions = _build_explore_bridge_actions(
+            focus_context=focus_context,
+            guide_session_id=getattr(learning_session, "source_session_id", None),
+            step_index=focus_step_index,
+            turn_id=turn.id,
+        )
+        presentation["bridgeActions"] = bridge_actions
+        turn.metadata_json = {
+            **(turn.metadata_json or {}),
+            "presentation": presentation,
+        }
+        state["presentation"] = presentation
         repository.create_agent_run(
             session,
             turn_id=turn.id,

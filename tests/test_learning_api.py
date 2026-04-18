@@ -486,16 +486,37 @@ def test_learning_session_stream_emits_multi_agent_events_and_progress(client):
 
     event_names = [event["event"] for event in events]
     assert event_names[0] == "status"
-    assert "retrieval.evidence" in event_names
-    assert "agent.teacher.delta" in event_names
-    assert "agent.peer.delta" in event_names
-    assert "agent.examiner.result" in event_names
+    assert "evidence.items" in event_names
+    assert "teacher.delta" in event_names
+    assert "peer.delta" in event_names
+    assert "examiner.result" in event_names
+    assert "followups.items" in event_names
+    assert "bridge.actions" in event_names
     assert "session.progress" in event_names
     assert event_names[-1] == "assistant.final"
 
+    final_event = events[-1]
+    presentation = final_event["data"]["turn"]["presentation"]
+    assert final_event["data"]["turn"]["intentKind"] == "step_answer"
+    assert final_event["data"]["turn"]["responseMode"] == "evaluation"
+    assert final_event["data"]["turn"]["redirectedSessionId"] is None
+    assert presentation["kind"] == "guide"
+    assert presentation["teacher"]["content"]
+    assert presentation["peer"]["content"]
+    assert presentation["examiner"]["passed"] is True
+    assert presentation["evidence"]
+    assert presentation["followups"]
+    assert any(action["actionType"] == "expand_step_to_explore" for action in presentation["bridgeActions"])
+
     turns_response = client.get(f"/api/v2/learning/sessions/{learning_session_id}/turns", headers=headers)
     assert turns_response.status_code == 200
-    assert len(turns_response.json()["items"]) == 1
+    turns = turns_response.json()["items"]
+    assert len(turns) == 1
+    assert turns[0]["intentKind"] == "step_answer"
+    assert turns[0]["responseMode"] == "evaluation"
+    assert turns[0]["redirectedSessionId"] is None
+    assert turns[0]["presentation"]["kind"] == "guide"
+    assert turns[0]["presentation"]["examiner"]["passed"] is True
 
 
 def test_learning_session_stream_forbidden_reader_returns_403_before_stream_starts(client):
@@ -619,9 +640,11 @@ def test_explore_session_stream_returns_free_qa_without_progress_or_checkpoint(c
 
     event_names = [event["event"] for event in events]
     assert event_names[0] == "status"
-    assert "retrieval.evidence" in event_names
+    assert "evidence.items" in event_names
     assert "explore.answer.delta" in event_names
     assert "explore.related_concepts" in event_names
+    assert "followups.items" in event_names
+    assert "bridge.actions" in event_names
     assert "session.progress" not in event_names
     assert "session.remediation" not in event_names
     assert event_names[-1] == "assistant.final"
@@ -629,15 +652,30 @@ def test_explore_session_stream_returns_free_qa_without_progress_or_checkpoint(c
     final_event = events[-1]
     assert final_event["data"]["session"]["sessionKind"] == "explore"
     assert final_event["data"]["turn"]["turnKind"] == "explore"
+    assert final_event["data"]["turn"]["intentKind"] is None
+    assert final_event["data"]["turn"]["responseMode"] is None
+    assert final_event["data"]["turn"]["redirectedSessionId"] is None
     assert final_event["data"]["turn"]["evaluation"] is None
     assert final_event["data"]["turn"]["relatedConcepts"]
+    assert final_event["data"]["turn"]["presentation"]["kind"] == "explore"
+    assert final_event["data"]["turn"]["presentation"]["answer"]["content"]
+    assert final_event["data"]["turn"]["presentation"]["evidence"]
+    assert final_event["data"]["turn"]["presentation"]["relatedConcepts"]
+    assert any(
+        action["actionType"] == "attach_explore_turn_to_guide_step"
+        for action in final_event["data"]["turn"]["presentation"]["bridgeActions"]
+    )
 
     turns_response = client.get(f"/api/v2/learning/sessions/{explore_session_id}/turns", headers=headers)
     assert turns_response.status_code == 200
     turn = turns_response.json()["items"][0]
     assert turn["turnKind"] == "explore"
+    assert turn["intentKind"] is None
+    assert turn["responseMode"] is None
+    assert turn["redirectedSessionId"] is None
     assert turn["evaluation"] is None
     assert turn["relatedConcepts"]
+    assert turn["presentation"]["kind"] == "explore"
 
     session = get_session_factory()()
     try:
