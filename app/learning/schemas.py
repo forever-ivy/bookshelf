@@ -297,5 +297,19 @@ def serialize_bridge_action(action: Any) -> dict[str, Any]:
     }
 
 
+def serialize_session_redirect(
+    *,
+    target_session: Any,
+    bridge_action: Any,
+    recommended_prompts: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "targetMode": "explore",
+        "targetSession": serialize_session(target_session),
+        "bridgeAction": serialize_bridge_action(bridge_action),
+        "recommendedPrompts": recommended_prompts or [],
+    }
+
+
 def sse_event(event: str, data: dict[str, Any]) -> dict[str, Any]:
     return {"event": event, "data": data}

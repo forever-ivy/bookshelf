@@ -753,6 +753,9 @@ class LearningBridgeService:
         *,
         reader_id: int,
         guide_session_id: int,
+        from_turn_id: int | None = None,
+        trigger: str = "manual",
+        reason: str = "user_tap",
     ) -> dict[str, Any]:
         guide_session = repository.require_owned_session(session, session_id=guide_session_id, reader_id=reader_id)
         if getattr(guide_session, "session_kind", "guide") != "guide":
@@ -800,10 +803,10 @@ class LearningBridgeService:
             session,
             action_type="expand_step_to_explore",
             from_session_id=guide_session.id,
-            from_turn_id=None,
+            from_turn_id=from_turn_id,
             to_session_id=explore_session.id,
             status="completed",
-            payload_json={"stepIndex": current_index},
+            payload_json={"stepIndex": current_index, "trigger": trigger, "reason": reason},
             result_json={"recommendedPrompts": recommended_prompts},
         )
         return {

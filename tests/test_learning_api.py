@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from io import BytesIO
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
@@ -71,6 +72,194 @@ def parse_sse_lines(lines: list[str]) -> list[dict]:
             continue
         events.append(json.loads(line[6:]))
     return events
+
+
+def create_ready_learning_session(client: TestClient) -> tuple[dict[str, int], dict[str, str], int]:
+    state = seed_reader_with_book()
+    headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
+    create_response = client.post(
+        "/api/v2/learning/profiles",
+        headers=headers,
+        json={
+            "title": "操作系统导学空间",
+            "goalMode": "preview",
+            "difficultyMode": "guided",
+            "sources": [{"kind": "book", "bookId": state["book_id"]}],
+        },
+    )
+    profile_id = create_response.json()["profile"]["id"]
+    client.post(f"/api/v2/learning/profiles/{profile_id}/generate", headers=headers)
+    session_response = client.post(
+        "/api/v2/learning/sessions",
+        headers=headers,
+        json={"profileId": profile_id, "learningMode": "preview"},
+    )
+    assert session_response.status_code == 201
+    return state, headers, session_response.json()["session"]["id"]
+
+
+@pytest.mark.parametrize(
+    ("content", "expected_kind"),
+    [
+        ("我理解这份资料主要讨论进程、线程和调度策略，它们决定了实验里如何组织并发执行。", "step_answer"),
+        ("这一步最关键的区别到底是什么？我还缺哪块理解？", "step_clarify"),
+        ("如果跳出去看，这和数据库事务或分布式一致性有什么关系？", "offtrack_explore"),
+    ],
+)
+def test_learning_session_stream_classifies_guide_intent(client: TestClient, content: str, expected_kind: str):
+    _, headers, learning_session_id = create_ready_learning_session(client)
+
+    with client.stream(
+        "POST",
+        f"/api/v2/learning/sessions/{learning_session_id}/stream",
+        headers=headers,
+        json={"content": content},
+    ) as response:
+        assert response.status_code == 200
+        events = parse_sse_lines(list(response.iter_lines()))
+
+    intent_event = next(event for event in events if event["event"] == "guide.intent")
+    assert intent_event["data"]["kind"] == expected_kind
+
+    final_event = events[-1]
+    assert final_event["data"]["turn"]["intentKind"] == expected_kind
+
+
+def test_learning_session_stream_step_clarify_persists_without_checkpoint(client: TestClient):
+    _, headers, learning_session_id = create_ready_learning_session(client)
+
+    with client.stream(
+        "POST",
+        f"/api/v2/learning/sessions/{learning_session_id}/stream",
+        headers=headers,
+        json={"content": "这一步最关键的区别到底是什么？我还缺哪块理解？"},
+    ) as response:
+        assert response.status_code == 200
+        events = parse_sse_lines(list(response.iter_lines()))
+
+    event_names = [event["event"] for event in events]
+    assert "guide.intent" in event_names
+    assert "session.progress" not in event_names
+    assert "session.remediation" not in event_names
+
+    final_event = events[-1]
+    assert final_event["data"]["turn"]["intentKind"] == "step_clarify"
+    assert final_event["data"]["turn"]["evaluation"] is None
+
+    session = get_session_factory()()
+    try:
+        checkpoint_count = session.execute(text("SELECT COUNT(*) FROM learning_checkpoints")).scalar_one()
+        remediation_count = session.execute(text("SELECT COUNT(*) FROM learning_remediation_plans")).scalar_one()
+        assert checkpoint_count == 0
+        assert remediation_count == 0
+    finally:
+        session.close()
+
+
+def test_learning_session_stream_offtrack_explore_skips_checkpoint_and_remediation(client: TestClient):
+    _, headers, learning_session_id = create_ready_learning_session(client)
+
+    with client.stream(
+        "POST",
+        f"/api/v2/learning/sessions/{learning_session_id}/stream",
+        headers=headers,
+        json={"content": "如果跳出去看，这和数据库事务或分布式一致性有什么关系？"},
+    ) as response:
+        assert response.status_code == 200
+        events = parse_sse_lines(list(response.iter_lines()))
+
+    event_names = [event["event"] for event in events]
+    assert "guide.intent" in event_names
+    assert "session.progress" not in event_names
+    assert "session.remediation" not in event_names
+
+    final_event = events[-1]
+    assert final_event["data"]["turn"]["intentKind"] == "offtrack_explore"
+    assert final_event["data"]["turn"]["evaluation"] is None
+
+    session = get_session_factory()()
+    try:
+        checkpoint_count = session.execute(text("SELECT COUNT(*) FROM learning_checkpoints")).scalar_one()
+        remediation_count = session.execute(text("SELECT COUNT(*) FROM learning_remediation_plans")).scalar_one()
+        assert checkpoint_count == 0
+        assert remediation_count == 0
+    finally:
+        session.close()
+
+
+def test_learning_session_stream_control_mutates_state_without_evaluation(client: TestClient):
+    _, headers, learning_session_id = create_ready_learning_session(client)
+
+    with client.stream(
+        "POST",
+        f"/api/v2/learning/sessions/{learning_session_id}/stream",
+        headers=headers,
+        json={"content": "继续"},
+    ) as response:
+        assert response.status_code == 200
+        events = parse_sse_lines(list(response.iter_lines()))
+
+    event_names = [event["event"] for event in events]
+    assert "guide.intent" in event_names
+    assert "session.progress" not in event_names
+    assert "session.remediation" not in event_names
+
+    final_event = events[-1]
+    assert final_event["data"]["turn"]["intentKind"] == "control"
+    assert final_event["data"]["turn"]["evaluation"] is None
+    assert final_event["data"]["session"]["currentStepIndex"] == 1
+
+    session = get_session_factory()()
+    try:
+        checkpoint_count = session.execute(text("SELECT COUNT(*) FROM learning_checkpoints")).scalar_one()
+        remediation_count = session.execute(text("SELECT COUNT(*) FROM learning_remediation_plans")).scalar_one()
+        assert checkpoint_count == 0
+        assert remediation_count == 0
+    finally:
+        session.close()
+
+
+def test_learning_session_stream_session_redirects_offtrack_question_to_explore(client: TestClient):
+    _, headers, learning_session_id = create_ready_learning_session(client)
+
+    with client.stream(
+        "POST",
+        f"/api/v2/learning/sessions/{learning_session_id}/stream",
+        headers=headers,
+        json={"content": "如果跳出去看，这和数据库事务或分布式一致性有什么关系？"},
+    ) as response:
+        assert response.status_code == 200
+        events = parse_sse_lines(list(response.iter_lines()))
+
+    redirect_event = next(event for event in events if event["event"] == "session.redirect")
+    assert redirect_event["data"]["targetMode"] == "explore"
+    assert redirect_event["data"]["targetSession"]["sessionKind"] == "explore"
+    assert redirect_event["data"]["targetSession"]["sourceSessionId"] == learning_session_id
+    assert redirect_event["data"]["bridgeAction"]["payload"]["trigger"] == "auto"
+    assert redirect_event["data"]["bridgeAction"]["payload"]["reason"] == "offtrack_explore"
+
+    final_event = events[-1]
+    assert final_event["data"]["turn"]["intentKind"] == "offtrack_explore"
+    assert final_event["data"]["turn"]["responseMode"] == "redirected"
+    assert final_event["data"]["turn"]["redirectedSessionId"] == redirect_event["data"]["targetSession"]["id"]
+    assert final_event["data"]["turn"]["bridgeMetadata"]["trigger"] == "auto"
+    assert final_event["data"]["turn"]["bridgeMetadata"]["reason"] == "offtrack_explore"
+    assert final_event["data"]["turn"]["evaluation"] is None
+
+    turns_response = client.get(f"/api/v2/learning/sessions/{learning_session_id}/turns", headers=headers)
+    assert turns_response.status_code == 200
+    turn = turns_response.json()["items"][0]
+    assert turn["responseMode"] == "redirected"
+    assert turn["redirectedSessionId"] == redirect_event["data"]["targetSession"]["id"]
+
+    session = get_session_factory()()
+    try:
+        checkpoint_count = session.execute(text("SELECT COUNT(*) FROM learning_checkpoints")).scalar_one()
+        remediation_count = session.execute(text("SELECT COUNT(*) FROM learning_remediation_plans")).scalar_one()
+        assert checkpoint_count == 0
+        assert remediation_count == 0
+    finally:
+        session.close()
 
 
 def test_create_learning_profile_from_book_returns_bundle_and_jobs(client):

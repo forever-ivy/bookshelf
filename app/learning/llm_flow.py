@@ -132,6 +132,35 @@ class LearningLLMWorkflow:
             "reasoning": str(parsed.get("reasoning") or ""),
         }
 
+    def classify_guide_intent(self, *, step: dict[str, Any], user_content: str) -> dict[str, Any] | None:
+        if not self.enabled:
+            return None
+        reply = self.provider.chat(
+            text=user_content,
+            context={
+                "systemPrompt": "你是导学课堂中的意图分类器。你只返回 JSON。",
+                "instruction": (
+                    "判断当前 Guide 输入的意图，返回 JSON："
+                    "kind:string, reason:string。kind 只能是 "
+                    "step_answer, step_clarify, offtrack_explore, control。"
+                ),
+                "step": step,
+            },
+        )
+        try:
+            parsed = json.loads(_clean_json_payload(reply))
+        except Exception:
+            return None
+        if not isinstance(parsed, dict):
+            return None
+        kind = str(parsed.get("kind") or "").strip()
+        if kind not in {"step_answer", "step_clarify", "offtrack_explore", "control"}:
+            return None
+        return {
+            "kind": kind,
+            "reason": str(parsed.get("reason") or "").strip(),
+        }
+
     def explore_answer(
         self,
         *,
