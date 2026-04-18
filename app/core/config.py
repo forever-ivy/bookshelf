@@ -43,6 +43,16 @@ class Settings(BaseSettings):
     graph_password: str | None = None
     graph_database: str | None = None
     mineru_base_url: str | None = None
+    mineru_local_base_url: str | None = None
+    mineru_cloud_base_url: str | None = None
+    mineru_api_token: str = ""
+    mineru_model_version: str = "vlm"
+    mineru_language: str | None = None
+    mineru_enable_formula: bool = True
+    mineru_enable_table: bool = True
+    mineru_ocr: bool = False
+    mineru_poll_interval_seconds: float = 1.0
+    mineru_max_wait_seconds: float = 120.0
     mineru_timeout_seconds: float = 60.0
     object_store_provider: str = "filesystem"
     object_store_bucket: str = "library-learning"

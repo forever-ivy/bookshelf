@@ -130,16 +130,11 @@ def _build_explore_answer(
     user_content: str,
     related_concepts: list[str],
 ) -> str:
-    snippets = [citation.get("snippet", "") for citation in citations[:2] if citation.get("snippet")]
-    prefix = "自由探索：" if focus_context else "自由问答："
-    focus_line = ""
-    if focus_context:
-        focus_line = f"当前我会把回答尽量贴近“{focus_context.get('stepTitle', '当前主题')}”这个步骤。"
-    evidence_line = " ".join(snippets) if snippets else "资料目前更强调从核心概念差异和应用场景去理解这个问题。"
-    concept_line = ""
-    if related_concepts:
-        concept_line = f"相关概念包括：{'、'.join(related_concepts[:4])}。"
-    return f"{prefix}{focus_line}{evidence_line}{concept_line}围绕你的问题“{user_content.strip()}”，建议先抓住定义差异，再看实验或应用里的影响。"
+    del focus_context, citations, related_concepts
+    normalized = (user_content or "").strip().lower()
+    if normalized in {"hi", "hello", "hey", "你好", "您好", "嗨"}:
+        return "模型暂时不可用。请稍后重试，或直接输入一个更具体的问题。"
+    return "模型暂时不可用，当前无法生成这轮 Explore 回答。请稍后重试。"
 
 
 def _append_event(state: dict[str, Any], event_name: str, data: dict[str, Any]) -> dict[str, Any]:

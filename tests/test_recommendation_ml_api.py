@@ -69,7 +69,7 @@ def build_ml_client(tmp_path: Path, monkeypatch, model_payload: dict):
 
     from app.main import create_app
 
-    settings = Settings()
+    settings = Settings(_env_file=None)
     init_engine(settings)
     init_schema()
     try:

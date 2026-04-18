@@ -11,6 +11,59 @@ def _clean_json_payload(text: str) -> str:
     return (text or "").strip().replace("```json", "").replace("```", "").strip()
 
 
+def _extract_balanced_json_payload(text: str) -> str | None:
+    raw = (text or "").strip()
+    if not raw:
+        return None
+
+    start_index = next((index for index, char in enumerate(raw) if char in "{["), None)
+    if start_index is None:
+        return None
+
+    stack: list[str] = []
+    in_string = False
+    escape = False
+    matching = {"{": "}", "[": "]"}
+
+    for index in range(start_index, len(raw)):
+        char = raw[index]
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+
+        if char == '"':
+            in_string = True
+            continue
+
+        if char in matching:
+            stack.append(matching[char])
+            continue
+
+        if stack and char == stack[-1]:
+            stack.pop()
+            if not stack:
+                return raw[start_index : index + 1]
+
+    return None
+
+
+def _parse_json_payload(text: str) -> Any | None:
+    cleaned = _clean_json_payload(text)
+    for candidate in (cleaned, _extract_balanced_json_payload(cleaned)):
+        if not candidate:
+            continue
+        try:
+            return json.loads(candidate)
+        except Exception:
+            continue
+    return None
+
+
 def _truncate(text: str, *, limit: int = 5000) -> str:
     compact = " ".join((text or "").split())
     return compact[:limit]
@@ -47,10 +100,7 @@ class LearningLLMWorkflow:
                 "difficultyMode": difficulty_mode,
             },
         )
-        try:
-            parsed = json.loads(_clean_json_payload(reply))
-        except Exception:
-            return None
+        parsed = _parse_json_payload(reply)
         if not isinstance(parsed, dict):
             return None
         if not isinstance(parsed.get("steps"), list) or not parsed.get("summary"):
@@ -117,10 +167,7 @@ class LearningLLMWorkflow:
                 "step": step,
             },
         )
-        try:
-            parsed = json.loads(_clean_json_payload(reply))
-        except Exception:
-            return None
+        parsed = _parse_json_payload(reply)
         if not isinstance(parsed, dict):
             return None
         if "masteryScore" not in parsed or "passed" not in parsed:
@@ -147,10 +194,7 @@ class LearningLLMWorkflow:
                 "step": step,
             },
         )
-        try:
-            parsed = json.loads(_clean_json_payload(reply))
-        except Exception:
-            return None
+        parsed = _parse_json_payload(reply)
         if not isinstance(parsed, dict):
             return None
         kind = str(parsed.get("kind") or "").strip()
@@ -179,13 +223,18 @@ class LearningLLMWorkflow:
                 "citations": citations[:4],
             },
         )
-        try:
-            parsed = json.loads(_clean_json_payload(reply))
-        except Exception:
+        parsed = _parse_json_payload(reply)
+        if isinstance(parsed, dict) and parsed.get("answer"):
+            return {
+                "answer": str(parsed["answer"]).strip(),
+                "relatedConcepts": [str(item).strip() for item in parsed.get("relatedConcepts", []) if str(item).strip()],
+            }
+
+        raw_answer = (reply or "").strip()
+        if not raw_answer:
             return None
-        if not isinstance(parsed, dict) or not parsed.get("answer"):
-            return None
+
         return {
-            "answer": str(parsed["answer"]).strip(),
-            "relatedConcepts": [str(item).strip() for item in parsed.get("relatedConcepts", []) if str(item).strip()],
+            "answer": raw_answer,
+            "relatedConcepts": [],
         }

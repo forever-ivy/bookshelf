@@ -31,6 +31,7 @@ except Exception:  # pragma: no cover - optional in tests
 
 FILENAME_SANITIZER = re.compile(r"[^A-Za-z0-9._-]+")
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_]+|[\u4e00-\u9fff]+")
+MINERU_SUPPORTED_SUFFIXES = {".pdf", ".docx", ".pptx", ".xlsx", ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}
 
 
 class PlannerState(TypedDict, total=False):
@@ -670,35 +671,20 @@ class LearningService:
         if suffix in {".html", ".htm"}:
             html = self.blob_store.read_text(storage_path)
             return html
-        if suffix == ".pdf":
-            try:
-                from pypdf import PdfReader  # type: ignore
-
-                raw_path = storage_path
-                if raw_path.startswith("s3://"):
-                    temp_path = ensure_learning_profile_storage_dir(
-                        settings=self.settings,
-                        reader_id=0,
-                        profile_id=0,
-                    ) / "tmp_source.pdf"
-                    temp_path.write_bytes(self.blob_store.read_bytes(raw_path))
-                    reader = PdfReader(str(temp_path))
-                else:
-                    reader = PdfReader(str(raw_path))
-                page_texts = [(page.extract_text() or "").strip() for page in reader.pages]
-                text = "\n\n".join(item for item in page_texts if item)
-                if text:
-                    return text
-            except Exception:
-                pass
-        if suffix in {".docx", ".pptx", ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".pdf"} and self.mineru_client.is_enabled():
+        if suffix in MINERU_SUPPORTED_SUFFIXES and self.mineru_client.is_enabled():
             local_path = self._materialize_local_source(storage_path=storage_path, file_name=file_name)
-            parsed = self.mineru_client.parse_path(local_path)
-            results = parsed.get("results") or {}
-            first_payload = next(iter(results.values()), {})
-            md_content = first_payload.get("md_content")
-            if md_content:
-                return str(md_content)
+            try:
+                parsed = self.mineru_client.parse_path(local_path)
+                md_content = (parsed.get("md_content") or "").strip()
+                if md_content:
+                    return md_content
+            except Exception:
+                if suffix != ".pdf":
+                    raise
+        if suffix == ".pdf":
+            text = self._extract_text_from_pdf_via_pypdf(storage_path=storage_path)
+            if text:
+                return text
         raise RuntimeError(f"Unsupported source type for extraction: {mime_type or suffix or 'unknown'}")
 
     def _materialize_local_source(self, *, storage_path: str, file_name: str | None) -> str:
@@ -709,6 +695,27 @@ class LearningService:
         target = temp_dir / _safe_filename(file_name, fallback="source.bin")
         target.write_bytes(self.blob_store.read_bytes(storage_path))
         return str(target)
+
+    def _extract_text_from_pdf_via_pypdf(self, *, storage_path: str) -> str | None:
+        try:
+            from pypdf import PdfReader  # type: ignore
+
+            raw_path = storage_path
+            if raw_path.startswith("s3://"):
+                temp_path = ensure_learning_profile_storage_dir(
+                    settings=self.settings,
+                    reader_id=0,
+                    profile_id=0,
+                ) / "tmp_source.pdf"
+                temp_path.write_bytes(self.blob_store.read_bytes(raw_path))
+                reader = PdfReader(str(temp_path))
+            else:
+                reader = PdfReader(str(raw_path))
+            page_texts = [(page.extract_text() or "").strip() for page in reader.pages]
+            text = "\n\n".join(item for item in page_texts if item)
+            return text or None
+        except Exception:
+            return None
 
     def _build_fragments(self, text: str) -> list[dict[str, Any]]:
         chunks = chunk_text(

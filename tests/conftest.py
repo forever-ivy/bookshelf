@@ -28,7 +28,7 @@ def app(tmp_path, monkeypatch):
     reset_engine()
     from app.main import create_app
 
-    settings = Settings()
+    settings = Settings(_env_file=None)
     init_engine(settings)
     init_schema()
     return create_app()

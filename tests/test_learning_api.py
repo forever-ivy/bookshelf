@@ -876,6 +876,50 @@ def test_explore_session_stream_returns_free_qa_without_progress_or_checkpoint(c
         session.close()
 
 
+def test_explore_session_stream_returns_model_unavailable_message_when_llm_disabled(client):
+    state = seed_reader_with_book()
+    headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
+
+    create_response = client.post(
+        "/api/v2/learning/profiles",
+        headers=headers,
+        json={
+            "title": "操作系统导学空间",
+            "goalMode": "preview",
+            "difficultyMode": "guided",
+            "sources": [{"kind": "book", "bookId": state["book_id"]}],
+        },
+    )
+    profile_id = create_response.json()["profile"]["id"]
+    client.post(f"/api/v2/learning/profiles/{profile_id}/generate", headers=headers)
+
+    session_response = client.post(
+        "/api/v2/learning/sessions",
+        headers=headers,
+        json={
+            "profileId": profile_id,
+            "learningMode": "preview",
+            "sessionKind": "explore",
+        },
+    )
+    explore_session_id = session_response.json()["session"]["id"]
+
+    with client.stream(
+        "POST",
+        f"/api/v2/learning/sessions/{explore_session_id}/stream",
+        headers=headers,
+        json={"content": "hi"},
+    ) as response:
+        assert response.status_code == 200
+        events = parse_sse_lines(list(response.iter_lines()))
+
+    final_event = events[-1]
+    answer_content = final_event["data"]["turn"]["presentation"]["answer"]["content"]
+    assert "模型暂时不可用" in answer_content
+    assert "自由问答：" not in answer_content
+    assert "围绕你的问题" not in answer_content
+
+
 def test_bridge_expand_step_to_explore_reuses_focus_context(client):
     state = seed_reader_with_book()
     headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
