@@ -313,13 +313,73 @@ export type LearningSession = {
   createdAt: string;
   currentStepIndex: number;
   currentStepTitle: string | null;
+  focusContext?: Record<string, unknown> | null;
+  focusStepIndex?: number | null;
   id: number;
   lastMessagePreview?: string | null;
+  learningMode?: string | null;
   progressLabel: string;
+  sessionKind?: 'explore' | 'guide';
   status: LearningSessionStatus;
   learningProfileId: number;
+  sourceSessionId?: number | null;
+  sourceTurnId?: number | null;
   updatedAt: string;
 };
+
+export type LearningBridgeAction = {
+  actionType: 'attach_explore_turn_to_guide_step' | 'expand_step_to_explore' | string;
+  description?: string | null;
+  label?: string | null;
+  targetGuideSessionId?: number | null;
+  targetStepIndex?: number | null;
+  turnId?: number | null;
+};
+
+export type LearningGuidePresentation = {
+  bridgeActions: LearningBridgeAction[];
+  evidence: LearningCitation[];
+  examiner: LearningStepEvaluation & {
+    label?: string | null;
+  };
+  followups: string[];
+  kind: 'guide';
+  peer?: {
+    content: string;
+  } | null;
+  relatedConcepts?: string[];
+  step?: {
+    guidingQuestion?: string | null;
+    index?: number | null;
+    objective?: string | null;
+    successCriteria?: string | null;
+    title?: string | null;
+  } | null;
+  teacher: {
+    content: string;
+  };
+};
+
+export type LearningExplorePresentation = {
+  answer: {
+    content: string;
+  };
+  bridgeActions: LearningBridgeAction[];
+  evidence: LearningCitation[];
+  focus?: {
+    guidingQuestion?: string | null;
+    objective?: string | null;
+    stepIndex?: number | null;
+    stepTitle?: string | null;
+  } | null;
+  followups: string[];
+  kind: 'explore';
+  relatedConcepts: string[];
+};
+
+export type LearningConversationPresentation =
+  | LearningExplorePresentation
+  | LearningGuidePresentation;
 
 export type LearningSessionMessage = {
   citations?: LearningCitation[];
@@ -328,6 +388,7 @@ export type LearningSessionMessage = {
   id: number;
   role: 'assistant' | 'user';
   learningSessionId: number;
+  presentation?: LearningConversationPresentation | null;
 };
 
 export type LearningSuggestion = {
@@ -384,6 +445,14 @@ export type LearningStepEvaluation = {
 
 export type LearningStreamEvent =
   | {
+      actions: LearningBridgeAction[];
+      type: 'bridge.actions';
+    }
+  | {
+      items: LearningCitation[];
+      type: 'evidence.items';
+    }
+  | {
       delta: string;
       type: 'assistant.delta';
     }
@@ -396,12 +465,32 @@ export type LearningStreamEvent =
       type: 'evaluation';
     }
   | {
+      items: string[];
+      type: 'explore.related_concepts';
+    }
+  | {
+      items: string[];
+      type: 'followups.items';
+    }
+  | {
+      delta: string;
+      type: 'explore.answer.delta';
+    }
+  | {
+      delta: string;
+      type: 'peer.delta';
+    }
+  | {
       phase?: string | null;
       type: 'status';
     }
   | {
       session: LearningSession;
       type: 'session.updated';
+    }
+  | {
+      delta: string;
+      type: 'teacher.delta';
     }
   | {
       message: string;

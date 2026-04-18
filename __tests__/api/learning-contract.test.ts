@@ -264,6 +264,32 @@ describe('learning contract', () => {
               ],
               createdAt: '2026-04-08T08:22:00Z',
               id: 801,
+              presentation: {
+                bridgeActions: [
+                  {
+                    actionType: 'expand_step_to_explore',
+                    label: '展开自由探索',
+                  },
+                ],
+                evidence: [
+                  {
+                    excerpt: '围绕模型、数据和目标组织内容。',
+                    sourceTitle: '机器学习从零到一',
+                  },
+                ],
+                examiner: {
+                  passed: true,
+                  reasoning: '回答已经覆盖当前步骤的关键线索。',
+                },
+                followups: ['继续说明数据和模型之间的关系'],
+                kind: 'guide',
+                peer: {
+                  content: '如果继续往下学，你觉得下一步最该澄清哪个概念？',
+                },
+                teacher: {
+                  content: '先把模型、数据和目标三者的关系说清楚，再进入监督学习。',
+                },
+              },
               sessionId: 301,
               turnKind: 'guide',
               userContent: '帮我总结这一节的核心线索',
@@ -331,6 +357,15 @@ describe('learning contract', () => {
     });
     expect(messages[1]).toMatchObject({
       content: '我们先回到模型、数据和目标这三者的关系。',
+      presentation: expect.objectContaining({
+        examiner: expect.objectContaining({
+          passed: true,
+        }),
+        kind: 'guide',
+        teacher: expect.objectContaining({
+          content: '先把模型、数据和目标三者的关系说清楚，再进入监督学习。',
+        }),
+      }),
       role: 'assistant',
       learningSessionId: 301,
     });
@@ -582,13 +617,21 @@ describe('learning contract', () => {
             [
               'data: {"event":"status","data":{"phase":"retrieving","sessionId":301}}',
               '',
-              'data: {"event":"assistant.delta","data":{"delta":"我们先"}}',
+              'data: {"event":"teacher.delta","data":{"delta":"我们先回到模型、数据和目标这三者的关系。"}}',
               '',
-              'data: {"event":"evaluation","data":{"confidence":0.82,"meetsCriteria":true,"reasoning":"回答已经覆盖当前步骤的关键线索。","stepIndex":0}}',
+              'data: {"event":"peer.delta","data":{"delta":"如果继续往下学，你觉得下一步最该澄清哪个概念？"}}',
+              '',
+              'data: {"event":"examiner.result","data":{"confidence":0.82,"meetsCriteria":true,"reasoning":"回答已经覆盖当前步骤的关键线索。","stepIndex":0}}',
+              '',
+              'data: {"event":"evidence.items","data":{"items":[{"chunkId":11,"sourceTitle":"机器学习从零到一","excerpt":"围绕模型、数据和目标组织内容。"}]}}',
+              '',
+              'data: {"event":"followups.items","data":{"items":["继续说明数据和模型之间的关系"]}}',
+              '',
+              'data: {"event":"bridge.actions","data":{"items":[{"actionType":"expand_step_to_explore","label":"展开自由探索"}]}}',
               '',
               'data: {"event":"session.progress","data":{"session":{"id":301,"learningProfileId":101,"status":"active","currentStepIndex":1,"currentStepTitle":"用自己的话解释概念","completedStepsCount":1,"startedAt":"2026-04-08T08:21:00Z","updatedAt":"2026-04-08T08:22:00Z"}}}',
               '',
-              'data: {"event":"assistant.final","data":{"turn":{"id":801,"sessionId":301,"assistantContent":"我们先回到模型、数据和目标这三者的关系。","citations":[{"chunkId":11,"sourceTitle":"机器学习从零到一"}],"createdAt":"2026-04-08T08:22:00Z"}}}',
+              'data: {"event":"assistant.final","data":{"turn":{"id":801,"sessionId":301,"assistantContent":"我们先回到模型、数据和目标这三者的关系。","citations":[{"chunkId":11,"sourceTitle":"机器学习从零到一"}],"presentation":{"kind":"guide","teacher":{"content":"我们先回到模型、数据和目标这三者的关系。"},"peer":{"content":"如果继续往下学，你觉得下一步最该澄清哪个概念？"},"examiner":{"passed":true,"reasoning":"回答已经覆盖当前步骤的关键线索。"},"evidence":[{"chunkId":11,"sourceTitle":"机器学习从零到一","excerpt":"围绕模型、数据和目标组织内容。"}],"followups":["继续说明数据和模型之间的关系"],"bridgeActions":[{"actionType":"expand_step_to_explore","label":"展开自由探索"}]},"createdAt":"2026-04-08T08:22:00Z"}}}',
               '',
             ].join('\n')
           )
@@ -615,8 +658,12 @@ describe('learning contract', () => {
 
     expect(events.map((event) => event.type)).toEqual([
       'status',
-      'assistant.delta',
+      'teacher.delta',
+      'peer.delta',
       'evaluation',
+      'evidence.items',
+      'followups.items',
+      'bridge.actions',
       'session.updated',
       'assistant.final',
     ]);
@@ -624,10 +671,16 @@ describe('learning contract', () => {
       phase: 'retrieving',
       type: 'status',
     });
-    expect(events[4]).toMatchObject({
+    expect(events[8]).toMatchObject({
       message: {
         citations: [{ chunkId: 11, sourceTitle: '机器学习从零到一' }],
         learningSessionId: 301,
+        presentation: expect.objectContaining({
+          kind: 'guide',
+          teacher: expect.objectContaining({
+            content: '我们先回到模型、数据和目标这三者的关系。',
+          }),
+        }),
       },
       type: 'assistant.final',
     });

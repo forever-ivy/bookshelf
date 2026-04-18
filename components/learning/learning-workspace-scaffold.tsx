@@ -12,13 +12,17 @@ type IconComponent = React.ComponentType<Record<string, unknown>>;
 const CloseIcon = X as IconComponent;
 const MenuIcon = EllipsisVertical as IconComponent;
 
+export const LEARNING_WORKSPACE_TAB_BAR_CLEARANCE = 56;
+
 export function LearningWorkspaceScaffold({
   children,
   footer,
+  showHeader = true,
   subtitle,
 }: {
   children: React.ReactNode;
   footer?: React.ReactNode;
+  showHeader?: boolean;
   subtitle?: string;
 }) {
   const { theme } = useAppTheme();
@@ -32,6 +36,7 @@ export function LearningWorkspaceScaffold({
     workspaceGate,
     workspaceSession,
   } = useLearningWorkspaceScreen();
+  const footerBottomOffset = LEARNING_WORKSPACE_TAB_BAR_CLEARANCE + insets.bottom;
 
   if (workspaceGate.kind !== 'ready' || !profile || !workspaceSession) {
     return (
@@ -66,78 +71,82 @@ export function LearningWorkspaceScaffold({
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.backgroundWorkspace }]}>
-      <View
-        style={[
-          styles.header,
-          {
-            backgroundColor: theme.colors.backgroundWorkspace,
-            borderBottomColor: theme.colors.borderSoft,
-            paddingTop: Math.max(insets.top, theme.spacing.lg),
-          },
-        ]}>
-        <Pressable
-          accessibilityLabel="返回导学本库"
-          accessibilityRole="button"
-          hitSlop={8}
-          onPress={closeWorkspace}
-          style={({ pressed }) => [
-            styles.iconButton,
+      {showHeader ? (
+        <View
+          style={[
+            styles.header,
             {
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.borderSoft,
-              opacity: pressed ? 0.72 : 1,
+              backgroundColor: theme.colors.backgroundWorkspace,
+              borderBottomColor: theme.colors.borderSoft,
+              paddingTop: Math.max(insets.top, theme.spacing.lg),
             },
-          ]}
-          testID="learning-workspace-close-button">
-          <CloseIcon color={theme.colors.text} size={18} strokeWidth={2.2} />
-        </Pressable>
+          ]}>
+          <Pressable
+            accessibilityLabel="返回导学本库"
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={closeWorkspace}
+            style={({ pressed }) => [
+              styles.iconButton,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.borderSoft,
+                opacity: pressed ? 0.72 : 1,
+              },
+            ]}
+            testID="learning-workspace-close-button">
+            <CloseIcon color={theme.colors.text} size={18} strokeWidth={2.2} />
+          </Pressable>
 
-        <View style={styles.headerText}>
-          <Text
-            numberOfLines={1}
-            style={[
-              styles.progressLabel,
-              { color: theme.colors.textSoft, fontFamily: theme.typography.semiBold.fontFamily },
-            ]}>
-            {subtitle ?? workspaceSession.progressLabel}
-          </Text>
-          <Text
-            numberOfLines={1}
-            style={[
-              styles.title,
-              { color: theme.colors.text, fontFamily: theme.typography.bold.fontFamily },
-            ]}>
-            {profile.title}
-          </Text>
+          <View style={styles.headerText}>
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.progressLabel,
+                { color: theme.colors.textSoft, fontFamily: theme.typography.semiBold.fontFamily },
+              ]}>
+              {subtitle ?? workspaceSession.progressLabel}
+            </Text>
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.title,
+                { color: theme.colors.text, fontFamily: theme.typography.bold.fontFamily },
+              ]}>
+              {profile.title}
+            </Text>
+          </View>
+
+          <Pressable
+            accessibilityLabel="打开导学概览"
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={openOverview}
+            style={({ pressed }) => [
+              styles.iconButton,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.borderSoft,
+                opacity: pressed ? 0.72 : 1,
+              },
+            ]}
+            testID="learning-workspace-info-button">
+            <MenuIcon color={theme.colors.text} size={18} strokeWidth={2.2} />
+          </Pressable>
         </View>
-
-        <Pressable
-          accessibilityLabel="打开导学概览"
-          accessibilityRole="button"
-          hitSlop={8}
-          onPress={openOverview}
-          style={({ pressed }) => [
-            styles.iconButton,
-            {
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.borderSoft,
-              opacity: pressed ? 0.72 : 1,
-            },
-          ]}
-          testID="learning-workspace-info-button">
-          <MenuIcon color={theme.colors.text} size={18} strokeWidth={2.2} />
-        </Pressable>
-      </View>
+      ) : null}
 
       <View style={styles.content}>{children}</View>
 
       {footer ? (
         <View
+          testID="learning-workspace-footer"
           style={[
             styles.footer,
             {
               backgroundColor: theme.colors.backgroundWorkspace,
-              paddingBottom: Math.max(insets.bottom, theme.spacing.md),
+              marginBottom: footerBottomOffset,
+              paddingBottom: theme.spacing.md,
             },
           ]}>
           {footer}

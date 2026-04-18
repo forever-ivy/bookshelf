@@ -6,13 +6,6 @@ export default function LearningWorkspaceTabsLayout() {
     <NativeTabs
       disableTransparentOnScrollEdge
       minimizeBehavior="never">
-      <NativeTabs.Trigger name="study">
-        <NativeTabs.Trigger.Icon
-          md="auto_awesome"
-          sf={{ default: 'sparkles', selected: 'sparkles' }}
-        />
-        <NativeTabs.Trigger.Label>学习</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="graph">
         <NativeTabs.Trigger.Icon
           md="device_hub"
@@ -26,6 +19,13 @@ export default function LearningWorkspaceTabsLayout() {
           sf={{ default: 'clock.arrow.trianglehead.counterclockwise.rotate.90', selected: 'clock.arrow.trianglehead.counterclockwise.rotate.90' }}
         />
         <NativeTabs.Trigger.Label>复盘</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="study" role="search">
+        <NativeTabs.Trigger.Icon
+          md="auto_awesome"
+          sf={{ default: 'sparkles', selected: 'sparkles' }}
+        />
+        <NativeTabs.Trigger.Label>学习</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   );

@@ -13,13 +13,16 @@ jest.mock('expo-router/unstable-native-tabs', () => {
   const Trigger: any = ({
     children,
     name,
+    role,
   }: {
     children: React.ReactNode;
     name?: string;
+    role?: string;
   }) =>
     React.createElement(
       View,
       {
+        accessibilityLabel: role,
         testID: name ? `learning-workspace-native-tab-${name}` : undefined,
       },
       children
@@ -35,13 +38,26 @@ jest.mock('expo-router/unstable-native-tabs', () => {
 });
 
 describe('LearningWorkspaceTabsLayout', () => {
-  it('registers fixed native tabs for study, graph, and review', () => {
-    render(<LearningWorkspaceTabsLayout />);
+  it('registers graph, review, and a search-role study tab in that order', () => {
+    const view = render(<LearningWorkspaceTabsLayout />);
+    const triggerNodes = view.UNSAFE_root.findAll(
+      (node) =>
+        typeof node.props?.testID === 'string' &&
+        node.props.testID.startsWith('learning-workspace-native-tab-')
+    );
 
     expect(screen.getByTestId('learning-workspace-native-tabs-root')).toBeTruthy();
     expect(screen.getByTestId('learning-workspace-native-tab-study')).toBeTruthy();
     expect(screen.getByTestId('learning-workspace-native-tab-graph')).toBeTruthy();
     expect(screen.getByTestId('learning-workspace-native-tab-review')).toBeTruthy();
+    expect(screen.getByTestId('learning-workspace-native-tab-study').props.accessibilityLabel).toBe(
+      'search'
+    );
+    expect([...new Set(triggerNodes.map((node) => node.props.testID))]).toEqual([
+      'learning-workspace-native-tab-graph',
+      'learning-workspace-native-tab-review',
+      'learning-workspace-native-tab-study',
+    ]);
     expect(screen.getByText('学习')).toBeTruthy();
     expect(screen.getByText('图谱')).toBeTruthy();
     expect(screen.getByText('复盘')).toBeTruthy();

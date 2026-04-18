@@ -24,6 +24,7 @@ const mockUseLocalSearchParams = jest.fn<any, any>(() => ({ profileId: '101' }))
 const mockUsePathname = jest.fn(() => '/learning/101');
 const mockStartSessionMutateAsync = jest.fn();
 const mockGenerateProfileMutateAsync = jest.fn();
+const mockSubmitLearningBridgeAction = jest.fn(async () => ({ ok: true }));
 
 let mockSessionMessagesData = [
   {
@@ -197,18 +198,63 @@ jest.mock('react-native-safe-area-context', () => ({
   }),
 }));
 
-jest.mock('expo-router', () => ({
-  Redirect: ({ href }: { href: string }) => {
-    const React = jest.requireActual('react') as typeof import('react');
-    return React.createElement('redirect', {
-      href,
-      testID: 'route-redirect',
-    });
-  },
-  useLocalSearchParams: () => mockUseLocalSearchParams(),
-  usePathname: () => mockUsePathname(),
-  useRouter: () => mockRouter,
-}));
+jest.mock('expo-router', () => {
+  const React = jest.requireActual('react') as typeof import('react');
+  const { TextInput, View } = jest.requireActual('react-native') as typeof import('react-native');
+
+  const Stack = ({ children }: { children?: React.ReactNode }) =>
+    React.createElement(View, { testID: 'learning-study-stack' }, children);
+  Stack.displayName = 'MockLearningStudyStack';
+
+  const MockStackScreen = ({
+    options,
+  }: {
+    options?: {
+      headerLeft?: (props?: Record<string, unknown>) => React.ReactNode;
+      headerRight?: (props?: Record<string, unknown>) => React.ReactNode;
+      headerSearchBarOptions?: {
+        onChangeText?: (event: { nativeEvent: { text: string } }) => void;
+        onSearchButtonPress?: (event: { nativeEvent: { text: string } }) => void;
+        placeholder?: string;
+      };
+    };
+  }) => {
+    const headerSearchBarOptions = options?.headerSearchBarOptions;
+
+    return React.createElement(
+      View,
+      null,
+      typeof options?.headerLeft === 'function' ? options.headerLeft({}) : null,
+      typeof options?.headerRight === 'function' ? options.headerRight({}) : null,
+      headerSearchBarOptions
+        ? React.createElement(TextInput, {
+            onChangeText: (value: string) =>
+              headerSearchBarOptions.onChangeText?.({ nativeEvent: { text: value } }),
+            onSubmitEditing: (event: { nativeEvent: { text: string } }) =>
+              headerSearchBarOptions.onSearchButtonPress?.({
+                nativeEvent: { text: String(event.nativeEvent?.text ?? '') },
+              }),
+            placeholder: headerSearchBarOptions.placeholder,
+            testID: 'learning-study-native-search-bar',
+          })
+        : null
+    );
+  };
+  MockStackScreen.displayName = 'MockLearningStudyStackScreen';
+  Stack.Screen = MockStackScreen;
+
+  return {
+    Redirect: ({ href }: { href: string }) =>
+      React.createElement('redirect', {
+        href,
+        testID: 'route-redirect',
+      }),
+    Stack,
+    useLocalSearchParams: () => mockUseLocalSearchParams(),
+    usePathname: () => mockUsePathname(),
+    useRouter: () => mockRouter,
+  };
+});
 
 jest.mock('@/hooks/use-app-session', () => ({
   useAppSession: () => ({
@@ -242,7 +288,7 @@ jest.mock('@/hooks/use-library-app-data', () => ({
 
 jest.mock('@/lib/api/learning', () => ({
   streamLearningSessionReply: jest.fn(),
-  submitLearningBridgeAction: jest.fn(async () => ({ ok: true })),
+  submitLearningBridgeAction: (...args: unknown[]) => mockSubmitLearningBridgeAction(...args),
 }));
 
 function renderWithWorkspaceProvider(ui: React.ReactElement) {
@@ -299,6 +345,9 @@ function WorkspaceProbe() {
 describe('learning workspace routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockRouter.back.mockReset();
+    mockRouter.push.mockReset();
+    mockRouter.replace.mockReset();
     resetReadyWorkspace();
     mockUseLocalSearchParams.mockReturnValue({ profileId: '101' });
     mockUsePathname.mockReturnValue('/learning/101');
@@ -335,6 +384,8 @@ describe('learning workspace routes', () => {
       triggered: true,
     });
     (streamLearningSessionReply as jest.Mock).mockReset();
+    mockSubmitLearningBridgeAction.mockReset();
+    mockSubmitLearningBridgeAction.mockResolvedValue({ ok: true });
   });
 
   it('redirects the entry route to guide by default', () => {
@@ -371,6 +422,47 @@ describe('learning workspace routes', () => {
 
     expect(screen.getByText('用自己的话解释概念')).toBeTruthy();
     expect(screen.getByText('1 / 2 步')).toBeTruthy();
+  });
+
+  it('uses the native header search bar for guide replies instead of rendering a footer composer', async () => {
+    mockUsePathname.mockReturnValue('/learning/101/study');
+    mockUseLocalSearchParams.mockReturnValue({ mode: 'guide', profileId: '101' });
+    (streamLearningSessionReply as jest.Mock).mockImplementation(async function* () {
+      yield {
+        message: {
+          content: '先把这一节拆成目标、概念和例子三层。',
+          createdAt: '2026-04-08T08:31:00Z',
+          id: 880,
+          role: 'assistant',
+          learningSessionId: 301,
+        },
+        type: 'assistant.final',
+      };
+    });
+
+    renderWithWorkspaceProvider(<LearningWorkspaceStudyRoute />);
+
+    expect(screen.getByTestId('learning-study-native-search-bar').props.placeholder).toBe(
+      '回复导师，推进当前步骤...'
+    );
+    expect(screen.queryByTestId('learning-workspace-footer')).toBeNull();
+
+    fireEvent.changeText(
+      screen.getByTestId('learning-study-native-search-bar'),
+      '我理解这一节在解释监督学习的目标。'
+    );
+
+    await act(async () => {
+      fireEvent(screen.getByTestId('learning-study-native-search-bar'), 'submitEditing', {
+        nativeEvent: { text: '我理解这一节在解释监督学习的目标。' },
+      });
+    });
+
+    expect(streamLearningSessionReply).toHaveBeenCalledWith(
+      301,
+      { content: '我理解这一节在解释监督学习的目标。' },
+      'reader-token'
+    );
   });
 
   it('shows a not-started state and lets the user retry generation', async () => {
@@ -521,7 +613,7 @@ describe('learning workspace routes', () => {
     );
 
     expect(screen.getByText('用自己的话解释概念')).toBeTruthy();
-    expect(screen.getByText('深度探索')).toBeTruthy();
+    expect(screen.getByText('转去 Explore 深挖')).toBeTruthy();
   });
 
   it('tracks active tab and study mode separately and uses replace-based study/tab navigation', () => {
@@ -623,6 +715,148 @@ describe('learning workspace routes', () => {
     expect(screen.getAllByText('先抓住模型、数据和目标。').length).toBeGreaterThan(0);
     expect(screen.getByText('回答已经覆盖当前步骤的关键线索。')).toBeTruthy();
     expect(screen.getAllByText('当前导学本的所有步骤都已完成。').length).toBeGreaterThan(0);
+  });
+
+  it('routes freeform guide questions into explore before streaming the reply', async () => {
+    mockUsePathname.mockReturnValue('/learning/101/study');
+    mockUseLocalSearchParams.mockReturnValue({ mode: 'guide', profileId: '101' });
+    mockRouter.replace.mockImplementation((href: string) => {
+      if (href === '/learning/101/study?mode=explore') {
+        mockUsePathname.mockReturnValue('/learning/101/study');
+        mockUseLocalSearchParams.mockReturnValue({ mode: 'explore', profileId: '101' });
+      }
+    });
+    mockSubmitLearningBridgeAction.mockResolvedValueOnce({
+      ok: true,
+      session: {
+        completedSteps: [
+          { completedAt: '2026-04-08T08:00:00Z', confidence: 0.82, stepIndex: 0 },
+        ],
+        completedStepsCount: 1,
+        conversationSessionId: 402,
+        createdAt: '2026-04-08T08:32:00Z',
+        currentStepIndex: 1,
+        currentStepTitle: '用自己的话解释概念',
+        id: 302,
+        lastMessagePreview: null,
+        learningProfileId: 101,
+        progressLabel: '1 / 2 步',
+        sessionKind: 'explore',
+        sourceSessionId: 301,
+        status: 'active',
+        updatedAt: '2026-04-08T08:32:00Z',
+      },
+    });
+    (streamLearningSessionReply as jest.Mock).mockImplementation(async function* (sessionId: number) {
+      yield {
+        message: {
+          content: `session:${sessionId}`,
+          createdAt: '2026-04-08T08:33:00Z',
+          id: 881,
+          role: 'assistant',
+          learningSessionId: sessionId,
+        },
+        type: 'assistant.final',
+      };
+    });
+
+    renderWithWorkspaceProvider(<LearningWorkspaceStudyRoute />);
+
+    await act(async () => {
+      fireEvent.changeText(
+        screen.getByTestId('learning-study-native-search-bar'),
+        '帮我总结这一节的核心线索'
+      );
+      fireEvent(screen.getByTestId('learning-study-native-search-bar'), 'submitEditing', {
+        nativeEvent: { text: '帮我总结这一节的核心线索' },
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockSubmitLearningBridgeAction).toHaveBeenCalledWith(
+        301,
+        'expand_step_to_explore',
+        {},
+        'reader-token'
+      );
+    });
+    await waitFor(() => {
+      expect(streamLearningSessionReply).toHaveBeenCalledWith(
+        302,
+        { content: '帮我总结这一节的核心线索' },
+        'reader-token'
+      );
+    });
+    expect(mockRouter.replace).toHaveBeenCalledWith('/learning/101/study?mode=explore');
+  });
+
+  it('routes short document clarifications into explore before streaming the reply', async () => {
+    mockUsePathname.mockReturnValue('/learning/101/study');
+    mockUseLocalSearchParams.mockReturnValue({ mode: 'guide', profileId: '101' });
+    mockRouter.replace.mockImplementation((href: string) => {
+      if (href === '/learning/101/study?mode=explore') {
+        mockUsePathname.mockReturnValue('/learning/101/study');
+        mockUseLocalSearchParams.mockReturnValue({ mode: 'explore', profileId: '101' });
+      }
+    });
+    mockSubmitLearningBridgeAction.mockResolvedValueOnce({
+      ok: true,
+      session: {
+        completedSteps: [
+          { completedAt: '2026-04-08T08:00:00Z', confidence: 0.82, stepIndex: 0 },
+        ],
+        completedStepsCount: 1,
+        conversationSessionId: 402,
+        createdAt: '2026-04-08T08:32:00Z',
+        currentStepIndex: 1,
+        currentStepTitle: '用自己的话解释概念',
+        id: 302,
+        lastMessagePreview: null,
+        learningProfileId: 101,
+        progressLabel: '1 / 2 步',
+        sessionKind: 'explore',
+        sourceSessionId: 301,
+        status: 'active',
+        updatedAt: '2026-04-08T08:32:00Z',
+      },
+    });
+    (streamLearningSessionReply as jest.Mock).mockImplementation(async function* (sessionId: number) {
+      yield {
+        message: {
+          content: `session:${sessionId}`,
+          createdAt: '2026-04-08T08:33:00Z',
+          id: 882,
+          role: 'assistant',
+          learningSessionId: sessionId,
+        },
+        type: 'assistant.final',
+      };
+    });
+
+    renderWithWorkspaceProvider(<LearningWorkspaceStudyRoute />);
+
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('learning-study-native-search-bar'), '这是个简历');
+      fireEvent(screen.getByTestId('learning-study-native-search-bar'), 'submitEditing', {
+        nativeEvent: { text: '这是个简历' },
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockSubmitLearningBridgeAction).toHaveBeenCalledWith(
+        301,
+        'expand_step_to_explore',
+        {},
+        'reader-token'
+      );
+    });
+    await waitFor(() => {
+      expect(streamLearningSessionReply).toHaveBeenCalledWith(
+        302,
+        { content: '这是个简历' },
+        'reader-token'
+      );
+    });
   });
 
   it('does not show a failure toast when the stream errors after assistant.final already arrived', async () => {

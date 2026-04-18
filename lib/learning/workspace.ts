@@ -1,5 +1,9 @@
 import type {
   LearningCompletedStep,
+  LearningBridgeAction,
+  LearningCitation,
+  LearningConversationPresentation,
+  LearningGuidePresentation,
   LearningProfile,
   LearningSession,
   LearningSessionMessage,
@@ -19,8 +23,37 @@ export type LearningWorkspaceInsightCard = {
   tone: 'info' | 'success' | 'warning';
 };
 
+export type LearningWorkspaceMessageCard =
+  | {
+      content: string;
+      kind: 'answer' | 'peer' | 'teacher';
+      title: string;
+    }
+  | {
+      actions: LearningBridgeAction[];
+      kind: 'bridge_actions';
+      title: string;
+    }
+  | {
+      evaluation: LearningGuidePresentation['examiner'];
+      kind: 'examiner';
+      title: string;
+    }
+  | {
+      items: LearningCitation[];
+      kind: 'evidence';
+      title: string;
+    }
+  | {
+      items: string[];
+      kind: 'followups' | 'related_concepts';
+      title: string;
+    };
+
 export type LearningWorkspaceRenderedMessage = {
+  cards: LearningWorkspaceMessageCard[];
   id: string;
+  presentation?: LearningConversationPresentation | null;
   role: 'assistant' | 'user';
   streaming: boolean;
   text: string;
@@ -39,6 +72,85 @@ export type LearningWorkspaceSessionSignal = {
   status: LearningSession['status'];
   transitionLabel?: string | null;
 };
+
+const GUIDE_QUESTION_PREFIXES = [
+  '帮我',
+  '请',
+  '给我',
+  '告诉我',
+  '总结',
+  '概括',
+  '解释',
+  '说明',
+  '分析',
+  '对比',
+  '举例',
+  '梳理',
+  '聊聊',
+  '为什么',
+  '怎么',
+  '如何',
+  '什么',
+  '哪些',
+  '哪一步',
+  '能不能',
+  '是否',
+  '有没有',
+];
+
+const GUIDE_QUESTION_CONTAINS = ['是什么意思', '为什么', '怎么', '如何', '哪些', '能不能', '是否', '有没有'];
+
+const GUIDE_ANSWER_PREFIXES = ['我觉得', '我理解', '我认为', '我会', '我先', '因为', '它', '这本书', '这份资料'];
+
+const DOCUMENT_CLASSIFICATION_KEYWORDS = [
+  '简历',
+  'cv',
+  'resume',
+  '合同',
+  '发票',
+  '论文',
+  '报告',
+  '病历',
+  '手册',
+  '说明书',
+  '课件',
+  '试卷',
+  '表格',
+  '邮件',
+  'pdf',
+  'word',
+  'doc',
+  'docx',
+];
+
+export function shouldAutoRouteGuideDraftToExplore(draft: string) {
+  const normalized = draft.trim();
+  if (!normalized) {
+    return false;
+  }
+
+  if (/[?？]/.test(normalized)) {
+    return true;
+  }
+
+  if (GUIDE_QUESTION_PREFIXES.some((prefix) => normalized.startsWith(prefix))) {
+    return true;
+  }
+
+  if (GUIDE_ANSWER_PREFIXES.some((prefix) => normalized.startsWith(prefix))) {
+    return false;
+  }
+
+  const lowered = normalized.toLowerCase();
+  if (
+    normalized.length <= 18 &&
+    DOCUMENT_CLASSIFICATION_KEYWORDS.some((keyword) => lowered.includes(keyword))
+  ) {
+    return true;
+  }
+
+  return GUIDE_QUESTION_CONTAINS.some((keyword) => normalized.includes(keyword));
+}
 
 export function resolveLearningWorkspaceSourceSummary(profile: LearningProfile) {
   if (profile.sourceSummary?.trim()) {
@@ -59,11 +171,121 @@ export function createLearningRenderedMessages(
       return timeDelta === 0 ? left.id - right.id : timeDelta;
     })
     .map((message) => ({
+      cards: buildLearningWorkspaceMessageCards(message.presentation),
       id: `message-${message.id}`,
+      presentation: message.presentation ?? null,
       role: message.role,
       streaming: false,
       text: message.content,
     }));
+}
+
+export function buildLearningWorkspaceMessageCards(
+  presentation?: LearningConversationPresentation | null
+): LearningWorkspaceMessageCard[] {
+  if (!presentation) {
+    return [];
+  }
+
+  if (presentation.kind === 'guide') {
+    const cards: LearningWorkspaceMessageCard[] = [
+      {
+        content: presentation.teacher.content,
+        kind: 'teacher',
+        title: '导师主讲',
+      },
+    ];
+
+    if (presentation.peer?.content) {
+      cards.push({
+        content: presentation.peer.content,
+        kind: 'peer',
+        title: '学伴追问',
+      });
+    }
+
+    cards.push({
+      evaluation: presentation.examiner,
+      kind: 'examiner',
+      title: '考官判断',
+    });
+
+    if (presentation.evidence.length > 0) {
+      cards.push({
+        items: presentation.evidence,
+        kind: 'evidence',
+        title: '资料依据',
+      });
+    }
+
+    if (presentation.followups.length > 0) {
+      cards.push({
+        items: presentation.followups,
+        kind: 'followups',
+        title: '继续推进',
+      });
+    }
+
+    if ((presentation.relatedConcepts ?? []).length > 0) {
+      cards.push({
+        items: presentation.relatedConcepts ?? [],
+        kind: 'related_concepts',
+        title: '相关概念',
+      });
+    }
+
+    if (presentation.bridgeActions.length > 0) {
+      cards.push({
+        actions: presentation.bridgeActions,
+        kind: 'bridge_actions',
+        title: '延展动作',
+      });
+    }
+
+    return cards;
+  }
+
+  const cards: LearningWorkspaceMessageCard[] = [
+    {
+      content: presentation.answer.content,
+      kind: 'answer',
+      title: '答案',
+    },
+  ];
+
+  if (presentation.evidence.length > 0) {
+    cards.push({
+      items: presentation.evidence,
+      kind: 'evidence',
+      title: '资料依据',
+    });
+  }
+
+  if (presentation.relatedConcepts.length > 0) {
+    cards.push({
+      items: presentation.relatedConcepts,
+      kind: 'related_concepts',
+      title: '相关概念',
+    });
+  }
+
+  if (presentation.followups.length > 0) {
+    cards.push({
+      items: presentation.followups,
+      kind: 'followups',
+      title: '继续追问',
+    });
+  }
+
+  if (presentation.bridgeActions.length > 0) {
+    cards.push({
+      actions: presentation.bridgeActions,
+      kind: 'bridge_actions',
+      title: '收编动作',
+    });
+  }
+
+  return cards;
 }
 
 export function buildLearningWorkspaceSources(profile: LearningProfile): LearningWorkspaceSourceCard[] {

@@ -2,6 +2,7 @@ import {
   buildLearningSessionTransitionLabel,
   buildLearningWorkspaceSources,
   createLearningRenderedMessages,
+  shouldAutoRouteGuideDraftToExplore,
 } from '@/lib/learning/workspace';
 
 describe('learning workspace helpers', () => {
@@ -31,6 +32,73 @@ describe('learning workspace helpers', () => {
     expect(messages[1]).toMatchObject({
       role: 'user',
       text: '我觉得它先让我知道数据、目标和模型之间是什么关系。',
+    });
+  });
+
+  it('preserves structured guide presentations as renderable workspace cards', () => {
+    const messages = createLearningRenderedMessages([
+      {
+        citations: [
+          {
+            excerpt: '围绕模型、数据和目标组织内容。',
+            sourceTitle: '机器学习从零到一',
+          },
+        ],
+        content: '先把模型、数据和目标三者的关系说清楚，再进入监督学习。',
+        createdAt: '2026-04-08T08:05:00Z',
+        id: 803,
+        learningSessionId: 301,
+        presentation: {
+          bridgeActions: [
+            {
+              actionType: 'expand_step_to_explore',
+              label: '转去 Explore 深挖',
+            },
+          ],
+          evidence: [
+            {
+              excerpt: '围绕模型、数据和目标组织内容。',
+              sourceTitle: '机器学习从零到一',
+            },
+          ],
+          examiner: {
+            masteryScore: 0.82,
+            missingConcepts: [],
+            passed: true,
+            reasoning: '回答已经覆盖当前步骤的关键线索。',
+            stepIndex: 0,
+          },
+          followups: ['继续说明数据和模型之间的关系'],
+          kind: 'guide',
+          peer: {
+            content: '如果继续往下学，你觉得下一步最该澄清哪个概念？',
+          },
+          teacher: {
+            content: '先把模型、数据和目标三者的关系说清楚，再进入监督学习。',
+          },
+        },
+        role: 'assistant',
+      },
+    ]);
+
+    expect(messages[0]).toMatchObject({
+      cards: expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'teacher',
+          title: '导师主讲',
+        }),
+        expect.objectContaining({
+          kind: 'examiner',
+          title: '考官判断',
+        }),
+        expect.objectContaining({
+          kind: 'followups',
+        }),
+      ]),
+      presentation: expect.objectContaining({
+        kind: 'guide',
+      }),
+      role: 'assistant',
     });
   });
 
@@ -104,5 +172,17 @@ describe('learning workspace helpers', () => {
     );
 
     expect(label).toBe('当前导学本的所有步骤都已完成。');
+  });
+
+  it('detects when a guide draft is really a freeform question', () => {
+    expect(shouldAutoRouteGuideDraftToExplore('这一步到底在讲什么？')).toBe(true);
+    expect(shouldAutoRouteGuideDraftToExplore('帮我总结这一节的核心线索')).toBe(true);
+    expect(shouldAutoRouteGuideDraftToExplore('请给我举一个更具体的例子')).toBe(true);
+    expect(shouldAutoRouteGuideDraftToExplore('这是个简历')).toBe(true);
+    expect(shouldAutoRouteGuideDraftToExplore('这是一份简历')).toBe(true);
+    expect(shouldAutoRouteGuideDraftToExplore('这是一本讲监督学习的书')).toBe(false);
+    expect(shouldAutoRouteGuideDraftToExplore('我理解它是从带标签的数据里学规律。')).toBe(
+      false
+    );
   });
 });

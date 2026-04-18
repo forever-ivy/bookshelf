@@ -1,7 +1,9 @@
 import type {
   CreateLearningProfileInput,
+  LearningBridgeAction,
   LearningCitation,
   LearningCompletedStep,
+  LearningConversationPresentation,
   LearningCurriculumStep,
   LearningDashboard,
   LearningDashboardContinueSession,
@@ -90,6 +92,18 @@ function normalizeLearningCitation(raw: any): LearningCitation {
     chunkId: raw?.chunkId ?? raw?.chunk_id ?? null,
     excerpt: raw?.excerpt ?? raw?.snippet ?? null,
     sourceTitle: raw?.sourceTitle ?? raw?.source_title ?? null,
+  };
+}
+
+function normalizeLearningBridgeAction(raw: any): LearningBridgeAction {
+  return {
+    actionType: raw?.actionType ?? raw?.action_type ?? 'expand_step_to_explore',
+    description: raw?.description ?? null,
+    label: raw?.label ?? null,
+    targetGuideSessionId:
+      raw?.targetGuideSessionId ?? raw?.target_guide_session_id ?? null,
+    targetStepIndex: raw?.targetStepIndex ?? raw?.target_step_index ?? null,
+    turnId: raw?.turnId ?? raw?.turn_id ?? null,
   };
 }
 
@@ -284,23 +298,34 @@ function normalizeLearningSession(
     createdAt: raw?.createdAt ?? raw?.created_at ?? raw?.startedAt ?? raw?.started_at ?? nowIso(),
     currentStepIndex: Number(raw?.currentStepIndex ?? raw?.current_step_index ?? 0),
     currentStepTitle: raw?.currentStepTitle ?? raw?.current_step_title ?? null,
+    focusContext: raw?.focusContext ?? raw?.focus_context ?? {},
+    focusStepIndex:
+      typeof raw?.focusStepIndex === 'number'
+        ? raw.focusStepIndex
+        : typeof raw?.focus_step_index === 'number'
+          ? raw.focus_step_index
+          : null,
     id: Number(raw?.id ?? 0),
     lastMessagePreview: raw?.lastMessagePreview ?? raw?.last_message_preview ?? null,
+    learningMode: raw?.learningMode ?? raw?.learning_mode ?? null,
     progressLabel:
       raw?.progressLabel ??
       raw?.progress_label ??
       resolveProgressLabel(completedStepsCount, totalSteps),
+    sessionKind: raw?.sessionKind ?? raw?.session_kind ?? 'guide',
     status: raw?.status ?? 'active',
     learningProfileId: Number(
       raw?.learningProfileId ?? raw?.learning_profile_id ?? raw?.profileId ?? raw?.profile_id ?? 0
     ),
+    sourceSessionId: raw?.sourceSessionId ?? raw?.source_session_id ?? null,
+    sourceTurnId: raw?.sourceTurnId ?? raw?.source_turn_id ?? null,
     updatedAt: raw?.updatedAt ?? raw?.updated_at ?? raw?.startedAt ?? raw?.started_at ?? nowIso(),
   };
 }
 
 function normalizeLearningSessionMessage(
   raw: any,
-  options: { citations?: any[] } = {}
+  options: { citations?: any[]; presentation?: any } = {}
 ): LearningSessionMessage {
   const citationsRaw = options.citations ?? raw?.citations ?? raw?.citations_json ?? [];
 
@@ -319,6 +344,9 @@ function normalizeLearningSessionMessage(
         raw?.session_id ??
         0
     ),
+    presentation: normalizeLearningPresentation(
+      options.presentation ?? raw?.presentation ?? raw?.metadata?.presentation
+    ),
   };
 }
 
@@ -333,6 +361,87 @@ function normalizeLearningEvaluation(raw: any): LearningStepEvaluation {
     feedback: raw?.feedback ?? raw?.reasoning ?? null,
     stepIndex: Number(raw?.stepIndex ?? raw?.step_index ?? 0),
   };
+}
+
+function normalizeLearningPresentation(raw: any): LearningConversationPresentation | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  if (raw?.kind === 'guide') {
+    return {
+      bridgeActions: Array.isArray(raw?.bridgeActions)
+        ? raw.bridgeActions.map((action: any) => normalizeLearningBridgeAction(action))
+        : [],
+      evidence: Array.isArray(raw?.evidence)
+        ? raw.evidence.map((item: any) => normalizeLearningCitation(item))
+        : [],
+      examiner: {
+        ...normalizeLearningEvaluation(raw?.examiner ?? {}),
+        label: raw?.examiner?.label ?? null,
+      },
+      followups: Array.isArray(raw?.followups)
+        ? raw.followups.filter((item: unknown) => typeof item === 'string')
+        : [],
+      kind: 'guide',
+      peer:
+        raw?.peer && typeof raw.peer === 'object' && typeof raw.peer.content === 'string'
+          ? { content: raw.peer.content }
+          : null,
+      relatedConcepts: Array.isArray(raw?.relatedConcepts)
+        ? raw.relatedConcepts.filter((item: unknown) => typeof item === 'string')
+        : [],
+      step: raw?.step
+        ? {
+            guidingQuestion: raw.step.guidingQuestion ?? null,
+            index:
+              typeof raw.step.index === 'number'
+                ? raw.step.index
+                : typeof raw.step.stepIndex === 'number'
+                  ? raw.step.stepIndex
+                  : null,
+            objective: raw.step.objective ?? null,
+            successCriteria: raw.step.successCriteria ?? null,
+            title: raw.step.title ?? null,
+          }
+        : null,
+      teacher: {
+        content: raw?.teacher?.content ?? '',
+      },
+    };
+  }
+
+  if (raw?.kind === 'explore') {
+    return {
+      answer: {
+        content: raw?.answer?.content ?? raw?.answer ?? '',
+      },
+      bridgeActions: Array.isArray(raw?.bridgeActions)
+        ? raw.bridgeActions.map((action: any) => normalizeLearningBridgeAction(action))
+        : [],
+      evidence: Array.isArray(raw?.evidence)
+        ? raw.evidence.map((item: any) => normalizeLearningCitation(item))
+        : [],
+      focus: raw?.focus
+        ? {
+            guidingQuestion: raw.focus.guidingQuestion ?? null,
+            objective: raw.focus.objective ?? null,
+            stepIndex:
+              typeof raw.focus.stepIndex === 'number' ? raw.focus.stepIndex : null,
+            stepTitle: raw.focus.stepTitle ?? null,
+          }
+        : null,
+      followups: Array.isArray(raw?.followups)
+        ? raw.followups.filter((item: unknown) => typeof item === 'string')
+        : [],
+      kind: 'explore',
+      relatedConcepts: Array.isArray(raw?.relatedConcepts)
+        ? raw.relatedConcepts.filter((item: unknown) => typeof item === 'string')
+        : [],
+    };
+  }
+
+  return null;
 }
 
 function buildWelcomeMessage(
@@ -386,6 +495,9 @@ function normalizeLearningTurnMessages(turn: any): LearningSessionMessage[] {
   const sessionId = Number(turn?.sessionId ?? turn?.session_id ?? 0);
   const createdAt = turn?.createdAt ?? turn?.created_at ?? nowIso();
   const citations = Array.isArray(turn?.citations) ? turn.citations : [];
+  const presentation = normalizeLearningPresentation(
+    turn?.presentation ?? turn?.metadata?.presentation
+  );
   const messages: LearningSessionMessage[] = [];
 
   if (typeof turn?.userContent === 'string' && turn.userContent.trim()) {
@@ -410,7 +522,7 @@ function normalizeLearningTurnMessages(turn: any): LearningSessionMessage[] {
           role: 'assistant',
           sessionId,
         },
-        { citations }
+        { citations, presentation }
       )
     );
   }
@@ -475,7 +587,10 @@ function normalizeLearningFinalMessage(raw: any): LearningSessionMessage {
       sessionId:
         turn?.sessionId ?? turn?.session_id ?? raw?.sessionId ?? raw?.session_id ?? 0,
     },
-    { citations: turn?.citations ?? raw?.citations }
+    {
+      citations: turn?.citations ?? raw?.citations,
+      presentation: turn?.presentation ?? raw?.presentation ?? turn?.metadata?.presentation,
+    }
   );
 }
 
@@ -490,21 +605,75 @@ function normalizeLearningStreamEvents(raw: { data?: any; event?: string }): Lea
         },
       ];
     case 'assistant.delta':
-    case 'agent.teacher.delta':
-    case 'agent.peer.delta':
-    case 'explore.answer.delta':
       return [
         {
           delta: String(raw.data?.delta ?? ''),
           type: 'assistant.delta',
         },
       ];
+    case 'teacher.delta':
+      return [
+        {
+          delta: String(raw.data?.delta ?? ''),
+          type: 'teacher.delta',
+        },
+      ];
+    case 'peer.delta':
+      return [
+        {
+          delta: String(raw.data?.delta ?? ''),
+          type: 'peer.delta',
+        },
+      ];
+    case 'explore.answer.delta':
+      return [
+        {
+          delta: String(raw.data?.delta ?? ''),
+          type: 'explore.answer.delta',
+        },
+      ];
     case 'evaluation':
-    case 'agent.examiner.result':
+    case 'examiner.result':
       return [
         {
           evaluation: normalizeLearningEvaluation(raw.data),
           type: 'evaluation',
+        },
+      ];
+    case 'evidence.items':
+      return [
+        {
+          items: Array.isArray(raw.data?.items)
+            ? raw.data.items.map((item: any) => normalizeLearningCitation(item))
+            : [],
+          type: 'evidence.items',
+        },
+      ];
+    case 'followups.items':
+      return [
+        {
+          items: Array.isArray(raw.data?.items)
+            ? raw.data.items.filter((item: unknown) => typeof item === 'string')
+            : [],
+          type: 'followups.items',
+        },
+      ];
+    case 'bridge.actions':
+      return [
+        {
+          actions: Array.isArray(raw.data?.items)
+            ? raw.data.items.map((item: any) => normalizeLearningBridgeAction(item))
+            : [],
+          type: 'bridge.actions',
+        },
+      ];
+    case 'explore.related_concepts':
+      return [
+        {
+          items: Array.isArray(raw.data?.items)
+            ? raw.data.items.filter((item: unknown) => typeof item === 'string')
+            : [],
+          type: 'explore.related_concepts',
         },
       ];
     case 'session.updated':
@@ -555,7 +724,9 @@ function normalizeLearningStreamEvents(raw: { data?: any; event?: string }): Lea
         },
       ];
     case 'retrieval.evidence':
-    case 'explore.related_concepts':
+    case 'agent.examiner.result':
+    case 'agent.teacher.delta':
+    case 'agent.peer.delta':
       return [];
     default:
       return [];
@@ -891,7 +1062,10 @@ export async function submitLearningBridgeAction(
     }),
     method: 'POST',
     token,
-  });
+  }).then((payload: any) => ({
+    ...payload,
+    session: payload?.session ? normalizeLearningSession(payload.session) : null,
+  }));
 }
 
 export async function getLearningGraph(profileId: number, token?: string | null): Promise<any> {

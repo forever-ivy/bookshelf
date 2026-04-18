@@ -138,37 +138,55 @@ export function useLearningWorkspace(profileId: number) {
   const startSessionMutation = useStartLearningSessionMutation();
   const generateProfileMutation = useGenerateLearningProfileMutation();
   const profile = profileQuery.data;
-  const activeSession = React.useMemo(
+  const activeSessions = React.useMemo(
     () =>
-      (sessionsQuery.data ?? []).find(
+      (sessionsQuery.data ?? []).filter(
         (item) => item.learningProfileId === profileId && item.status !== 'completed'
-      ) ?? null,
+      ),
     [profileId, sessionsQuery.data]
   );
+  const defaultSession = React.useMemo(
+    () =>
+      [...activeSessions].sort(
+        (left, right) =>
+          new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
+      )[0] ?? null,
+    [activeSessions]
+  );
   const [workspaceSession, setWorkspaceSession] = React.useState<LearningSession | null>(
-    activeSession ?? null
+    defaultSession ?? null
   );
 
   React.useEffect(() => {
-    if (activeSession) {
+    const matchedCurrent =
+      workspaceSession != null
+        ? activeSessions.find((item) => item.id === workspaceSession.id) ?? null
+        : null;
+
+    if (matchedCurrent) {
       setWorkspaceSession((current) => {
         if (
           current &&
-          current.id === activeSession.id &&
-          current.updatedAt === activeSession.updatedAt
+          current.id === matchedCurrent.id &&
+          current.updatedAt === matchedCurrent.updatedAt
         ) {
           return current;
         }
 
-        return activeSession;
+        return matchedCurrent;
       });
+      return;
+    }
+
+    if (defaultSession) {
+      setWorkspaceSession(defaultSession);
       return;
     }
 
     if (profile?.status !== 'ready') {
       setWorkspaceSession(null);
     }
-  }, [activeSession, profile?.status]);
+  }, [activeSessions, defaultSession, profile?.status, workspaceSession]);
 
   React.useEffect(() => {
     if (!profile || profile.status !== 'ready' || workspaceSession || startSessionMutation.isPending) {

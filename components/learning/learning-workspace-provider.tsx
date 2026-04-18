@@ -27,6 +27,7 @@ import {
   type LearningWorkspaceSourceCard,
   type LearningWorkspaceStatusSignal,
 } from '@/lib/learning/workspace';
+import { useLearningConversationStore } from '@/stores/learning-conversation-store';
 
 export type LearningWorkspaceTab = 'study' | 'graph' | 'review';
 export type LearningStudyMode = 'guide' | 'explore';
@@ -48,6 +49,7 @@ type LearningWorkspaceContextValue = {
   openOverview: () => void;
   profile: ReturnType<typeof useLearningWorkspace>['profile'];
   renderedMessages: LearningWorkspaceRenderedMessage[];
+  replaceWorkspaceSession: (session: NonNullable<ReturnType<typeof useLearningWorkspace>['workspaceSession']>) => void;
   retryGenerate: (profileId?: number) => Promise<void>;
   setDraft: React.Dispatch<React.SetStateAction<string>>;
   sourceCount: number;
@@ -146,12 +148,23 @@ export function LearningWorkspaceProvider({
   } = useLearningWorkspace(profileId);
   const sessionMessagesQuery = useLearningSessionMessagesQuery(workspaceSession?.id ?? Number.NaN);
   const [draft, setDraft] = React.useState('');
-  const [localMessages, setLocalMessages] = React.useState<LearningWorkspaceRenderedMessage[]>([]);
-  const [latestEvaluation, setLatestEvaluation] = React.useState<LearningStepEvaluation | null>(null);
-  const [latestStatus, setLatestStatus] = React.useState<LearningWorkspaceStatusSignal | null>(null);
-  const [latestSessionSignal, setLatestSessionSignal] =
-    React.useState<LearningWorkspaceSessionSignal | null>(null);
   const [isSending, setIsSending] = React.useState(false);
+  const renderedMessages = useLearningConversationStore((state) => state.messages);
+  const latestEvaluation = useLearningConversationStore((state) => state.latestEvaluation);
+  const latestStatus = useLearningConversationStore((state) => state.latestStatus);
+  const latestSessionSignal = useLearningConversationStore((state) => state.latestSessionSignal);
+  const hydrateConversationHistory = useLearningConversationStore((state) => state.hydrateHistory);
+  const startConversationDraft = useLearningConversationStore((state) => state.startDraft);
+  const applyConversationEvent = useLearningConversationStore((state) => state.applyEvent);
+  const clearConversationDraft = useLearningConversationStore((state) => state.clearDraft);
+  const resetConversation = useLearningConversationStore((state) => state.reset);
+  const setConversationLatestStatus = useLearningConversationStore((state) => state.setLatestStatus);
+  const setConversationLatestSessionSignal = useLearningConversationStore(
+    (state) => state.setLatestSessionSignal
+  );
+  const setConversationLatestEvaluation = useLearningConversationStore(
+    (state) => state.setLatestEvaluation
+  );
 
   const baseRenderedMessages = React.useMemo(
     () => createLearningRenderedMessages(sessionMessagesQuery.data ?? []),
@@ -159,24 +172,12 @@ export function LearningWorkspaceProvider({
   );
 
   React.useEffect(() => {
-    if (localMessages.length === 0) {
-      return;
-    }
+    resetConversation();
+  }, [resetConversation, workspaceSession?.id]);
 
-    const localAssistant = localMessages.findLast((message) => message.role === 'assistant');
-    const historyContainsAssistant = baseRenderedMessages.some(
-      (message) => message.role === 'assistant' && message.text === localAssistant?.text && !message.streaming
-    );
-
-    if (historyContainsAssistant) {
-      setLocalMessages([]);
-    }
-  }, [baseRenderedMessages, localMessages]);
-
-  const renderedMessages = React.useMemo(
-    () => [...baseRenderedMessages, ...localMessages],
-    [baseRenderedMessages, localMessages]
-  );
+  React.useEffect(() => {
+    hydrateConversationHistory(baseRenderedMessages);
+  }, [baseRenderedMessages, hydrateConversationHistory]);
 
   const sourceCards = React.useMemo(
     () => (profile ? buildLearningWorkspaceSources(profile) : []),
@@ -188,7 +189,7 @@ export function LearningWorkspaceProvider({
   );
 
   const starterPrompts = React.useMemo(() => {
-    if ((sessionMessagesQuery.data?.length ?? 0) > 0 || localMessages.length > 0) {
+    if ((sessionMessagesQuery.data?.length ?? 0) > 0 || renderedMessages.length > 0) {
       return [];
     }
 
@@ -197,10 +198,14 @@ export function LearningWorkspaceProvider({
     }
 
     return buildStarterPrompts(profile, workspaceSession);
-  }, [localMessages.length, profile, sessionMessagesQuery.data, workspaceSession]);
+  }, [profile, renderedMessages.length, sessionMessagesQuery.data, workspaceSession]);
 
   const updateMessagesCache = React.useCallback(
-    (sessionId: number, userMessage: LearningWorkspaceRenderedMessage, assistantMessage: LearningWorkspaceRenderedMessage) => {
+    (
+      sessionId: number,
+      userMessage: LearningWorkspaceRenderedMessage,
+      assistantMessage: LearningSessionMessage
+    ) => {
       queryClient.setQueryData(
         ['learning', 'sessions', 'messages', sessionId, token],
         (previous: unknown) => {
@@ -211,7 +216,8 @@ export function LearningWorkspaceProvider({
             (message: any) => message.role === 'user' && message.content === userMessage.text
           );
           const hasAssistant = nextItems.some(
-            (message: any) => message.role === 'assistant' && message.content === assistantMessage.text
+            (message: any) =>
+              message.role === 'assistant' && message.content === assistantMessage.content
           );
 
           if (!hasUser) {
@@ -225,11 +231,13 @@ export function LearningWorkspaceProvider({
           }
           if (!hasAssistant) {
             nextItems.push({
-              content: assistantMessage.text,
-              createdAt: new Date().toISOString(),
-              id: -Date.now() - 1,
+              citations: assistantMessage.citations ?? [],
+              content: assistantMessage.content,
+              createdAt: assistantMessage.createdAt ?? new Date().toISOString(),
+              id: assistantMessage.id,
               role: 'assistant',
               learningSessionId: sessionId,
+              presentation: assistantMessage.presentation ?? null,
             });
           }
 
@@ -257,6 +265,11 @@ export function LearningWorkspaceProvider({
     [queryClient, token]
   );
 
+  const { activeTab, studyMode } = React.useMemo(
+    () => resolveLearningWorkspaceNavigationState(pathname, mode),
+    [mode, pathname]
+  );
+
   const handleSend = React.useCallback(async (nextDraft?: string) => {
     const normalized = (nextDraft ?? draft).trim();
     if (!normalized || !profile || !workspaceSession || !token || isSending) {
@@ -271,28 +284,27 @@ export function LearningWorkspaceProvider({
     const userMessageId = `local-user-${Date.now()}`;
     const assistantMessageId = `local-assistant-${Date.now()}`;
     const optimisticUserMessage: LearningWorkspaceRenderedMessage = {
+      cards: [],
       id: userMessageId,
+      presentation: null,
       role: 'user',
       streaming: false,
       text: normalized,
     };
 
     setDraft('');
-    setLatestEvaluation(null);
-    setLatestSessionSignal(null);
-    setLatestStatus(resolveLearningStreamStatusSignal());
-    setLocalMessages([
-      optimisticUserMessage,
-      {
-        id: assistantMessageId,
-        role: 'assistant',
-        streaming: true,
-        text: '',
-      },
-    ]);
+    setConversationLatestEvaluation(null);
+    setConversationLatestSessionSignal(null);
+    setConversationLatestStatus(resolveLearningStreamStatusSignal());
+    startConversationDraft({
+      assistantMessageId,
+      mode: studyMode,
+      userMessageId,
+      userText: normalized,
+    });
     setIsSending(true);
 
-    let finalAssistantMessage: LearningWorkspaceRenderedMessage | null = null;
+    let finalAssistantMessage: LearningSessionMessage | null = null;
 
     try {
       for await (const event of streamLearningSessionReply(
@@ -301,56 +313,43 @@ export function LearningWorkspaceProvider({
         token
       )) {
         if (event.type === 'status') {
-          setLatestStatus(resolveLearningStreamStatusSignal(event.phase));
+          setConversationLatestStatus(resolveLearningStreamStatusSignal(event.phase));
           continue;
         }
 
-        if (event.type === 'assistant.delta') {
-          setLocalMessages((current) =>
-            current.map((message) =>
-              message.id === assistantMessageId
-                ? {
-                    ...message,
-                    text: `${message.text}${event.delta}`,
-                  }
-                : message
-            )
-          );
-          continue;
-        }
-
-        if (event.type === 'evaluation') {
-          setLatestEvaluation(event.evaluation);
+        if (
+          event.type === 'assistant.delta' ||
+          event.type === 'teacher.delta' ||
+          event.type === 'peer.delta' ||
+          event.type === 'explore.answer.delta' ||
+          event.type === 'evaluation' ||
+          event.type === 'evidence.items' ||
+          event.type === 'followups.items' ||
+          event.type === 'bridge.actions' ||
+          event.type === 'explore.related_concepts' ||
+          event.type === 'assistant.final'
+        ) {
+          applyConversationEvent(event);
+          if (event.type === 'assistant.final') {
+            finalAssistantMessage = event.message;
+            updateMessagesCache(workspaceSession.id, optimisticUserMessage, event.message);
+          }
           continue;
         }
 
         if (event.type === 'session.updated') {
           const nextSession = profile ? mergeLearningSessionWithProfile(profile, event.session) : event.session;
-          setLatestSessionSignal({
+          const nextSignal = {
             completedStepsCount: nextSession.completedStepsCount,
             currentStepIndex: nextSession.currentStepIndex,
             currentStepTitle: nextSession.currentStepTitle,
             progressLabel: nextSession.progressLabel,
             status: nextSession.status,
             transitionLabel: buildLearningSessionTransitionLabel(workspaceSession, nextSession),
-          });
+          };
+          setConversationLatestSessionSignal(nextSignal);
           setWorkspaceSession(nextSession);
           updateSessionCaches(nextSession);
-          continue;
-        }
-
-        if (event.type === 'assistant.final') {
-          finalAssistantMessage = {
-            id: `message-${event.message.id}`,
-            role: 'assistant',
-            streaming: false,
-            text: event.message.content,
-          };
-          setLocalMessages([
-            optimisticUserMessage,
-            finalAssistantMessage,
-          ]);
-          updateMessagesCache(workspaceSession.id, optimisticUserMessage, finalAssistantMessage);
           continue;
         }
 
@@ -360,7 +359,7 @@ export function LearningWorkspaceProvider({
       }
 
       if (!finalAssistantMessage) {
-        setLocalMessages([]);
+        clearConversationDraft();
       }
     } catch (error) {
       const [messagesResult] = await Promise.allSettled([sessionMessagesQuery.refetch(), sessionsQuery.refetch()]);
@@ -375,11 +374,11 @@ export function LearningWorkspaceProvider({
         );
 
       if (recoveredAssistantReply) {
-        setLocalMessages([]);
-        setLatestStatus(null);
+        clearConversationDraft();
+        setConversationLatestStatus(null);
       } else if (!finalAssistantMessage) {
-        setLocalMessages([]);
-        setLatestStatus({
+        clearConversationDraft();
+        setConversationLatestStatus({
           label: '这一轮导学没有成功返回，正在和后端重新同步。',
           tone: 'warning',
         });
@@ -399,12 +398,14 @@ export function LearningWorkspaceProvider({
     updateMessagesCache,
     updateSessionCaches,
     workspaceSession,
+    studyMode,
+    applyConversationEvent,
+    clearConversationDraft,
+    setConversationLatestEvaluation,
+    setConversationLatestSessionSignal,
+    setConversationLatestStatus,
+    startConversationDraft,
   ]);
-
-  const { activeTab, studyMode } = React.useMemo(
-    () => resolveLearningWorkspaceNavigationState(pathname, mode),
-    [mode, pathname]
-  );
 
   const navigateToTab = React.useCallback(
     (tab: LearningWorkspaceTab) => {
@@ -477,6 +478,7 @@ export function LearningWorkspaceProvider({
       openOverview,
       profile,
       renderedMessages,
+      replaceWorkspaceSession: setWorkspaceSession,
       retryGenerate,
       setDraft,
       sourceCount: sourceCards.length,
@@ -504,6 +506,7 @@ export function LearningWorkspaceProvider({
       openOverview,
       profile,
       renderedMessages,
+      setWorkspaceSession,
       retryGenerate,
       sourceCards,
       starterPrompts,
