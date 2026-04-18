@@ -336,6 +336,7 @@ function normalizeLearningSessionMessage(
     content: raw?.content ?? '',
     createdAt: raw?.createdAt ?? raw?.created_at ?? nowIso(),
     id: Number(raw?.id ?? 0),
+    intentKind: raw?.intentKind ?? raw?.intent_kind ?? null,
     role: raw?.role ?? 'assistant',
     learningSessionId: Number(
       raw?.learningSessionId ??
@@ -347,6 +348,9 @@ function normalizeLearningSessionMessage(
     presentation: normalizeLearningPresentation(
       options.presentation ?? raw?.presentation ?? raw?.metadata?.presentation
     ),
+    redirectedSessionId:
+      raw?.redirectedSessionId ?? raw?.redirected_session_id ?? null,
+    responseMode: raw?.responseMode ?? raw?.response_mode ?? null,
   };
 }
 
@@ -583,7 +587,11 @@ function normalizeLearningFinalMessage(raw: any): LearningSessionMessage {
       createdAt:
         turn?.createdAt ?? turn?.created_at ?? raw?.createdAt ?? raw?.created_at ?? nowIso(),
       id: Number(turn?.id ?? 0),
+      intentKind: turn?.intentKind ?? turn?.intent_kind ?? null,
       role: 'assistant',
+      redirectedSessionId:
+        turn?.redirectedSessionId ?? turn?.redirected_session_id ?? null,
+      responseMode: turn?.responseMode ?? turn?.response_mode ?? null,
       sessionId:
         turn?.sessionId ?? turn?.session_id ?? raw?.sessionId ?? raw?.session_id ?? 0,
     },
@@ -667,6 +675,20 @@ function normalizeLearningStreamEvents(raw: { data?: any; event?: string }): Lea
           type: 'bridge.actions',
         },
       ];
+    case 'guide.intent':
+      return [
+        {
+          kind: String(raw.data?.kind ?? ''),
+          source: raw.data?.source ?? null,
+          stepIndex:
+            typeof raw.data?.stepIndex === 'number'
+              ? raw.data.stepIndex
+              : typeof raw.data?.step_index === 'number'
+                ? raw.data.step_index
+                : null,
+          type: 'guide.intent',
+        },
+      ];
     case 'explore.related_concepts':
       return [
         {
@@ -676,6 +698,23 @@ function normalizeLearningStreamEvents(raw: { data?: any; event?: string }): Lea
           type: 'explore.related_concepts',
         },
       ];
+    case 'session.redirect':
+      return raw.data?.targetSession
+        ? [
+            {
+              bridgeAction:
+                raw.data?.bridgeAction && typeof raw.data.bridgeAction === 'object'
+                  ? raw.data.bridgeAction
+                  : null,
+              recommendedPrompts: Array.isArray(raw.data?.recommendedPrompts)
+                ? raw.data.recommendedPrompts.filter((item: unknown) => typeof item === 'string')
+                : [],
+              session: normalizeLearningSession(raw.data.targetSession),
+              targetMode: raw.data?.targetMode === 'explore' ? 'explore' : 'explore',
+              type: 'session.redirect',
+            },
+          ]
+        : [];
     case 'session.updated':
       return [
         {

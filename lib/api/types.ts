@@ -386,9 +386,12 @@ export type LearningSessionMessage = {
   content: string;
   createdAt: string;
   id: number;
+  intentKind?: string | null;
   role: 'assistant' | 'user';
   learningSessionId: number;
   presentation?: LearningConversationPresentation | null;
+  redirectedSessionId?: number | null;
+  responseMode?: string | null;
 };
 
 export type LearningSuggestion = {
@@ -457,6 +460,12 @@ export type LearningStreamEvent =
       type: 'assistant.delta';
     }
   | {
+      kind: string;
+      source?: string | null;
+      stepIndex?: number | null;
+      type: 'guide.intent';
+    }
+  | {
       message: LearningSessionMessage;
       type: 'assistant.final';
     }
@@ -483,6 +492,13 @@ export type LearningStreamEvent =
   | {
       phase?: string | null;
       type: 'status';
+    }
+  | {
+      session: LearningSession;
+      bridgeAction?: Record<string, unknown> | null;
+      recommendedPrompts?: string[];
+      targetMode: 'explore';
+      type: 'session.redirect';
     }
   | {
       session: LearningSession;

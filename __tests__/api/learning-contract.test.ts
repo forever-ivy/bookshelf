@@ -617,6 +617,8 @@ describe('learning contract', () => {
             [
               'data: {"event":"status","data":{"phase":"retrieving","sessionId":301}}',
               '',
+              'data: {"event":"guide.intent","data":{"kind":"offtrack_explore","source":"heuristic","stepIndex":0}}',
+              '',
               'data: {"event":"teacher.delta","data":{"delta":"我们先回到模型、数据和目标这三者的关系。"}}',
               '',
               'data: {"event":"peer.delta","data":{"delta":"如果继续往下学，你觉得下一步最该澄清哪个概念？"}}',
@@ -629,9 +631,11 @@ describe('learning contract', () => {
               '',
               'data: {"event":"bridge.actions","data":{"items":[{"actionType":"expand_step_to_explore","label":"展开自由探索"}]}}',
               '',
+              'data: {"event":"session.redirect","data":{"targetMode":"explore","targetSession":{"id":901,"learningProfileId":101,"sessionKind":"explore","sourceSessionId":301,"focusStepIndex":0,"focusContext":{"stepTitle":"建立整体认知"},"status":"active","currentStepIndex":0,"currentStepTitle":"建立整体认知","completedStepsCount":0,"startedAt":"2026-04-08T08:21:30Z","updatedAt":"2026-04-08T08:21:30Z"},"bridgeAction":{"id":88,"actionType":"expand_step_to_explore","fromSessionId":301,"toSessionId":901,"status":"completed","payload":{"stepIndex":0,"trigger":"auto","reason":"offtrack_explore"},"result":{"recommendedPrompts":["先比较一下模型和数据"]},"createdAt":"2026-04-08T08:21:30Z"},"recommendedPrompts":["先比较一下模型和数据"]}}',
+              '',
               'data: {"event":"session.progress","data":{"session":{"id":301,"learningProfileId":101,"status":"active","currentStepIndex":1,"currentStepTitle":"用自己的话解释概念","completedStepsCount":1,"startedAt":"2026-04-08T08:21:00Z","updatedAt":"2026-04-08T08:22:00Z"}}}',
               '',
-              'data: {"event":"assistant.final","data":{"turn":{"id":801,"sessionId":301,"assistantContent":"我们先回到模型、数据和目标这三者的关系。","citations":[{"chunkId":11,"sourceTitle":"机器学习从零到一"}],"presentation":{"kind":"guide","teacher":{"content":"我们先回到模型、数据和目标这三者的关系。"},"peer":{"content":"如果继续往下学，你觉得下一步最该澄清哪个概念？"},"examiner":{"passed":true,"reasoning":"回答已经覆盖当前步骤的关键线索。"},"evidence":[{"chunkId":11,"sourceTitle":"机器学习从零到一","excerpt":"围绕模型、数据和目标组织内容。"}],"followups":["继续说明数据和模型之间的关系"],"bridgeActions":[{"actionType":"expand_step_to_explore","label":"展开自由探索"}]},"createdAt":"2026-04-08T08:22:00Z"}}}',
+              'data: {"event":"assistant.final","data":{"turn":{"id":801,"sessionId":301,"assistantContent":"我们先回到模型、数据和目标这三者的关系。","intentKind":"offtrack_explore","responseMode":"redirected","redirectedSessionId":901,"citations":[{"chunkId":11,"sourceTitle":"机器学习从零到一"}],"presentation":{"kind":"guide","teacher":{"content":"我们先回到模型、数据和目标这三者的关系。"},"peer":{"content":"如果继续往下学，你觉得下一步最该澄清哪个概念？"},"examiner":{"passed":true,"reasoning":"回答已经覆盖当前步骤的关键线索。"},"evidence":[{"chunkId":11,"sourceTitle":"机器学习从零到一","excerpt":"围绕模型、数据和目标组织内容。"}],"followups":["继续说明数据和模型之间的关系"],"bridgeActions":[{"actionType":"expand_step_to_explore","label":"展开自由探索"}]},"createdAt":"2026-04-08T08:22:00Z"}}}',
               '',
             ].join('\n')
           )
@@ -658,12 +662,14 @@ describe('learning contract', () => {
 
     expect(events.map((event) => event.type)).toEqual([
       'status',
+      'guide.intent',
       'teacher.delta',
       'peer.delta',
       'evaluation',
       'evidence.items',
       'followups.items',
       'bridge.actions',
+      'session.redirect',
       'session.updated',
       'assistant.final',
     ]);
@@ -671,10 +677,25 @@ describe('learning contract', () => {
       phase: 'retrieving',
       type: 'status',
     });
+    expect(events[1]).toMatchObject({
+      kind: 'offtrack_explore',
+      type: 'guide.intent',
+    });
     expect(events[8]).toMatchObject({
+      session: expect.objectContaining({
+        id: 901,
+        sessionKind: 'explore',
+        sourceSessionId: 301,
+      }),
+      type: 'session.redirect',
+    });
+    expect(events[10]).toMatchObject({
       message: {
         citations: [{ chunkId: 11, sourceTitle: '机器学习从零到一' }],
         learningSessionId: 301,
+        intentKind: 'offtrack_explore',
+        redirectedSessionId: 901,
+        responseMode: 'redirected',
         presentation: expect.objectContaining({
           kind: 'guide',
           teacher: expect.objectContaining({
