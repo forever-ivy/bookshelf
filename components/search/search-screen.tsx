@@ -408,16 +408,14 @@ export function SearchScreen({
             style={{
               alignSelf: 'flex-start',
               backgroundColor: theme.colors.successSoft,
-              borderColor: theme.colors.borderStrong,
-              borderRadius: theme.radii.md,
-              borderWidth: 1,
+              borderRadius: 12,
               paddingHorizontal: 12,
               paddingVertical: 8,
             }}>
             <Text
               style={{
                 color: theme.colors.success,
-                ...theme.typography.medium,
+                ...theme.typography.semiBold,
                 fontSize: 13,
               }}>
               只看可借可送
@@ -440,9 +438,8 @@ export function SearchScreen({
           <View
             style={{
               backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.borderSoft,
-              borderRadius: theme.radii.xl,
-              borderWidth: 1,
+              borderRadius: 28,
+              boxShadow: theme.shadows.card,
               overflow: 'hidden',
             }}
             testID="search-results-list">
@@ -493,11 +490,10 @@ export function SearchScreen({
                     style={{
                       alignItems: 'center',
                       backgroundColor: theme.colors.surface,
-                      borderColor: theme.colors.borderStrong,
-                      borderRadius: theme.radii.md,
-                      borderWidth: 1,
+                      borderRadius: 18,
+                      boxShadow: theme.shadows.card,
                       justifyContent: 'center',
-                      minHeight: 42,
+                      minHeight: 46,
                       paddingHorizontal: 14,
                     }}>
                     {isLoadingMoreResults ? (
@@ -530,9 +526,8 @@ export function SearchScreen({
           <View
             style={{
               backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.borderSoft,
-              borderRadius: theme.radii.xl,
-              borderWidth: 1,
+              borderRadius: 28,
+              boxShadow: theme.shadows.card,
               gap: theme.spacing.lg,
               padding: theme.spacing.xl,
             }}>
@@ -592,9 +587,7 @@ export function SearchScreen({
             <View
               style={{
                 backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.borderSoft,
-                borderRadius: theme.radii.xl,
-                borderWidth: 1,
+                borderRadius: 28,
                 boxShadow: '0 18px 44px rgba(0, 0, 0, 0.24)',
                 gap: theme.spacing.lg,
                 padding: theme.spacing.xl,
@@ -646,9 +639,7 @@ export function SearchScreen({
                     placeholderTextColor="rgba(31, 30, 27, 0.42)"
                     style={{
                       backgroundColor: 'rgba(255, 255, 255, 0.56)',
-                      borderColor: 'rgba(31, 30, 27, 0.10)',
-                      borderRadius: 24,
-                      borderWidth: 1,
+                      borderRadius: 20,
                       color: theme.colors.text,
                       fontSize: 15,
                       minHeight: 54,
@@ -680,9 +671,7 @@ export function SearchScreen({
                     placeholderTextColor="rgba(31, 30, 27, 0.42)"
                     style={{
                       backgroundColor: 'rgba(255, 255, 255, 0.56)',
-                      borderColor: 'rgba(31, 30, 27, 0.10)',
-                      borderRadius: 24,
-                      borderWidth: 1,
+                      borderRadius: 20,
                       color: theme.colors.text,
                       fontSize: 15,
                       minHeight: 54,
@@ -714,9 +703,7 @@ export function SearchScreen({
                     placeholderTextColor="rgba(31, 30, 27, 0.42)"
                     style={{
                       backgroundColor: 'rgba(255, 255, 255, 0.56)',
-                      borderColor: 'rgba(31, 30, 27, 0.10)',
-                      borderRadius: 24,
-                      borderWidth: 1,
+                      borderRadius: 20,
                       color: theme.colors.text,
                       fontSize: 15,
                       minHeight: 96,

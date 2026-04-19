@@ -1,13 +1,6 @@
 import React from 'react';
-import { View, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
-} from 'react-native-reanimated';
+import { Card, Skeleton, SkeletonGroup } from 'heroui-native';
+import { type StyleProp, type ViewStyle } from 'react-native';
 
 import { useAppTheme } from '@/hooks/use-app-theme';
 
@@ -29,31 +22,16 @@ export function LoadingSkeletonBlock({
   width = '100%',
 }: LoadingSkeletonBlockProps) {
   const { theme } = useAppTheme();
-  const opacity = useSharedValue(0.62);
-
-  React.useEffect(() => {
-    opacity.value = withRepeat(
-      withSequence(
-        withTiming(1, {
-          duration: 920,
-          easing: Easing.inOut(Easing.ease),
-        }),
-        withTiming(0.62, {
-          duration: 920,
-          easing: Easing.inOut(Easing.ease),
-        })
-      ),
-      -1,
-      false
-    );
-  }, [opacity]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-  }));
 
   return (
-    <Animated.View
+    <Skeleton
+      animation={{
+        pulse: {
+          duration: 920,
+          maxOpacity: 1,
+          minOpacity: 0.62,
+        },
+      }}
       testID={testID}
       style={[
         {
@@ -62,9 +40,9 @@ export function LoadingSkeletonBlock({
           height,
           width,
         },
-        animatedStyle,
         style,
       ]}
+      variant="pulse"
     />
   );
 }
@@ -80,17 +58,33 @@ export function LoadingSkeletonText({
   testIDPrefix?: string;
   widths: SkeletonWidth[];
 }) {
+  const { theme } = useAppTheme();
+
   return (
-    <View style={{ gap }}>
+    <SkeletonGroup
+      animation={{
+        pulse: {
+          duration: 920,
+          maxOpacity: 1,
+          minOpacity: 0.62,
+        },
+      }}
+      isLoading
+      style={{ gap }}
+      variant="pulse">
       {widths.map((width, index) => (
-        <LoadingSkeletonBlock
+        <SkeletonGroup.Item
           key={`${testIDPrefix ?? 'skeleton-line'}-${index}`}
-          height={lineHeight}
           testID={testIDPrefix ? `${testIDPrefix}-${index + 1}` : undefined}
-          width={width}
+          style={{
+            backgroundColor: theme.colors.surfaceMuted,
+            borderRadius: theme.radii.md,
+            height: lineHeight,
+            width,
+          }}
         />
       ))}
-    </View>
+    </SkeletonGroup>
   );
 }
 
@@ -106,7 +100,7 @@ export function LoadingSkeletonCard({
   const { theme } = useAppTheme();
 
   return (
-    <View
+    <Card
       style={[
         {
           backgroundColor: theme.colors.surface,
@@ -120,6 +114,6 @@ export function LoadingSkeletonCard({
       ]}
       testID={testID}>
       {children}
-    </View>
+    </Card>
   );
 }

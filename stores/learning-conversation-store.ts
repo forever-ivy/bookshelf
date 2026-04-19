@@ -30,6 +30,7 @@ export type LearningConversationState = {
 type LearningConversationStore = LearningConversationState & {
   applyEvent: (event: LearningStreamEvent) => void;
   clearDraft: () => void;
+  commitDraft: () => void;
   hydrateHistory: (messages: LearningWorkspaceRenderedMessage[]) => void;
   reset: () => void;
   setLatestEvaluation: (evaluation: LearningStepEvaluation | null) => void;
@@ -43,6 +44,32 @@ type LearningConversationStore = LearningConversationState & {
   }) => void;
 };
 
+function createDraftMessages(input: {
+  assistantMessageId: string;
+  mode: LearningConversationMode;
+  userMessageId: string;
+  userText: string;
+}): LearningWorkspaceRenderedMessage[] {
+  return [
+    {
+      cards: [],
+      id: input.userMessageId,
+      presentation: null,
+      role: 'user',
+      streaming: false,
+      text: input.userText,
+    },
+    {
+      cards: [],
+      id: input.assistantMessageId,
+      presentation: createDraftPresentation(input.mode),
+      role: 'assistant',
+      streaming: true,
+      text: '',
+    },
+  ];
+}
+
 function createDraftPresentation(mode: LearningConversationMode): LearningConversationPresentation {
   if (mode === 'explore') {
     return {
@@ -52,6 +79,7 @@ function createDraftPresentation(mode: LearningConversationMode): LearningConver
       focus: null,
       followups: [],
       kind: 'explore',
+      reasoningContent: null,
       relatedConcepts: [],
     };
   }
@@ -156,24 +184,7 @@ export function createInitialLearningConversationState(input: {
     latestEvaluation: null,
     latestSessionSignal: null,
     latestStatus: null,
-    messages: [
-      {
-        cards: [],
-        id: input.userMessageId,
-        presentation: null,
-        role: 'user',
-        streaming: false,
-        text: input.userText,
-      },
-      {
-        cards: [],
-        id: input.assistantMessageId,
-        presentation: createDraftPresentation(input.mode),
-        role: 'assistant',
-        streaming: true,
-        text: '',
-      },
-    ],
+    messages: createDraftMessages(input),
     mode: input.mode,
   };
 }
@@ -211,6 +222,14 @@ export function reduceLearningConversationEvent(
           answer: {
             content: `${nextPresentation.answer.content}${event.delta}`,
           },
+        });
+      });
+    case 'explore.reasoning.delta':
+      return updateAssistantDraft(state, (message, presentation) => {
+        const nextPresentation = ensureExplorePresentation(presentation);
+        return buildRenderedDraftMessage(message, {
+          ...nextPresentation,
+          reasoningContent: `${nextPresentation.reasoningContent ?? ''}${event.delta}`,
         });
       });
     case 'assistant.delta':
@@ -303,6 +322,15 @@ export const useLearningConversationStore = create<LearningConversationStore>((s
       messages: state.messages.filter((message) => !message.streaming),
     }));
   },
+  commitDraft: () => {
+    set((state) => ({
+      ...state,
+      assistantMessageId: null,
+      messages: state.messages.map((message) =>
+        message.id === state.assistantMessageId ? { ...message, streaming: false } : message
+      ),
+    }));
+  },
   hydrateHistory: (messages) => {
     set((state) => {
       const draftMessages = state.messages.filter((message) => message.streaming);
@@ -336,6 +364,14 @@ export const useLearningConversationStore = create<LearningConversationStore>((s
     }));
   },
   startDraft: (input) => {
-    set(createInitialLearningConversationState(input));
+    set((state) => ({
+      ...state,
+      assistantMessageId: input.assistantMessageId,
+      latestEvaluation: null,
+      latestSessionSignal: null,
+      latestStatus: null,
+      messages: [...state.messages.filter((message) => !message.streaming), ...createDraftMessages(input)],
+      mode: input.mode,
+    }));
   },
 }));

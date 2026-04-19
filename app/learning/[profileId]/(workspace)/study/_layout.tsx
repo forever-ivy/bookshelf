@@ -1,10 +1,12 @@
 import { Stack } from 'expo-router';
 import React from 'react';
+import { Platform } from 'react-native';
 
 import { useAppTheme } from '@/hooks/use-app-theme';
 
 export default function LearningWorkspaceStudyLayout() {
   const { theme } = useAppTheme();
+  const isIos = Platform.OS === 'ios';
 
   return (
     <Stack
@@ -14,10 +16,12 @@ export default function LearningWorkspaceStudyLayout() {
         },
         headerBackButtonDisplayMode: 'minimal',
         headerShadowVisible: false,
+        headerShown: true,
         headerStyle: {
-          backgroundColor: theme.colors.backgroundWorkspace,
+          backgroundColor: isIos ? 'transparent' : theme.colors.backgroundWorkspace,
         },
         headerTintColor: theme.colors.text,
+        headerTransparent: isIos,
       }}>
       <Stack.Screen name="index" />
     </Stack>

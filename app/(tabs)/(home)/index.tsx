@@ -5,6 +5,7 @@ import { Link, Stack, type Href } from 'expo-router';
 
 import { AppIcon, type AppIconName } from '@/components/base/app-icon';
 import { EditorialIllustration } from '@/components/base/editorial-illustration';
+import { GlassSurface } from '@/components/base/glass-surface';
 import {
   LoadingSkeletonBlock,
   LoadingSkeletonCard,
@@ -130,10 +131,10 @@ function HomeBookLinkListSkeleton({ testID }: { testID: string }) {
     <View
       style={{
         backgroundColor: theme.colors.surface,
-        borderColor: theme.colors.borderStrong,
-        borderRadius: theme.radii.lg,
-        borderWidth: 1,
+        borderRadius: 24,
+        boxShadow: theme.shadows.card,
         overflow: 'hidden',
+        paddingVertical: 12,
       }}
       testID={testID}>
       {Array.from({ length: 2 }, (_, index) => (
@@ -263,10 +264,10 @@ function HomeBookLinkList({
     <View
       style={{
         backgroundColor: theme.colors.surface,
-        borderColor: theme.colors.borderStrong,
-        borderRadius: theme.radii.lg,
-        borderWidth: 1,
+        borderRadius: 24,
+        boxShadow: theme.shadows.card,
         overflow: 'hidden',
+        paddingVertical: 8,
       }}>
       {items.map((item, index) => (
         <Link key={`${testIDPrefix}-${item.id}`} asChild href={item.href}>
@@ -667,14 +668,15 @@ export default function HomeRoute() {
 
       <View style={{ gap: theme.spacing.lg }}>
         <SectionTitle title="快速开始" />
-        <View
+        <GlassSurface
+          intensity={typeof Platform !== 'undefined' && Platform.OS === 'ios' ? 40 : 100}
           style={{
-            backgroundColor: theme.colors.surface,
-            borderColor: theme.colors.borderStrong,
-            borderRadius: theme.radii.lg,
+            borderRadius: 28,
             borderWidth: 1,
+            borderColor: theme.colors.borderSoft,
             gap: theme.spacing.lg,
             padding: theme.spacing.xl,
+            overflow: 'hidden',
           }}>
           {showQuickStartSkeleton ? (
             <HomeQuickStartSkeleton />
@@ -751,9 +753,11 @@ export default function HomeRoute() {
             ))
           )}
           {!showQuickStartSkeleton ? (
-            <PillButton href={quickStartCta.href} icon="bookmark" label={quickStartCta.label} variant="accent" />
+            <View style={{ marginTop: 12 }}>
+              <PillButton href={quickStartCta.href} icon="bookmark" label={quickStartCta.label} variant="accent" />
+            </View>
           ) : null}
-        </View>
+        </GlassSurface>
       </View>
 
       {showRecommendationSkeleton || homeRecommendationLinks.length > 0 ? (
@@ -795,11 +799,10 @@ export default function HomeRoute() {
                   key={item.id}
                   style={{
                     backgroundColor: theme.colors.surface,
-                    borderColor: theme.colors.borderStrong,
-                    borderRadius: theme.radii.lg,
-                    borderWidth: 1,
-                    gap: 4,
-                    padding: theme.spacing.lg,
+                    borderRadius: 20,
+                    boxShadow: theme.shadows.card,
+                    gap: 6,
+                    padding: 20,
                   }}>
                   <Text
                     style={{

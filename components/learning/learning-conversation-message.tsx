@@ -1,7 +1,7 @@
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 
-import { GlassSurface } from '@/components/base/glass-surface';
+import { AppIcon } from '@/components/base/app-icon';
 import { LearningChatBubble } from '@/components/learning/learning-chat-bubble';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import type { LearningBridgeAction } from '@/lib/api/types';
@@ -10,292 +10,227 @@ import type {
   LearningWorkspaceRenderedMessage,
 } from '@/lib/learning/workspace';
 
-function SectionCard({
-  children,
-  title,
+function TextSection({
+  content,
+  tone = 'primary',
 }: {
-  children: React.ReactNode;
-  title: string;
+  content: string;
+  tone?: 'muted' | 'primary';
 }) {
   const { theme } = useAppTheme();
+  const isPrimary = tone === 'primary';
 
   return (
-    <GlassSurface
-      style={{
-        backgroundColor: theme.colors.surface,
-        borderRadius: 24,
-        padding: 16,
-      }}>
-      <View style={{ gap: 12 }}>
+    <View style={{ gap: 10 }}>
+      <Text
+        selectable
+        style={{
+          color: theme.colors.text,
+          fontFamily: Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' }),
+          fontSize: isPrimary ? 17 : 16,
+          lineHeight: isPrimary ? 28 : 26,
+        }}>
+        {content}
+      </Text>
+    </View>
+  );
+}
+
+function ExploreMessage({
+  presentation,
+  streaming,
+}: {
+  presentation: NonNullable<LearningWorkspaceRenderedMessage['presentation']>;
+  streaming: boolean;
+}) {
+  const { theme } = useAppTheme();
+  const [exploreReasoningExpanded, setExploreReasoningExpanded] = React.useState(false);
+  const answerContent = presentation.kind === 'explore' ? presentation.answer.content.trim() : '';
+  const exploreReasoning =
+    presentation.kind === 'explore' ? presentation.reasoningContent?.trim() ?? '' : '';
+  const showThinkingOnly = streaming && !answerContent && !exploreReasoning;
+
+  if (showThinkingOnly) {
+    return <LearningChatBubble role="assistant" text="" thinking />;
+  }
+
+  return (
+    <View style={{ gap: 16, width: '100%' }}>
+      <View
+        style={{
+          gap: 10,
+        }}>
+        <Pressable
+          accessibilityRole={exploreReasoning ? 'button' : undefined}
+          disabled={!exploreReasoning}
+          onPress={() => {
+            if (!exploreReasoning) {
+              return;
+            }
+            setExploreReasoningExpanded((value) => !value);
+          }}
+          style={({ pressed }) => ({
+            opacity: pressed && exploreReasoning ? 0.88 : 1,
+          })}
+          testID={exploreReasoning ? 'learning-conversation-reasoning-toggle' : undefined}>
+          <View
+            style={{
+              alignItems: 'center',
+              flexDirection: 'row',
+              gap: 6,
+            }}>
+            <Text
+              selectable
+              style={{
+                color: theme.colors.textSoft,
+                ...theme.typography.semiBold,
+                fontSize: 13,
+                letterSpacing: 0.2,
+              }}>
+              Explore
+            </Text>
+            {exploreReasoning ? (
+              <View
+                style={{
+                  transform: [{ rotate: exploreReasoningExpanded ? '180deg' : '0deg' }],
+                }}>
+                <AppIcon color={theme.colors.textSoft} name="chevronDown" size={15} strokeWidth={2} />
+              </View>
+            ) : null}
+            {streaming ? (
+              <Text
+                selectable
+                style={{
+                  color: theme.colors.textSoft,
+                  ...theme.typography.medium,
+                  fontSize: 12,
+                }}>
+                正在整理这轮回复…
+              </Text>
+            ) : null}
+          </View>
+        </Pressable>
+        {exploreReasoningExpanded ? (
+          <View
+            style={{
+              borderBottomColor: theme.colors.borderSoft,
+              borderBottomWidth: 1,
+              paddingBottom: 14,
+            }}>
+            <ReasoningSection content={exploreReasoning} />
+          </View>
+        ) : null}
+      </View>
+      {answerContent || streaming ? <TextSection content={answerContent} /> : null}
+    </View>
+  );
+}
+
+function ReasoningSection({
+  content,
+}: {
+  content: string;
+}) {
+  const { theme } = useAppTheme();
+  const paragraphs = content
+    .split(/\n\s*\n/g)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return (
+    <View style={{ gap: 12, paddingTop: 4 }}>
+      <View
+        style={{
+          alignItems: 'center',
+          flexDirection: 'row',
+          gap: 8,
+        }}>
+        <AppIcon color={theme.colors.textSoft} name="search" size={14} strokeWidth={1.8} />
         <Text
           selectable
           style={{
             color: theme.colors.textSoft,
-            ...theme.typography.semiBold,
-            fontSize: 12,
-            textTransform: 'uppercase',
+            ...theme.typography.medium,
+            fontSize: 13,
+            lineHeight: 18,
           }}>
-          {title}
+          基于当前资料推理
         </Text>
-        {children}
       </View>
-    </GlassSurface>
-  );
-}
-
-function EvidenceCard({ card }: { card: Extract<LearningWorkspaceMessageCard, { kind: 'evidence' }> }) {
-  const { theme } = useAppTheme();
-
-  return (
-    <SectionCard title={card.title}>
-      <View style={{ gap: 10 }}>
-        {card.items.map((item, index) => (
-          <View
-            key={`${item.chunkId ?? index}-${item.sourceTitle ?? 'citation'}`}
-            style={{
-              backgroundColor: theme.colors.surfaceMuted,
-              borderColor: theme.colors.borderSoft,
-              borderRadius: 18,
-              borderWidth: 1,
-              gap: 8,
-              padding: 12,
-            }}>
-            {item.sourceTitle ? (
-              <Text
-                selectable
-                style={{
-                  color: theme.colors.primaryStrong,
-                  ...theme.typography.semiBold,
-                  fontSize: 12,
-                }}>
-                {item.sourceTitle}
-              </Text>
-            ) : null}
+      <View
+        style={{
+          minHeight: 24,
+          paddingLeft: 22,
+          position: 'relative',
+        }}>
+        <View
+          style={{
+            backgroundColor: theme.colors.borderSoft,
+            bottom: 0,
+            left: 8,
+            position: 'absolute',
+            top: 0,
+            width: 1,
+          }}
+        />
+        <View
+          style={{
+            backgroundColor: theme.colors.textSoft,
+            borderRadius: 4,
+            height: 8,
+            left: 4.5,
+            position: 'absolute',
+            top: 6,
+            width: 8,
+          }}
+        />
+        <View style={{ gap: 18 }}>
+          {(paragraphs.length > 0 ? paragraphs : [content]).map((paragraph, index) => (
             <Text
+              key={`reasoning-${index}`}
               selectable
               style={{
                 color: theme.colors.textMuted,
                 ...theme.typography.body,
-                fontSize: 14,
-                lineHeight: 21,
+                fontSize: 15,
+                lineHeight: 28,
               }}>
-              {item.excerpt ?? '已命中当前资料片段。'}
+              {paragraph}
             </Text>
-          </View>
-        ))}
+          ))}
+        </View>
       </View>
-    </SectionCard>
-  );
-}
-
-function PillListCard({
-  card,
-}: {
-  card: Extract<
-    LearningWorkspaceMessageCard,
-    { kind: 'followups' | 'related_concepts' | 'remediation' }
-  >;
-}) {
-  const { theme } = useAppTheme();
-
-  return (
-    <SectionCard title={card.title}>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-        {card.items.map((item) => (
-          <View
-            key={item}
-            style={{
-              backgroundColor: theme.colors.surfaceMuted,
-              borderColor: theme.colors.borderSoft,
-              borderRadius: theme.radii.pill,
-              borderWidth: 1,
-              paddingHorizontal: 12,
-              paddingVertical: 8,
-            }}>
-            <Text
-              selectable
-              style={{
-                color: theme.colors.textMuted,
-                ...theme.typography.body,
-                fontSize: 13,
-              }}>
-              {item}
-            </Text>
-          </View>
-        ))}
-      </View>
-    </SectionCard>
-  );
-}
-
-function BridgeActionsCard({
-  card,
-  onAction,
-}: {
-  card: Extract<LearningWorkspaceMessageCard, { kind: 'bridge_actions' | 'redirect' }>;
-  onAction?: (action: LearningBridgeAction) => void;
-}) {
-  const { theme } = useAppTheme();
-
-  return (
-    <SectionCard title={card.title}>
-      <View style={{ gap: 10 }}>
-        {card.actions.map((action) => (
-          <Pressable
-            key={`${action.actionType}-${action.label ?? 'action'}`}
-            accessibilityRole="button"
-            onPress={() => onAction?.(action)}
-            style={({ pressed }) => ({
-              backgroundColor: theme.colors.primarySoft,
-              borderColor: theme.colors.borderSoft,
-              borderRadius: 18,
-              borderWidth: 1,
-              gap: 6,
-              opacity: pressed ? 0.76 : 1,
-              padding: 14,
-            })}>
-            <Text
-              selectable
-              style={{
-                color: theme.colors.primaryStrong,
-                ...theme.typography.semiBold,
-                fontSize: 14,
-              }}>
-              {action.label ?? action.actionType}
-            </Text>
-            {action.description ? (
-              <Text
-                selectable
-                style={{
-                  color: theme.colors.textMuted,
-                  ...theme.typography.body,
-                  fontSize: 13,
-                  lineHeight: 19,
-                }}>
-                {action.description}
-              </Text>
-            ) : null}
-          </Pressable>
-        ))}
-      </View>
-    </SectionCard>
+    </View>
   );
 }
 
 function renderCard(
   card: LearningWorkspaceMessageCard,
-  onAction?: (action: LearningBridgeAction) => void
 ) {
   switch (card.kind) {
     case 'coach':
+    case 'answer':
+      return <TextSection key={`${card.kind}-${card.title}`} content={card.content} />;
     case 'teacher':
     case 'peer':
-    case 'answer':
       return (
-        <SectionCard key={`${card.kind}-${card.title}`} title={card.title}>
-          <LearningChatBubble role="assistant" text={card.content} />
-        </SectionCard>
+        <TextSection
+          key={`${card.kind}-${card.title}`}
+          content={card.content}
+          tone="muted"
+        />
       );
-    case 'examiner': {
-      const { passed, reasoning, missingConcepts } = card.evaluation;
-      return (
-        <SectionCard key={`${card.kind}-${card.title}`} title={card.title}>
-          <ExaminerCardBody
-            missingConcepts={missingConcepts}
-            passed={passed}
-            reasoning={reasoning}
-          />
-        </SectionCard>
-      );
-    }
+    case 'examiner':
     case 'evidence':
-      return <EvidenceCard key={`${card.kind}-${card.title}`} card={card} />;
     case 'remediation':
     case 'followups':
     case 'related_concepts':
-      return <PillListCard key={`${card.kind}-${card.title}`} card={card} />;
     case 'redirect':
     case 'bridge_actions':
-      return (
-        <BridgeActionsCard
-          key={`${card.kind}-${card.title}`}
-          card={card}
-          onAction={onAction}
-        />
-      );
+      return null;
     default:
       return null;
   }
-}
-
-function ExaminerCardBody({
-  missingConcepts,
-  passed,
-  reasoning,
-}: {
-  missingConcepts: string[];
-  passed: boolean;
-  reasoning?: string | null;
-}) {
-  const { theme } = useAppTheme();
-
-  return (
-    <View
-      style={{
-        backgroundColor: passed ? theme.colors.availabilityReadySoft : theme.colors.warningSoft,
-        borderColor: passed ? theme.colors.availabilityReady : theme.colors.warning,
-        borderRadius: 18,
-        borderWidth: 1,
-        gap: 8,
-        padding: 14,
-      }}>
-      <Text
-        selectable
-        style={{
-          color: passed ? theme.colors.success : theme.colors.warning,
-          ...theme.typography.semiBold,
-          fontSize: 14,
-        }}>
-        {passed ? '已经通过当前步骤' : '还需要补强'}
-      </Text>
-      {reasoning ? (
-        <Text
-          selectable
-          style={{
-            color: theme.colors.text,
-            ...theme.typography.body,
-            fontSize: 14,
-            lineHeight: 21,
-          }}>
-          {reasoning}
-        </Text>
-      ) : null}
-      {!passed && missingConcepts.length > 0 ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          {missingConcepts.map((concept) => (
-            <View
-              key={concept}
-              style={{
-                backgroundColor: theme.colors.surface,
-                borderRadius: theme.radii.pill,
-                paddingHorizontal: 10,
-                paddingVertical: 6,
-              }}>
-              <Text
-                selectable
-                style={{
-                  color: theme.colors.textMuted,
-                  ...theme.typography.medium,
-                  fontSize: 12,
-                }}>
-                {concept}
-              </Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
-    </View>
-  );
 }
 
 export function LearningConversationMessage({
@@ -306,9 +241,14 @@ export function LearningConversationMessage({
   onAction?: (action: LearningBridgeAction) => void;
 }) {
   const { theme } = useAppTheme();
+  const isExploreMessage = message.presentation?.kind === 'explore';
 
   if (message.role === 'user') {
     return <LearningChatBubble role="user" text={message.text} />;
+  }
+
+  if (isExploreMessage && message.presentation) {
+    return <ExploreMessage presentation={message.presentation} streaming={message.streaming} />;
   }
 
   if (!message.presentation || message.cards.length === 0) {
@@ -328,43 +268,48 @@ export function LearningConversationMessage({
 
   return (
     <View style={{ gap: 12, width: '100%' }}>
-      <View
-        style={{
-          alignItems: 'center',
-          flexDirection: 'row',
-          gap: 8,
-        }}>
+      {!isExploreMessage ? (
         <View
           style={{
-            backgroundColor: theme.colors.primarySoft,
-            borderRadius: theme.radii.pill,
-            paddingHorizontal: 10,
-            paddingVertical: 6,
+            alignItems: 'center',
+            flexDirection: 'row',
+            gap: 8,
           }}>
-          <Text
-            selectable
+          <View
             style={{
-              color: theme.colors.primaryStrong,
-              ...theme.typography.semiBold,
-              fontSize: 12,
+              backgroundColor: theme.colors.primarySoft,
+              borderColor: theme.colors.borderSoft,
+              borderRadius: theme.radii.pill,
+              borderWidth: 1,
+              paddingHorizontal: 10,
+              paddingVertical: 5,
             }}>
-            {message.presentation.kind === 'guide' ? 'Guide' : 'Explore'}
-          </Text>
+            <Text
+              selectable
+              style={{
+                color: theme.colors.primaryStrong,
+                ...theme.typography.semiBold,
+                fontSize: 11,
+                letterSpacing: 0.5,
+              }}>
+                Guide
+              </Text>
+            </View>
+          {message.streaming ? (
+            <Text
+              selectable
+              style={{
+                color: theme.colors.textSoft,
+                ...theme.typography.medium,
+                fontSize: 12,
+              }}>
+              正在整理这轮回复…
+            </Text>
+          ) : null}
         </View>
-        {message.streaming ? (
-          <Text
-            selectable
-            style={{
-              color: theme.colors.textSoft,
-              ...theme.typography.medium,
-              fontSize: 12,
-            }}>
-            正在整理这轮回复…
-          </Text>
-        ) : null}
-      </View>
-      <View style={{ gap: 12 }}>
-        {message.cards.map((card) => renderCard(card, onAction))}
+      ) : null}
+      <View style={{ gap: 16 }}>
+        {message.cards.map((card) => renderCard(card))}
       </View>
     </View>
   );

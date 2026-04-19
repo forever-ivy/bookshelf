@@ -185,20 +185,20 @@ describe('learning library route', () => {
     expect(screen.queryByText('我的导师')).toBeNull();
   });
 
-  it('links library notebook cards to direct guide entry routes', () => {
+  it('links library notebook cards to direct explore entry routes', () => {
     render(<LearningRoute />);
 
     const hrefs = screen.getAllByTestId('mock-link').map((node) => node.props.href).filter(Boolean);
 
-    expect(hrefs).toContain('/learning/101/guide');
-    expect(hrefs).toContain('/learning/102/guide');
-    expect(hrefs).toContain('/learning/103/guide');
+    expect(hrefs).toContain('/learning/101/explore');
+    expect(hrefs).toContain('/learning/102/explore');
+    expect(hrefs).toContain('/learning/103/explore');
   });
 
   it('links notebook cards to the standalone learning workspace route so the root tabs can disappear', () => {
     render(
       <LearningNotebookCard
-        href="/learning/101/guide"
+        href="/learning/101/explore"
         profile={{
           bookId: 1,
           createdAt: '2026-04-08T08:00:00Z',
@@ -230,7 +230,7 @@ describe('learning library route', () => {
   it('shows a waiting-to-start placeholder when generation has not actually begun', () => {
     render(
       <LearningNotebookCard
-        href="/learning/102/guide"
+        href="/learning/102/explore"
         profile={{
           bookId: null,
           createdAt: '2026-04-08T09:00:00Z',
@@ -264,7 +264,7 @@ describe('learning library route', () => {
   it('shows a failure placeholder that invites the user to retry', () => {
     render(
       <LearningNotebookCard
-        href="/learning/103/guide"
+        href="/learning/103/explore"
         profile={{
           bookId: null,
           createdAt: '2026-04-08T09:00:00Z',

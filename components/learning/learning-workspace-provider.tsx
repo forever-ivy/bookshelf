@@ -69,6 +69,20 @@ type LearningWorkspaceContextValue = {
 
 const LearningWorkspaceContext = React.createContext<LearningWorkspaceContextValue | null>(null);
 
+function getLearningReplyFailureFallback(mode: LearningStudyMode) {
+  return mode === 'explore' ? 'Explore 回复失败，请稍后再试。' : '导学回复失败，请稍后再试。';
+}
+
+function hasStreamedAssistantDraftContent() {
+  const { assistantMessageId, messages } = useLearningConversationStore.getState();
+  if (!assistantMessageId) {
+    return false;
+  }
+
+  const assistantDraft = messages.find((message) => message.id === assistantMessageId);
+  return Boolean(assistantDraft?.text.trim());
+}
+
 export function resolveLearningWorkspaceNavigationState(
   pathname: string,
   modeParam?: string | string[]
@@ -76,14 +90,14 @@ export function resolveLearningWorkspaceNavigationState(
   if (pathname.endsWith('/graph')) {
     return {
       activeTab: 'graph' as const,
-      studyMode: 'guide' as const,
+      studyMode: 'explore' as const,
     };
   }
 
   if (pathname.endsWith('/review')) {
     return {
       activeTab: 'review' as const,
-      studyMode: 'guide' as const,
+      studyMode: 'explore' as const,
     };
   }
 
@@ -92,7 +106,11 @@ export function resolveLearningWorkspaceNavigationState(
   return {
     activeTab: 'study' as const,
     studyMode:
-      normalizedMode === 'explore' || pathname.endsWith('/explore') ? ('explore' as const) : ('guide' as const),
+      normalizedMode === 'guide'
+        ? ('guide' as const)
+        : normalizedMode === 'explore' || pathname.endsWith('/explore')
+          ? ('explore' as const)
+          : ('explore' as const),
   };
 }
 
@@ -162,6 +180,7 @@ export function LearningWorkspaceProvider({
   const startConversationDraft = useLearningConversationStore((state) => state.startDraft);
   const applyConversationEvent = useLearningConversationStore((state) => state.applyEvent);
   const clearConversationDraft = useLearningConversationStore((state) => state.clearDraft);
+  const commitConversationDraft = useLearningConversationStore((state) => state.commitDraft);
   const resetConversation = useLearningConversationStore((state) => state.reset);
   const setConversationLatestStatus = useLearningConversationStore((state) => state.setLatestStatus);
   const setConversationLatestSessionSignal = useLearningConversationStore(
@@ -331,6 +350,7 @@ export function LearningWorkspaceProvider({
           event.type === 'teacher.delta' ||
           event.type === 'peer.delta' ||
           event.type === 'explore.answer.delta' ||
+          event.type === 'explore.reasoning.delta' ||
           event.type === 'evaluation' ||
           event.type === 'evidence.items' ||
           event.type === 'followups.items' ||
@@ -397,17 +417,24 @@ export function LearningWorkspaceProvider({
         syncedMessages.some(
           (message) => message.role === 'assistant' && (Number(message.id) || 0) > previousLatestMessageId
         );
+      const hasVisibleDraftReply = !finalAssistantMessage && hasStreamedAssistantDraftContent();
 
       if (recoveredAssistantReply) {
         clearConversationDraft();
         setConversationLatestStatus(null);
+      } else if (hasVisibleDraftReply) {
+        commitConversationDraft();
+        setConversationLatestStatus({
+          label: '这一轮回复连接中断，已保留当前内容并继续和后端同步。',
+          tone: 'warning',
+        });
       } else if (!finalAssistantMessage) {
         clearConversationDraft();
         setConversationLatestStatus({
           label: '这一轮导学没有成功返回，正在和后端重新同步。',
           tone: 'warning',
         });
-        toast.error(getLibraryErrorMessage(error, '导学回复失败，请稍后再试。'));
+        toast.error(getLibraryErrorMessage(error, getLearningReplyFailureFallback(activeMode)));
       }
     } finally {
       setIsSending(false);
@@ -415,6 +442,7 @@ export function LearningWorkspaceProvider({
   }, [
     applyConversationEvent,
     clearConversationDraft,
+    commitConversationDraft,
     draft,
     isSending,
     profile,
@@ -477,16 +505,22 @@ export function LearningWorkspaceProvider({
         return;
       }
 
-      if (activeTab === 'study' && studyMode === nextMode) {
+      const resolvedMode = nextMode === 'guide' ? 'explore' : nextMode;
+
+      if (activeTab === 'study' && studyMode === resolvedMode) {
         return;
       }
 
-      router.replace(`/learning/${profileId}/study?mode=${nextMode}`);
+      router.replace(`/learning/${profileId}/study?mode=${resolvedMode}`);
     },
     [activeTab, profileId, router, studyMode]
   );
   const closeWorkspace = React.useCallback(() => {
-    router.replace('/learning');
+    if (router.canDismiss()) {
+      router.dismiss();
+    } else {
+      router.replace('/learning');
+    }
   }, [router]);
   const openOverview = React.useCallback(() => {
     if (!Number.isFinite(profileId) || profileId <= 0) {

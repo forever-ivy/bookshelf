@@ -8,6 +8,9 @@ import type {
   LearningDashboard,
   LearningDashboardContinueSession,
   LearningGenerationJob,
+  LearningGraph,
+  LearningGraphEdge,
+  LearningGraphNode,
   LearningPersona,
   LearningProfile,
   LearningSession,
@@ -103,6 +106,41 @@ function normalizeLearningBridgeAction(raw: any): LearningBridgeAction {
       raw?.targetGuideSessionId ?? raw?.target_guide_session_id ?? null,
     targetStepIndex: raw?.targetStepIndex ?? raw?.target_step_index ?? null,
     turnId: raw?.turnId ?? raw?.turn_id ?? null,
+  };
+}
+
+function normalizeLearningGraphNode(raw: any): LearningGraphNode {
+  return {
+    ...(raw && typeof raw === 'object' ? raw : {}),
+    id: String(raw?.id ?? ''),
+    label: String(raw?.label ?? raw?.title ?? raw?.id ?? ''),
+    profileId:
+      typeof raw?.profileId === 'number'
+        ? raw.profileId
+        : typeof raw?.profile_id === 'number'
+          ? raw.profile_id
+          : null,
+    type: String(raw?.type ?? 'Node'),
+  };
+}
+
+function normalizeLearningGraphEdge(raw: any): LearningGraphEdge {
+  return {
+    ...(raw && typeof raw === 'object' ? raw : {}),
+    source: String(raw?.source ?? ''),
+    target: String(raw?.target ?? ''),
+    type: String(raw?.type ?? 'RELATED_TO'),
+  };
+}
+
+function normalizeLearningGraph(raw: any): LearningGraph {
+  const nodes = Array.isArray(raw?.nodes) ? raw.nodes.map((node: any) => normalizeLearningGraphNode(node)) : [];
+  const edges = Array.isArray(raw?.edges) ? raw.edges.map((edge: any) => normalizeLearningGraphEdge(edge)) : [];
+
+  return {
+    edges,
+    nodes,
+    provider: String(raw?.provider ?? 'fallback'),
   };
 }
 
@@ -438,6 +476,7 @@ function normalizeLearningPresentation(raw: any): LearningConversationPresentati
         ? raw.followups.filter((item: unknown) => typeof item === 'string')
         : [],
       kind: 'explore',
+      reasoningContent: raw?.reasoningContent ?? raw?.reasoning_content ?? null,
       relatedConcepts: Array.isArray(raw?.relatedConcepts)
         ? raw.relatedConcepts.filter((item: unknown) => typeof item === 'string')
         : [],
@@ -628,6 +667,13 @@ function normalizeLearningStreamEvents(raw: { data?: any; event?: string }): Lea
           type: 'explore.answer.delta',
         },
       ];
+    case 'explore.reasoning.delta':
+      return [
+        {
+          delta: String(raw.data?.delta ?? ''),
+          type: 'explore.reasoning.delta',
+        },
+      ];
     case 'evaluation':
     case 'examiner.result':
       return [
@@ -775,9 +821,14 @@ function extractFormDataValue(formData: FormData, fieldName: string) {
   return typeof entry === 'string' && entry.trim().length > 0 ? entry.trim() : null;
 }
 
-async function triggerProfileGeneration(profileId: number, token?: string | null) {
+async function triggerProfileGeneration(
+  profileId: number,
+  token?: string | null,
+  options?: { background?: boolean }
+) {
+  const query = options?.background ? '?background=1' : '';
   return strictLibraryRequest<{ jobs?: any[]; ok: boolean; triggered: boolean }>(
-    `/api/v2/learning/profiles/${profileId}/generate`,
+    `/api/v2/learning/profiles/${profileId}/generate${query}`,
     {
       method: 'POST',
       token,
@@ -863,7 +914,7 @@ export async function retryGenerateLearningProfile(
   profileId: number,
   token?: string | null
 ): Promise<{ jobs: LearningGenerationJob[]; triggered: boolean }> {
-  return triggerProfileGeneration(profileId, token).then((payload: any) => ({
+  return triggerProfileGeneration(profileId, token, { background: true }).then((payload: any) => ({
     jobs: Array.isArray(payload?.jobs)
       ? payload.jobs.map((job: any) => normalizeLearningGenerationJob(job))
       : [],
@@ -885,15 +936,10 @@ export async function createLearningProfile(
     method: 'POST',
     token,
   });
-  const profileId = Number((created as any)?.profile?.id ?? 0);
-  const generation = await triggerProfileGeneration(profileId, token);
 
   return normalizeLearningProfile((created as any)?.profile ?? {}, {
     assets: Array.isArray((created as any)?.assets) ? (created as any).assets : [],
-    jobs: [
-      ...(Array.isArray((created as any)?.jobs) ? (created as any).jobs : []),
-      ...(Array.isArray((generation as any)?.jobs) ? (generation as any).jobs : []),
-    ],
+    jobs: Array.isArray((created as any)?.jobs) ? (created as any).jobs : [],
   });
 }
 
@@ -923,15 +969,10 @@ export async function uploadLearningProfile(
     method: 'POST',
     token,
   });
-  const profileId = Number((created as any)?.profile?.id ?? 0);
-  const generation = await triggerProfileGeneration(profileId, token);
 
   return normalizeLearningProfile((created as any)?.profile ?? {}, {
     assets: Array.isArray((created as any)?.assets) ? (created as any).assets : [],
-    jobs: [
-      ...(Array.isArray((created as any)?.jobs) ? (created as any).jobs : []),
-      ...(Array.isArray((generation as any)?.jobs) ? (generation as any).jobs : []),
-    ],
+    jobs: Array.isArray((created as any)?.jobs) ? (created as any).jobs : [],
   });
 }
 
@@ -1095,11 +1136,14 @@ export async function submitLearningBridgeAction(
   }));
 }
 
-export async function getLearningGraph(profileId: number, token?: string | null): Promise<any> {
+export async function getLearningGraph(
+  profileId: number,
+  token?: string | null
+): Promise<LearningGraph> {
   return strictLibraryRequest(`/api/v2/learning/profiles/${profileId}/graph`, {
     method: 'GET',
     token,
-  });
+  }).then((payload: any) => normalizeLearningGraph(payload?.graph ?? payload));
 }
 
 export async function getLearningReport(sessionId: number, token?: string | null): Promise<any> {

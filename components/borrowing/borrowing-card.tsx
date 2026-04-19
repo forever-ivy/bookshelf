@@ -36,63 +36,77 @@ export function BorrowingCard({
     <View
       style={{
         backgroundColor: theme.colors.surface,
-        borderColor: theme.colors.borderStrong,
-        borderRadius: theme.radii.lg,
-        borderWidth: 1,
+        borderRadius: 28,
+        boxShadow: theme.shadows.card,
         flexDirection: 'row',
-        gap: theme.spacing.lg,
-        padding: theme.spacing.lg,
+        gap: 20,
+        overflow: 'hidden',
+        padding: 16,
       }}>
       <View
-          style={{
-            justifyContent: 'center',
-          }}>
-        <BookCover borderRadius={theme.radii.md} height={96} seed={title} tone={coverTone} width={70} />
+        style={{
+          alignItems: 'center',
+          backgroundColor: theme.colors.surfaceMuted,
+          borderRadius: 20,
+          justifyContent: 'center',
+          width: 128,
+          alignSelf: 'stretch',
+        }}>
+        <BookCover borderRadius={theme.radii.md} height={132} seed={title} tone={coverTone} width={96} />
       </View>
-        <View style={{ flex: 1, gap: theme.spacing.md }}>
-          <View style={{ gap: 8 }}>
+      <View style={{ flex: 1, paddingVertical: 4 }}>
+        <View style={{ gap: 4, marginBottom: 'auto' }}>
+          <View style={{ alignItems: 'flex-start', marginBottom: 2 }}>
             <DueStateChip state={status} />
-            <Text
-              style={{
-                color: theme.colors.text,
-                ...theme.typography.semiBold,
-                fontSize: 18,
-                lineHeight: 22,
-              }}>
-              {title}
-            </Text>
+          </View>
           <Text
+            numberOfLines={2}
+            style={{
+              color: theme.colors.text,
+              ...theme.typography.bold,
+              fontSize: 18,
+              lineHeight: 24,
+              letterSpacing: -0.3,
+            }}>
+            {title}
+          </Text>
+          <Text
+            numberOfLines={1}
             style={{
               color: theme.colors.textMuted,
-              ...theme.typography.body,
+              ...theme.typography.medium,
               fontSize: 13,
             }}>
             {author}
           </Text>
+          <Text
+            numberOfLines={2}
+            style={{
+              color: theme.colors.textMuted,
+              ...theme.typography.body,
+              fontSize: 13,
+              marginTop: 4,
+            }}>
+            {note}
+          </Text>
         </View>
-        <Text
-          style={{
-            color: theme.colors.textMuted,
-            ...theme.typography.body,
-            fontSize: 13,
-            lineHeight: 18,
-          }}>
-          {note}
-        </Text>
-        <Text
-          style={{
-            color: theme.colors.textMuted,
-            ...theme.typography.body,
-            fontSize: 13,
-          }}>
-          到期时间 · {dueDate}
-        </Text>
-        <PillButton
-          href={href}
-          label={actionLabel}
-          onPress={onPress}
-          variant={status === 'active' ? 'soft' : 'accent'}
-        />
+
+        <View style={{ gap: 12, marginTop: 16 }}>
+          <Text
+            style={{
+              color: theme.colors.textSoft,
+              ...theme.typography.medium,
+              fontSize: 12,
+            }}>
+            到期时间 · {dueDate}
+          </Text>
+          <PillButton
+            href={href}
+            label={actionLabel}
+            onPress={onPress}
+            variant={status === 'active' ? 'soft' : 'accent'}
+          />
+        </View>
       </View>
     </View>
   );

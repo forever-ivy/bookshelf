@@ -1,12 +1,14 @@
-import { useRouter } from 'expo-router';
 import { Button, Host } from '@expo/ui/swift-ui';
 import { buttonStyle, controlSize, labelStyle } from '@expo/ui/swift-ui/modifiers';
+import { useRouter } from 'expo-router';
 import React from 'react';
 import { Platform, Pressable, View } from 'react-native';
 
 import { AppIcon } from '@/components/base/app-icon';
 import { GlassSurface } from '@/components/base/glass-surface';
 import { useAppTheme } from '@/hooks/use-app-theme';
+
+const FLOATING_BUTTON_SIZE = 58;
 
 type SecondaryBackButtonProps = {
   glassVisible?: boolean;
@@ -69,6 +71,8 @@ export function SecondaryBackButton({
   const sharedWrapperStyle = {
     alignSelf: 'flex-start' as const,
     opacity: glassVisible ? 1 : 0,
+    height: FLOATING_BUTTON_SIZE,
+    width: FLOATING_BUTTON_SIZE,
   };
 
   if (!canUseSwiftButton) {
@@ -83,9 +87,9 @@ export function SecondaryBackButton({
             style={{
               alignItems: 'center',
               borderRadius: theme.radii.pill,
-              height: 58,
+              height: FLOATING_BUTTON_SIZE,
               justifyContent: 'center',
-              width: 58,
+              width: FLOATING_BUTTON_SIZE,
             }}
             tintColor="rgba(255,255,255,0.72)">
             <Pressable
@@ -111,9 +115,11 @@ export function SecondaryBackButton({
   return (
     <View
       pointerEvents={glassVisible ? 'auto' : 'none'}
-      style={sharedWrapperStyle}
+      style={[sharedWrapperStyle, { alignItems: 'center', justifyContent: 'center' }]}
       testID={testID}>
-      <Host matchContents style={{ alignSelf: 'flex-start' }} testID="secondary-back-button-host">
+      <Host
+        style={{ height: FLOATING_BUTTON_SIZE, width: FLOATING_BUTTON_SIZE }}
+        testID="secondary-back-button-host">
         <Button
           label={label}
           modifiers={buttonModifiers}

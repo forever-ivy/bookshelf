@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 import { Copy, Ellipsis, RefreshCcw, Share, type LucideIcon } from 'lucide-react-native';
 
 import { useAppTheme } from '@/hooks/use-app-theme';
@@ -203,6 +203,8 @@ export function LearningChatBubble({
 
           <View style={{ gap: 24 }}>
             {assistantBlocks.map((block, index) => {
+              const serifFont = Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' });
+
               if (block.type === 'heading') {
                 return (
                   <Text
@@ -210,9 +212,10 @@ export function LearningChatBubble({
                     selectable
                     style={{
                       color: theme.colors.text,
-                      ...theme.typography.heading,
-                      fontSize: 18,
-                      lineHeight: 24,
+                      fontFamily: serifFont,
+                      fontSize: 19,
+                      fontWeight: '600',
+                      lineHeight: 26,
                     }}>
                     {block.content}
                   </Text>
@@ -232,9 +235,9 @@ export function LearningChatBubble({
                       selectable
                       style={{
                         color: theme.colors.textMuted,
-                        ...theme.typography.body,
-                        fontSize: 15,
-                        lineHeight: 25,
+                        fontFamily: serifFont,
+                        fontSize: 16,
+                        lineHeight: 26,
                       }}>
                       {block.content}
                     </Text>
@@ -266,10 +269,10 @@ export function LearningChatBubble({
                           selectable
                           style={{
                             color: theme.colors.text,
-                            ...theme.typography.body,
                             flex: 1,
+                            fontFamily: serifFont,
                             fontSize: 17,
-                            lineHeight: 29,
+                            lineHeight: 28,
                           }}>
                           {item}
                         </Text>
@@ -285,9 +288,9 @@ export function LearningChatBubble({
                   selectable
                   style={{
                     color: theme.colors.text,
-                    ...theme.typography.body,
+                    fontFamily: serifFont,
                     fontSize: 17,
-                    lineHeight: 29,
+                    lineHeight: 28,
                   }}>
                   {block.content}
                 </Text>
@@ -319,13 +322,11 @@ export function LearningChatBubble({
       }}>
       <View
         style={{
-          backgroundColor: theme.colors.knowledgeSoft,
-          borderColor: theme.colors.borderSoft,
-          borderRadius: 28,
-          borderWidth: 1,
+          backgroundColor: 'rgba(20, 20, 20, 0.05)',
+          borderRadius: 16,
           maxWidth: '84%',
-          paddingHorizontal: theme.spacing.lg,
-          paddingVertical: 14,
+          paddingHorizontal: 16,
+          paddingVertical: 12,
         }}>
         <Text
           selectable

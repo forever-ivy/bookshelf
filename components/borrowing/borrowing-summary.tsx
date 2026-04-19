@@ -1,6 +1,7 @@
 import React from 'react';
-import { Text, View } from 'react-native';
+import { Platform, Text, View } from 'react-native';
 
+import { GlassSurface } from '@/components/base/glass-surface';
 import { useAppTheme } from '@/hooks/use-app-theme';
 
 type BorrowingSummaryProps = {
@@ -24,30 +25,31 @@ export function BorrowingSummary({
   ] as const;
 
   return (
-    <View
+    <GlassSurface
+      intensity={typeof Platform !== 'undefined' && Platform.OS === 'ios' ? 40 : 100}
       style={{
-        backgroundColor: theme.colors.surface,
-        borderColor: theme.colors.borderStrong,
-        borderRadius: theme.radii.lg,
-        borderWidth: 1,
-        gap: theme.spacing.lg,
+        borderRadius: 28,
+        gap: 28,
         padding: theme.spacing.xl,
+        overflow: 'hidden',
+        boxShadow: theme.shadows.card,
       }}>
-      <View style={{ gap: 6 }}>
-        <Text
-          style={{
-            color: theme.colors.text,
-            ...theme.typography.heading,
-            fontSize: 28,
-          }}>
-          {headline}
-        </Text>
-      </View>
+      <Text
+        style={{
+          color: theme.colors.text,
+          ...theme.typography.bold,
+          fontSize: 28,
+          letterSpacing: -0.5,
+          marginBottom: 20,
+        }}>
+        {headline}
+      </Text>
+      
       <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
         {[
-          { label: '进行中借阅', value: `${totalCount} 本` },
-          { label: '即将到期', value: `${dueSoonCount} 本` },
-          { label: '可续借', value: `${renewableCount} 本` },
+          { label: '进行中借阅', value: totalCount },
+          { label: '即将到期', value: dueSoonCount },
+          { label: '可续借', value: renewableCount },
         ].map((item, index) => {
           const palette = statPalettes[index % statPalettes.length];
 
@@ -56,16 +58,20 @@ export function BorrowingSummary({
               key={item.label}
               style={{
                 backgroundColor: palette.backgroundColor,
-                borderRadius: theme.radii.md,
+                borderRadius: 20,
                 flex: 1,
-                gap: 6,
-                padding: theme.spacing.md,
+                gap: 4,
+                paddingVertical: 18,
+                paddingHorizontal: 8,
+                alignItems: 'center',
+                justifyContent: 'center',
               }}>
               <Text
                 style={{
                   color: palette.color,
-                  ...theme.typography.bold,
-                  fontSize: 18,
+                  ...theme.typography.semiBold,
+                  fontSize: 32,
+                  lineHeight: 38,
                   fontVariant: ['tabular-nums'],
                 }}>
                 {item.value}
@@ -73,15 +79,15 @@ export function BorrowingSummary({
               <Text
                 style={{
                   color: theme.colors.textMuted,
-                  ...theme.typography.body,
+                  ...theme.typography.medium,
                   fontSize: 12,
                 }}>
                 {item.label}
               </Text>
             </View>
-        );
+          );
         })}
       </View>
-    </View>
+    </GlassSurface>
   );
 }

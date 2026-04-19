@@ -67,6 +67,10 @@ jest.mock('react-native-safe-area-context', () => ({
   }),
 }));
 
+jest.mock('heroui-native/provider', () => ({
+  HeroUINativeProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 jest.mock('@/providers/app-providers', () => ({
   AppProviders: ({ children }: { children: React.ReactNode }) => children,
 }));

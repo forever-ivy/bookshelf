@@ -528,7 +528,7 @@ describe('BookDetailRoute', () => {
         title: '机器学习从零到一',
       });
     });
-    expect(mockRouter.push).toHaveBeenCalledWith('/learning/901/guide');
+    expect(mockRouter.push).toHaveBeenCalledWith('/learning/901/explore');
   });
 
   it('shows the current book as in transit when there is an active robot delivery order', () => {

@@ -1,4 +1,4 @@
-import { Compass, History, Network, Sparkles } from 'lucide-react-native';
+import { Compass, History, Network } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -15,7 +15,6 @@ type IconComponent = React.ComponentType<Record<string, unknown>>;
 const CompassIcon = Compass as IconComponent;
 const HistoryIcon = History as IconComponent;
 const NetworkIcon = Network as IconComponent;
-const SparklesIcon = Sparkles as IconComponent;
 
 function OverviewActionCard({
   description,
@@ -214,36 +213,24 @@ export default function LearningWorkspaceOverviewRoute() {
         <View style={styles.summaryActions}>
           <PillButton
             fullWidth
-            label="继续 Guide"
-            onPress={() => navigateToStudyMode('guide')}
-            variant="accent"
-          />
-          <PillButton
-            fullWidth
-            label="切到 Explore"
+            label="继续 Explore"
             onPress={() => navigateToStudyMode('explore')}
-            variant="soft"
+            variant="accent"
           />
         </View>
       </View>
 
       <View style={styles.sectionBlock}>
         <SectionTitle
-          description="从概览页分流到不同的学习空间，不打断当前导学上下文。"
+          description="从概览页继续当前主题的深挖，或者切到图谱、复盘查看全局。"
           title="继续方式"
         />
         <View style={styles.actionGrid}>
           <OverviewActionCard
-            description={currentStep?.goal ?? '继续当前步骤的主线推进与反馈。'}
-            icon={<SparklesIcon color={theme.colors.primaryStrong} size={18} />}
-            onPress={() => navigateToStudyMode('guide')}
-            title="学习主线"
-          />
-          <OverviewActionCard
             description="从当前步骤发散提问，再把结论收编回主线。"
             icon={<CompassIcon color={theme.colors.primaryStrong} size={18} />}
             onPress={() => navigateToStudyMode('explore')}
-            title="发散探索"
+            title={currentStep ? `继续探索：${currentStep.title}` : '继续 Explore'}
           />
           <OverviewActionCard
             description={`查看 ${sourceCount} 份来源如何被组织成概念图谱。`}

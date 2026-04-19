@@ -24,11 +24,6 @@ export type LearningWorkspaceGate =
     }
   | {
       description: string;
-      kind: 'not_started';
-      title: string;
-    }
-  | {
-      description: string;
       kind: 'processing';
       title: string;
     }
@@ -47,9 +42,11 @@ export function resolveLearningWorkspaceStatusDescription(
   options: {
     attemptCount?: number | null;
     failureMessage?: string | null;
+    latestJobStatus?: string | null;
   } = {}
 ) {
   const attemptCount = options.attemptCount ?? 0;
+  const latestJobStatus = options.latestJobStatus ?? null;
 
   switch (status) {
     case 'ready':
@@ -59,9 +56,9 @@ export function resolveLearningWorkspaceStatusDescription(
     case 'processing':
       return '资料正在后台解析和整理，完成后会自动进入工作区。';
     case 'queued':
-      return attemptCount > 0
+      return attemptCount > 0 || latestJobStatus === 'processing'
         ? '资料正在后台解析和整理，完成后会自动进入工作区。'
-        : '导学任务已经创建，但后台任务还没有真正启动。你可以重新触发生成。';
+        : '导学任务已经创建，正在为这份资料启动解析与整理。';
     default:
       return '正在加载导学本资料与当前工作区。';
   }
@@ -95,19 +92,15 @@ function resolveLearningWorkspaceGate(
 
   if (profile.status === 'queued' || profile.status === 'processing') {
     const attemptCount = getLatestAttemptCount(profile);
-
-    if (attemptCount > 0) {
-      return {
-        description: resolveLearningWorkspaceStatusDescription(profile.status, { attemptCount }),
-        kind: 'processing',
-        title: '后台处理中',
-      };
-    }
+    const latestJobStatus = profile.latestJob?.status ?? null;
 
     return {
-      description: resolveLearningWorkspaceStatusDescription(profile.status, { attemptCount }),
-      kind: 'not_started',
-      title: '还未真正开始处理',
+      description: resolveLearningWorkspaceStatusDescription(profile.status, {
+        attemptCount,
+        latestJobStatus,
+      }),
+      kind: 'processing',
+      title: '后台处理中',
     };
   }
 
@@ -137,7 +130,9 @@ export function useLearningWorkspace(profileId: number) {
   const sessionsQuery = useLearningSessionsQuery();
   const startSessionMutation = useStartLearningSessionMutation();
   const generateProfileMutation = useGenerateLearningProfileMutation();
+  const autoTriggeredGenerationProfileRef = React.useRef<number | null>(null);
   const profile = profileQuery.data;
+  const startingExploreSessionRef = React.useRef(false);
   const activeSessions = React.useMemo(
     () =>
       (sessionsQuery.data ?? []).filter(
@@ -145,13 +140,20 @@ export function useLearningWorkspace(profileId: number) {
       ),
     [profileId, sessionsQuery.data]
   );
+  const standaloneExploreSessions = React.useMemo(
+    () =>
+      activeSessions.filter(
+        (item) => item.sessionKind === 'explore' && !item.sourceSessionId
+      ),
+    [activeSessions]
+  );
   const defaultSession = React.useMemo(
     () =>
-      [...activeSessions].sort(
+      [...standaloneExploreSessions].sort(
         (left, right) =>
           new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
       )[0] ?? null,
-    [activeSessions]
+    [standaloneExploreSessions]
   );
   const [workspaceSession, setWorkspaceSession] = React.useState<LearningSession | null>(
     defaultSession ?? null
@@ -198,14 +200,21 @@ export function useLearningWorkspace(profileId: number) {
   }, [activeSessions, defaultSession, profile?.status, profileId, workspaceSession]);
 
   React.useEffect(() => {
-    if (!profile || profile.status !== 'ready' || workspaceSession || startSessionMutation.isPending) {
+    if (
+      !profile ||
+      profile.status !== 'ready' ||
+      workspaceSession ||
+      startSessionMutation.isPending ||
+      startingExploreSessionRef.current
+    ) {
       return;
     }
 
     let isActive = true;
+    startingExploreSessionRef.current = true;
 
     startSessionMutation
-      .mutateAsync(profile.id)
+      .mutateAsync({ profileId: profile.id, sessionKind: 'explore' })
       .then((result) => {
         if (isActive) {
           setWorkspaceSession(result.session);
@@ -215,12 +224,39 @@ export function useLearningWorkspace(profileId: number) {
         if (isActive) {
           toast.error(getLibraryErrorMessage(error, '启动导学工作区失败，请稍后再试。'));
         }
+      })
+      .finally(() => {
+        if (isActive) {
+          startingExploreSessionRef.current = false;
+        }
       });
 
     return () => {
       isActive = false;
     };
   }, [profile, workspaceSession, startSessionMutation]);
+
+  React.useEffect(() => {
+    if (!profile || generateProfileMutation.isPending) {
+      return;
+    }
+
+    const latestJobStatus = profile.latestJob?.status ?? null;
+    const attemptCount = getLatestAttemptCount(profile);
+    const shouldAutoTrigger =
+      (profile.status === 'queued' || profile.status === 'processing') &&
+      latestJobStatus !== 'processing' &&
+      attemptCount === 0;
+
+    if (!shouldAutoTrigger || autoTriggeredGenerationProfileRef.current === profile.id) {
+      return;
+    }
+
+    autoTriggeredGenerationProfileRef.current = profile.id;
+    retryGenerate(profile.id).catch(() => {
+      autoTriggeredGenerationProfileRef.current = null;
+    });
+  }, [generateProfileMutation.isPending, profile, retryGenerate]);
 
   const retryGenerate = React.useCallback(
     async (nextProfileId = profileId) => {

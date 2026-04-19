@@ -32,7 +32,7 @@ function isLearningProfilePending(profile: LearningProfile) {
 }
 
 function hasStartedGeneration(profile: LearningProfile) {
-  return (profile.latestJob?.attemptCount ?? 0) > 0;
+  return (profile.latestJob?.attemptCount ?? 0) > 0 || profile.latestJob?.status === 'processing';
 }
 
 function resolveNotebookPalette(profile: LearningProfile): LearningNotebookPalette {
@@ -198,130 +198,112 @@ function LearningPosterCard({
         <View
           style={{
             backgroundColor: palette.cardBackground,
-            borderColor: theme.colors.borderStrong,
-            borderRadius: 30,
-            borderWidth: 1,
-            boxShadow: theme.shadows.card,
-            height: 362,
+            borderRadius: 32,
+            boxShadow: theme.shadows.card, // soft shadow, no hard borders
+            height: 380,
             overflow: 'hidden',
-            padding: theme.spacing.lg,
           }}
           testID="learning-notebook-poster-card">
-          <View style={{ alignItems: 'flex-start', flexDirection: 'row', justifyContent: 'space-between' }}>
-            <NotebookChip
-              backgroundColor={theme.colors.surfaceTint}
-              color={theme.colors.textSoft}
-              label={meta.sourceLabel}
-            />
-            <NotebookChip
-              backgroundColor={palette.statusBackground}
-              color={palette.infoColor}
-              label={meta.statusLabel}
-            />
-          </View>
-
+          
           <View
             style={{
               alignItems: 'center',
               backgroundColor: palette.coverBackground,
-              borderRadius: 26,
-              height: 142,
+              height: 190,
               justifyContent: 'center',
-              marginTop: 16,
-              overflow: 'hidden',
               position: 'relative',
+              width: '100%',
             }}>
+            {/* Top chips floating over the cover background */}
+            <View style={{ position: 'absolute', top: 16, left: 16, right: 16, flexDirection: 'row', justifyContent: 'space-between', zIndex: 10 }}>
+              <NotebookChip
+                backgroundColor={theme.colors.surface}
+                color={theme.colors.textSoft}
+                label={meta.sourceLabel}
+              />
+              <NotebookChip
+                backgroundColor={palette.statusBackground}
+                color={palette.infoColor}
+                label={meta.statusLabel}
+              />
+            </View>
+
+            {/* Glowing accents and cover */}
             <View
               style={{
                 backgroundColor: palette.coverAccent,
                 borderRadius: 30,
-                height: 96,
-                left: 20,
-                opacity: 0.8,
+                height: 110,
                 position: 'absolute',
-                right: 108,
-                top: 18,
-                transform: [{ rotate: '-8deg' }],
+                width: 140,
+                opacity: 0.6,
+                transform: [{ rotate: '-12deg' }],
               }}
             />
             <View
               style={{
                 backgroundColor: palette.coverGlow,
                 borderRadius: 999,
-                height: 132,
+                height: 160,
                 position: 'absolute',
-                width: 132,
+                width: 160,
               }}
             />
             <BookCover
               borderRadius={theme.radii.lg}
-              height={108}
+              height={120}
               seed={profile.title}
               shellTestID="learning-notebook-poster-cover"
               tone={palette.coverTone}
-              width={82}
+              width={90}
             />
           </View>
 
-          <View style={{ flex: 1, gap: 12, marginTop: 18 }}>
-            <Text
-              numberOfLines={2}
-              style={{
-                color: theme.colors.text,
-                ...theme.typography.heading,
-                fontSize: 22,
-                lineHeight: 28,
-              }}>
-              {profile.title}
-            </Text>
-            <Text
-              numberOfLines={3}
-              style={{
-                color: theme.colors.textMuted,
-                ...theme.typography.body,
-                fontSize: 14,
-                lineHeight: 21,
-              }}>
-              {meta.previewText}
-            </Text>
-          </View>
+          <View style={{ flex: 1, padding: 20, justifyContent: 'space-between' }}>
+            <View style={{ gap: 8 }}>
+              <Text
+                numberOfLines={2}
+                style={{
+                  color: theme.colors.text,
+                  ...theme.typography.bold,
+                  fontSize: 24,
+                  lineHeight: 30,
+                  letterSpacing: -0.3,
+                }}>
+                {profile.title}
+              </Text>
+              <Text
+                numberOfLines={2}
+                style={{
+                  color: theme.colors.textMuted,
+                  ...theme.typography.body,
+                  fontSize: 14,
+                  lineHeight: 20,
+                }}>
+                {meta.previewText}
+              </Text>
+            </View>
 
-          <View
-            style={{
-              backgroundColor: palette.infoBackground,
-              borderRadius: 22,
-              gap: 6,
-              marginTop: 16,
-              paddingHorizontal: 14,
-              paddingVertical: 14,
-            }}>
-            <Text
-              numberOfLines={1}
-              style={{
-                color: palette.infoColor,
-                ...theme.typography.semiBold,
-                fontSize: 14,
-              }}>
-              {meta.primaryMeta}
-            </Text>
-            <Text
-              numberOfLines={1}
-              style={{
-                color: palette.mutedColor,
-                ...theme.typography.medium,
-                fontSize: 12,
-              }}>
-              {meta.secondaryMeta}
-            </Text>
-            <Text
-              numberOfLines={1}
-              style={{
-                color: palette.mutedColor,
-                ...theme.typography.medium,
-                fontSize: 11,
-              }}>
-              {meta.tertiaryMeta}
-            </Text>
+            <View style={{ gap: 4 }}>
+              <Text
+                numberOfLines={1}
+                style={{
+                  color: palette.infoColor,
+                  ...theme.typography.semiBold,
+                  fontSize: 14,
+                }}>
+                {meta.primaryMeta}
+              </Text>
+              <Text
+                numberOfLines={1}
+                style={{
+                  color: palette.mutedColor,
+                  ...theme.typography.medium,
+                  fontSize: 12,
+                }}>
+                {meta.secondaryMeta} · {meta.tertiaryMeta}
+              </Text>
+            </View>
           </View>
         </View>
       </Pressable>
@@ -354,15 +336,12 @@ function LearningListCard({
         <View
           style={{
             backgroundColor: palette.cardBackground,
-            borderColor: theme.colors.borderStrong,
-            borderRadius: theme.radii.xl,
-            borderWidth: 1,
+            borderRadius: 32,
             boxShadow: theme.shadows.card,
             flexDirection: 'row',
-            gap: theme.spacing.lg,
-            minHeight: 164,
+            gap: 20,
             overflow: 'hidden',
-            padding: theme.spacing.lg,
+            padding: 16,
           }}
           testID="learning-notebook-list-card">
           <View
@@ -370,76 +349,70 @@ function LearningListCard({
               alignItems: 'center',
               backgroundColor: palette.coverBackground,
               borderRadius: 24,
-              height: 112,
+              height: 140,
               justifyContent: 'center',
               overflow: 'hidden',
-              width: 94,
+              width: 110,
             }}>
             <View
               style={{
                 backgroundColor: palette.coverGlow,
                 borderRadius: 999,
-                height: 78,
+                height: 90,
                 position: 'absolute',
-                width: 78,
+                width: 90,
               }}
             />
             <BookCover
               borderRadius={theme.radii.md}
-              height={88}
+              height={100}
               seed={profile.title}
               shellTestID="learning-notebook-list-cover"
               tone={palette.coverTone}
-              width={64}
+              width={74}
             />
           </View>
 
-          <View style={{ flex: 1, gap: 12 }}>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              <NotebookChip
-                backgroundColor={theme.colors.surfaceTint}
-                color={theme.colors.textSoft}
-                label={meta.sourceLabel}
-              />
-              <NotebookChip
-                backgroundColor={palette.statusBackground}
-                color={palette.infoColor}
-                label={meta.statusLabel}
-              />
-            </View>
-
+          <View style={{ flex: 1, justifyContent: 'space-between', paddingVertical: 4 }}>
             <View style={{ gap: 6 }}>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                <NotebookChip
+                  backgroundColor={theme.colors.surface}
+                  color={theme.colors.textSoft}
+                  label={meta.sourceLabel}
+                />
+                <NotebookChip
+                  backgroundColor={palette.statusBackground}
+                  color={palette.infoColor}
+                  label={meta.statusLabel}
+                />
+              </View>
+
               <Text
                 numberOfLines={2}
                 style={{
                   color: theme.colors.text,
-                  ...theme.typography.heading,
+                  ...theme.typography.bold,
                   fontSize: 20,
-                  lineHeight: 25,
+                  lineHeight: 26,
+                  letterSpacing: -0.3,
+                  marginTop: 2,
                 }}>
                 {profile.title}
               </Text>
               <Text
-                numberOfLines={2}
+                numberOfLines={1}
                 style={{
                   color: theme.colors.textMuted,
                   ...theme.typography.body,
-                  fontSize: 14,
-                  lineHeight: 20,
+                  fontSize: 13,
+                  lineHeight: 18,
                 }}>
                 {meta.previewText}
               </Text>
             </View>
 
-            <View
-              style={{
-                backgroundColor: palette.infoBackground,
-                borderRadius: 18,
-                gap: 4,
-                marginTop: 'auto',
-                paddingHorizontal: 12,
-                paddingVertical: 10,
-              }}>
+            <View style={{ gap: 2 }}>
               <Text
                 numberOfLines={1}
                 style={{
@@ -456,7 +429,7 @@ function LearningListCard({
                   ...theme.typography.medium,
                   fontSize: 12,
                 }}>
-                {meta.secondaryMeta}
+                {meta.secondaryMeta} · {meta.tertiaryMeta}
               </Text>
             </View>
           </View>

@@ -1,9 +1,10 @@
 import { Redirect, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import React from 'react';
-import { Keyboard, Platform, Pressable, Text, TextInput, View } from 'react-native';
+import { Keyboard, Platform, Pressable, Text, View } from 'react-native';
 import { toast } from 'sonner-native';
 
+import { AuthInput } from '@/components/auth/auth-input';
 import { PageShell } from '@/components/navigation/page-shell';
 import { useAppSession } from '@/hooks/use-app-session';
 import { useAppTheme } from '@/hooks/use-app-theme';
@@ -264,41 +265,23 @@ export default function LoginRoute() {
               paddingBottom: formPaddingBottom,
               width: '100%',
             }}>
-            <TextInput
+            <AuthInput
               autoCapitalize="none"
+              autoCorrect={false}
               placeholder="请输入用户名"
-              placeholderTextColor="rgba(31, 30, 27, 0.42)"
               onChangeText={setUsername}
+              testID="login-username-input"
               value={username}
-              style={{
-                backgroundColor: 'rgba(255, 255, 255, 0.48)',
-                borderColor: 'rgba(31, 30, 27, 0.10)',
-                borderRadius: 28,
-                borderWidth: 1,
-                color: theme.colors.text,
-                fontSize: 16,
-                minHeight: 58,
-                paddingHorizontal: 22,
-              }}
             />
 
-            <TextInput
+            <AuthInput
               autoCapitalize="none"
+              autoCorrect={false}
               onChangeText={setPassword}
               placeholder="请输入密码"
-              placeholderTextColor="rgba(31, 30, 27, 0.42)"
               secureTextEntry
+              testID="login-password-input"
               value={password}
-              style={{
-                backgroundColor: 'rgba(255, 255, 255, 0.48)',
-                borderColor: 'rgba(31, 30, 27, 0.10)',
-                borderRadius: 28,
-                borderWidth: 1,
-                color: theme.colors.text,
-                fontSize: 16,
-                minHeight: 58,
-                paddingHorizontal: 22,
-              }}
             />
 
             <Pressable

@@ -1,5 +1,6 @@
 import {
   createLearningProfile,
+  getLearningGraph,
   getLearningProfile,
   listLearningProfiles,
   listLearningSessionMessages,
@@ -390,7 +391,7 @@ describe('learning contract', () => {
     expect(session.welcomeMessage.content).toContain('建立整体框架');
   });
 
-  it('creates a learning profile for a book and immediately triggers generation', async () => {
+  it('creates a learning profile for a book without waiting for generation', async () => {
     (global.fetch as jest.Mock)
       .mockResolvedValueOnce({
         json: async () => ({
@@ -426,23 +427,6 @@ describe('learning contract', () => {
           },
         }),
         ok: true,
-      })
-      .mockResolvedValueOnce({
-        json: async () => ({
-          jobs: [
-            {
-              attemptCount: 1,
-              id: 1,
-              jobType: 'parse',
-              profileId: 102,
-              status: 'queued',
-              updatedAt: '2026-04-08T08:01:00Z',
-            },
-          ],
-          ok: true,
-          triggered: true,
-        }),
-        ok: true,
       });
 
     const profile = await createLearningProfile(
@@ -462,7 +446,7 @@ describe('learning contract', () => {
       status: 'queued',
       title: '机器学习从零到一',
     });
-    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
     expect((global.fetch as jest.Mock).mock.calls[0]?.[0]).toBe(
       'https://library.example/api/v2/learning/profiles'
     );
@@ -472,12 +456,9 @@ describe('learning contract', () => {
       sources: [{ bookId: 1, kind: 'book' }],
       title: '机器学习从零到一',
     });
-    expect((global.fetch as jest.Mock).mock.calls[1]?.[0]).toBe(
-      'https://library.example/api/v2/learning/profiles/102/generate'
-    );
   });
 
-  it('uploads a file, creates a learning profile from the upload, and triggers generation', async () => {
+  it('uploads a file and creates a learning profile from the upload without waiting for generation', async () => {
     (global.fetch as jest.Mock)
       .mockResolvedValueOnce({
         json: async () => ({
@@ -521,22 +502,6 @@ describe('learning contract', () => {
           },
         }),
         ok: true,
-      })
-      .mockResolvedValueOnce({
-        json: async () => ({
-          jobs: [
-            {
-              attemptCount: 1,
-              id: 1,
-              jobType: 'parse',
-              profileId: 202,
-              status: 'queued',
-            },
-          ],
-          ok: true,
-          triggered: true,
-        }),
-        ok: true,
       });
 
     const formData = new FormData();
@@ -552,7 +517,7 @@ describe('learning contract', () => {
       status: 'queued',
       title: '操作系统实验讲义',
     });
-    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
     expect((global.fetch as jest.Mock).mock.calls[0]?.[0]).toBe(
       'https://library.example/api/v2/learning/uploads'
     );
@@ -565,9 +530,6 @@ describe('learning contract', () => {
       sources: [{ kind: 'upload', uploadId: 88 }],
       title: '操作系统实验讲义',
     });
-    expect((global.fetch as jest.Mock).mock.calls[2]?.[0]).toBe(
-      'https://library.example/api/v2/learning/profiles/202/generate'
-    );
   });
 
   it('retries generation for an existing learning profile', async () => {
@@ -601,7 +563,7 @@ describe('learning contract', () => {
       triggered: true,
     });
     expect(global.fetch).toHaveBeenCalledWith(
-      'https://library.example/api/v2/learning/profiles/202/generate',
+      'https://library.example/api/v2/learning/profiles/202/generate?background=1',
       expect.objectContaining({
         method: 'POST',
       })
@@ -744,5 +706,133 @@ describe('learning contract', () => {
     }
 
     expect(events.map((event) => event.type)).toEqual(['status', 'assistant.final']);
+  });
+
+  it('parses explore reasoning stream events and keeps reasoning content on the final presentation', async () => {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            [
+              'data: {"event":"status","data":{"phase":"retrieving","sessionId":901}}',
+              '',
+              'data: {"event":"explore.answer.delta","data":{"delta":"进程是资源分配单位，线程是调度执行单位。"}}',
+              '',
+              'data: {"event":"explore.reasoning.delta","data":{"delta":"先识别问题在比较两个概念，再抓定义维度和调度维度。"}}',
+              '',
+              'data: {"event":"assistant.final","data":{"turn":{"id":990,"sessionId":901,"assistantContent":"进程是资源分配单位，线程是调度执行单位。","presentation":{"kind":"explore","answer":{"content":"进程是资源分配单位，线程是调度执行单位。"},"reasoningContent":"先识别问题在比较两个概念，再抓定义维度和调度维度。","evidence":[],"relatedConcepts":["并发模型"],"followups":["继续追问调度差异"],"bridgeActions":[]},"createdAt":"2026-04-08T09:02:00Z"}}}',
+              '',
+            ].join('\n')
+          )
+        );
+        controller.close();
+      },
+    });
+
+    (global.fetch as jest.Mock).mockResolvedValue({
+      body: stream,
+      headers: { get: () => 'text/event-stream' },
+      ok: true,
+      status: 200,
+    });
+
+    const events = [];
+    for await (const event of streamLearningSessionReply(
+      901,
+      { content: '进程和线程有什么区别？' },
+      'reader-token'
+    )) {
+      events.push(event);
+    }
+
+    expect(events.map((event) => event.type)).toEqual([
+      'status',
+      'explore.answer.delta',
+      'explore.reasoning.delta',
+      'assistant.final',
+    ]);
+    expect(events[2]).toMatchObject({
+      delta: '先识别问题在比较两个概念，再抓定义维度和调度维度。',
+      type: 'explore.reasoning.delta',
+    });
+    expect(events[3]).toMatchObject({
+      message: {
+        learningSessionId: 901,
+        presentation: expect.objectContaining({
+          kind: 'explore',
+          reasoningContent: '先识别问题在比较两个概念，再抓定义维度和调度维度。',
+        }),
+      },
+      type: 'assistant.final',
+    });
+  });
+
+  it('normalizes graph payloads from the v2 learning endpoint', async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      json: async () => ({
+        graph: {
+          edges: [
+            {
+              source: 'step:0',
+              target: 'concept:limits',
+              type: 'TESTS',
+            },
+          ],
+          nodes: [
+            {
+              id: 'step:0',
+              keywords: ['limits'],
+              label: '建立整体认知',
+              type: 'LessonStep',
+            },
+            {
+              id: 'concept:limits',
+              label: '极限',
+              type: 'Concept',
+            },
+          ],
+          provider: 'fallback',
+        },
+        ok: true,
+      }),
+      ok: true,
+    });
+
+    const graph = await getLearningGraph(101, 'reader-token');
+
+    expect(graph).toMatchObject({
+      edges: [
+        {
+          source: 'step:0',
+          target: 'concept:limits',
+          type: 'TESTS',
+        },
+      ],
+      nodes: [
+        {
+          id: 'step:0',
+          keywords: ['limits'],
+          label: '建立整体认知',
+          type: 'LessonStep',
+        },
+        {
+          id: 'concept:limits',
+          label: '极限',
+          type: 'Concept',
+        },
+      ],
+      provider: 'fallback',
+    });
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://library.example/api/v2/learning/profiles/101/graph',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Accept: 'application/json',
+          Authorization: 'Bearer reader-token',
+        }),
+        method: 'GET',
+      })
+    );
   });
 });

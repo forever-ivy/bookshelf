@@ -7,6 +7,7 @@ import { toast } from 'sonner-native';
 import { EditorialIllustration } from '@/components/base/editorial-illustration';
 import { PillButton } from '@/components/base/pill-button';
 import { SectionTitle } from '@/components/base/section-title';
+import { GlassSurface } from '@/components/base/glass-surface';
 import { LearningCreateSheet } from '@/components/learning/learning-create-sheet';
 import { LearningNotebookCard } from '@/components/learning/learning-notebook-card';
 import { PageShell } from '@/components/navigation/page-shell';
@@ -28,11 +29,9 @@ const notebookFilters = ['全部', '最近继续', '馆藏书', '上传资料'] 
 
 function LibrarySummaryStat({
   label,
-  tone = 'neutral',
   value,
 }: {
   label: string;
-  tone?: 'neutral' | 'warning';
   value: number;
 }) {
   const { theme } = useAppTheme();
@@ -40,30 +39,31 @@ function LibrarySummaryStat({
   return (
     <View
       style={{
-        backgroundColor: tone === 'warning' ? theme.colors.warningSoft : theme.colors.surface,
-        borderColor: theme.colors.borderSoft,
-        borderRadius: 18,
-        borderWidth: 1,
+        backgroundColor: theme.colors.surfaceMuted,
+        borderRadius: 20,
         flex: 1,
-        gap: 6,
-        minHeight: 84,
-        padding: 14,
+        gap: 4,
+        paddingVertical: 18,
+        paddingHorizontal: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
       }}>
       <Text
         style={{
-          color: theme.colors.textSoft,
+          color: theme.colors.text,
           ...theme.typography.semiBold,
-          fontSize: 12,
+          fontSize: 36,
+          lineHeight: 40,
         }}>
-        {label}
+        {value}
       </Text>
       <Text
         style={{
-          color: theme.colors.text,
-          ...theme.typography.bold,
-          fontSize: 24,
+          color: theme.colors.textMuted,
+          ...theme.typography.medium,
+          fontSize: 13,
         }}>
-        {value}
+        {label}
       </Text>
     </View>
   );
@@ -153,7 +153,7 @@ export default function LearningIndexRoute() {
     try {
       const profile = await createPromise;
       setIsCreateSheetOpen(false);
-      router.push(`/learning/${profile.id}/guide`);
+      router.push(`/learning/${profile.id}/explore`);
     } catch (error) {
       toast.error(getLibraryErrorMessage(error, '创建导学本失败，请稍后再试。'));
     }
@@ -253,102 +253,48 @@ export default function LearningIndexRoute() {
           />
         </Animated.View>
 
-        <View
+        <GlassSurface
+          intensity={typeof Platform !== 'undefined' && Platform.OS === 'ios' ? 40 : 100}
           style={{
-            backgroundColor: theme.colors.surfaceKnowledge,
-            borderColor: theme.colors.borderSoft,
-            borderRadius: theme.radii.xl,
-            borderWidth: 1,
-            gap: theme.spacing.lg,
+            borderRadius: 28,
+            overflow: 'hidden',
             padding: theme.spacing.xl,
+            gap: 32, /* Increased gap back to a larger value */
+            borderWidth: 1,
+            borderColor: theme.colors.borderSoft,
           }}>
           <Text
             style={{
-              color: theme.colors.primaryStrong,
-              ...theme.typography.medium,
-              fontSize: 11,
-              letterSpacing: 0.3,
-              textTransform: 'uppercase',
-            }}>
-            导学本库
-          </Text>
-          <Text
-            style={{
               color: theme.colors.text,
-              ...theme.typography.heading,
+              ...theme.typography.bold,
               fontSize: 28,
-              lineHeight: 34,
+              letterSpacing: -0.5,
+              marginBottom: 24, // increased margin to separate from the stats
             }}>
             定制你的导师
           </Text>
-          <Text
-            style={{
-              color: theme.colors.textMuted,
-              ...theme.typography.body,
-              fontSize: 14,
-              lineHeight: 22,
-            }}>
-            首页优先展示导学本本身和学习状态，让你更快找到值得继续的那一本。
-          </Text>
 
-          <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
-            <LibrarySummaryStat label="已就绪" value={readyCount} />
-            <LibrarySummaryStat label="处理中" value={processingCount} />
-            <LibrarySummaryStat label="需关注" tone="warning" value={failedCount} />
+          <View style={{ gap: theme.spacing.md }}>
+            <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
+              <LibrarySummaryStat label="已就绪" value={readyCount} />
+              <LibrarySummaryStat label="处理中" value={processingCount} />
+            </View>
+
+            <PillButton
+              fullWidth
+              icon="plus"
+              label="新建导学本"
+              onPress={() => setIsCreateSheetOpen(true)}
+              size="hero"
+              variant="accent"
+              style={{ paddingVertical: 14, borderRadius: 20 }}
+            />
           </View>
-
-          <PillButton
-            fullWidth
-            icon="plus"
-            label="新建导学本"
-            onPress={() => setIsCreateSheetOpen(true)}
-            size="hero"
-            variant="soft"
-          />
-        </View>
-
-        <ScrollView
-          horizontal
-          contentContainerStyle={{ gap: theme.spacing.sm }}
-          showsHorizontalScrollIndicator={false}>
-          {notebookFilters.map((filter) => {
-            const isActive = activeFilter === filter;
-
-            return (
-              <Pressable
-                key={filter}
-                accessibilityRole="button"
-                onPress={() => setActiveFilter(filter)}
-                style={({ pressed }) => ({
-                  opacity: pressed ? 0.78 : 1,
-                })}>
-                <View
-                  style={{
-                    backgroundColor: isActive ? theme.colors.primarySoft : theme.colors.surface,
-                    borderColor: isActive ? theme.colors.primaryStrong : theme.colors.borderStrong,
-                    borderRadius: theme.radii.pill,
-                    borderWidth: 1,
-                    paddingHorizontal: 14,
-                    paddingVertical: 9,
-                  }}>
-                  <Text
-                    style={{
-                      color: isActive ? theme.colors.primaryStrong : theme.colors.textMuted,
-                      ...theme.typography.medium,
-                      fontSize: 13,
-                    }}>
-                    {filter}
-                  </Text>
-                </View>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        </GlassSurface>
 
         {featuredProfiles.length > 0 ? (
           <View style={{ gap: theme.spacing.lg }}>
             <SectionTitle
-              description="优先把可继续推进的导学本放在前面，像浏览精选学习工作区。"
               title="精选导学本"
             />
 
@@ -359,7 +305,7 @@ export default function LearningIndexRoute() {
               {featuredProfiles.map((profile) => (
                 <View key={`featured-${profile.id}`} style={{ width: 284 }}>
                   <LearningNotebookCard
-                    href={`/learning/${profile.id}/guide`}
+                    href={`/learning/${profile.id}/explore`}
                     profile={profile}
                     session={sessionByProfileId.get(profile.id) ?? null}
                     variant="poster"
@@ -372,7 +318,6 @@ export default function LearningIndexRoute() {
 
         <View style={{ gap: theme.spacing.lg }}>
           <SectionTitle
-            description="最近打开的导学本会保留在这里，方便你直接回到对应工作区。"
             title="最近打开"
           />
 
@@ -381,7 +326,7 @@ export default function LearningIndexRoute() {
               {filteredProfiles.map((profile) => (
                 <LearningNotebookCard
                   key={`recent-${profile.id}`}
-                  href={`/learning/${profile.id}/guide`}
+                  href={`/learning/${profile.id}/explore`}
                   profile={profile}
                   session={sessionByProfileId.get(profile.id) ?? null}
                   variant="list"

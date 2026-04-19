@@ -595,7 +595,21 @@ export function useStartLearningSessionMutation() {
   const { token } = useAppSession();
 
   return useMutation({
-    mutationFn: (profileId: number) => startLearningSession(profileId, token),
+    mutationFn: (
+      input:
+        | number
+        | {
+            learningMode?: string;
+            profileId: number;
+            sessionKind?: 'guide' | 'explore';
+          }
+    ) =>
+      typeof input === 'number'
+        ? startLearningSession(input, token)
+        : startLearningSession(input.profileId, token, {
+            learningMode: input.learningMode,
+            sessionKind: input.sessionKind,
+          }),
     onSuccess: (payload) => {
       queryClient.invalidateQueries({ queryKey: ['learning'] });
       queryClient.setQueryData(['learning', 'sessions', 'detail', payload.session.id, token], payload.session);

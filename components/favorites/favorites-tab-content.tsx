@@ -131,9 +131,8 @@ export function FavoritesTabContent() {
         <View
           style={{
             backgroundColor: theme.colors.surface,
-            borderColor: theme.colors.borderStrong,
-            borderRadius: theme.radii.xl,
-            borderWidth: 1,
+            borderRadius: 28,
+            boxShadow: theme.shadows.card,
             overflow: 'hidden',
           }}
           testID="favorites-booklists-panel">

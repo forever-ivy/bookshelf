@@ -1,8 +1,9 @@
 import { Redirect, useRouter } from 'expo-router';
 import React from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { toast } from 'sonner-native';
 
+import { AuthInput } from '@/components/auth/auth-input';
 import { EditorialIllustration } from '@/components/base/editorial-illustration';
 import { PageShell } from '@/components/navigation/page-shell';
 import { useAppSession } from '@/hooks/use-app-session';
@@ -98,58 +99,30 @@ export default function RegisterRoute() {
             先创建一个读者账号，后续再补全学院、专业、年级和兴趣标签。
           </Text>
 
-          <TextInput
+          <AuthInput
             autoCapitalize="none"
+            autoCorrect={false}
             onChangeText={setUsername}
             placeholder="请输入用户名"
-            placeholderTextColor="rgba(31, 30, 27, 0.42)"
-            style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.48)',
-              borderColor: 'rgba(31, 30, 27, 0.10)',
-              borderRadius: 28,
-              borderWidth: 1,
-              color: theme.colors.text,
-              fontSize: 16,
-              minHeight: 58,
-              paddingHorizontal: 22,
-            }}
+            testID="register-username-input"
             value={username}
           />
 
-          <TextInput
+          <AuthInput
             autoCapitalize="words"
             onChangeText={setDisplayName}
             placeholder="请输入显示名称"
-            placeholderTextColor="rgba(31, 30, 27, 0.42)"
-            style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.48)',
-              borderColor: 'rgba(31, 30, 27, 0.10)',
-              borderRadius: 28,
-              borderWidth: 1,
-              color: theme.colors.text,
-              fontSize: 16,
-              minHeight: 58,
-              paddingHorizontal: 22,
-            }}
+            testID="register-display-name-input"
             value={displayName}
           />
 
-          <TextInput
+          <AuthInput
             autoCapitalize="none"
+            autoCorrect={false}
             onChangeText={setPassword}
             placeholder="请输入密码"
-            placeholderTextColor="rgba(31, 30, 27, 0.42)"
             secureTextEntry
-            style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.48)',
-              borderColor: 'rgba(31, 30, 27, 0.10)',
-              borderRadius: 28,
-              borderWidth: 1,
-              color: theme.colors.text,
-              fontSize: 16,
-              minHeight: 58,
-              paddingHorizontal: 22,
-            }}
+            testID="register-password-input"
             value={password}
           />
 

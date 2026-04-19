@@ -17,9 +17,8 @@ export function CollectionPreview({
           key={item.title}
           style={{
             backgroundColor: theme.colors.surface,
-            borderColor: theme.colors.borderSoft,
-            borderRadius: theme.radii.lg,
-            borderWidth: 1,
+            borderRadius: 28,
+            boxShadow: theme.shadows.card,
             flexGrow: 1,
             gap: 8,
             minWidth: 140,

@@ -61,12 +61,12 @@ function ReminderSkeleton() {
 
   return (
     <View style={{ gap: theme.spacing.md }} testID="me-reminders-skeleton">
-      <LoadingSkeletonCard style={{ backgroundColor: theme.colors.warningSoft, gap: theme.spacing.sm }}>
+      <LoadingSkeletonCard style={{ backgroundColor: theme.colors.warningSoft, borderRadius: 28, gap: theme.spacing.sm }}>
         <LoadingSkeletonBlock height={12} width="24%" />
         <LoadingSkeletonBlock height={18} width="42%" />
         <LoadingSkeletonBlock height={12} width="72%" />
       </LoadingSkeletonCard>
-      <LoadingSkeletonCard style={{ backgroundColor: theme.colors.surface, gap: theme.spacing.md }}>
+      <LoadingSkeletonCard style={{ backgroundColor: theme.colors.surface, borderRadius: 28, boxShadow: theme.shadows.card, gap: theme.spacing.md }}>
         <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
           <View style={{ flex: 1, gap: theme.spacing.xs }}>
             <LoadingSkeletonBlock height={10} width="34%" />
@@ -86,10 +86,10 @@ function ProfileSummarySkeleton() {
   const { theme } = useAppTheme();
 
   return (
-    <LoadingSkeletonCard testID="me-profile-summary-skeleton">
+    <LoadingSkeletonCard style={{ borderRadius: 28, boxShadow: theme.shadows.card }} testID="me-profile-summary-skeleton">
       <View style={{ gap: theme.spacing.lg }}>
         <View style={{ flexDirection: 'row', gap: theme.spacing.lg }}>
-          <LoadingSkeletonBlock borderRadius={theme.radii.lg} height={60} width={60} />
+          <LoadingSkeletonBlock borderRadius={20} height={60} width={60} />
           <View style={{ flex: 1, gap: 8, justifyContent: 'center' }}>
             <LoadingSkeletonBlock height={24} width="38%" />
             <LoadingSkeletonBlock height={14} width="26%" />
@@ -100,7 +100,7 @@ function ProfileSummarySkeleton() {
           {Array.from({ length: 3 }, (_, index) => (
             <LoadingSkeletonCard
               key={`me-highlight-skeleton-${index}`}
-              style={{ backgroundColor: theme.colors.backgroundStrong, flex: 1, padding: theme.spacing.md }}>
+              style={{ backgroundColor: theme.colors.backgroundStrong, borderRadius: 16, flex: 1, padding: theme.spacing.md }}>
               <LoadingSkeletonBlock height={10} width="56%" />
               <LoadingSkeletonBlock height={14} width="68%" />
             </LoadingSkeletonCard>
@@ -116,10 +116,10 @@ function ProfileSummarySkeleton() {
           </View>
         </View>
         <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
-          <LoadingSkeletonCard style={{ backgroundColor: theme.colors.warningSoft, flex: 1, padding: theme.spacing.md }}>
+          <LoadingSkeletonCard style={{ backgroundColor: theme.colors.warningSoft, borderRadius: 16, flex: 1, padding: theme.spacing.md }}>
             <LoadingSkeletonBlock height={14} width="82%" />
           </LoadingSkeletonCard>
-          <LoadingSkeletonCard style={{ backgroundColor: theme.colors.backgroundStrong, flex: 1, padding: theme.spacing.md }}>
+          <LoadingSkeletonCard style={{ backgroundColor: theme.colors.backgroundStrong, borderRadius: 16, flex: 1, padding: theme.spacing.md }}>
             <LoadingSkeletonBlock height={14} width="78%" />
           </LoadingSkeletonCard>
         </View>
@@ -139,6 +139,8 @@ function CollectionPreviewSkeleton() {
           key={`me-collection-skeleton-${index}`}
           style={{
             backgroundColor: theme.colors.surface,
+            borderRadius: 28,
+            boxShadow: theme.shadows.card,
             flexGrow: 1,
             gap: 8,
             minWidth: 140,
@@ -208,7 +210,7 @@ export function MeScreenContent({
     : '今天很轻松';
 
   return (
-    <>
+    <View style={{ gap: 32, paddingBottom: 32 }}>
       {meError ? (
         <StateMessageCard
           description={getLibraryErrorMessage(meError, '个人中心数据暂时同步失败，请确认接口可访问。')}
@@ -217,173 +219,19 @@ export function MeScreenContent({
         />
       ) : null}
 
-      <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle title="今日提醒" />
-        {showOverviewSkeleton ? (
-          <ReminderSkeleton />
-        ) : (
-          <View style={{ gap: theme.spacing.md }}>
-            <View
-              style={{
-                backgroundColor: theme.colors.warningSoft,
-                borderColor: theme.colors.borderStrong,
-                borderRadius: theme.radii.lg,
-                borderWidth: 1,
-                gap: theme.spacing.sm,
-                padding: theme.spacing.lg,
-              }}>
-              <Text
-                style={{
-                  color: theme.colors.text,
-                  ...theme.typography.semiBold,
-                  fontSize: 20,
-                  lineHeight: 26,
-                }}>
-                {primaryReminderTitle}
-              </Text>
-              <Text
-                style={{
-                  color: theme.colors.textMuted,
-                  ...theme.typography.body,
-                  fontSize: 14,
-                  lineHeight: 20,
-                }}>
-                {primaryReminderDescription}
-              </Text>
-            </View>
-
-            <View
-              style={{
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.borderSoft,
-                borderRadius: theme.radii.lg,
-                borderWidth: 1,
-                flexDirection: 'row',
-                gap: theme.spacing.md,
-                padding: theme.spacing.lg,
-              }}>
-              <View style={{ flex: 1, gap: 4 }}>
-                <Text
-                  style={{
-                    color: theme.colors.textSoft,
-                    ...theme.typography.medium,
-                    fontSize: 12,
-                  }}>
-                  活跃
-                </Text>
-                <Text
-                  style={{
-                    color: theme.colors.text,
-                    ...theme.typography.semiBold,
-                    fontSize: 16,
-                  }}>
-                  {formattedLastActive}
-                </Text>
-              </View>
-              <View style={{ flex: 1, gap: 4 }}>
-                <Text
-                  style={{
-                  color: theme.colors.textSoft,
-                  ...theme.typography.medium,
-                  fontSize: 12,
-                }}>
-                  找书
-                </Text>
-                <Text
-                  style={{
-                    color: theme.colors.text,
-                    ...theme.typography.semiBold,
-                    fontSize: 16,
-                  }}>
-                  {stats?.searchCount ?? 0} 次
-                </Text>
-              </View>
-            </View>
-          </View>
-        )}
-      </View>
-
       {showOverviewSkeleton ? (
         <ProfileSummarySkeleton />
       ) : (
-        <ProfileSummaryCard highlights={profileHighlights} onProfilePress={onProfilePress} profile={currentProfile} />
+        <View style={{ marginTop: 8 }}>
+          <ProfileSummaryCard highlights={profileHighlights} onProfilePress={onProfilePress} profile={currentProfile} />
+        </View>
       )}
 
-      <View style={{ gap: theme.spacing.lg }}>
+      <View style={{ gap: theme.spacing.xl }}>
         <SectionTitle title="数据概览" />
         {showOverviewSkeleton || Boolean(achievementsQuery.isFetching && !achievements)
           ? <CollectionPreviewSkeleton />
           : <CollectionPreview items={dataOverviewItems} />}
-      </View>
-
-      <View style={{ gap: theme.spacing.lg }}>
-        <SectionTitle title="最近使用记录" />
-        {showOverviewSkeleton ? (
-          <LoadingSkeletonCard testID="me-history-skeleton">
-            <LoadingSkeletonBlock height={15} width={72} />
-            <LoadingSkeletonBlock height={12} width="58%" />
-            <LoadingSkeletonBlock height={12} width="46%" />
-            <LoadingSkeletonBlock height={15} width={72} />
-            <LoadingSkeletonBlock height={12} width="62%" />
-            <LoadingSkeletonBlock height={12} width="54%" />
-          </LoadingSkeletonCard>
-        ) : (
-          <View
-            style={{
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.borderStrong,
-              borderRadius: theme.radii.lg,
-              borderWidth: 1,
-              gap: theme.spacing.md,
-              padding: theme.spacing.lg,
-            }}>
-            <View style={{ gap: theme.spacing.sm }}>
-              <Text style={{ color: theme.colors.text, ...theme.typography.semiBold, fontSize: 15 }}>最近搜索</Text>
-              {recentQueries.length ? (
-                recentQueries.map((item) => (
-                  <Text
-                    key={item}
-                    style={{
-                    color: theme.colors.textMuted,
-                    ...theme.typography.body,
-                    fontSize: 13,
-                    lineHeight: 18,
-                  }}>
-                    {compactReadingSummary(item)}
-                  </Text>
-                ))
-              ) : (
-                <Text style={{ color: theme.colors.textMuted, ...theme.typography.body, fontSize: 13 }}>
-                  还没有搜索记录
-                </Text>
-              )}
-            </View>
-
-            <View style={{ backgroundColor: theme.colors.borderSoft, height: 1 }} />
-
-            <View style={{ gap: theme.spacing.sm }}>
-              <Text style={{ color: theme.colors.text, ...theme.typography.semiBold, fontSize: 15 }}>最近借阅</Text>
-              {recentBorrowedBooks.length ? (
-                recentBorrowedBooks.map((item) => (
-                  <Text
-                    key={item}
-                    style={{
-                      color: theme.colors.textMuted,
-                      ...theme.typography.body,
-                      fontSize: 13,
-                      lineHeight: 18,
-                    }}>
-                    {item}
-                  </Text>
-                ))
-              ) : (
-                <Text style={{ color: theme.colors.textMuted, ...theme.typography.body, fontSize: 13 }}>
-                  最近借阅会同步到这里
-                </Text>
-              )}
-            </View>
-          </View>
-        )}
       </View>
 
       <Pressable
@@ -398,24 +246,22 @@ export function MeScreenContent({
         })}>
         <View
           style={{
-            backgroundColor: theme.colors.warningSoft,
-            borderColor: theme.colors.borderStrong,
-            borderRadius: theme.radii.lg,
-            borderWidth: 1,
+            backgroundColor: theme.colors.backgroundStrong,
+            borderRadius: theme.radii.pill,
             paddingHorizontal: theme.spacing.lg,
-            paddingVertical: 14,
+            paddingVertical: 16,
           }}>
           <Text
             style={{
-              color: theme.colors.warning,
+              color: theme.colors.textSoft,
               ...theme.typography.semiBold,
-              fontSize: 15,
+              fontSize: 16,
               textAlign: 'center',
             }}>
             退出登录
           </Text>
         </View>
       </Pressable>
-    </>
+    </View>
   );
 }

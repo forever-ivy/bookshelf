@@ -217,11 +217,11 @@ function BookDetailSurface({
     <View
       style={{
         backgroundColor: muted ? theme.colors.surfaceMuted : theme.colors.surface,
-        borderColor: theme.colors.borderStrong,
-        borderRadius: theme.radii.xl,
-        borderWidth: 1,
+        borderRadius: 28,
+        boxShadow: muted ? undefined : theme.shadows.card,
         gap: theme.spacing.lg,
         padding: theme.spacing.xl,
+        overflow: 'hidden',
       }}
       testID={testID}>
       {children}
@@ -576,7 +576,7 @@ export default function BookDetailRoute() {
         sourceType: 'book',
         title: book.title,
       });
-      router.push(`/learning/${profile.id}/guide`);
+      router.push(`/learning/${profile.id}/explore`);
     } catch (error) {
       toast.error(getLibraryErrorMessage(error, '创建学习导师失败，请稍后再试。'));
     }
@@ -819,21 +819,7 @@ export default function BookDetailRoute() {
                       variant="soft"
                     />
                   </View>
-                  <View style={{ width: '100%' }} testID="book-detail-decision-tertiary-row">
-                    <PillButton
-                      fullWidth
-                      href={undefined}
-                      icon="spark"
-                      label={createLearningProfileMutation.isPending ? '创建中…' : '创建学习导师'}
-                      onPress={() => {
-                        void handleCreateLearning();
-                      }}
-                      size="hero"
-                      surfaceTestID="book-detail-decision-learning-surface"
-                      testID="book-detail-create-learning"
-                      variant="accent"
-                    />
-                  </View>
+
                 </View>
               </BookDetailSurface>
             </View>

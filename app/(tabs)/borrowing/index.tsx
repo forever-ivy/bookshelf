@@ -63,6 +63,9 @@ export default function BorrowingRoute() {
   const previousNotificationSignatures = React.useRef<Set<string>>(new Set());
   const hasHydratedNotifications = React.useRef(false);
   const notificationDismissProgress = React.useRef<Record<string, Animated.Value>>({});
+  const tabPositionValue = React.useRef(new Animated.Value(0)).current;
+  const contentFadeValue = React.useRef(new Animated.Value(1)).current;
+  const [containerWidth, setContainerWidth] = React.useState(0);
 
   const borrowingError = borrowing.borrowingError;
   const notifications = notificationsQuery.data ?? [];
@@ -170,6 +173,43 @@ export default function BorrowingRoute() {
     [dismissNotificationMutation, getNotificationProgress]
   );
 
+  const switchTab = React.useCallback(
+    (key: BorrowingTabKey) => {
+      if (key === activeTab) {
+        return;
+      }
+
+      const index = borrowingTabs.findIndex((t) => t.key === key);
+
+      // 1. Fade out current content
+      Animated.timing(contentFadeValue, {
+        duration: 100,
+        toValue: 0,
+        useNativeDriver: true,
+      }).start(() => {
+        // 2. Change tab and slide background
+        setActiveTab(key);
+
+        Animated.parallel([
+          Animated.spring(tabPositionValue, {
+            damping: 24,
+            mass: 1,
+            stiffness: 280,
+            toValue: index,
+            useNativeDriver: false, // translateX can use native, but left/width might be needed depending on layout
+          }),
+          Animated.timing(contentFadeValue, {
+            delay: 50,
+            duration: 200,
+            toValue: 1,
+            useNativeDriver: true,
+          }),
+        ]).start();
+      });
+    },
+    [activeTab, contentFadeValue, tabPositionValue]
+  );
+
   React.useEffect(() => {
     if (!notificationsQuery.data?.length) {
       return;
@@ -274,58 +314,82 @@ export default function BorrowingRoute() {
         ) : null}
 
         <View style={{ gap: theme.spacing.md }}>
-          <View
-            style={{
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.borderStrong,
-              borderRadius: theme.radii.lg,
-              borderWidth: 1,
-              flexDirection: 'row',
-              gap: theme.spacing.sm,
-              padding: 6,
-            }}>
-            {borrowingTabs.map((tab) => {
-              const active = activeTab === tab.key;
-              return (
-                <Pressable
-                  key={tab.key}
-                  accessibilityRole="button"
-                  onPress={() => setActiveTab(tab.key)}
-                  style={({ pressed }) => ({
-                    flex: 1,
-                    opacity: pressed ? 0.92 : 1,
-                  })}
-                  testID={tab.key === 'activity' ? 'borrowing-tab-dynamic' : `borrowing-tab-${tab.key}`}>
-                  <View
-                    style={{
-                      backgroundColor: active ? theme.colors.primarySoft : 'transparent',
-                      borderColor: active ? theme.colors.primaryStrong : 'transparent',
-                      borderRadius: theme.radii.md,
-                      borderWidth: active ? 1 : 0,
-                      paddingHorizontal: theme.spacing.md,
-                      paddingVertical: 10,
-                    }}>
-                    <Text
+            <View
+              onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
+              style={{
+                backgroundColor: theme.colors.surface,
+                borderRadius: 24,
+                boxShadow: theme.shadows.card,
+                flexDirection: 'row',
+                padding: 6,
+                position: 'relative',
+              }}>
+              <Animated.View
+                style={{
+                  backgroundColor: theme.colors.primarySoft,
+                  borderRadius: 18,
+                  bottom: 6,
+                  left: 6,
+                  position: 'absolute',
+                  top: 6,
+                  width: `${100 / borrowingTabs.length}%`,
+                  zIndex: 0,
+                  transform: [
+                    {
+                      translateX: tabPositionValue.interpolate({
+                        inputRange: [0, 1, 2],
+                        outputRange: [0, (containerWidth - 12) / 3, ((containerWidth - 12) / 3) * 2],
+                      }),
+                    },
+                  ],
+                }}
+              />
+              {borrowingTabs.map((tab, index) => {
+                const active = activeTab === tab.key;
+                return (
+                  <Pressable
+                    key={tab.key}
+                    accessibilityRole="button"
+                    onPress={() => switchTab(tab.key)}
+                    style={({ pressed }) => ({
+                      flex: 1,
+                      opacity: pressed ? 0.92 : 1,
+                      zIndex: 1,
+                    })}
+                    testID={tab.key === 'activity' ? 'borrowing-tab-dynamic' : `borrowing-tab-${tab.key}`}>
+                    <View
                       style={{
-                        color: active ? theme.colors.primaryStrong : theme.colors.textMuted,
-                        ...theme.typography.medium,
-                        fontSize: 14,
-                        textAlign: 'center',
+                        borderRadius: 18,
+                        paddingHorizontal: theme.spacing.md,
+                        paddingVertical: 10,
                       }}>
-                      {tab.label}
-                    </Text>
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
+                      <Text
+                        style={{
+                          color: active ? theme.colors.primaryStrong : theme.colors.textMuted,
+                          ...(active ? theme.typography.semiBold : theme.typography.medium),
+                          fontSize: 14,
+                          textAlign: 'center',
+                        }}>
+                        {tab.label}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
         </View>
 
-        {activeTab === 'borrowing' ? (
-          <>
-            {borrowing.isBorrowingLoading ? (
-              <BorrowingSummarySkeleton />
-            ) : (
+        <Animated.View
+          style={{
+            flex: 1,
+            gap: theme.spacing.lg,
+            opacity: contentFadeValue,
+          }}>
+          {activeTab === 'borrowing' ? (
+            <>
+              {borrowing.isBorrowingLoading ? (
+                <BorrowingSummarySkeleton />
+              ) : (
               <BorrowingSummary
                 dueSoonCount={borrowing.dueSoonOrders.length}
                 headline="借阅任务中心"
@@ -368,18 +432,17 @@ export default function BorrowingRoute() {
                         testID={`borrowing-filter-chip-${item.value ?? 'all'}-shell`}>
                         <View
                           style={{
-                            backgroundColor: palette.backgroundColor,
-                            borderColor: active ? theme.colors.primaryStrong : theme.colors.borderStrong,
-                            borderRadius: theme.radii.md,
-                            borderWidth: active ? 1.5 : 1,
-                            paddingHorizontal: 12,
-                            paddingVertical: 8,
+                            backgroundColor: active ? theme.colors.primaryStrong : palette.backgroundColor,
+                            borderRadius: theme.radii.pill,
+                            paddingHorizontal: 16,
+                            paddingVertical: 10,
+                            boxShadow: active ? theme.shadows.card : 'none',
                           }}
                           testID={`borrowing-filter-chip-${item.value ?? 'all'}-surface`}>
                           <Text
                             style={{
-                              color: palette.color,
-                              ...theme.typography.medium,
+                              color: active ? theme.colors.surface : palette.color,
+                              ...(active ? theme.typography.semiBold : theme.typography.medium),
                               fontSize: 13,
                             }}
                             testID={`borrowing-filter-chip-${item.value ?? 'all'}-label`}>
@@ -443,10 +506,9 @@ export default function BorrowingRoute() {
               <SectionTitle title="提醒" />
               <View
                 style={{
-                  backgroundColor: theme.colors.surfaceTint,
-                  borderColor: theme.colors.borderStrong,
-                  borderRadius: theme.radii.xl,
-                  borderWidth: 1,
+                  backgroundColor: theme.colors.surface,
+                  borderRadius: 28,
+                  boxShadow: theme.shadows.card,
                   overflow: 'hidden',
                 }}
                 testID="notification-cart">
@@ -529,10 +591,7 @@ export default function BorrowingRoute() {
                     </Text>
                   </View>
                 ) : (
-                  <View
-                    style={{
-                      padding: theme.spacing.md,
-                    }}>
+                  <View>
                     {visibleNotifications.map((item, index) => {
                       const progress = getNotificationProgress(item.id);
                       const presentation = getNotificationPresentation(item.kind);
@@ -541,7 +600,6 @@ export default function BorrowingRoute() {
                         <Animated.View
                           key={item.id}
                           style={{
-                            marginBottom: index === visibleNotifications.length - 1 ? 0 : theme.spacing.md,
                             maxHeight: progress.interpolate({
                               inputRange: [0, 1],
                               outputRange: [0, 176],
@@ -600,9 +658,8 @@ export default function BorrowingRoute() {
                             <View
                               style={{
                                 backgroundColor: theme.colors.surface,
-                                borderColor: theme.colors.borderStrong,
-                                borderRadius: theme.radii.lg,
-                                borderWidth: 1,
+                                borderTopColor: index === 0 ? 'transparent' : theme.colors.borderSoft,
+                                borderTopWidth: index === 0 ? 0 : 1,
                                 padding: theme.spacing.lg,
                               }}
                               testID={`notification-card-${item.id}`}>
@@ -690,9 +747,8 @@ export default function BorrowingRoute() {
                         key={group.category}
                         style={{
                           backgroundColor: theme.colors.surface,
-                          borderColor: theme.colors.borderStrong,
-                          borderRadius: theme.radii.lg,
-                          borderWidth: 1,
+                          borderRadius: 24,
+                          boxShadow: theme.shadows.card,
                           overflow: 'hidden',
                         }}>
                         <View
@@ -784,7 +840,8 @@ export default function BorrowingRoute() {
             </View>
           </>
         )}
-      </PageShell>
-    </>
-  );
+      </Animated.View>
+    </PageShell>
+  </>
+);
 }

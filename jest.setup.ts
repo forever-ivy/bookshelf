@@ -115,6 +115,184 @@ jest.mock('expo-secure-store', () => ({
   setItemAsync: jest.fn(async () => undefined),
 }));
 
+jest.mock('react-native-webview', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+
+  const MockWebView = React.forwardRef(
+    (
+      props: Record<string, unknown> & { children?: React.ReactNode },
+      ref: ForwardedRef<unknown>
+    ) => {
+      React.useImperativeHandle(ref, () => ({
+        postMessage: jest.fn(),
+        reload: jest.fn(),
+      }));
+
+      return React.createElement(View, props, props.children);
+    }
+  );
+
+  return {
+    WebView: MockWebView,
+  };
+});
+
+jest.mock('heroui-native', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+
+  const Skeleton = ({
+    children,
+    ...props
+  }: Record<string, unknown> & { children?: React.ReactNode }) =>
+    React.createElement(View, { accessibilityLabel: 'heroui-skeleton', ...props }, children);
+
+  const SkeletonGroupRoot = ({
+    children,
+    ...props
+  }: Record<string, unknown> & { children?: React.ReactNode }) =>
+    React.createElement(
+      View,
+      { accessibilityLabel: 'heroui-skeleton-group', ...props },
+      children
+    );
+
+  const SkeletonGroupItem = ({
+    children,
+    ...props
+  }: Record<string, unknown> & { children?: React.ReactNode }) =>
+    React.createElement(
+      View,
+      { accessibilityLabel: 'heroui-skeleton-group-item', ...props },
+      children
+    );
+
+  const Card = ({
+    children,
+    ...props
+  }: Record<string, unknown> & { children?: React.ReactNode }) =>
+    React.createElement(View, { accessibilityLabel: 'heroui-card', ...props }, children);
+
+  const BottomSheetRoot = ({
+    children,
+    ...props
+  }: Record<string, unknown> & { children?: React.ReactNode }) =>
+    React.createElement(View, { accessibilityLabel: 'heroui-bottom-sheet', ...props }, children);
+
+  const BottomSheetPortal = ({
+    children,
+    ...props
+  }: Record<string, unknown> & { children?: React.ReactNode }) =>
+    React.createElement(View, { accessibilityLabel: 'heroui-bottom-sheet-portal', ...props }, children);
+
+  const BottomSheetOverlay = (props: Record<string, unknown>) =>
+    React.createElement(View, { accessibilityLabel: 'heroui-bottom-sheet-overlay', ...props });
+
+  const BottomSheetContent = ({
+    children,
+    ...props
+  }: Record<string, unknown> & { children?: React.ReactNode }) =>
+    React.createElement(View, { accessibilityLabel: 'heroui-bottom-sheet-content', ...props }, children);
+
+  const BottomSheetTrigger = ({
+    children,
+    ...props
+  }: Record<string, unknown> & { children?: React.ReactNode }) =>
+    React.createElement(View, { accessibilityLabel: 'heroui-bottom-sheet-trigger', ...props }, children);
+
+  const BottomSheetClose = (props: Record<string, unknown>) =>
+    React.createElement(View, { accessibilityLabel: 'heroui-bottom-sheet-close', ...props });
+
+  const BottomSheetTitle = ({
+    children,
+    ...props
+  }: Record<string, unknown> & { children?: React.ReactNode }) =>
+    React.createElement(View, { accessibilityLabel: 'heroui-bottom-sheet-title', ...props }, children);
+
+  const BottomSheetDescription = ({
+    children,
+    ...props
+  }: Record<string, unknown> & { children?: React.ReactNode }) =>
+    React.createElement(View, { accessibilityLabel: 'heroui-bottom-sheet-description', ...props }, children);
+
+  return {
+    BottomSheet: Object.assign(BottomSheetRoot, {
+      Portal: BottomSheetPortal,
+      Overlay: BottomSheetOverlay,
+      Content: BottomSheetContent,
+      Trigger: BottomSheetTrigger,
+      Close: BottomSheetClose,
+      Title: BottomSheetTitle,
+      Description: BottomSheetDescription,
+    }),
+    Card,
+    Skeleton,
+    SkeletonGroup: Object.assign(SkeletonGroupRoot, {
+      Item: SkeletonGroupItem,
+    }),
+  };
+});
+
+jest.mock('heroui-native/bottom-sheet', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+
+  const BottomSheetRoot = ({
+    children,
+    ...props
+  }: Record<string, unknown> & { children?: React.ReactNode }) =>
+    React.createElement(View, { accessibilityLabel: 'heroui-bottom-sheet', ...props }, children);
+
+  const BottomSheetPortal = ({
+    children,
+    ...props
+  }: Record<string, unknown> & { children?: React.ReactNode }) =>
+    React.createElement(View, { accessibilityLabel: 'heroui-bottom-sheet-portal', ...props }, children);
+
+  const BottomSheetOverlay = (props: Record<string, unknown>) =>
+    React.createElement(View, { accessibilityLabel: 'heroui-bottom-sheet-overlay', ...props });
+
+  const BottomSheetContent = ({
+    children,
+    ...props
+  }: Record<string, unknown> & { children?: React.ReactNode }) =>
+    React.createElement(View, { accessibilityLabel: 'heroui-bottom-sheet-content', ...props }, children);
+
+  const BottomSheetTrigger = ({
+    children,
+    ...props
+  }: Record<string, unknown> & { children?: React.ReactNode }) =>
+    React.createElement(View, { accessibilityLabel: 'heroui-bottom-sheet-trigger', ...props }, children);
+
+  const BottomSheetClose = (props: Record<string, unknown>) =>
+    React.createElement(View, { accessibilityLabel: 'heroui-bottom-sheet-close', ...props });
+
+  const BottomSheetTitle = ({
+    children,
+    ...props
+  }: Record<string, unknown> & { children?: React.ReactNode }) =>
+    React.createElement(View, { accessibilityLabel: 'heroui-bottom-sheet-title', ...props }, children);
+
+  const BottomSheetDescription = ({
+    children,
+    ...props
+  }: Record<string, unknown> & { children?: React.ReactNode }) =>
+    React.createElement(View, { accessibilityLabel: 'heroui-bottom-sheet-description', ...props }, children);
+
+  return {
+    BottomSheet: Object.assign(BottomSheetRoot, {
+      Portal: BottomSheetPortal,
+      Overlay: BottomSheetOverlay,
+      Content: BottomSheetContent,
+      Trigger: BottomSheetTrigger,
+      Close: BottomSheetClose,
+      Title: BottomSheetTitle,
+      Description: BottomSheetDescription,
+    }),
+  };
+});
+
 jest.mock('expo-glass-effect', () => {
   const React = require('react');
   const { View } = require('react-native');
@@ -312,3 +490,42 @@ jest.mock('@expo/ui/jetpack-compose', () => {
 jest.mock('@expo/ui/jetpack-compose/modifiers', () => ({
   fillMaxWidth: jest.fn(() => ({ type: 'fillMaxWidth' })),
 }));
+
+jest.mock('heroui-native/provider', () => {
+  const React = require('react');
+
+  return {
+    __esModule: true,
+    HeroUINativeProvider: ({ children }: { children?: React.ReactNode }) => children ?? null,
+  };
+});
+
+jest.mock('heroui-native/input', () => {
+  const React = require('react');
+  const { TextInput } = require('react-native');
+
+  const MockInput = React.forwardRef(
+    (
+      props: Record<string, unknown> & {
+        className?: string;
+        placeholderColorClassName?: string;
+        selectionColorClassName?: string;
+      },
+      ref: ForwardedRef<unknown>
+    ) => {
+      const {
+        className: _className,
+        placeholderColorClassName: _placeholderColorClassName,
+        selectionColorClassName: _selectionColorClassName,
+        ...restProps
+      } = props;
+
+      return React.createElement(TextInput, { ...restProps, ref });
+    }
+  );
+
+  return {
+    __esModule: true,
+    Input: MockInput,
+  };
+});

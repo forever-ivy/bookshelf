@@ -58,19 +58,17 @@ export function SearchFilterStrip<T extends string>({
               testID={`search-filter-chip-${filter.key}-shell`}>
               <View
                 style={{
-                  backgroundColor:
-                    isPrimaryChip || isActive ? theme.colors.successSoft : palette.backgroundColor,
-                  borderColor: isActive ? theme.colors.primaryStrong : theme.colors.borderStrong,
-                  borderRadius: theme.radii.md,
-                  borderWidth: isActive ? 1.5 : 1,
-                  paddingHorizontal: 12,
-                  paddingVertical: 8,
+                  backgroundColor: isActive ? theme.colors.primaryStrong : (isPrimaryChip ? theme.colors.successSoft : palette.backgroundColor),
+                  borderRadius: theme.radii.pill,
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  boxShadow: isActive ? theme.shadows.card : 'none',
                 }}
                 testID={`search-filter-chip-${filter.key}-surface`}>
                 <Text
                   style={{
-                    color: theme.colors.textMuted,
-                    ...theme.typography.medium,
+                    color: isActive ? theme.colors.surface : theme.colors.textMuted,
+                    ...(isActive ? theme.typography.semiBold : theme.typography.medium),
                     fontSize: 13,
                   }}
                   testID={`search-filter-chip-${filter.key}-label`}>

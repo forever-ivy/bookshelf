@@ -57,4 +57,18 @@ describe('LearningWorkspaceScaffold', () => {
     );
     expect(flattened.paddingBottom).toBe(appTheme.spacing.md);
   });
+
+  it('omits the footer wrapper entirely when no footer is provided', () => {
+    const view = render(
+      <LearningWorkspaceScaffold subtitle="主线学习">
+        <Text>content</Text>
+      </LearningWorkspaceScaffold>
+    );
+
+    const footerNodes = view.UNSAFE_root.findAll(
+      (node) => node.props?.testID === 'learning-workspace-footer'
+    );
+
+    expect(footerNodes).toHaveLength(0);
+  });
 });

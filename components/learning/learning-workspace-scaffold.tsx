@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LearningWorkspaceLoadingState } from '@/components/learning/learning-workspace-loading-state';
 import { useLearningWorkspaceScreen } from '@/components/learning/learning-workspace-provider';
+import { appTheme } from '@/constants/app-theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 
 type IconComponent = React.ComponentType<Record<string, unknown>>;
@@ -13,6 +14,9 @@ const CloseIcon = X as IconComponent;
 const MenuIcon = EllipsisVertical as IconComponent;
 
 export const LEARNING_WORKSPACE_TAB_BAR_CLEARANCE = 56;
+export const LEARNING_WORKSPACE_TOP_CHROME_CLEARANCE = 44;
+export const LEARNING_WORKSPACE_TOP_CHROME_OFFSET = appTheme.spacing.lg + 4;
+export const LEARNING_WORKSPACE_FLOATING_BUTTON_SIZE = 58;
 
 export function LearningWorkspaceScaffold({
   children,
@@ -43,14 +47,7 @@ export function LearningWorkspaceScaffold({
       <LearningWorkspaceLoadingState
         description={workspaceGate.description}
         primaryAction={
-          workspaceGate.kind === 'not_started'
-            ? {
-                label: isRetryPending ? '重新触发中...' : '重新触发生成',
-                onPress: () => {
-                  void retryGenerate(profile?.id);
-                },
-              }
-            : workspaceGate.kind === 'failed'
+          workspaceGate.kind === 'failed'
               ? {
                   label: isRetryPending ? '重新生成中...' : '重新生成',
                   onPress: () => {

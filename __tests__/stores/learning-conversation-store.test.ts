@@ -1,9 +1,14 @@
 import {
   createInitialLearningConversationState,
   reduceLearningConversationEvent,
+  useLearningConversationStore,
 } from '@/stores/learning-conversation-store';
 
 describe('learning conversation store helpers', () => {
+  beforeEach(() => {
+    useLearningConversationStore.getState().reset();
+  });
+
   it('builds a structured guide draft from typed stream events', () => {
     let state = createInitialLearningConversationState({
       assistantMessageId: 'local-assistant-1',
@@ -83,5 +88,90 @@ describe('learning conversation store helpers', () => {
       }),
       streaming: true,
     });
+  });
+
+  it('accumulates explore reasoning deltas into the current assistant draft', () => {
+    let state = createInitialLearningConversationState({
+      assistantMessageId: 'local-assistant-2',
+      mode: 'explore',
+      userText: '进程和线程有什么区别？',
+      userMessageId: 'local-user-2',
+    });
+
+    state = reduceLearningConversationEvent(state, {
+      delta: '进程是资源分配单位，线程是调度执行单位。',
+      type: 'explore.answer.delta',
+    });
+    state = reduceLearningConversationEvent(state, {
+      delta: '先识别问题在比较两个概念，再抓定义维度和调度维度。',
+      type: 'explore.reasoning.delta',
+    });
+
+    expect(state.messages[1]).toMatchObject({
+      presentation: expect.objectContaining({
+        answer: {
+          content: '进程是资源分配单位，线程是调度执行单位。',
+        },
+        kind: 'explore',
+        reasoningContent: '先识别问题在比较两个概念，再抓定义维度和调度维度。',
+      }),
+      streaming: true,
+    });
+  });
+
+  it('preserves prior history when starting a new draft', () => {
+    useLearningConversationStore.getState().hydrateHistory([
+      {
+        cards: [],
+        id: 'history-user-1',
+        presentation: null,
+        role: 'user',
+        streaming: false,
+        text: '这个文档讲了什么？',
+      },
+      {
+        cards: [],
+        id: 'history-assistant-1',
+        presentation: {
+          answer: {
+            content: '它先给了一段概览。',
+          },
+          bridgeActions: [],
+          evidence: [],
+          followups: [],
+          kind: 'explore',
+          relatedConcepts: [],
+        },
+        role: 'assistant',
+        streaming: false,
+        text: '它先给了一段概览。',
+      },
+    ]);
+
+    useLearningConversationStore.getState().startDraft({
+      assistantMessageId: 'local-assistant-3',
+      mode: 'explore',
+      userMessageId: 'local-user-3',
+      userText: '继续展开第二段',
+    });
+
+    expect(useLearningConversationStore.getState().messages).toMatchObject([
+      expect.objectContaining({
+        id: 'history-user-1',
+        text: '这个文档讲了什么？',
+      }),
+      expect.objectContaining({
+        id: 'history-assistant-1',
+        text: '它先给了一段概览。',
+      }),
+      expect.objectContaining({
+        id: 'local-user-3',
+        text: '继续展开第二段',
+      }),
+      expect.objectContaining({
+        id: 'local-assistant-3',
+        streaming: true,
+      }),
+    ]);
   });
 });

@@ -374,6 +374,7 @@ export type LearningExplorePresentation = {
   } | null;
   followups: string[];
   kind: 'explore';
+  reasoningContent?: string | null;
   relatedConcepts: string[];
 };
 
@@ -392,6 +393,33 @@ export type LearningSessionMessage = {
   presentation?: LearningConversationPresentation | null;
   redirectedSessionId?: number | null;
   responseMode?: string | null;
+};
+
+export type LearningGraphNodeType =
+  | 'Book'
+  | 'Concept'
+  | 'Fragment'
+  | 'LessonStep'
+  | 'SourceAsset'
+  | string;
+
+export type LearningGraphNode = {
+  id: string;
+  label: string;
+  profileId?: number | null;
+  type: LearningGraphNodeType;
+} & Record<string, unknown>;
+
+export type LearningGraphEdge = {
+  source: string;
+  target: string;
+  type: string;
+} & Record<string, unknown>;
+
+export type LearningGraph = {
+  edges: LearningGraphEdge[];
+  nodes: LearningGraphNode[];
+  provider: string;
 };
 
 export type LearningSuggestion = {
@@ -484,6 +512,10 @@ export type LearningStreamEvent =
   | {
       delta: string;
       type: 'explore.answer.delta';
+    }
+  | {
+      delta: string;
+      type: 'explore.reasoning.delta';
     }
   | {
       delta: string;

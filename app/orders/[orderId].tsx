@@ -88,11 +88,11 @@ export default function OrderDetailRoute() {
             <View
               style={{
                 backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.borderStrong,
-                borderRadius: theme.radii.lg,
-                borderWidth: 1,
+                borderRadius: 28,
+                boxShadow: theme.shadows.card,
                 gap: theme.spacing.md,
                 padding: theme.spacing.xl,
+                overflow: 'hidden',
               }}>
               <View style={{ gap: theme.spacing.lg }}>
                 <View style={{ gap: theme.spacing.sm }}>
@@ -144,9 +144,8 @@ export default function OrderDetailRoute() {
               <View
                 style={{
                   backgroundColor: journeyPalette.accentSoft,
-                  borderColor: journeyPalette.border,
-                  borderRadius: theme.radii.xl,
-                  borderWidth: 1,
+                  borderRadius: 28,
+                  boxShadow: theme.shadows.card,
                   gap: theme.spacing.lg,
                   overflow: 'hidden',
                   padding: theme.spacing.xl,
@@ -208,11 +207,11 @@ export default function OrderDetailRoute() {
               <View
                 style={{
                   backgroundColor: theme.colors.surface,
-                  borderColor: theme.colors.borderStrong,
-                  borderRadius: theme.radii.lg,
-                  borderWidth: 1,
+                  borderRadius: 28,
+                  boxShadow: theme.shadows.card,
                   gap: theme.spacing.md,
                   padding: theme.spacing.xl,
+                  overflow: 'hidden',
                 }}>
                 <SectionTitle title={journey?.variant === 'timeline' ? '下一步操作' : '可用操作'} />
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.md }}>

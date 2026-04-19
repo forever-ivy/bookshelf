@@ -108,17 +108,17 @@ export function SearchResultCard({
     const radiusStyle =
       listPosition === 'single'
         ? {
-            borderRadius: theme.radii.xl,
+            borderRadius: 28,
           }
         : listPosition === 'first'
           ? {
-              borderTopLeftRadius: theme.radii.xl,
-              borderTopRightRadius: theme.radii.xl,
+              borderTopLeftRadius: 28,
+              borderTopRightRadius: 28,
             }
           : listPosition === 'last'
             ? {
-                borderBottomLeftRadius: theme.radii.xl,
-                borderBottomRightRadius: theme.radii.xl,
+                borderBottomLeftRadius: 28,
+                borderBottomRightRadius: 28,
               }
             : null;
     const listContent = (
@@ -235,9 +235,8 @@ export function SearchResultCard({
     <View
       style={{
         backgroundColor: theme.colors.surface,
-        borderColor: theme.colors.borderStrong,
-        borderRadius: theme.radii.lg,
-        borderWidth: 1,
+        borderRadius: 28,
+        boxShadow: theme.shadows.card,
         gap: theme.spacing.md,
         padding: theme.spacing.lg,
       }}>

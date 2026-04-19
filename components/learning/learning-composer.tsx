@@ -12,23 +12,27 @@ const ArrowUpIcon = ArrowUp as IconComponent;
 export function LearningComposer({
   disabled,
   draft,
+  inputTestID,
   onChangeText,
   onPrimaryActionPress,
   onSend,
   onSuggestionPress,
   placeholder,
   primaryActionLabel,
+  sendButtonTestID,
   statusLabel,
   suggestions,
 }: {
   disabled?: boolean;
   draft: string;
+  inputTestID?: string;
   onChangeText: (value: string) => void;
   onPrimaryActionPress?: () => void;
   onSend: () => void;
   onSuggestionPress?: (value: string) => void;
   placeholder: string;
   primaryActionLabel?: string;
+  sendButtonTestID?: string;
   statusLabel?: string | null;
   suggestions?: string[];
 }) {
@@ -127,6 +131,7 @@ export function LearningComposer({
             onChangeText={onChangeText}
             placeholder={placeholder}
             placeholderTextColor={theme.colors.textSoft}
+            testID={inputTestID}
             style={{
               color: theme.colors.text,
               flex: 1,
@@ -144,6 +149,7 @@ export function LearningComposer({
             accessibilityRole="button"
             disabled={disabled || !hasDraft}
             onPress={onSend}
+            testID={sendButtonTestID}
             style={({ pressed }) => ({
               alignItems: 'center',
               backgroundColor:
