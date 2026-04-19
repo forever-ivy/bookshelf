@@ -224,6 +224,20 @@ def serialize_turn(turn: Any, *, agent_runs: list[dict[str, Any]] | None = None)
     }
 
 
+def serialize_stream_turn(turn: Any) -> dict[str, Any]:
+    metadata = turn.metadata_json or {}
+    return {
+        "id": turn.id,
+        "sessionId": turn.session_id,
+        "intentKind": getattr(turn, "intent_kind", None),
+        "responseMode": getattr(turn, "response_mode", None),
+        "redirectedSessionId": getattr(turn, "redirected_session_id", None),
+        "assistantContent": turn.assistant_content,
+        "presentation": metadata.get("presentation"),
+        "createdAt": _isoformat(turn.created_at),
+    }
+
+
 def serialize_checkpoint(checkpoint: Any) -> dict[str, Any]:
     return {
         "id": checkpoint.id,

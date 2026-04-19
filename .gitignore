@@ -1,4 +1,5 @@
 .venv/
+.venv-mineru-local/
 venv/
 .worktrees/
 .uv-cache/
@@ -20,3 +21,4 @@ tmp_*.db
 
 # generated runtime artifacts
 artifacts/learning/
+output/

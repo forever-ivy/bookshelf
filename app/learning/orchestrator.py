@@ -16,9 +16,9 @@ from app.learning.schemas import (
     serialize_checkpoint,
     serialize_path_step,
     serialize_remediation_plan,
-    serialize_report,
     serialize_session,
     serialize_session_redirect,
+    serialize_stream_turn,
     serialize_turn,
     sse_event,
 )
@@ -343,6 +343,7 @@ def _build_explore_presentation(
     *,
     focus_context: dict[str, Any],
     answer_text: str,
+    reasoning_content: str | None,
     citations: list[dict[str, Any]],
     related_concepts: list[str],
     followups: list[str],
@@ -357,6 +358,7 @@ def _build_explore_presentation(
             "guidingQuestion": focus_context.get("guidingQuestion"),
         },
         "answer": {"content": answer_text},
+        "reasoningContent": reasoning_content,
         "evidence": citations,
         "relatedConcepts": related_concepts,
         "followups": followups,
@@ -785,7 +787,7 @@ class GuideOrchestrator:
                     },
                 )
                 _append_event(state, "session.remediation", {"plan": serialize_remediation_plan(remediation_plan)})
-        report = repository.upsert_report(
+        repository.upsert_report(
             session,
             session_id=learning_session.id,
             report_type="session_summary",
@@ -814,11 +816,8 @@ class GuideOrchestrator:
             },
         )
         session.commit()
-        agent_runs = [run.agent_name for run in repository.list_turn_agent_runs(session, turn_id=turn.id)]
         state["final_payload"] = {
-            "turn": serialize_turn(turn, agent_runs=[{"agentName": name} for name in agent_runs]),
-            "session": serialize_session(learning_session),
-            "report": serialize_report(report),
+            "turn": serialize_stream_turn(turn),
         }
         return state
 
@@ -952,6 +951,7 @@ class ExploreOrchestrator:
             answer_text = llm_answer["answer"]
             if llm_answer["relatedConcepts"]:
                 state["related_concepts"] = llm_answer["relatedConcepts"]
+            state["reasoning_content"] = llm_answer.get("reasoningContent")
         else:
             answer_text = _build_explore_answer(
                 focus_context=focus_context,
@@ -959,8 +959,11 @@ class ExploreOrchestrator:
                 user_content=state["user_content"],
                 related_concepts=state["related_concepts"],
             )
+            state["reasoning_content"] = None
         state["answer_text"] = answer_text
         _append_event(state, "explore.answer.delta", {"delta": answer_text})
+        if state.get("reasoning_content"):
+            _append_event(state, "explore.reasoning.delta", {"delta": state["reasoning_content"]})
         return state
 
     def _related_concepts_node(self, state: dict[str, Any]) -> dict[str, Any]:
@@ -989,6 +992,7 @@ class ExploreOrchestrator:
         presentation = _build_explore_presentation(
             focus_context=focus_context,
             answer_text=state["answer_text"],
+            reasoning_content=state.get("reasoning_content"),
             citations=state["citations"],
             related_concepts=state["related_concepts"],
             followups=followups,
@@ -1034,7 +1038,7 @@ class ExploreOrchestrator:
             output_summary=state["answer_text"][:180],
             metadata_json={"focusStepIndex": focus_step_index},
         )
-        report = repository.upsert_report(
+        repository.upsert_report(
             session,
             session_id=learning_session.id,
             report_type="session_summary",
@@ -1045,9 +1049,7 @@ class ExploreOrchestrator:
         )
         session.commit()
         state["final_payload"] = {
-            "turn": serialize_turn(turn, agent_runs=[{"agentName": "Explore"}]),
-            "session": serialize_session(learning_session),
-            "report": serialize_report(report),
+            "turn": serialize_stream_turn(turn),
         }
         return state
 

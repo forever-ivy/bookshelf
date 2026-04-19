@@ -43,6 +43,54 @@ class FakeClient:
         self.chat = FakeChat()
 
 
+class FakeReasoningMessage:
+    def __init__(self, *, content: str, reasoning_content: str):
+        self.content = content
+        self.reasoning_content = reasoning_content
+        self.role = "assistant"
+
+    def model_dump(self, *, exclude_none: bool = False):
+        return {
+            "content": self.content,
+            "reasoning_content": self.reasoning_content,
+            "role": self.role,
+        }
+
+
+class FakeReasoningChoice:
+    def __init__(self, message):
+        self.message = message
+
+
+class FakeReasoningResponse:
+    def __init__(self, message):
+        self.choices = [FakeReasoningChoice(message)]
+
+
+class FakeReasoningCompletions:
+    def __init__(self):
+        self.calls = []
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        return FakeReasoningResponse(
+            FakeReasoningMessage(
+                content="结论：可以回答。",
+                reasoning_content="先分析问题，再给出结论。",
+            )
+        )
+
+
+class FakeReasoningChat:
+    def __init__(self):
+        self.completions = FakeReasoningCompletions()
+
+
+class FakeReasoningClient:
+    def __init__(self):
+        self.chat = FakeReasoningChat()
+
+
 def test_default_settings_prefer_local_fallback_provider(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("LIBRARY_LLM_PROVIDER", raising=False)
@@ -53,6 +101,7 @@ def test_default_settings_prefer_local_fallback_provider(tmp_path, monkeypatch):
 
     settings = get_settings()
     assert settings.llm_provider == "null"
+    assert settings.llm_timeout_seconds == 30.0
     assert isinstance(build_llm_provider(), NullLLMProvider)
 
 
@@ -142,3 +191,41 @@ def test_openai_compatible_provider_passes_timeout_to_sdk_calls():
     provider.chat(text="帮我找书", context={})
 
     assert client.chat.completions.calls[0]["timeout"] == 3.5
+
+
+def test_openai_compatible_provider_reports_reasoning_field_diagnostics():
+    client = FakeReasoningClient()
+    provider = OpenAICompatibleLLMProvider(
+        api_key="test-key",
+        model="deepseek-chat",
+        base_url="https://api.deepseek.com",
+        client=client,
+    )
+
+    reply, diagnostics = provider.chat_with_diagnostics(
+        text="支持把思维链进行展示吗？",
+        context={},
+    )
+
+    assert reply == "结论：可以回答。"
+    assert diagnostics["has_reasoning_content"] is True
+    assert diagnostics["reasoning_content_length"] == len("先分析问题，再给出结论。")
+    assert "reasoning_content" in diagnostics["message_keys"]
+
+
+def test_openai_compatible_provider_returns_reasoning_content_for_chat_calls():
+    client = FakeReasoningClient()
+    provider = OpenAICompatibleLLMProvider(
+        api_key="test-key",
+        model="deepseek-reasoner",
+        base_url="https://api.deepseek.com",
+        client=client,
+    )
+
+    reply, reasoning_content = provider.chat_with_reasoning(
+        text="支持把思维链进行展示吗？",
+        context={},
+    )
+
+    assert reply == "结论：可以回答。"
+    assert reasoning_content == "先分析问题，再给出结论。"

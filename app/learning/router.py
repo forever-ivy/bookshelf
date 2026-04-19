@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import httpx
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -35,6 +35,12 @@ from app.learning.service import LearningBridgeService, LearningService
 
 
 router = APIRouter(prefix="/api/v2/learning", tags=["learning"])
+
+
+def _dispatch_generation_task(profile_id: int, reader_id: int) -> None:
+    from app.learning.tasks import generate_learning_profile_task
+
+    generate_learning_profile_task(profile_id, reader_id)
 
 
 @router.post("/uploads", status_code=201)
@@ -156,12 +162,20 @@ def get_learning_profile_graph(
 @router.post("/profiles/{profile_id}/generate", status_code=202)
 def generate_learning_profile(
     profile_id: int,
+    background_tasks: BackgroundTasks,
+    background: bool = Query(False),
     identity: AuthIdentity = Depends(require_reader),
     db: Session = Depends(get_db),
 ) -> dict:
     service = LearningService()
-    result = service.queue_generation(db, reader_id=identity.profile_id, profile_id=profile_id)
-    db.commit()
+    if background and service.settings.learning_tasks_eager:
+        result = service.prepare_generation(db, reader_id=identity.profile_id, profile_id=profile_id)
+        db.commit()
+        if result["triggered"]:
+            background_tasks.add_task(_dispatch_generation_task, profile_id, identity.profile_id)
+    else:
+        result = service.queue_generation(db, reader_id=identity.profile_id, profile_id=profile_id)
+        db.commit()
     return {
         "ok": True,
         "triggered": result["triggered"],

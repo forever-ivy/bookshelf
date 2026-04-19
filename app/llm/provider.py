@@ -38,6 +38,9 @@ class LLMProvider(Protocol):
     def chat(self, *, text: str, context: dict) -> str:
         ...
 
+    def chat_with_reasoning(self, *, text: str, context: dict) -> tuple[str, str | None]:
+        ...
+
 
 class NullLLMProvider:
     def rerank(self, query: str, candidates: list[RecommendationCandidate]) -> list[RecommendationCandidate]:
@@ -64,6 +67,9 @@ class NullLLMProvider:
             return f"可以先看看这些书：{'、'.join(available_titles[:3])}。"
         return f"我已经收到你的问题：{text}。如果你愿意，我可以继续帮你找书或推荐图书。"
 
+    def chat_with_reasoning(self, *, text: str, context: dict) -> tuple[str, str | None]:
+        return self.chat(text=text, context=context), None
+
 
 class OpenAICompatibleLLMProvider:
     def __init__(
@@ -88,17 +94,85 @@ class OpenAICompatibleLLMProvider:
         return OpenAI(**kwargs)
 
     @staticmethod
-    def _extract_text(response: Any) -> str:
+    def _message_to_dict(message: Any) -> dict[str, Any]:
+        if message is None:
+            return {}
+        if isinstance(message, dict):
+            return dict(message)
+
+        model_dump = getattr(message, "model_dump", None)
+        if callable(model_dump):
+            try:
+                dumped = model_dump(exclude_none=False)
+            except TypeError:
+                dumped = model_dump()
+            if isinstance(dumped, dict):
+                return dumped
+
+        payload: dict[str, Any] = {}
+        for field in ("content", "reasoning_content", "role", "refusal", "tool_calls", "function_call"):
+            value = getattr(message, field, None)
+            if value is not None:
+                payload[field] = value
+        model_extra = getattr(message, "model_extra", None)
+        if isinstance(model_extra, dict):
+            payload.update(model_extra)
+        return payload
+
+    @classmethod
+    def _stringify_message_content(cls, value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value
+        if isinstance(value, list):
+            return "".join(cls._stringify_message_content(item) for item in value)
+        if isinstance(value, dict):
+            text = value.get("text")
+            if isinstance(text, str):
+                return text
+            content = value.get("content")
+            if isinstance(content, str):
+                return content
+        text = getattr(value, "text", None)
+        if isinstance(text, str):
+            return text
+        content = getattr(value, "content", None)
+        if isinstance(content, str):
+            return content
+        return str(value)
+
+    @classmethod
+    def _extract_text_and_diagnostics(cls, response: Any) -> tuple[str, dict[str, Any]]:
         choices = getattr(response, "choices", None) or []
         if not choices:
-            return ""
+            return "", {
+                "has_reasoning_content": False,
+                "message_keys": [],
+                "reasoning_content_length": 0,
+            }
         message = getattr(choices[0], "message", None)
         if message is None:
-            return ""
-        content = getattr(message, "content", "")
-        if isinstance(content, list):
-            return "".join(str(item) for item in content)
-        return str(content or "")
+            return "", {
+                "has_reasoning_content": False,
+                "message_keys": [],
+                "reasoning_content_length": 0,
+            }
+        message_dict = cls._message_to_dict(message)
+        content = cls._stringify_message_content(message_dict.get("content", getattr(message, "content", "")))
+        reasoning_content = cls._stringify_message_content(
+            message_dict.get("reasoning_content", getattr(message, "reasoning_content", None))
+        ).strip()
+        return content, {
+            "has_reasoning_content": bool(reasoning_content),
+            "message_keys": sorted(str(key) for key in message_dict.keys()),
+            "reasoning_content": reasoning_content,
+            "reasoning_content_length": len(reasoning_content),
+        }
+
+    @classmethod
+    def _extract_text(cls, response: Any) -> str:
+        return cls._extract_text_and_diagnostics(response)[0]
 
     @staticmethod
     def _clean_json_payload(text: str) -> str:
@@ -114,6 +188,22 @@ class OpenAICompatibleLLMProvider:
             timeout=self.timeout_seconds,
         )
         return self._extract_text(response)
+
+    def _chat_with_diagnostics(self, messages: list[dict[str, str]]) -> tuple[str, dict[str, Any]]:
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            temperature=0,
+            timeout=self.timeout_seconds,
+        )
+        return self._extract_text_and_diagnostics(response)
+
+    def _extract_reasoning_content(self, diagnostics: dict[str, Any]) -> str | None:
+        reasoning_content = diagnostics.get("reasoning_content")
+        if not isinstance(reasoning_content, str):
+            return None
+        normalized = reasoning_content.strip()
+        return normalized or None
 
     def rerank(self, query: str, candidates: list[RecommendationCandidate]) -> list[RecommendationCandidate]:
         if len(candidates) <= 1:
@@ -232,6 +322,32 @@ class OpenAICompatibleLLMProvider:
         )
         return reply.strip()
 
+    def chat_with_diagnostics(self, *, text: str, context: dict) -> tuple[str, dict[str, Any]]:
+        system_prompt = context.get("systemPrompt") or "You are a helpful library assistant. Reply in Chinese."
+        instruction = context.get("instruction") or "Reply in Chinese with one concise helpful sentence for a library reader."
+        prompt = {
+            "text": text,
+            "context": {key: value for key, value in context.items() if key not in {"systemPrompt", "instruction"}},
+            "instruction": instruction,
+        }
+        reply, diagnostics = self._chat_with_diagnostics(
+            [
+                {
+                    "role": "system",
+                    "content": system_prompt,
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(prompt, ensure_ascii=False),
+                },
+            ]
+        )
+        return reply.strip(), diagnostics
+
+    def chat_with_reasoning(self, *, text: str, context: dict) -> tuple[str, str | None]:
+        reply, diagnostics = self.chat_with_diagnostics(text=text, context=context)
+        return reply, self._extract_reasoning_content(diagnostics)
+
 
 class MockLLMProvider:
     def __init__(self, titles_in_order: list[str] | None = None) -> None:
@@ -248,6 +364,9 @@ class MockLLMProvider:
 
     def chat(self, *, text: str, context: dict) -> str:
         return f"Mock reply for '{text}'."
+
+    def chat_with_reasoning(self, *, text: str, context: dict) -> tuple[str, str | None]:
+        return self.chat(text=text, context=context), None
 
     def parse_book_from_ocr(self, ocr_texts: list[str]) -> dict:
         return {

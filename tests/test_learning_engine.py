@@ -5,6 +5,9 @@ import zipfile
 from io import BytesIO
 from types import SimpleNamespace
 
+import httpx
+from openai import APITimeoutError
+
 from app.core.config import Settings
 
 from app.learning.graph import LearningGraphService
@@ -16,13 +19,18 @@ from app.learning.service import LearningService
 
 
 class FakeLLMProvider:
-    def __init__(self, reply: str) -> None:
+    def __init__(self, reply: str, *, reasoning_content: str | None = None) -> None:
         self.reply = reply
+        self.reasoning_content = reasoning_content
         self.calls: list[dict] = []
 
     def chat(self, *, text: str, context: dict) -> str:
         self.calls.append({"text": text, "context": context})
         return self.reply
+
+    def chat_with_reasoning(self, *, text: str, context: dict) -> tuple[str, str | None]:
+        self.calls.append({"text": text, "context": context, "mode": "reasoning"})
+        return self.reply, self.reasoning_content
 
 
 class FakeMinerUClient:
@@ -82,6 +90,26 @@ def test_learning_llm_workflow_plans_path_from_json(monkeypatch):
     assert provider.calls[0]["context"]["goalMode"] == "preview"
 
 
+def test_learning_service_plan_path_falls_back_when_llm_plan_times_out(tmp_path):
+    service = LearningService(settings=Settings(learning_storage_dir=str(tmp_path), _env_file=None))
+
+    def raise_timeout(**kwargs):
+        raise APITimeoutError(request=httpx.Request("POST", "https://api.deepseek.com/chat/completions"))
+
+    service.llm_workflow = SimpleNamespace(plan_path=raise_timeout)
+
+    result = service._plan_learning_path(
+        title="操作系统实验导学",
+        goal_mode="preview",
+        difficulty_mode="guided",
+        combined_text="进程和线程是并发控制的基础，调度决定执行顺序。",
+    )
+
+    assert result["summary"]
+    assert len(result["steps"]) >= 3
+    assert result["steps"][0]["title"]
+
+
 def test_learning_llm_workflow_explore_answer_recovers_json_from_fenced_reply(monkeypatch):
     provider = FakeLLMProvider(
         """
@@ -106,6 +134,7 @@ def test_learning_llm_workflow_explore_answer_recovers_json_from_fenced_reply(mo
     assert result == {
         "answer": "这份资料的重点是先判断候选人的翻译方向、行业经验和项目证据是否匹配岗位。",
         "relatedConcepts": ["岗位匹配", "项目证据"],
+        "reasoningContent": None,
     }
 
 
@@ -123,6 +152,33 @@ def test_learning_llm_workflow_explore_answer_uses_raw_text_when_provider_return
     assert result == {
         "answer": "先看候选人的语言方向、行业场景和可验证项目，再决定是否继续深问。",
         "relatedConcepts": [],
+        "reasoningContent": None,
+    }
+
+
+def test_learning_llm_workflow_explore_answer_returns_reasoning_content(monkeypatch):
+    provider = FakeLLMProvider(
+        """
+        {
+          "answer": "先看候选人的语言方向和项目证据。",
+          "relatedConcepts": ["岗位匹配"]
+        }
+        """,
+        reasoning_content="先确定问题范围，再比对简历中的直接证据。",
+    )
+    monkeypatch.setattr("app.learning.llm_flow.build_llm_provider", lambda: provider)
+
+    workflow = LearningLLMWorkflow()
+    result = workflow.explore_answer(
+        focus_context={},
+        citations=[],
+        user_content="这份简历先看什么？",
+    )
+
+    assert result == {
+        "answer": "先看候选人的语言方向和项目证据。",
+        "relatedConcepts": ["岗位匹配"],
+        "reasoningContent": "先确定问题范围，再比对简历中的直接证据。",
     }
 
 
@@ -526,7 +582,10 @@ def test_runtime_orchestrators_compile_langgraph_graphs():
     assert guide.runtime is not None
     assert guide.runtime_node_names == [
         "load_session",
+        "classify_intent",
+        "control_node",
         "retrieve_evidence",
+        "redirect_node",
         "teacher_node",
         "peer_node",
         "examiner_node",

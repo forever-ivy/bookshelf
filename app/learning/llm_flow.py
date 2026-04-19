@@ -214,20 +214,22 @@ class LearningLLMWorkflow:
     ) -> dict[str, Any] | None:
         if not self.enabled:
             return None
-        reply = self.provider.chat(
+        context = {
+            "systemPrompt": "你是 grounded notebook 问答助手。你只返回 JSON。",
+            "instruction": "返回 JSON：answer:string, relatedConcepts:string[]。答案必须基于给定引用和焦点上下文。",
+            "focusContext": focus_context,
+            "citations": citations[:4],
+        }
+        reply, reasoning_content = self.provider.chat_with_reasoning(
             text=user_content,
-            context={
-                "systemPrompt": "你是 grounded notebook 问答助手。你只返回 JSON。",
-                "instruction": "返回 JSON：answer:string, relatedConcepts:string[]。答案必须基于给定引用和焦点上下文。",
-                "focusContext": focus_context,
-                "citations": citations[:4],
-            },
+            context=context,
         )
         parsed = _parse_json_payload(reply)
         if isinstance(parsed, dict) and parsed.get("answer"):
             return {
                 "answer": str(parsed["answer"]).strip(),
                 "relatedConcepts": [str(item).strip() for item in parsed.get("relatedConcepts", []) if str(item).strip()],
+                "reasoningContent": reasoning_content,
             }
 
         raw_answer = (reply or "").strip()
@@ -237,4 +239,5 @@ class LearningLLMWorkflow:
         return {
             "answer": raw_answer,
             "relatedConcepts": [],
+            "reasoningContent": reasoning_content,
         }

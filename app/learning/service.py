@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from datetime import timedelta
 from pathlib import Path
 from typing import Any, TypedDict
 
+import httpx
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
@@ -22,6 +24,11 @@ from app.learning.web_fetch import UrlContentFetcher
 from app.recommendation.embeddings import build_book_embedding_text, build_embedding_provider
 
 try:
+    from openai import APITimeoutError
+except Exception:  # pragma: no cover - optional in tests
+    APITimeoutError = None  # type: ignore[assignment]
+
+try:
     from langgraph.graph import END, START, StateGraph  # type: ignore
 except Exception:  # pragma: no cover - optional in tests
     END = "__end__"
@@ -32,6 +39,7 @@ except Exception:  # pragma: no cover - optional in tests
 FILENAME_SANITIZER = re.compile(r"[^A-Za-z0-9._-]+")
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_]+|[\u4e00-\u9fff]+")
 MINERU_SUPPORTED_SUFFIXES = {".pdf", ".docx", ".pptx", ".xlsx", ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}
+logger = logging.getLogger(__name__)
 
 
 class PlannerState(TypedDict, total=False):
@@ -78,6 +86,13 @@ def ensure_learning_profile_storage_dir(*, settings: Settings, reader_id: int, p
     target = learning_profile_storage_dir(settings=settings, reader_id=reader_id, profile_id=profile_id)
     target.mkdir(parents=True, exist_ok=True)
     return target
+
+
+def _is_llm_timeout(exc: Exception) -> bool:
+    timeout_types = [TimeoutError, httpx.TimeoutException]
+    if APITimeoutError is not None:
+        timeout_types.append(APITimeoutError)
+    return isinstance(exc, tuple(timeout_types))
 
 
 def chunk_text(text: str, *, chunk_size: int, overlap: int) -> list[str]:
@@ -313,19 +328,12 @@ class LearningService:
         reader_id: int,
         profile_id: int,
     ) -> dict[str, Any]:
-        profile = repository.require_owned_profile(session, profile_id=profile_id, reader_id=reader_id)
-        jobs = list(repository.list_profile_jobs(session, profile_id=profile.id))
-        active_jobs = [job for job in jobs if job.status == "processing"]
-        retryable_jobs = [job for job in active_jobs if int(job.attempt_count or 0) == 0]
-        if active_jobs and len(retryable_jobs) != len(active_jobs):
-            return {"triggered": False, "jobs": jobs}
-        self.runtime_probe.assert_generation_runtime_available()
+        result = self.prepare_generation(session, reader_id=reader_id, profile_id=profile_id)
+        if not result["triggered"]:
+            return result
 
-        for job in jobs:
-            job.status = "processing"
-            job.error_message = None
-        profile.status = "queued"
-        session.flush()
+        profile = result["profile"]
+        jobs = result["jobs"]
 
         if self.settings.learning_tasks_eager:
             session.commit()
@@ -334,12 +342,34 @@ class LearningService:
             generate_learning_profile_task(profile.id, reader_id)
             session.expire_all()
             refreshed_jobs = list(repository.list_profile_jobs(session, profile_id=profile.id))
-            return {"triggered": True, "jobs": refreshed_jobs}
+            return {"triggered": True, "jobs": refreshed_jobs, "profile": profile}
 
         from app.learning.tasks import generate_learning_profile_task
 
         generate_learning_profile_task.delay(profile.id, reader_id)
-        return {"triggered": True, "jobs": jobs}
+        return result
+
+    def prepare_generation(
+        self,
+        session: Session,
+        *,
+        reader_id: int,
+        profile_id: int,
+    ) -> dict[str, Any]:
+        profile = repository.require_owned_profile(session, profile_id=profile_id, reader_id=reader_id)
+        jobs = list(repository.list_profile_jobs(session, profile_id=profile.id))
+        active_jobs = [job for job in jobs if job.status == "processing"]
+        retryable_jobs = [job for job in active_jobs if int(job.attempt_count or 0) == 0]
+        if active_jobs and len(retryable_jobs) != len(active_jobs):
+            return {"triggered": False, "jobs": jobs, "profile": profile}
+        self.runtime_probe.assert_generation_runtime_available()
+
+        for job in jobs:
+            job.status = "processing"
+            job.error_message = None
+        profile.status = "queued"
+        session.flush()
+        return {"triggered": True, "jobs": jobs, "profile": profile}
 
     def _create_asset(
         self,
@@ -540,12 +570,18 @@ class LearningService:
         difficulty_mode: str,
         combined_text: str,
     ) -> dict[str, Any]:
-        llm_plan = self.llm_workflow.plan_path(
-            title=title,
-            goal_mode=goal_mode,
-            difficulty_mode=difficulty_mode,
-            combined_text=combined_text,
-        )
+        llm_plan = None
+        try:
+            llm_plan = self.llm_workflow.plan_path(
+                title=title,
+                goal_mode=goal_mode,
+                difficulty_mode=difficulty_mode,
+                combined_text=combined_text,
+            )
+        except Exception as exc:
+            if not _is_llm_timeout(exc):
+                raise
+            logger.warning("LLM learning planner timed out; falling back to local planner")
         if llm_plan is not None:
             return llm_plan
         return plan_learning_path(

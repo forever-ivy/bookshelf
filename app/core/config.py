@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     llm_model: str = "gpt-4.1-mini"
     llm_api_key: str = ""
     llm_base_url: str | None = None
-    llm_timeout_seconds: float = 5.0
+    llm_timeout_seconds: float = 30.0
     embedding_provider: str = "hash"
     embedding_model: str = "text-embedding-3-small"
     embedding_api_key: str = ""

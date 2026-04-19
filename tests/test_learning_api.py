@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 from io import BytesIO
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
+from openai import APITimeoutError
 from sqlalchemy import text
 
 from app.catalog.models import Book
@@ -144,7 +146,8 @@ def test_learning_session_stream_step_clarify_persists_without_checkpoint(client
 
     final_event = events[-1]
     assert final_event["data"]["turn"]["intentKind"] == "step_clarify"
-    assert final_event["data"]["turn"]["evaluation"] is None
+    assert set(final_event["data"]) == {"turn"}
+    assert "evaluation" not in final_event["data"]["turn"]
 
     session = get_session_factory()()
     try:
@@ -175,7 +178,8 @@ def test_learning_session_stream_offtrack_explore_skips_checkpoint_and_remediati
 
     final_event = events[-1]
     assert final_event["data"]["turn"]["intentKind"] == "offtrack_explore"
-    assert final_event["data"]["turn"]["evaluation"] is None
+    assert set(final_event["data"]) == {"turn"}
+    assert "evaluation" not in final_event["data"]["turn"]
 
     session = get_session_factory()()
     try:
@@ -206,13 +210,18 @@ def test_learning_session_stream_control_mutates_state_without_evaluation(client
 
     final_event = events[-1]
     assert final_event["data"]["turn"]["intentKind"] == "control"
-    assert final_event["data"]["turn"]["evaluation"] is None
-    assert final_event["data"]["session"]["currentStepIndex"] == 1
+    assert set(final_event["data"]) == {"turn"}
+    assert "evaluation" not in final_event["data"]["turn"]
 
     session = get_session_factory()()
     try:
+        current_step_index = session.execute(
+            text("SELECT current_step_index FROM learning_sessions WHERE id = :session_id"),
+            {"session_id": learning_session_id},
+        ).scalar_one()
         checkpoint_count = session.execute(text("SELECT COUNT(*) FROM learning_checkpoints")).scalar_one()
         remediation_count = session.execute(text("SELECT COUNT(*) FROM learning_remediation_plans")).scalar_one()
+        assert current_step_index == 1
         assert checkpoint_count == 0
         assert remediation_count == 0
     finally:
@@ -242,15 +251,17 @@ def test_learning_session_stream_session_redirects_offtrack_question_to_explore(
     assert final_event["data"]["turn"]["intentKind"] == "offtrack_explore"
     assert final_event["data"]["turn"]["responseMode"] == "redirected"
     assert final_event["data"]["turn"]["redirectedSessionId"] == redirect_event["data"]["targetSession"]["id"]
-    assert final_event["data"]["turn"]["bridgeMetadata"]["trigger"] == "auto"
-    assert final_event["data"]["turn"]["bridgeMetadata"]["reason"] == "offtrack_explore"
-    assert final_event["data"]["turn"]["evaluation"] is None
+    assert set(final_event["data"]) == {"turn"}
+    assert "bridgeMetadata" not in final_event["data"]["turn"]
+    assert "evaluation" not in final_event["data"]["turn"]
 
     turns_response = client.get(f"/api/v2/learning/sessions/{learning_session_id}/turns", headers=headers)
     assert turns_response.status_code == 200
     turn = turns_response.json()["items"][0]
     assert turn["responseMode"] == "redirected"
     assert turn["redirectedSessionId"] == redirect_event["data"]["targetSession"]["id"]
+    assert turn["bridgeMetadata"]["trigger"] == "auto"
+    assert turn["bridgeMetadata"]["reason"] == "offtrack_explore"
 
     session = get_session_factory()()
     try:
@@ -341,6 +352,100 @@ def test_generate_learning_profile_keeps_profile_when_graph_provider_missing(cli
     assert detail_payload["activePathVersion"]["graphProvider"] in {"fallback", "neo4j"}
     assert any(job["jobType"] == "graph_build" for job in detail_payload["jobs"])
     assert any(asset["parseStatus"] == "parsed" for asset in detail_payload["assets"])
+
+
+def test_generate_learning_profile_can_defer_background_work_in_eager_mode(client, monkeypatch):
+    state = seed_reader_with_book()
+    headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
+
+    create_response = client.post(
+        "/api/v2/learning/profiles",
+        headers=headers,
+        json={
+            "title": "异步触发导学空间",
+            "goalMode": "preview",
+            "difficultyMode": "guided",
+            "sources": [
+                {
+                    "kind": "inline_text",
+                    "fileName": "deferred.md",
+                    "mimeType": "text/markdown",
+                    "content": "# Deferred\n\n先创建 profile，再把生成链放到后台。",
+                }
+            ],
+        },
+    )
+    profile_id = create_response.json()["profile"]["id"]
+
+    scheduled: list[tuple[int, int]] = []
+
+    def fake_schedule(profile_id: int, reader_id: int) -> None:
+        scheduled.append((profile_id, reader_id))
+
+    monkeypatch.setattr("app.learning.router._dispatch_generation_task", fake_schedule)
+
+    generate_response = client.post(
+        f"/api/v2/learning/profiles/{profile_id}/generate?background=1",
+        headers=headers,
+    )
+
+    assert generate_response.status_code == 202
+    payload = generate_response.json()
+    assert payload["ok"] is True
+    assert payload["triggered"] is True
+    assert scheduled == [(profile_id, state["owner_profile_id"])]
+
+    detail_response = client.get(f"/api/v2/learning/profiles/{profile_id}", headers=headers)
+    detail_payload = detail_response.json()
+    assert detail_payload["profile"]["status"] == "queued"
+    assert detail_payload["activePathVersion"] is None
+    assert all(job["status"] == "processing" for job in detail_payload["jobs"])
+
+
+def test_generate_learning_profile_falls_back_when_llm_plan_times_out(client, monkeypatch):
+    state = seed_reader_with_book()
+    headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
+
+    create_response = client.post(
+        "/api/v2/learning/profiles",
+        headers=headers,
+        json={
+            "title": "超时回退导学空间",
+            "goalMode": "preview",
+            "difficultyMode": "guided",
+            "sources": [
+                {
+                    "kind": "inline_text",
+                    "fileName": "timeout.md",
+                    "mimeType": "text/markdown",
+                    "content": "# 超时\n\n即使 LLM 规划超时，也应该回退到本地 planner 继续生成。",
+                }
+            ],
+        },
+    )
+    profile_id = create_response.json()["profile"]["id"]
+
+    def raise_timeout(self, **kwargs):
+        raise APITimeoutError(request=httpx.Request("POST", "https://api.deepseek.com/chat/completions"))
+
+    monkeypatch.setattr("app.learning.llm_flow.LearningLLMWorkflow.plan_path", raise_timeout)
+
+    generate_response = client.post(
+        f"/api/v2/learning/profiles/{profile_id}/generate",
+        headers=headers,
+    )
+
+    assert generate_response.status_code == 202
+    payload = generate_response.json()
+    assert payload["ok"] is True
+    assert payload["triggered"] is True
+
+    detail_response = client.get(f"/api/v2/learning/profiles/{profile_id}", headers=headers)
+    assert detail_response.status_code == 200
+    detail_payload = detail_response.json()
+    assert detail_payload["profile"]["status"] == "ready"
+    assert detail_payload["activePathVersion"]["stepCount"] >= 3
+    assert all(job["status"] == "completed" for job in detail_payload["jobs"])
 
 
 def test_generate_learning_profile_retries_processing_jobs_that_never_started(client):
@@ -689,6 +794,11 @@ def test_learning_session_stream_emits_multi_agent_events_and_progress(client):
     assert final_event["data"]["turn"]["intentKind"] == "step_answer"
     assert final_event["data"]["turn"]["responseMode"] == "evaluation"
     assert final_event["data"]["turn"]["redirectedSessionId"] is None
+    assert set(final_event["data"]) == {"turn"}
+    assert "session" not in final_event["data"]
+    assert "report" not in final_event["data"]
+    assert "metadata" not in final_event["data"]["turn"]
+    assert "citations" not in final_event["data"]["turn"]
     assert presentation["kind"] == "guide"
     assert presentation["teacher"]["content"]
     assert presentation["peer"]["content"]
@@ -839,13 +949,13 @@ def test_explore_session_stream_returns_free_qa_without_progress_or_checkpoint(c
     assert event_names[-1] == "assistant.final"
 
     final_event = events[-1]
-    assert final_event["data"]["session"]["sessionKind"] == "explore"
-    assert final_event["data"]["turn"]["turnKind"] == "explore"
+    assert set(final_event["data"]) == {"turn"}
+    assert "session" not in final_event["data"]
+    assert "evaluation" not in final_event["data"]["turn"]
+    assert "relatedConcepts" not in final_event["data"]["turn"]
     assert final_event["data"]["turn"]["intentKind"] is None
     assert final_event["data"]["turn"]["responseMode"] is None
     assert final_event["data"]["turn"]["redirectedSessionId"] is None
-    assert final_event["data"]["turn"]["evaluation"] is None
-    assert final_event["data"]["turn"]["relatedConcepts"]
     assert final_event["data"]["turn"]["presentation"]["kind"] == "explore"
     assert final_event["data"]["turn"]["presentation"]["answer"]["content"]
     assert final_event["data"]["turn"]["presentation"]["evidence"]
@@ -874,6 +984,68 @@ def test_explore_session_stream_returns_free_qa_without_progress_or_checkpoint(c
         assert remediation_count == 0
     finally:
         session.close()
+
+
+def test_explore_session_stream_includes_reasoning_delta_and_persists_reasoning_content(client, monkeypatch):
+    def fake_explore_answer(self, *, focus_context, citations, user_content):
+        return {
+            "answer": "进程是资源分配单位，线程是调度执行单位。",
+            "relatedConcepts": ["并发模型"],
+            "reasoningContent": "先识别问题在比较两个概念，再抓定义维度和调度维度。",
+        }
+
+    monkeypatch.setattr("app.learning.llm_flow.LearningLLMWorkflow.explore_answer", fake_explore_answer)
+
+    state = seed_reader_with_book()
+    headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
+
+    create_response = client.post(
+        "/api/v2/learning/profiles",
+        headers=headers,
+        json={
+            "title": "操作系统导学空间",
+            "goalMode": "preview",
+            "difficultyMode": "guided",
+            "sources": [{"kind": "book", "bookId": state["book_id"]}],
+        },
+    )
+    profile_id = create_response.json()["profile"]["id"]
+    client.post(f"/api/v2/learning/profiles/{profile_id}/generate", headers=headers)
+
+    session_response = client.post(
+        "/api/v2/learning/sessions",
+        headers=headers,
+        json={
+            "profileId": profile_id,
+            "learningMode": "preview",
+            "sessionKind": "explore",
+        },
+    )
+
+    assert session_response.status_code == 201
+    explore_session_id = session_response.json()["session"]["id"]
+
+    with client.stream(
+        "POST",
+        f"/api/v2/learning/sessions/{explore_session_id}/stream",
+        headers=headers,
+        json={"content": "进程和线程有什么区别？"},
+    ) as response:
+        assert response.status_code == 200
+        events = parse_sse_lines(list(response.iter_lines()))
+
+    event_names = [event["event"] for event in events]
+    assert "explore.reasoning.delta" in event_names
+    final_event = events[-1]
+    assert (
+        final_event["data"]["turn"]["presentation"]["reasoningContent"]
+        == "先识别问题在比较两个概念，再抓定义维度和调度维度。"
+    )
+
+    turns_response = client.get(f"/api/v2/learning/sessions/{explore_session_id}/turns", headers=headers)
+    assert turns_response.status_code == 200
+    turn = turns_response.json()["items"][0]
+    assert turn["presentation"]["reasoningContent"] == "先识别问题在比较两个概念，再抓定义维度和调度维度。"
 
 
 def test_explore_session_stream_returns_model_unavailable_message_when_llm_disabled(client):
