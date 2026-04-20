@@ -83,6 +83,27 @@ function hasStreamedAssistantDraftContent() {
   return Boolean(assistantDraft?.text.trim());
 }
 
+export function buildOptimisticUserHistoryMessage(
+  sessionId: number,
+  userMessage: Pick<LearningWorkspaceRenderedMessage, 'text'>,
+  assistantMessage?: Pick<LearningSessionMessage, 'createdAt'>
+): LearningSessionMessage {
+  const assistantTimestamp = assistantMessage?.createdAt
+    ? new Date(assistantMessage.createdAt).getTime()
+    : Number.NaN;
+  const userTimestamp = Number.isFinite(assistantTimestamp)
+    ? Math.max(0, assistantTimestamp - 1)
+    : Date.now();
+
+  return {
+    content: userMessage.text,
+    createdAt: new Date(userTimestamp).toISOString(),
+    id: -userTimestamp,
+    learningSessionId: sessionId,
+    role: 'user',
+  };
+}
+
 export function resolveLearningWorkspaceNavigationState(
   pathname: string,
   modeParam?: string | string[]
@@ -249,13 +270,7 @@ export function LearningWorkspaceProvider({
           );
 
           if (!hasUser) {
-            nextItems.push({
-              content: userMessage.text,
-              createdAt: new Date().toISOString(),
-              id: -Date.now(),
-              role: 'user',
-              learningSessionId: sessionId,
-            });
+            nextItems.push(buildOptimisticUserHistoryMessage(sessionId, userMessage, assistantMessage));
           }
           if (!hasAssistant) {
             nextItems.push({
@@ -404,7 +419,7 @@ export function LearningWorkspaceProvider({
       }
 
       if (!finalAssistantMessage && !redirected) {
-        clearConversationDraft();
+        throw new Error('learning_stream_missing_final');
       }
     } catch (error) {
       const [messagesResult] = await Promise.allSettled([sessionMessagesQuery.refetch(), sessionsQuery.refetch()]);

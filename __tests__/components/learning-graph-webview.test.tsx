@@ -54,6 +54,7 @@ describe('learning graph webview availability', () => {
           edgeKeysByNodeId: {
             'concept:limits': ['fragment:1::concept:limits::MENTIONS'],
           },
+          generatedNodeIds: ['explore:concept:无穷小'],
           graph: {
             edges: [{ source: 'fragment:1', target: 'concept:limits', type: 'MENTIONS' }],
             nodes: [
@@ -74,23 +75,31 @@ describe('learning graph webview availability', () => {
             ],
             provider: 'fallback',
           },
+          guideStatusByNodeId: {
+            'concept:limits': 'completed',
+          },
+          highlightedNodeIds: ['concept:limits', 'fragment:1'],
           linkedNodeIdsByNodeId: {
             'book:1': [],
             'concept:limits': ['fragment:1'],
             'fragment:1': ['concept:limits'],
           },
+          mode: 'global',
           selectedNodeId: null,
           theme: {
             background: '#ffffff',
             borderSoft: '#dddddd',
             edge: '#999999',
+            explore: '#ff9900',
             fragment: '#aaaaaa',
             primary: '#333333',
             source: '#009900',
             step: '#cc9900',
+            success: '#006600',
             surface: '#ffffff',
             text: '#111111',
             textSoft: '#666666',
+            warning: '#cc9900',
           },
         }}
         hydrateToken={0}
@@ -128,26 +137,33 @@ describe('learning graph webview availability', () => {
             velocityDecay: 0.25,
           },
           edgeKeysByNodeId: {},
+          generatedNodeIds: [],
           graph: {
             edges: [],
             nodes: [{ id: 'book:1', label: '高数', type: 'Book' }],
             provider: 'fallback',
           },
+          guideStatusByNodeId: {},
+          highlightedNodeIds: [],
           linkedNodeIdsByNodeId: {
             'book:1': [],
           },
+          mode: 'global',
           selectedNodeId: null,
           theme: {
             background: '#ffffff',
             borderSoft: '#dddddd',
             edge: '#999999',
+            explore: '#ff9900',
             fragment: '#aaaaaa',
             primary: '#333333',
             source: '#009900',
             step: '#cc9900',
+            success: '#006600',
             surface: '#ffffff',
             text: '#111111',
             textSoft: '#666666',
+            warning: '#cc9900',
           },
         }}
         hydrateToken={0}

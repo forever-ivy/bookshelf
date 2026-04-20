@@ -1,9 +1,17 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
+import { StyleSheet } from 'react-native';
 
 import LearningWorkspaceGraphScreen from '@/app/learning/[profileId]/(workspace)/graph';
+import {
+  LEARNING_WORKSPACE_FLOATING_BUTTON_SIZE,
+  LEARNING_WORKSPACE_TOP_CHROME_OFFSET,
+} from '@/components/learning/learning-workspace-scaffold';
 import { getLearningGraph } from '@/lib/api/learning';
+
+let mockWorkspaceScreen: any;
+let mockLearningSessions: any[];
 
 jest.mock('expo-router', () => ({
   Stack: {
@@ -20,6 +28,39 @@ jest.mock('react-native-safe-area-context', () => ({
   }),
 }));
 
+jest.mock('react-native-reanimated', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+
+  return {
+    __esModule: true,
+    default: {
+      View,
+    },
+    FadeInDown: {
+      duration: () => ({
+        springify: () => undefined,
+      }),
+    },
+    FadeInUp: {
+      duration: () => ({
+        springify: () => undefined,
+      }),
+    },
+    Layout: {
+      springify: () => ({
+        damping: () => ({
+          mass: () => ({
+            stiffness: () => undefined,
+          }),
+        }),
+      }),
+    },
+    useAnimatedStyle: (updater: () => Record<string, unknown>) => updater(),
+    withSpring: (value: unknown) => value,
+  };
+});
+
 jest.mock('@/components/learning/learning-workspace-scaffold', () => {
   const React = require('react');
   const { View } = require('react-native');
@@ -33,21 +74,7 @@ jest.mock('@/components/learning/learning-workspace-scaffold', () => {
 });
 
 jest.mock('@/components/learning/learning-workspace-provider', () => ({
-  useLearningWorkspaceScreen: () => ({
-    profile: {
-      id: 6001,
-      title: 'test.pdf',
-    },
-    sourceCards: [
-      {
-        excerpt: '上传资料来源摘要',
-        id: 'source-1',
-        meta: '上传资料',
-        title: 'test.pdf',
-      },
-    ],
-    sourceSummary: '上传资料来源摘要',
-  }),
+  useLearningWorkspaceScreen: () => mockWorkspaceScreen,
 }));
 
 jest.mock('@/hooks/use-app-session', () => ({
@@ -62,24 +89,64 @@ jest.mock('@/hooks/use-app-theme', () => ({
   }),
 }));
 
+jest.mock('@/hooks/use-library-app-data', () => ({
+  useLearningSessionsQuery: () => ({
+    data: mockLearningSessions,
+  }),
+}));
+
 jest.mock('@/lib/api/learning', () => ({
   getLearningGraph: jest.fn(),
 }));
 
 describe('LearningWorkspaceGraphScreen', () => {
+  const graphModeTabsVisualHeight = 50;
   const mockGetLearningGraph = getLearningGraph as jest.MockedFunction<typeof getLearningGraph>;
 
   beforeEach(() => {
     mockGetLearningGraph.mockReset();
+    mockLearningSessions = [];
+    mockWorkspaceScreen = {
+      profile: {
+        curriculum: [
+          { id: 'step-0', title: '建立整体认知' },
+          { id: 'step-1', title: '连接导数概念' },
+        ],
+        id: 6001,
+        title: 'test.pdf',
+      },
+      renderedMessages: [],
+      sourceCards: [
+        {
+          excerpt: '上传资料来源摘要',
+          id: 'source-1',
+          meta: '上传资料',
+          title: 'test.pdf',
+        },
+      ],
+      sourceSummary: '上传资料来源摘要',
+      workspaceSession: {
+        currentStepIndex: 0,
+        currentStepTitle: null,
+        focusContext: null,
+        id: 301,
+        sessionKind: 'explore',
+      },
+    };
   });
 
-  it('renders graph stats and updates the details panel from WebView events', async () => {
+  it('renders global, explore, and guide graph tabs over the same base map', async () => {
     mockGetLearningGraph.mockResolvedValue({
       edges: [
         { source: 'asset:1', target: 'book:profile', type: 'DERIVED_FROM' },
         { source: 'fragment:1', target: 'asset:1', type: 'DERIVED_FROM' },
         { source: 'fragment:1', target: 'concept:limits', type: 'MENTIONS' },
+        { source: 'fragment:2', target: 'asset:1', type: 'DERIVED_FROM' },
+        { source: 'fragment:2', target: 'concept:derivative', type: 'MENTIONS' },
         { source: 'step:0', target: 'concept:limits', type: 'TESTS' },
+        { source: 'fragment:1', target: 'step:0', type: 'EVIDENCE_FOR' },
+        { source: 'step:1', target: 'concept:derivative', type: 'TESTS' },
+        { source: 'fragment:2', target: 'step:1', type: 'EVIDENCE_FOR' },
       ],
       nodes: [
         { id: 'book:profile', label: 'test.pdf', type: 'Book' },
@@ -93,19 +160,88 @@ describe('LearningWorkspaceGraphScreen', () => {
           semanticSummary: '函数极限的定义',
           type: 'Fragment',
         },
+        {
+          assetId: 1,
+          chapterLabel: 'Section 2',
+          chunkIndex: 1,
+          fragmentId: 2,
+          id: 'fragment:2',
+          label: '导数的定义',
+          semanticSummary: '导数的定义',
+          type: 'Fragment',
+        },
         { id: 'concept:limits', label: '极限', type: 'Concept' },
+        { id: 'concept:derivative', label: '导数', type: 'Concept' },
         {
           guidingQuestion: '极限最先该怎么理解？',
           id: 'step:0',
           keywords: ['极限'],
           label: '建立整体认知',
           objective: '先搭整体框架',
+          stepIndex: 0,
           title: '建立整体认知',
+          type: 'LessonStep',
+        },
+        {
+          guidingQuestion: '导数和极限怎么接上？',
+          id: 'step:1',
+          keywords: ['导数'],
+          label: '连接导数概念',
+          objective: '把导数接回整体图谱',
+          stepIndex: 1,
+          title: '连接导数概念',
           type: 'LessonStep',
         },
       ],
       provider: 'fallback',
     });
+    mockLearningSessions = [
+      {
+        completedSteps: [{ completedAt: '2026-04-19T10:00:00Z', confidence: 0.82, stepIndex: 0 }],
+        completedStepsCount: 1,
+        currentStepIndex: 1,
+        currentStepTitle: '连接导数概念',
+        id: 201,
+        learningProfileId: 6001,
+        progressLabel: '1 / 2 步',
+        sessionKind: 'guide',
+        status: 'active',
+        updatedAt: '2026-04-19T10:05:00Z',
+      },
+    ];
+    mockWorkspaceScreen.renderedMessages = [
+      {
+        cards: [],
+        id: 'message-user-1',
+        presentation: null,
+        role: 'user',
+        streaming: false,
+        text: '极限和无穷小有什么关系？',
+      },
+      {
+        cards: [],
+        id: 'message-explore-1',
+        presentation: {
+          answer: {
+            content: '无穷小通常会和极限一起理解。',
+          },
+          bridgeActions: [],
+          evidence: [
+            {
+              excerpt: '函数极限的定义',
+              fragmentId: 1,
+              sourceTitle: 'test.pdf',
+            },
+          ],
+          followups: [],
+          kind: 'explore',
+          relatedConcepts: ['极限', '无穷小'],
+        },
+        role: 'assistant',
+        streaming: false,
+        text: '无穷小通常会和极限一起理解。',
+      },
+    ];
 
     const queryClient = new QueryClient({
       defaultOptions: {
@@ -123,12 +259,23 @@ describe('LearningWorkspaceGraphScreen', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('5 个节点')).toBeTruthy();
-      expect(screen.getByText('4 条连线')).toBeTruthy();
-    });
+      const overlayStyle = StyleSheet.flatten(
+        screen.getByTestId('learning-graph-mode-tabs-overlay').props.style
+      );
 
-    expect(screen.getByText('点击图谱中的节点查看细节与相关来源。')).toBeTruthy();
-    expect(screen.getByTestId('learning-graph-webview')).toBeTruthy();
+      expect(screen.getByTestId('learning-graph-scaffold')).toBeTruthy();
+      expect(overlayStyle.top).toBe(
+        LEARNING_WORKSPACE_TOP_CHROME_OFFSET +
+          (LEARNING_WORKSPACE_FLOATING_BUTTON_SIZE - graphModeTabsVisualHeight) / 2
+      );
+      expect(overlayStyle.left).toBe(90);
+      expect(overlayStyle.right).toBe(90);
+      expect(screen.getByTestId('learning-graph-mode-tabs')).toBeTruthy();
+      expect(screen.getByText('Global')).toBeTruthy();
+      expect(screen.getByText('Explore')).toBeTruthy();
+      expect(screen.getByText('Guide')).toBeTruthy();
+      expect(screen.getByTestId('learning-graph-webview')).toBeTruthy();
+    });
 
     fireEvent(screen.getByTestId('learning-graph-webview'), 'message', {
       nativeEvent: {
@@ -141,20 +288,42 @@ describe('LearningWorkspaceGraphScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('极限')).toBeTruthy();
-      expect(screen.getByText('关联节点 2 个')).toBeTruthy();
+      expect(screen.getByText('图谱位置')).toBeTruthy();
       expect(screen.getByText('函数极限的定义')).toBeTruthy();
     });
+
+    fireEvent.press(screen.getByText('Explore'));
 
     fireEvent(screen.getByTestId('learning-graph-webview'), 'message', {
       nativeEvent: {
         data: JSON.stringify({
-          type: 'backgroundTap',
+          nodeId: 'explore:concept:无穷小',
+          type: 'nodeTap',
         }),
       },
     });
 
     await waitFor(() => {
-      expect(screen.getByText('点击图谱中的节点查看细节与相关来源。')).toBeTruthy();
+      expect(screen.getByText('无穷小')).toBeTruthy();
+      expect(screen.getByText('探索关系')).toBeTruthy();
+      expect(screen.getByText('来自最近一轮 Explore 发散出的概念')).toBeTruthy();
+    });
+
+    fireEvent.press(screen.getByText('Guide'));
+
+    fireEvent(screen.getByTestId('learning-graph-webview'), 'message', {
+      nativeEvent: {
+        data: JSON.stringify({
+          nodeId: 'concept:limits',
+          type: 'nodeTap',
+        }),
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('学习状态')).toBeTruthy();
+      expect(screen.getAllByText('已点亮').length).toBeGreaterThan(0);
+      expect(screen.getByText('建立整体认知')).toBeTruthy();
     });
   });
 
@@ -181,7 +350,7 @@ describe('LearningWorkspaceGraphScreen', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('还没有可展示的图谱数据')).toBeTruthy();
+      expect(screen.getByText('暂无可展示的图谱')).toBeTruthy();
       expect(screen.getByText('上传资料来源摘要')).toBeTruthy();
     });
   });

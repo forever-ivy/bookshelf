@@ -1,4 +1,4 @@
-import { EllipsisVertical, X } from 'lucide-react-native';
+import { ChevronLeft, EllipsisVertical, X } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,6 +11,7 @@ import { useAppTheme } from '@/hooks/use-app-theme';
 type IconComponent = React.ComponentType<Record<string, unknown>>;
 
 const CloseIcon = X as IconComponent;
+const BackIcon = ChevronLeft as IconComponent;
 const MenuIcon = EllipsisVertical as IconComponent;
 
 export const LEARNING_WORKSPACE_TAB_BAR_CLEARANCE = 56;
@@ -21,11 +22,15 @@ export const LEARNING_WORKSPACE_FLOATING_BUTTON_SIZE = 58;
 export function LearningWorkspaceScaffold({
   children,
   footer,
+  headerCenter,
+  leftIconKind = 'close',
   showHeader = true,
   subtitle,
 }: {
   children: React.ReactNode;
   footer?: React.ReactNode;
+  headerCenter?: React.ReactNode;
+  leftIconKind?: 'close' | 'back';
   showHeader?: boolean;
   subtitle?: string;
 }) {
@@ -62,6 +67,7 @@ export function LearningWorkspaceScaffold({
         }}
         title={workspaceGate.title}
         tone={workspaceGate.kind === 'failed' ? 'danger' : 'neutral'}
+        visualState={workspaceGate.kind === 'loading' ? 'skeleton' : 'copy'}
       />
     );
   }
@@ -79,7 +85,7 @@ export function LearningWorkspaceScaffold({
             },
           ]}>
           <Pressable
-            accessibilityLabel="返回导学本库"
+            accessibilityLabel={leftIconKind === 'back' ? '返回' : '返回导学本库'}
             accessibilityRole="button"
             hitSlop={8}
             onPress={closeWorkspace}
@@ -91,28 +97,36 @@ export function LearningWorkspaceScaffold({
                 opacity: pressed ? 0.72 : 1,
               },
             ]}
-            testID="learning-workspace-close-button">
-            <CloseIcon color={theme.colors.text} size={18} strokeWidth={2.2} />
+            testID={leftIconKind === 'back' ? 'learning-workspace-back-button' : 'learning-workspace-close-button'}>
+            {leftIconKind === 'back' ? (
+              <BackIcon color={theme.colors.text} size={20} strokeWidth={2.4} />
+            ) : (
+              <CloseIcon color={theme.colors.text} size={18} strokeWidth={2.2} />
+            )}
           </Pressable>
 
-          <View style={styles.headerText}>
-            <Text
-              numberOfLines={1}
-              style={[
-                styles.progressLabel,
-                { color: theme.colors.textSoft, fontFamily: theme.typography.semiBold.fontFamily },
-              ]}>
-              {subtitle ?? workspaceSession.progressLabel}
-            </Text>
-            <Text
-              numberOfLines={1}
-              style={[
-                styles.title,
-                { color: theme.colors.text, fontFamily: theme.typography.bold.fontFamily },
-              ]}>
-              {profile.title}
-            </Text>
-          </View>
+          {headerCenter ? (
+            <View style={styles.headerCenter}>{headerCenter}</View>
+          ) : (
+            <View style={styles.headerText}>
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.progressLabel,
+                  { color: theme.colors.textSoft, fontFamily: theme.typography.semiBold.fontFamily },
+                ]}>
+                {subtitle ?? workspaceSession.progressLabel}
+              </Text>
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.title,
+                  { color: theme.colors.text, fontFamily: theme.typography.bold.fontFamily },
+                ]}>
+                {profile.title}
+              </Text>
+            </View>
+          )}
 
           <Pressable
             accessibilityLabel="打开导学概览"
@@ -174,6 +188,11 @@ const styles = StyleSheet.create({
   },
   headerText: {
     flex: 1,
+  },
+  headerCenter: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
   },
   iconButton: {
     alignItems: 'center',

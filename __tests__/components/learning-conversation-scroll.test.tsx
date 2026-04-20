@@ -7,6 +7,7 @@ import { LearningConversationScroll } from '@/components/learning/learning-conve
 describe('LearningConversationScroll', () => {
   const originalRequestAnimationFrame = global.requestAnimationFrame;
   let scrollToEndSpy: jest.SpyInstance;
+  let scrollToSpy: jest.SpyInstance;
 
   beforeEach(() => {
     global.requestAnimationFrame = ((callback: FrameRequestCallback) => {
@@ -17,10 +18,14 @@ describe('LearningConversationScroll', () => {
     scrollToEndSpy = jest.spyOn(ScrollView.prototype as ScrollView, 'scrollToEnd').mockImplementation(() => {
       return undefined;
     });
+    scrollToSpy = jest.spyOn(ScrollView.prototype as ScrollView, 'scrollTo').mockImplementation(() => {
+      return undefined;
+    });
   });
 
   afterEach(() => {
     scrollToEndSpy.mockRestore();
+    scrollToSpy.mockRestore();
   });
 
   afterAll(() => {
@@ -58,5 +63,39 @@ describe('LearningConversationScroll', () => {
     expect(scrollToEndSpy).toHaveBeenCalledTimes(2);
 
     view.unmount();
+  });
+
+  it('anchors the latest turn near the top when a focus target is provided', () => {
+    render(
+      <LearningConversationScroll
+        focusAnchorOffset={72}
+        focusAnchorY={280}
+        testID="learning-conversation-scroll">
+        <Text>更早的消息</Text>
+        <Text>最新一轮</Text>
+      </LearningConversationScroll>
+    );
+
+    const scrollView = screen.getByTestId('learning-conversation-scroll');
+
+    act(() => {
+      scrollView.props.onLayout?.({
+        nativeEvent: {
+          layout: {
+            height: 640,
+            width: 320,
+            x: 0,
+            y: 0,
+          },
+        },
+      });
+    });
+
+    act(() => {
+      scrollView.props.onContentSizeChange?.(320, 960);
+    });
+
+    expect(scrollToSpy).toHaveBeenCalledWith({ animated: false, y: 208 });
+    expect(scrollToEndSpy).not.toHaveBeenCalled();
   });
 });

@@ -1,12 +1,24 @@
 import React from 'react';
-import { Platform, Pressable, Text, View } from 'react-native';
+import { Animated, Platform, Pressable, Text, View } from 'react-native';
 import { Copy, Ellipsis, RefreshCcw, Share, type LucideIcon } from 'lucide-react-native';
 
 import { useAppTheme } from '@/hooks/use-app-theme';
+import {
+  LearningRichText,
+  learningTextNeedsRichRendering,
+} from '@/components/learning/learning-rich-text';
 
 type MarkdownBlock =
   | { content: string; type: 'heading' | 'paragraph' | 'quote' }
   | { items: string[]; type: 'list' };
+
+function resolveConversationBodyTypography() {
+  return {
+    fontFamily: Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' }),
+    fontSize: 17,
+    lineHeight: 28,
+  };
+}
 
 function parseMarkdown(text: string) {
   const lines = text.split('\n');
@@ -82,35 +94,41 @@ function parseMarkdown(text: string) {
   return blocks;
 }
 
-function ChatGPTCursor() {
+function ChatGPTCursor({ inline = false }: { inline?: boolean }) {
   const { theme } = useAppTheme();
-  const [opacity, setOpacity] = React.useState(1);
+  const opacity = React.useRef(new Animated.Value(1)).current;
 
   React.useEffect(() => {
-    let fadeOut = true;
-    const intervalId = setInterval(() => {
-      setOpacity((prev) => {
-        if (fadeOut) {
-          if (prev <= 0.2) fadeOut = false;
-          return prev - 0.1;
-        } else {
-          if (prev >= 1) fadeOut = true;
-          return prev + 0.1;
-        }
-      });
-    }, 50);
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: !inline,
+        }),
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: !inline,
+        }),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [opacity, inline]);
 
-    return () => clearInterval(intervalId);
-  }, []);
+  if (inline) {
+    return <Animated.Text style={{ opacity }}>●</Animated.Text>;
+  }
 
   return (
-    <View
+    <Animated.View
       style={{
         backgroundColor: theme.colors.text,
         borderRadius: 99,
-        height: 12,
-        opacity: opacity,
-        width: 12,
+        height: 14,
+        opacity,
+        width: 14,
       }}
     />
   );
@@ -155,14 +173,21 @@ export function LearningChatBubble({
 }) {
   const { theme } = useAppTheme();
   const isAssistant = role === 'assistant';
+  const needsRichUserRendering = !isAssistant && learningTextNeedsRichRendering(text);
+  const bodyTypography = resolveConversationBodyTypography();
+  const userTextStyle = {
+    color: theme.colors.text,
+    ...bodyTypography,
+    ...(needsRichUserRendering ? { flex: 1 } : null),
+  };
   const assistantBlocks = React.useMemo(() => {
     if (!isAssistant || thinking) {
       return [];
     }
 
-    const source = `${text}${streaming ? '●' : ''}`;
+    const source = `${text}`;
     return parseMarkdown(source);
-  }, [isAssistant, streaming, text, thinking]);
+  }, [isAssistant, text, thinking]);
 
   if (isAssistant && thinking) {
     return (
@@ -202,23 +227,34 @@ export function LearningChatBubble({
           ) : null}
 
           <View style={{ gap: 24 }}>
+            {assistantBlocks.length === 0 && streaming && !thinking ? (
+               <Text
+                selectable
+                style={{
+                  color: theme.colors.text,
+                  ...bodyTypography,
+                }}>
+                <ChatGPTCursor inline />
+              </Text>
+            ) : null}
             {assistantBlocks.map((block, index) => {
-              const serifFont = Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' });
+              const isLastBlock = streaming && index === assistantBlocks.length - 1;
 
               if (block.type === 'heading') {
                 return (
-                  <Text
-                    key={`heading-${index}`}
-                    selectable
-                    style={{
-                      color: theme.colors.text,
-                      fontFamily: serifFont,
-                      fontSize: 19,
-                      fontWeight: '600',
-                      lineHeight: 26,
-                    }}>
-                    {block.content}
-                  </Text>
+                  <View key={`heading-${index}`}>
+                    <LearningRichText 
+                      content={block.content}
+                      style={{
+                        color: theme.colors.text,
+                        fontFamily: bodyTypography.fontFamily,
+                        fontSize: 19,
+                        fontWeight: '600',
+                        lineHeight: 26,
+                      }}
+                    />
+                    {isLastBlock ? <ChatGPTCursor inline /> : null}
+                  </View>
                 );
               }
 
@@ -231,16 +267,19 @@ export function LearningChatBubble({
                       borderLeftWidth: 3,
                       paddingLeft: 12,
                     }}>
-                    <Text
-                      selectable
-                      style={{
-                        color: theme.colors.textMuted,
-                        fontFamily: serifFont,
-                        fontSize: 16,
-                        lineHeight: 26,
-                      }}>
-                      {block.content}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <LearningRichText 
+                        content={block.content}
+                        style={{
+                          color: theme.colors.textMuted,
+                          fontFamily: bodyTypography.fontFamily,
+                          fontSize: 16,
+                          lineHeight: 26,
+                          flex: 1,
+                        }}
+                      />
+                      {isLastBlock ? <ChatGPTCursor inline /> : null}
+                    </View>
                   </View>
                 );
               }
@@ -248,52 +287,55 @@ export function LearningChatBubble({
               if (block.type === 'list') {
                 return (
                   <View key={`list-${index}`} style={{ gap: theme.spacing.sm }}>
-                    {block.items.map((item) => (
-                      <View
-                        key={item}
-                        style={{
-                          alignItems: 'flex-start',
-                          flexDirection: 'row',
-                          gap: theme.spacing.sm,
-                        }}>
+                    {block.items.map((item, itemIndex) => {
+                      const isLastItem = isLastBlock && itemIndex === block.items.length - 1;
+                      return (
                         <View
+                          key={item}
                           style={{
-                            backgroundColor: theme.colors.primaryStrong,
-                            borderRadius: theme.radii.pill,
-                            height: 6,
-                            marginTop: 11,
-                            width: 6,
-                          }}
-                        />
-                        <Text
-                          selectable
-                          style={{
-                            color: theme.colors.text,
-                            flex: 1,
-                            fontFamily: serifFont,
-                            fontSize: 17,
-                            lineHeight: 28,
+                            alignItems: 'flex-start',
+                            flexDirection: 'row',
+                            gap: theme.spacing.sm,
                           }}>
-                          {item}
-                        </Text>
-                      </View>
-                    ))}
+                          <View
+                            style={{
+                              backgroundColor: theme.colors.primaryStrong,
+                              borderRadius: theme.radii.pill,
+                              height: 6,
+                              marginTop: 11,
+                              width: 6,
+                            }}
+                          />
+                          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                            <LearningRichText 
+                              content={item}
+                              style={{
+                                color: theme.colors.text,
+                                flex: 1,
+                                ...bodyTypography,
+                              }}
+                            />
+                            {isLastItem ? <ChatGPTCursor inline /> : null}
+                          </View>
+                        </View>
+                      );
+                    })}
                   </View>
                 );
               }
 
               return (
-                <Text
-                  key={`paragraph-${index}`}
-                  selectable
-                  style={{
-                    color: theme.colors.text,
-                    fontFamily: serifFont,
-                    fontSize: 17,
-                    lineHeight: 28,
-                  }}>
-                  {block.content}
-                </Text>
+                <View key={`paragraph-${index}`} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <LearningRichText 
+                    content={block.content}
+                    style={{
+                      color: theme.colors.text,
+                      ...bodyTypography,
+                      flex: 1,
+                    }}
+                  />
+                  {isLastBlock ? <ChatGPTCursor inline /> : null}
+                </View>
               );
             })}
           </View>
@@ -319,26 +361,25 @@ export function LearningChatBubble({
     <View
       style={{
         alignItems: 'flex-end',
+        width: '100%',
       }}>
       <View
+        testID="learning-user-bubble"
         style={{
           backgroundColor: 'rgba(20, 20, 20, 0.05)',
           borderRadius: 16,
           maxWidth: '84%',
           paddingHorizontal: 16,
           paddingVertical: 12,
+          width: needsRichUserRendering ? '84%' : undefined,
         }}>
-        <Text
-          selectable
-          style={{
-            color: theme.colors.text,
-            ...theme.typography.body,
-            fontSize: 15,
-            lineHeight: 23,
-          }}>
-          {text}
-          {streaming ? '●' : ''}
-        </Text>
+        <View style={needsRichUserRendering ? { width: '100%' } : { flexDirection: 'row', alignItems: 'center' }}>
+          <LearningRichText 
+            content={text}
+            style={userTextStyle}
+          />
+          {streaming ? <ChatGPTCursor inline /> : null}
+        </View>
       </View>
     </View>
   );

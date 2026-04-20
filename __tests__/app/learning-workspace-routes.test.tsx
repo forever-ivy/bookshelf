@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { toast } from 'sonner-native';
 
 import { appTheme } from '@/constants/app-theme';
@@ -11,6 +11,7 @@ import LearningWorkspaceEntryRoute from '@/app/learning/[profileId]/index';
 import LearningWorkspaceOverviewRoute from '@/app/learning/[profileId]/overview';
 import LearningWorkspaceStudyRoute from '@/app/learning/[profileId]/(workspace)/study';
 import {
+  buildOptimisticUserHistoryMessage,
   LearningWorkspaceProvider,
   useLearningWorkspaceScreen,
 } from '@/components/learning/learning-workspace-provider';
@@ -131,6 +132,8 @@ let mockProfileData: any = {
 };
 let mockSessionsData: any[] = [createActiveSession()];
 let mockSafeAreaTop = 0;
+const originalPlatformOS = Platform.OS;
+const originalPlatformVersion = Platform.Version;
 
 function resetReadyWorkspace() {
   mockProfileData = {
@@ -478,6 +481,40 @@ describe('learning workspace routes', () => {
     (streamLearningSessionReply as jest.Mock).mockReset();
     mockSubmitLearningBridgeAction.mockReset();
     mockSubmitLearningBridgeAction.mockResolvedValue({ ok: true });
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: originalPlatformOS,
+    });
+    Object.defineProperty(Platform, 'Version', {
+      configurable: true,
+      value: originalPlatformVersion,
+    });
+  });
+
+  afterAll(() => {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: originalPlatformOS,
+    });
+    Object.defineProperty(Platform, 'Version', {
+      configurable: true,
+      value: originalPlatformVersion,
+    });
+  });
+
+  it('builds an optimistic user history message that sorts ahead of the synced assistant reply', () => {
+    const userMessage = buildOptimisticUserHistoryMessage(
+      301,
+      { text: '帮我总结这一节的核心线索' },
+      { createdAt: '2026-04-08T08:31:00Z' }
+    );
+
+    expect(new Date(userMessage.createdAt).getTime()).toBeLessThan(
+      new Date('2026-04-08T08:31:00Z').getTime()
+    );
+    expect(userMessage.role).toBe('user');
+    expect(userMessage.learningSessionId).toBe(301);
+    expect(userMessage.content).toBe('帮我总结这一节的核心线索');
   });
 
   it('redirects the entry route to explore by default', () => {
@@ -629,6 +666,49 @@ describe('learning workspace routes', () => {
     expect(streamLearningSessionReply).toHaveBeenCalledWith(
       301,
       { content: '我理解这一节在解释监督学习的目标。' },
+      'reader-token'
+    );
+  });
+
+  it('shows starter prompts in the study body when explore has no messages and can send from them', async () => {
+    mockSessionMessagesData = [];
+    mockUsePathname.mockReturnValue('/learning/101/study');
+    mockUseLocalSearchParams.mockReturnValue({ mode: 'explore', profileId: '101' });
+    (streamLearningSessionReply as jest.Mock).mockImplementation(async function* (sessionId: number, input: { content: string }) {
+      yield {
+        message: {
+          content: `assistant:${input.content}`,
+          createdAt: '2026-04-08T08:31:00Z',
+          id: 882,
+          role: 'assistant',
+          learningSessionId: sessionId,
+          presentation: {
+            answer: { content: `assistant:${input.content}` },
+            bridgeActions: [],
+            evidence: [],
+            followups: [],
+            kind: 'explore',
+            relatedConcepts: [],
+          },
+        },
+        type: 'assistant.final',
+      };
+    });
+
+    renderWithWorkspaceProvider(<LearningWorkspaceStudyRoute />);
+
+    const prompt = '你会怎么向同学解释“监督学习”和“标签数据”？';
+    expect(screen.getByText(prompt)).toBeTruthy();
+    expect(screen.getByText('用一句话说出这本书真正要解决的问题')).toBeTruthy();
+    expect(screen.getByText('说说你现在最不确定的一个概念或步骤')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(screen.getByText(prompt));
+    });
+
+    expect(streamLearningSessionReply).toHaveBeenCalledWith(
+      301,
+      { content: prompt },
       'reader-token'
     );
   });
@@ -790,29 +870,198 @@ describe('learning workspace routes', () => {
     expect(mockRouter.replace).toHaveBeenCalledWith('/learning/101/graph');
   });
 
-  it('opens the overview from the in-body study action', () => {
+  it('does not render the in-body overview action in explore mode', () => {
     mockUsePathname.mockReturnValue('/learning/101/study');
     mockUseLocalSearchParams.mockReturnValue({ mode: 'explore', profileId: '101' });
 
     renderWithWorkspaceProvider(<LearningWorkspaceStudyRoute />);
 
-    fireEvent.press(screen.getByText('查看导学概览'));
-
-    expect(mockRouter.push).toHaveBeenCalledWith('/learning/101/overview');
+    expect(screen.queryByText('查看导学概览')).toBeNull();
+    expect(mockRouter.push).not.toHaveBeenCalled();
   });
 
-  it('renders the study route title, overview action, and native search bar without a footer composer', () => {
+  it('renders the native search bar without the old explore summary card or footer composer', () => {
     mockUsePathname.mockReturnValue('/learning/101/study');
     mockUseLocalSearchParams.mockReturnValue({ mode: 'explore', profileId: '101' });
 
     renderWithWorkspaceProvider(<LearningWorkspaceStudyRoute />);
 
     expect(screen.getByTestId('learning-study-native-search-bar')).toBeTruthy();
-    expect(screen.getByTestId('learning-workspace-page-title')).toBeTruthy();
-    expect(screen.getByText('查看导学概览')).toBeTruthy();
+    expect(screen.queryByTestId('learning-workspace-page-title')).toBeNull();
+    expect(screen.queryByText('查看导学概览')).toBeNull();
     expect(screen.queryByTestId('learning-study-native-header-left-item-0')).toBeNull();
     expect(screen.queryByTestId('learning-study-native-header-right-item-0')).toBeNull();
     expect(screen.queryByTestId('learning-workspace-footer')).toBeNull();
+  });
+
+  it('renders an android composer fallback and submits through the same explore stream', async () => {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: 'android',
+    });
+    Object.defineProperty(Platform, 'Version', {
+      configurable: true,
+      value: 35,
+    });
+    mockUsePathname.mockReturnValue('/learning/101/study');
+    mockUseLocalSearchParams.mockReturnValue({ mode: 'explore', profileId: '101' });
+    (streamLearningSessionReply as jest.Mock).mockImplementation(async function* () {
+      yield {
+        message: {
+          content: 'assistant:继续发散',
+          createdAt: '2026-04-08T08:31:00Z',
+          id: 884,
+          role: 'assistant',
+          learningSessionId: 301,
+          presentation: {
+            answer: { content: 'assistant:继续发散' },
+            bridgeActions: [],
+            evidence: [],
+            followups: [],
+            kind: 'explore',
+            relatedConcepts: [],
+          },
+        },
+        type: 'assistant.final',
+      };
+    });
+
+    renderWithWorkspaceProvider(<LearningWorkspaceStudyRoute />);
+
+    expect(screen.queryByTestId('learning-study-native-search-bar')).toBeNull();
+    fireEvent.changeText(screen.getByTestId('learning-workspace-composer-input'), '继续发散');
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('learning-workspace-composer-send'));
+    });
+
+    expect(streamLearningSessionReply).toHaveBeenCalledWith(
+      301,
+      { content: '继续发散' },
+      'reader-token'
+    );
+  });
+
+  it('keeps the optimistic user message visible while explore is streaming a reply', async () => {
+    mockUsePathname.mockReturnValue('/learning/101/study');
+    mockUseLocalSearchParams.mockReturnValue({ mode: 'explore', profileId: '101' });
+    (streamLearningSessionReply as jest.Mock).mockImplementation(async function* () {
+      yield { phase: 'writing', type: 'status' };
+      yield {
+        delta: '我先根据资料梳理这一轮回答。',
+        type: 'explore.answer.delta',
+      };
+      yield {
+        message: {
+          content: '我先根据资料梳理这一轮回答。',
+          createdAt: '2026-04-08T08:31:00Z',
+          id: 885,
+          role: 'assistant',
+          learningSessionId: 301,
+          presentation: {
+            answer: { content: '我先根据资料梳理这一轮回答。' },
+            bridgeActions: [],
+            evidence: [],
+            followups: [],
+            kind: 'explore',
+            relatedConcepts: [],
+          },
+        },
+        type: 'assistant.final',
+      };
+    });
+
+    renderWithWorkspaceProvider(
+      <>
+        <LearningWorkspaceStudyRoute />
+        <WorkspaceProbe />
+      </>
+    );
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('workspace-probe-send'));
+    });
+
+    expect(screen.getAllByText('帮我总结这一节的核心线索').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('我先根据资料梳理这一轮回答。').length).toBeGreaterThan(0);
+  });
+
+  it('keeps the optimistic user message visible after assistant.final even when synced history only contains the assistant turn', async () => {
+    mockUsePathname.mockReturnValue('/learning/101/study');
+    mockUseLocalSearchParams.mockReturnValue({ mode: 'explore', profileId: '101' });
+    (streamLearningSessionReply as jest.Mock).mockImplementation(async function* () {
+      yield {
+        message: {
+          content: '这是已经整理好的总结。',
+          createdAt: '2026-04-08T08:31:00Z',
+          id: 886,
+          role: 'assistant',
+          learningSessionId: 301,
+          presentation: {
+            answer: { content: '这是已经整理好的总结。' },
+            bridgeActions: [],
+            evidence: [],
+            followups: [],
+            kind: 'explore',
+            relatedConcepts: [],
+          },
+        },
+        type: 'assistant.final',
+      };
+    });
+
+    const view = renderWithWorkspaceProvider(
+      <>
+        <LearningWorkspaceStudyRoute />
+        <WorkspaceProbe />
+      </>
+    );
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('workspace-probe-send'));
+    });
+
+    mockSessionMessagesData = [
+      ...mockSessionMessagesData,
+      {
+        content: '这是已经整理好的总结。',
+        createdAt: '2026-04-08T08:31:00Z',
+        id: 886,
+        role: 'assistant',
+        learningSessionId: 301,
+        presentation: {
+          answer: { content: '这是已经整理好的总结。' },
+          bridgeActions: [],
+          evidence: [],
+          followups: [],
+          kind: 'explore',
+          relatedConcepts: [],
+        },
+      },
+    ];
+
+    view.rerender(
+      <QueryClientProvider
+        client={
+          new QueryClient({
+            defaultOptions: {
+              queries: {
+                retry: false,
+              },
+            },
+          })
+        }>
+        <LearningWorkspaceProvider profileId={101}>
+          <>
+            <LearningWorkspaceStudyRoute />
+            <WorkspaceProbe />
+          </>
+        </LearningWorkspaceProvider>
+      </QueryClientProvider>
+    );
+
+    expect(screen.getAllByText('帮我总结这一节的核心线索').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('这是已经整理好的总结。').length).toBeGreaterThan(0);
   });
 
   it('keeps study content below the floating chrome', () => {
@@ -1141,6 +1390,27 @@ describe('learning workspace routes', () => {
 
     expect(screen.getByText('我先确认用户是要概览还是逐段拆解。')).toBeTruthy();
     expect(toast.error).not.toHaveBeenCalledWith('导学回复失败，请稍后再试。');
+  });
+
+  it('shows an explore failure toast when the stream ends without assistant.final', async () => {
+    (streamLearningSessionReply as jest.Mock).mockImplementation(async function* () {
+      yield { phase: 'retrieving', type: 'status' };
+    });
+
+    renderWithWorkspaceProvider(
+      <>
+        <LearningWorkspaceStudyRoute />
+        <WorkspaceProbe />
+      </>
+    );
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('workspace-probe-send'));
+    });
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('Explore 回复失败，请稍后再试。');
+    });
   });
 
   it('renders overview as a secondary workspace summary route', () => {

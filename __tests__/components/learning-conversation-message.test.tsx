@@ -4,7 +4,9 @@ import React from 'react';
 import { LearningConversationMessage } from '@/components/learning/learning-conversation-message';
 
 describe('learning conversation message', () => {
-  it('renders coach-first guide cards and exposes redirect actions', () => {
+  it('renders coach-first guide cards and exposes supporting sections and redirect actions', () => {
+    const handleAction = jest.fn();
+
     render(
       <LearningConversationMessage
         message={{
@@ -80,23 +82,30 @@ describe('learning conversation message', () => {
           streaming: false,
           text: '先把模型、数据和目标三者的关系说清楚，再进入监督学习。',
         }}
+        onAction={handleAction}
       />
     );
 
     expect(screen.getByText('Guide')).toBeTruthy();
     expect(screen.getAllByText('先把模型、数据和目标三者的关系说清楚，再进入监督学习。').length).toBeGreaterThan(0);
     expect(screen.getByText('如果继续往下学，你觉得下一步最该澄清哪个概念？')).toBeTruthy();
-    expect(screen.queryByText('教练反馈')).toBeNull();
-    expect(screen.queryByText('导师主讲')).toBeNull();
-    expect(screen.queryByText('学伴追问')).toBeNull();
-    expect(screen.queryByText('考官判断')).toBeNull();
-    expect(screen.queryByText('补强建议')).toBeNull();
-    expect(screen.queryByText('回答还没有把模型和数据怎么配合说清楚。')).toBeNull();
-    expect(screen.queryByText('转向 Explore')).toBeNull();
-    expect(screen.queryByText('转去 Explore 深挖')).toBeNull();
+    expect(screen.getByText('考官判断')).toBeTruthy();
+    expect(screen.getByText('回答还没有把模型和数据怎么配合说清楚。')).toBeTruthy();
+    expect(screen.getByText('补强建议')).toBeTruthy();
+    expect(screen.getByText('继续说明数据和模型之间的关系')).toBeTruthy();
+    expect(screen.getByText('转向 Explore')).toBeTruthy();
+    fireEvent.press(screen.getByText('转去 Explore 深挖'));
+    expect(handleAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionType: 'expand_step_to_explore',
+        label: '转去 Explore 深挖',
+      })
+    );
   });
 
-  it('renders explore answers as a minimal reading flow and hides supporting sections', () => {
+  it('renders explore answers without evidence, related concepts, or followups, while keeping actions', () => {
+    const handleAction = jest.fn();
+
     render(
       <LearningConversationMessage
         message={{
@@ -123,6 +132,16 @@ describe('learning conversation message', () => {
               title: '相关概念',
             },
             {
+              actions: [
+                {
+                  actionType: 'attach_explore_turn_to_guide_step',
+                  label: '收编回 Guide',
+                },
+              ],
+              kind: 'bridge_actions',
+              title: '收编动作',
+            },
+            {
               items: ['那它和数列极限的关系是什么？'],
               kind: 'followups',
               title: '继续追问',
@@ -144,21 +163,41 @@ describe('learning conversation message', () => {
             followups: ['那它和数列极限的关系是什么？'],
             kind: 'explore',
             relatedConcepts: ['函数极限', '无穷小量'],
+            bridgeActions: [
+              {
+                actionType: 'attach_explore_turn_to_guide_step',
+                label: '收编回 Guide',
+              },
+            ],
           },
           role: 'assistant',
           streaming: false,
           text: '极限的核心是先固定自变量靠近目标点，再观察函数值的稳定趋势。',
         }}
+        onAction={handleAction}
       />
     );
 
     expect(screen.getByText('Explore')).toBeTruthy();
     expect(screen.getByText('极限的核心是先固定自变量靠近目标点，再观察函数值的稳定趋势。')).toBeTruthy();
-    expect(screen.queryByText('答案')).toBeNull();
     expect(screen.queryByText('资料依据')).toBeNull();
     expect(screen.queryByText('test.pdf')).toBeNull();
+    expect(
+      screen.queryByText('函数极限的定义关注的是 x 逼近 a 时，f(x) 是否稳定靠近 L。')
+    ).toBeNull();
     expect(screen.queryByText('相关概念')).toBeNull();
+    expect(screen.queryByText('函数极限')).toBeNull();
+    expect(screen.queryByText('无穷小量')).toBeNull();
     expect(screen.queryByText('继续追问')).toBeNull();
+    expect(screen.queryByText('那它和数列极限的关系是什么？')).toBeNull();
+    expect(screen.getByText('收编动作')).toBeTruthy();
+    fireEvent.press(screen.getByText('收编回 Guide'));
+    expect(handleAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionType: 'attach_explore_turn_to_guide_step',
+        label: '收编回 Guide',
+      })
+    );
   });
 
   it('renders an expandable reasoning row for explore messages when reasoning content exists', () => {
@@ -199,6 +238,37 @@ describe('learning conversation message', () => {
 
     expect(screen.getByText('基于当前资料推理')).toBeTruthy();
     expect(screen.getByText('先识别问题在比较两个概念，再抓定义维度和调度维度。')).toBeTruthy();
+  });
+
+  it('does not render raw markdown or latex in the explore primary answer body', () => {
+    render(
+      <LearningConversationMessage
+        message={{
+          cards: [],
+          id: 'message-3b',
+          presentation: {
+            answer: {
+              content:
+                '文档中出现了以下几个公式：\n\n1. 一个函数公式：$$ f(x) = \\\\frac{x}{1 - x^{2}} $$\n\n3. **Leibniz公式**：例如用于 $f^{100}(x)$ 的求解。',
+            },
+            bridgeActions: [],
+            evidence: [],
+            followups: [],
+            kind: 'explore',
+            relatedConcepts: [],
+          },
+          role: 'assistant',
+          streaming: false,
+          text: '',
+        }}
+      />
+    );
+
+    expect(
+      screen.queryByText(
+        '文档中出现了以下几个公式：\n\n1. 一个函数公式：$$ f(x) = \\\\frac{x}{1 - x^{2}} $$\n\n3. **Leibniz公式**：例如用于 $f^{100}(x)$ 的求解。'
+      )
+    ).toBeNull();
   });
 
   it('renders streaming explore messages from presentation data even before cards are built', () => {

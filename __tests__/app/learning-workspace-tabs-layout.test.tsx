@@ -7,6 +7,7 @@ import { LEARNING_WORKSPACE_TOP_CHROME_OFFSET } from '@/components/learning/lear
 
 const mockCloseWorkspace = jest.fn();
 const mockOpenOverview = jest.fn();
+let mockWorkspaceScreen: any;
 
 jest.mock('expo-router/unstable-native-tabs', () => {
   const React = require('react');
@@ -70,15 +71,7 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 jest.mock('@/components/learning/learning-workspace-provider', () => ({
-  useLearningWorkspaceScreen: () => ({
-    closeWorkspace: mockCloseWorkspace,
-    openOverview: mockOpenOverview,
-    workspaceGate: {
-      description: 'ready',
-      kind: 'ready',
-      title: '导学本已准备好',
-    },
-  }),
+  useLearningWorkspaceScreen: () => mockWorkspaceScreen,
 }));
 
 jest.mock('@/components/navigation/secondary-back-button', () => ({
@@ -115,6 +108,16 @@ describe('LearningWorkspaceTabsLayout', () => {
   beforeEach(() => {
     mockCloseWorkspace.mockReset();
     mockOpenOverview.mockReset();
+    mockWorkspaceScreen = {
+      activeTab: 'study',
+      closeWorkspace: mockCloseWorkspace,
+      openOverview: mockOpenOverview,
+      workspaceGate: {
+        description: 'ready',
+        kind: 'ready',
+        title: '导学本已准备好',
+      },
+    };
   });
 
   it('registers graph, review, and a search-role study tab in that order', () => {
@@ -165,5 +168,13 @@ describe('LearningWorkspaceTabsLayout', () => {
 
     expect(mockCloseWorkspace).toHaveBeenCalledTimes(1);
     expect(mockOpenOverview).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the shared floating chrome on the graph tab because the graph control only aligns visually with it', () => {
+    mockWorkspaceScreen.activeTab = 'graph';
+
+    render(<LearningWorkspaceTabsLayout />);
+
+    expect(screen.getByTestId('learning-workspace-floating-chrome')).toBeTruthy();
   });
 });

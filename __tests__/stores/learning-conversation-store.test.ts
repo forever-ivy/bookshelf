@@ -174,4 +174,130 @@ describe('learning conversation store helpers', () => {
       }),
     ]);
   });
+
+  it('keeps the optimistic user draft when history rehydrates during an active stream', () => {
+    useLearningConversationStore.getState().hydrateHistory([
+      {
+        cards: [],
+        id: 'history-assistant-1',
+        presentation: {
+          answer: {
+            content: '它先给了一段概览。',
+          },
+          bridgeActions: [],
+          evidence: [],
+          followups: [],
+          kind: 'explore',
+          relatedConcepts: [],
+        },
+        role: 'assistant',
+        streaming: false,
+        text: '它先给了一段概览。',
+      },
+    ]);
+
+    useLearningConversationStore.getState().startDraft({
+      assistantMessageId: 'local-assistant-4',
+      mode: 'explore',
+      userMessageId: 'local-user-4',
+      userText: '你好！我是你的微积分复习助手。',
+    });
+
+    useLearningConversationStore.getState().hydrateHistory([
+      {
+        cards: [],
+        id: 'history-assistant-1',
+        presentation: {
+          answer: {
+            content: '它先给了一段概览。',
+          },
+          bridgeActions: [],
+          evidence: [],
+          followups: [],
+          kind: 'explore',
+          relatedConcepts: [],
+        },
+        role: 'assistant',
+        streaming: false,
+        text: '它先给了一段概览。',
+      },
+    ]);
+
+    expect(useLearningConversationStore.getState().messages).toMatchObject([
+      expect.objectContaining({
+        id: 'history-assistant-1',
+      }),
+      expect.objectContaining({
+        id: 'local-user-4',
+        role: 'user',
+        text: '你好！我是你的微积分复习助手。',
+      }),
+      expect.objectContaining({
+        id: 'local-assistant-4',
+        streaming: true,
+      }),
+    ]);
+  });
+
+  it('keeps the optimistic user message after assistant.final until synced history includes that user turn', () => {
+    let state = createInitialLearningConversationState({
+      assistantMessageId: 'local-assistant-5',
+      mode: 'explore',
+      userText: '帮我总结这份资料的重点',
+      userMessageId: 'local-user-5',
+    });
+
+    state = reduceLearningConversationEvent(state, {
+      message: {
+        content: '这是已经整理好的总结。',
+        createdAt: '2026-04-08T08:31:00Z',
+        id: 900,
+        role: 'assistant',
+        learningSessionId: 301,
+        presentation: {
+          answer: {
+            content: '这是已经整理好的总结。',
+          },
+          bridgeActions: [],
+          evidence: [],
+          followups: [],
+          kind: 'explore',
+          relatedConcepts: [],
+        },
+      },
+      type: 'assistant.final',
+    });
+
+    useLearningConversationStore.setState(state);
+    useLearningConversationStore.getState().hydrateHistory([
+      {
+        cards: [],
+        id: 'history-assistant-1',
+        presentation: {
+          answer: {
+            content: '这是已经整理好的总结。',
+          },
+          bridgeActions: [],
+          evidence: [],
+          followups: [],
+          kind: 'explore',
+          relatedConcepts: [],
+        },
+        role: 'assistant',
+        streaming: false,
+        text: '这是已经整理好的总结。',
+      },
+    ]);
+
+    expect(useLearningConversationStore.getState().messages).toMatchObject([
+      expect.objectContaining({
+        id: 'history-assistant-1',
+      }),
+      expect.objectContaining({
+        id: 'local-user-5',
+        role: 'user',
+        text: '帮我总结这份资料的重点',
+      }),
+    ]);
+  });
 });

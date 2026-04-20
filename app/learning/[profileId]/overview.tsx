@@ -98,6 +98,7 @@ export default function LearningWorkspaceOverviewRoute() {
           onPress: closeWorkspace,
         }}
         title={workspaceGate.title}
+        visualState={workspaceGate.kind === 'loading' ? 'skeleton' : 'copy'}
       />
     );
   }

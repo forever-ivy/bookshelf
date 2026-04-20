@@ -1,6 +1,10 @@
 import React from 'react';
 import { Text, View } from 'react-native';
 
+import {
+  LoadingSkeletonBlock,
+  LoadingSkeletonText,
+} from '@/components/base/loading-skeleton';
 import { PillButton } from '@/components/base/pill-button';
 import { PageShell } from '@/components/navigation/page-shell';
 import { useAppTheme } from '@/hooks/use-app-theme';
@@ -18,12 +22,14 @@ export function LearningWorkspaceLoadingState({
   secondaryAction,
   title,
   tone = 'neutral',
+  visualState = 'copy',
 }: {
   description: string;
   primaryAction?: LearningWorkspaceLoadingAction;
   secondaryAction?: LearningWorkspaceLoadingAction;
   title: string;
   tone?: 'danger' | 'neutral' | 'warning';
+  visualState?: 'copy' | 'skeleton';
 }) {
   const { theme } = useAppTheme();
   const palette =
@@ -48,34 +54,58 @@ export function LearningWorkspaceLoadingState({
           gap: theme.spacing.lg,
           padding: theme.spacing.xl,
         }}>
-        <Text
-          style={{
-            color: palette.accent,
-            ...theme.typography.medium,
-            fontSize: 11,
-            letterSpacing: 0.3,
-            textTransform: 'uppercase',
-          }}>
-          导学工作区
-        </Text>
-        <Text
-          style={{
-            color: theme.colors.text,
-            ...theme.typography.heading,
-            fontSize: 26,
-            lineHeight: 32,
-          }}>
-          {title}
-        </Text>
-        <Text
-          style={{
-            color: theme.colors.textMuted,
-            ...theme.typography.body,
-            fontSize: 14,
-            lineHeight: 21,
-          }}>
-          {description}
-        </Text>
+        {visualState === 'skeleton' ? (
+          <View style={{ gap: theme.spacing.lg }}>
+            <LoadingSkeletonBlock
+              height={12}
+              testID="learning-workspace-loading-skeleton-eyebrow"
+              width={76}
+            />
+            <LoadingSkeletonText
+              gap={10}
+              lineHeight={24}
+              testIDPrefix="learning-workspace-loading-skeleton-title"
+              widths={['78%', '52%']}
+            />
+            <LoadingSkeletonText
+              gap={8}
+              lineHeight={14}
+              testIDPrefix="learning-workspace-loading-skeleton-description"
+              widths={['94%', '68%']}
+            />
+          </View>
+        ) : (
+          <>
+            <Text
+              style={{
+                color: palette.accent,
+                ...theme.typography.medium,
+                fontSize: 11,
+                letterSpacing: 0.3,
+                textTransform: 'uppercase',
+              }}>
+              导学工作区
+            </Text>
+            <Text
+              style={{
+                color: theme.colors.text,
+                ...theme.typography.heading,
+                fontSize: 26,
+                lineHeight: 32,
+              }}>
+              {title}
+            </Text>
+            <Text
+              style={{
+                color: theme.colors.textMuted,
+                ...theme.typography.body,
+                fontSize: 14,
+                lineHeight: 21,
+              }}>
+              {description}
+            </Text>
+          </>
+        )}
 
         {primaryAction || secondaryAction ? (
           <View style={{ gap: theme.spacing.sm }}>

@@ -768,6 +768,69 @@ describe('learning contract', () => {
     });
   });
 
+  it('parses standard sse event headers and crlf-delimited learning streams', async () => {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            [
+              'event: status',
+              'data: {"phase":"retrieving","sessionId":901}',
+              '',
+              'event: explore.answer.delta',
+              'data: {"delta":"先抓住资源分配和调度执行这两个维度。"}',
+              '',
+              'event: assistant.final',
+              'data: {"turn":{"id":990,"sessionId":901,"assistantContent":"先抓住资源分配和调度执行这两个维度。","presentation":{"kind":"explore","answer":{"content":"先抓住资源分配和调度执行这两个维度。"},"evidence":[],"relatedConcepts":["并发模型"],"followups":[],"bridgeActions":[]},"createdAt":"2026-04-08T09:02:00Z"}}',
+              '',
+            ].join('\r\n')
+          )
+        );
+        controller.close();
+      },
+    });
+
+    (global.fetch as jest.Mock).mockResolvedValue({
+      body: stream,
+      headers: { get: () => 'text/event-stream' },
+      ok: true,
+      status: 200,
+    });
+
+    const events = [];
+    for await (const event of streamLearningSessionReply(
+      901,
+      { content: '进程和线程有什么区别？' },
+      'reader-token'
+    )) {
+      events.push(event);
+    }
+
+    expect(events.map((event) => event.type)).toEqual([
+      'status',
+      'explore.answer.delta',
+      'assistant.final',
+    ]);
+    expect(events[0]).toMatchObject({
+      phase: 'retrieving',
+      type: 'status',
+    });
+    expect(events[1]).toMatchObject({
+      delta: '先抓住资源分配和调度执行这两个维度。',
+      type: 'explore.answer.delta',
+    });
+    expect(events[2]).toMatchObject({
+      message: {
+        learningSessionId: 901,
+        presentation: expect.objectContaining({
+          kind: 'explore',
+        }),
+      },
+      type: 'assistant.final',
+    });
+  });
+
   it('normalizes graph payloads from the v2 learning endpoint', async () => {
     (global.fetch as jest.Mock).mockResolvedValueOnce({
       json: async () => ({

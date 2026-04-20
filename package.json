@@ -36,6 +36,7 @@
     "expo-system-ui": "~55.0.9",
     "expo-web-browser": "~55.0.9",
     "heroui-native": "^1.0.2",
+    "katex": "^0.16.45",
     "lucide-react-native": "^0.577.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",

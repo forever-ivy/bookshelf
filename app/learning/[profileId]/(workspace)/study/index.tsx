@@ -1,9 +1,9 @@
 import { Stack } from 'expo-router';
-import { Target } from 'lucide-react-native';
 import React from 'react';
 import {
   Keyboard,
   Platform,
+  Pressable,
   StyleSheet,
   Text,
   View,
@@ -12,9 +12,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SearchBarCommands } from 'react-native-screens';
 import { toast } from 'sonner-native';
 
-import { PillButton } from '@/components/base/pill-button';
 import { GlassSurface } from '@/components/base/glass-surface';
 import { LearningConversationMessage } from '@/components/learning/learning-conversation-message';
+import { LearningComposer } from '@/components/learning/learning-composer';
 import { LearningConversationScroll } from '@/components/learning/learning-conversation-scroll';
 import { LearningWorkspaceLoadingState } from '@/components/learning/learning-workspace-loading-state';
 import {
@@ -62,127 +62,58 @@ function resolveSearchBarText(value: unknown) {
   return '';
 }
 
-function WorkspaceSummaryCard({
-  body,
-  chipLabel,
-  criteriaBody,
-  criteriaTitle,
-  icon,
-  onOpenOverview,
-  status,
-  title,
+function StarterPromptStrip({
+  prompts,
+  onPromptPress,
 }: {
-  body: string;
-  chipLabel: string;
-  criteriaBody: string;
-  criteriaTitle: string;
-  icon: React.ReactNode;
-  onOpenOverview: () => void;
-  status?: string | null;
-  title: string;
+  prompts: string[];
+  onPromptPress: (prompt: string) => void;
 }) {
   const { theme } = useAppTheme();
 
+  if (prompts.length === 0) {
+    return null;
+  }
+
   return (
-    <View
-      style={{
-        backgroundColor: theme.colors.surface,
-        borderColor: theme.colors.borderStrong,
-        borderRadius: theme.radii.lg,
-        borderWidth: 1,
-        gap: theme.spacing.lg,
-        padding: theme.spacing.xl,
-      }}>
-      <View style={styles.heroHeader}>
-        <View
-          style={[
-            styles.heroChip,
-            {
-              backgroundColor: theme.colors.primarySoft,
-            },
-          ]}>
-          {icon}
-          <Text
-            selectable
-            style={{
-              color: theme.colors.primaryStrong,
-              ...theme.typography.semiBold,
-              fontSize: 12,
-            }}>
-            {chipLabel}
-          </Text>
-        </View>
-        {status ? (
-          <Text
-            selectable
-            style={{
-              color: theme.colors.textSoft,
-              ...theme.typography.medium,
-              flex: 1,
-              fontSize: 12,
-              textAlign: 'right',
-            }}>
-            {status}
-          </Text>
-        ) : null}
-      </View>
-
-      <View style={{ gap: theme.spacing.sm }}>
-        <Text
-          selectable
-          style={{
-            color: theme.colors.text,
-            ...theme.typography.heading,
-            fontSize: 26,
-            letterSpacing: -0.8,
-            lineHeight: 32,
-          }}>
-          {title}
-        </Text>
-        <Text
-          selectable
-          style={{
-            color: theme.colors.textMuted,
-            ...theme.typography.body,
-            fontSize: 14,
-            lineHeight: 21,
-          }}>
-          {body}
-        </Text>
-      </View>
-
-      <View
+    <View style={{ gap: 12 }}>
+      <Text
+        selectable
         style={{
-          backgroundColor: theme.colors.surfaceTint,
-          borderColor: theme.colors.borderSoft,
-          borderRadius: theme.radii.lg,
-          borderWidth: 1,
-          gap: theme.spacing.xs,
-          padding: theme.spacing.lg,
+          color: theme.colors.textSoft,
+          ...theme.typography.semiBold,
+          fontSize: 12,
+          letterSpacing: 0.4,
         }}>
-        <Text
-          selectable
-          style={{
-            color: theme.colors.textSoft,
-            ...theme.typography.semiBold,
-            fontSize: 12,
-          }}>
-          {criteriaTitle}
-        </Text>
-        <Text
-          selectable
-          style={{
-            color: theme.colors.text,
-            ...theme.typography.medium,
-            fontSize: 14,
-            lineHeight: 21,
-          }}>
-          {criteriaBody}
-        </Text>
-      </View>
-
-      <View style={{ paddingTop: theme.spacing.xs }}>
-        <PillButton label="查看导学概览" onPress={onOpenOverview} variant="glass" />
+        从这些问题开始
+      </Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+        {prompts.map((prompt, index) => (
+          <Pressable
+            key={prompt}
+            accessibilityRole="button"
+            onPress={() => onPromptPress(prompt)}
+            style={({ pressed }) => ({
+              backgroundColor: theme.colors.surface,
+              borderColor: theme.colors.borderSoft,
+              borderRadius: theme.radii.pill,
+              borderWidth: 1,
+              opacity: pressed ? 0.84 : 1,
+              paddingHorizontal: 14,
+              paddingVertical: 10,
+            })}
+            testID={`learning-workspace-starter-prompt-${index}`}>
+            <Text
+              selectable
+              style={{
+                color: theme.colors.text,
+                ...theme.typography.body,
+                fontSize: 14,
+              }}>
+              {prompt}
+            </Text>
+          </Pressable>
+        ))}
       </View>
     </View>
   );
@@ -237,21 +168,18 @@ function ConversationSection({
 function ExplorePane({
   bottomPadding,
   messages,
-  onOpenOverview,
+  onAction,
+  onPromptPress,
+  starterPrompts,
   topPadding,
 }: {
   bottomPadding?: number;
   messages: ReturnType<typeof useLearningWorkspaceScreen>['renderedMessages'];
-  onOpenOverview: () => void;
+  onAction?: (action: LearningBridgeAction) => void;
+  onPromptPress: (prompt: string) => void;
+  starterPrompts: string[];
   topPadding?: number;
 }) {
-  const { theme } = useAppTheme();
-  const { profile, sourceSummary, workspaceSession } = useLearningWorkspaceScreen();
-  const focusTitle =
-    workspaceSession?.focusContext && typeof workspaceSession.focusContext.stepTitle === 'string'
-      ? String(workspaceSession.focusContext.stepTitle)
-      : workspaceSession?.currentStepTitle ?? '当前主题';
-
   return (
     <LearningConversationScroll
       contentContainerStyle={[
@@ -264,10 +192,16 @@ function ExplorePane({
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
       testID="learning-workspace-screen">
-      <ConversationSection
-        emptyLabel="问一个更细、更偏应用或更偏例子的延展问题，系统会基于当前资料给出答案。"
-        messages={messages}
-      />
+      <View style={{ gap: 28 }}>
+        {messages.length === 0 ? (
+          <StarterPromptStrip onPromptPress={onPromptPress} prompts={starterPrompts} />
+        ) : null}
+        <ConversationSection
+          emptyLabel="问一个更细、更偏应用或更偏例子的延展问题，系统会基于当前资料给出答案。"
+          messages={messages}
+          onAction={onAction}
+        />
+      </View>
     </LearningConversationScroll>
   );
 }
@@ -282,17 +216,18 @@ export default function LearningWorkspaceStudyRoute() {
     handleSend,
     isRetryPending,
     navigateToStudyMode,
-    openOverview,
     profile,
     renderedMessages,
     replaceWorkspaceSession,
     retryGenerate,
     setDraft,
+    starterPrompts,
     studyMode,
     workspaceSession,
     workspaceGate,
   } = useLearningWorkspaceScreen();
   const [isActivatingExplore, setIsActivatingExplore] = React.useState(false);
+  const [keyboardHeight, setKeyboardHeight] = React.useState(0);
   const isActivatingExploreRef = React.useRef(false);
   const isMountedRef = React.useRef(true);
   const searchBarRef = React.useRef<SearchBarCommands>(null);
@@ -311,6 +246,23 @@ export default function LearningWorkspaceStudyRoute() {
     },
     []
   );
+
+  React.useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   React.useEffect(() => {
     if (studyMode !== 'guide') {
@@ -383,6 +335,43 @@ export default function LearningWorkspaceStudyRoute() {
     },
     [draft, handleSend, workspaceSession]
   );
+  const handleStarterPromptPress = React.useCallback(
+    (prompt: string) => {
+      if (!workspaceSession || workspaceSession.sessionKind !== 'explore') {
+        return;
+      }
+
+      setDraft(prompt);
+      void handleSend(prompt, {
+        mode: 'explore',
+        session: workspaceSession,
+      });
+    },
+    [handleSend, setDraft, workspaceSession]
+  );
+  const handleConversationAction = React.useCallback(
+    (action: LearningBridgeAction) => {
+      if (!workspaceSession) {
+        return;
+      }
+
+      void submitLearningBridgeAction(
+        workspaceSession.id,
+        action.actionType,
+        {
+          targetGuideSessionId:
+            typeof action.targetGuideSessionId === 'number' ? action.targetGuideSessionId : undefined,
+          targetStepIndex:
+            typeof action.targetStepIndex === 'number' ? action.targetStepIndex : undefined,
+          turnId: typeof action.turnId === 'number' ? action.turnId : undefined,
+        },
+        token
+      ).catch(() => {
+        toast.error('执行这条导学动作失败，请稍后重试。');
+      });
+    },
+    [token, workspaceSession]
+  );
   const headerSearchBarOptions = React.useMemo(
     () =>
       usesHeaderSearchBar
@@ -452,6 +441,7 @@ export default function LearningWorkspaceStudyRoute() {
             }}
             title={workspaceGate.title}
             tone={workspaceGate.kind === 'failed' ? 'danger' : 'neutral'}
+            visualState={workspaceGate.kind === 'loading' ? 'skeleton' : 'copy'}
           />
         </View>
       </>
@@ -486,29 +476,35 @@ export default function LearningWorkspaceStudyRoute() {
       {nativeSearchBar}
       <View style={styles.routeContainer}>
         <ExplorePane
+          bottomPadding={keyboardHeight > 0 ? keyboardHeight + 60 : undefined}
           messages={renderedMessages}
-          onOpenOverview={openOverview}
+          onAction={handleConversationAction}
+          onPromptPress={handleStarterPromptPress}
+          starterPrompts={usesNativeSearchBar ? starterPrompts : []}
           topPadding={topChromePadding}
         />
+        {!usesNativeSearchBar ? (
+          <View style={styles.composerDock}>
+            <LearningComposer
+              draft={draft}
+              inputTestID="learning-workspace-composer-input"
+              onChangeText={setDraft}
+              onSend={() => {
+                void handleSearchSubmit(draft);
+              }}
+              onSuggestionPress={handleStarterPromptPress}
+              placeholder="继续发散，追问细节..."
+              sendButtonTestID="learning-workspace-composer-send"
+              suggestions={renderedMessages.length === 0 ? starterPrompts : []}
+            />
+          </View>
+        ) : null}
       </View>
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  heroChip: {
-    alignItems: 'center',
-    borderRadius: 999,
-    flexDirection: 'row',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  heroHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
   paneScrollContent: {
     gap: 28,
     paddingBottom: 120,
@@ -517,5 +513,10 @@ const styles = StyleSheet.create({
   },
   routeContainer: {
     flex: 1,
+  },
+  composerDock: {
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    paddingTop: 12,
   },
 });

@@ -1,4 +1,12 @@
-import type { LearningGraph, LearningGraphEdge, LearningGraphNode } from '@/lib/api/types';
+import type {
+  LearningCompletedStep,
+  LearningCitation,
+  LearningExplorePresentation,
+  LearningGraph,
+  LearningGraphEdge,
+  LearningGraphNode,
+} from '@/lib/api/types';
+import type { LearningWorkspaceRenderedMessage } from '@/lib/learning/workspace';
 
 type LearningGraphNodeBuckets = {
   asset: LearningGraphNode[];
@@ -28,12 +36,63 @@ export type LearningGraphSelection = {
   typeLabel: string;
 };
 
+export type LearningExploreGraphFocus = {
+  evidence: LearningCitation[];
+  question: string | null;
+  relatedConcepts: string[];
+};
+
+export type LearningGraphMode = 'explore' | 'global' | 'guide';
+
+export type LearningGuideNodeStatus = 'completed' | 'current' | 'pending';
+
+export type LearningGuideProgressSnapshot = {
+  completedSteps: LearningCompletedStep[];
+  currentStepIndex: number | null;
+};
+
+export type LearningGraphLens = LearningExploreGraphFocus & {
+  generatedNodeIds: string[];
+  graph: LearningGraph;
+  guideStatusByNodeId: Record<string, LearningGuideNodeStatus>;
+  highlightedNodeIds: string[];
+  mode: LearningGraphMode;
+  relatedStepTitlesByNodeId: Record<string, string[]>;
+  viewModel: LearningGraphViewModel;
+};
+
+export type LearningGraphSelectionPresentation = {
+  description: string | null;
+  eyebrow: string;
+  metadata: string[];
+  relatedFragments: LearningGraphNode[];
+  sections: Array<{
+    lines: string[];
+    title: string;
+  }>;
+  statusLabel: string | null;
+  title: string;
+  typeLabel: string;
+};
+
 function isGraphNodeOfType(node: LearningGraphNode | undefined, type: string) {
   return node?.type === type;
 }
 
 function buildEdgeKey(edge: LearningGraphEdge) {
   return `${edge.source}::${edge.target}::${edge.type}`;
+}
+
+function normalizeGraphText(value: unknown) {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+function normalizeGraphSlug(value: unknown) {
+  return String(value ?? '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^\p{L}\p{N}\-_]+/gu, '')
+    .toLowerCase();
 }
 
 function dedupeNodes(nodes: LearningGraphNode[]) {
@@ -198,6 +257,157 @@ function resolveNodeTypeLabel(type: string) {
   }
 }
 
+function filterLearningGraphNodes(
+  graph: LearningGraph,
+  predicate: (node: LearningGraphNode) => boolean
+) {
+  const nodes = graph.nodes.filter(predicate);
+  const visibleNodeIds = new Set(nodes.map((node) => node.id));
+
+  return {
+    ...graph,
+    edges: graph.edges.filter(
+      (edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target)
+    ),
+    nodes,
+  };
+}
+
+function buildExploreConceptNodeId(concept: string) {
+  const slug = normalizeGraphSlug(concept);
+  return `explore:concept:${slug || concept.trim()}`;
+}
+
+function getCitationFragmentId(citation: LearningCitation) {
+  const rawValue = (citation as any)?.fragmentId ?? (citation as any)?.fragment_id ?? null;
+  return typeof rawValue === 'number' ? rawValue : null;
+}
+
+function matchExploreEvidenceNodeIds(
+  viewModel: LearningGraphViewModel,
+  evidence: LearningCitation[]
+) {
+  const matchingNodeIds = new Set<string>();
+
+  for (const citation of evidence) {
+    const fragmentId = getCitationFragmentId(citation);
+    const excerpt = normalizeGraphText(citation.excerpt);
+    const sourceTitle = normalizeGraphText(citation.sourceTitle);
+
+    for (const node of viewModel.graph.nodes) {
+      if (node.type === 'Fragment') {
+        if (fragmentId != null && node.fragmentId === fragmentId) {
+          matchingNodeIds.add(node.id);
+          continue;
+        }
+
+        const semanticSummary = normalizeGraphText(node.semanticSummary);
+        if (excerpt && semanticSummary && (excerpt.includes(semanticSummary) || semanticSummary.includes(excerpt))) {
+          matchingNodeIds.add(node.id);
+        }
+      }
+
+      if (node.type === 'SourceAsset') {
+        const fileName = normalizeGraphText(node.fileName ?? node.label);
+        if (sourceTitle && fileName && sourceTitle === fileName) {
+          matchingNodeIds.add(node.id);
+        }
+      }
+    }
+  }
+
+  return [...matchingNodeIds];
+}
+
+function matchExploreConceptNodeIds(
+  viewModel: LearningGraphViewModel,
+  relatedConcepts: string[]
+) {
+  const normalizedConcepts = new Set(
+    relatedConcepts.map((concept) => normalizeGraphText(concept)).filter(Boolean)
+  );
+
+  return viewModel.graph.nodes
+    .filter((node) => {
+      if (node.type !== 'Concept') {
+        return false;
+      }
+
+      return normalizedConcepts.has(normalizeGraphText(node.concept ?? node.label));
+    })
+    .map((node) => node.id);
+}
+
+function buildSubgraphFromNodeIds(
+  graph: LearningGraph,
+  includedNodeIds: Set<string>
+) {
+  return {
+    ...graph,
+    edges: graph.edges.filter(
+      (edge) => includedNodeIds.has(edge.source) && includedNodeIds.has(edge.target)
+    ),
+    nodes: graph.nodes.filter((node) => includedNodeIds.has(node.id)),
+  };
+}
+
+function getNodeStepIndex(node: LearningGraphNode | undefined) {
+  const value = (node as any)?.stepIndex ?? (node as any)?.index ?? null;
+  return typeof value === 'number' ? value : null;
+}
+
+function buildRelatedStepTitlesByNodeId(
+  documentViewModel: LearningGraphViewModel,
+  fullViewModel?: LearningGraphViewModel | null
+) {
+  const sourceViewModel = fullViewModel ?? documentViewModel;
+  const titlesByNodeId: Record<string, string[]> = {};
+
+  for (const node of documentViewModel.graph.nodes) {
+    const titles = (sourceViewModel.relatedStepsByNodeId[node.id] ?? [])
+      .map((stepNode) => String(stepNode.title ?? stepNode.label ?? '').trim())
+      .filter(Boolean);
+    titlesByNodeId[node.id] = [...new Set(titles)];
+  }
+
+  return titlesByNodeId;
+}
+
+function buildEmptyGuideStatusByNodeId(viewModel: LearningGraphViewModel) {
+  const statusByNodeId: Record<string, LearningGuideNodeStatus> = {};
+
+  for (const node of viewModel.graph.nodes) {
+    if (node.type === 'Book') {
+      continue;
+    }
+    statusByNodeId[node.id] = 'pending';
+  }
+
+  return statusByNodeId;
+}
+
+function collectGuideStepNodeIds(stepNodeId: string, fullViewModel: LearningGraphViewModel) {
+  const nodeIds = new Set<string>();
+
+  for (const linkedNodeId of fullViewModel.linkedNodeIdsByNodeId[stepNodeId] ?? []) {
+    const linkedNode = fullViewModel.nodeById[linkedNodeId];
+    if (!linkedNode || linkedNode.type === 'LessonStep' || linkedNode.type === 'Book') {
+      continue;
+    }
+    nodeIds.add(linkedNodeId);
+  }
+
+  for (const fragment of fullViewModel.relatedFragmentsByNodeId[stepNodeId] ?? []) {
+    nodeIds.add(fragment.id);
+  }
+
+  for (const asset of fullViewModel.relatedAssetsByNodeId[stepNodeId] ?? []) {
+    nodeIds.add(asset.id);
+  }
+
+  return [...nodeIds];
+}
+
 export function buildLearningGraphViewModel(graph: LearningGraph): LearningGraphViewModel {
   const nodes = dedupeNodes(graph.nodes);
   const nodeById = Object.fromEntries(nodes.map((node) => [node.id, node]));
@@ -275,6 +485,278 @@ export function buildLearningGraphViewModel(graph: LearningGraph): LearningGraph
     relatedAssetsByNodeId,
     relatedFragmentsByNodeId,
     relatedStepsByNodeId,
+  };
+}
+
+export function buildLearningDocumentGraphViewModel(graph: LearningGraph) {
+  return buildLearningGraphViewModel(
+    filterLearningGraphNodes(graph, (node) => node.type !== 'LessonStep')
+  );
+}
+
+export const buildLearningExploreGraphViewModel = buildLearningDocumentGraphViewModel;
+
+export function resolveLearningExploreGraphFocus(
+  messages: LearningWorkspaceRenderedMessage[] = []
+): LearningExploreGraphFocus | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    const presentation = message.presentation as LearningExplorePresentation | null | undefined;
+
+    if (message.role !== 'assistant' || presentation?.kind !== 'explore') {
+      continue;
+    }
+
+    const question =
+      [...messages.slice(0, index)]
+        .reverse()
+        .find((item) => item.role === 'user' && item.text.trim())?.text.trim() ?? null;
+
+    return {
+      evidence: presentation.evidence ?? [],
+      question,
+      relatedConcepts: (presentation.relatedConcepts ?? []).filter(Boolean),
+    };
+  }
+
+  return null;
+}
+
+export function buildLearningGlobalGraphLens(
+  viewModel: LearningGraphViewModel
+): LearningGraphLens {
+  return {
+    evidence: [],
+    generatedNodeIds: [],
+    graph: viewModel.graph,
+    guideStatusByNodeId: {},
+    highlightedNodeIds: [],
+    mode: 'global',
+    question: null,
+    relatedConcepts: [],
+    relatedStepTitlesByNodeId: buildRelatedStepTitlesByNodeId(viewModel),
+    viewModel,
+  };
+}
+
+export function buildLearningExploreGraphLens(
+  viewModel: LearningGraphViewModel,
+  focus: LearningExploreGraphFocus | null
+): LearningGraphLens {
+  const evidence = focus?.evidence ?? [];
+  const question = focus?.question ?? null;
+  const relatedConcepts = focus?.relatedConcepts ?? [];
+  const matchedEvidenceNodeIds = matchExploreEvidenceNodeIds(viewModel, evidence);
+  const matchedConceptNodeIds = matchExploreConceptNodeIds(viewModel, relatedConcepts);
+  const matchedConceptNames = new Set(
+    matchedConceptNodeIds.map((nodeId) =>
+      normalizeGraphText(viewModel.nodeById[nodeId]?.concept ?? viewModel.nodeById[nodeId]?.label)
+    )
+  );
+  const unmatchedConcepts = relatedConcepts.filter(
+    (concept) => !matchedConceptNames.has(normalizeGraphText(concept))
+  );
+
+  const bookAnchorNodeId =
+    viewModel.graph.nodes.find((node) => node.type === 'Book')?.id ?? viewModel.graph.nodes[0]?.id ?? null;
+
+  const generatedNodes = unmatchedConcepts.map<LearningGraphNode>((concept) => ({
+    description: '来自最近一轮 Explore 发散出的概念',
+    id: buildExploreConceptNodeId(concept),
+    isExploreGenerated: true,
+    label: concept,
+    type: 'Concept',
+  }));
+  const generatedEdges = bookAnchorNodeId
+    ? generatedNodes.map<LearningGraphEdge>((node) => ({
+        source: node.id,
+        target: bookAnchorNodeId,
+        type: 'EXPLORE_EXTENDS',
+      }))
+    : [];
+  const graph = {
+    ...viewModel.graph,
+    edges: [...viewModel.graph.edges, ...generatedEdges],
+    nodes: [...viewModel.graph.nodes, ...generatedNodes],
+  };
+  const lensViewModel = buildLearningGraphViewModel(graph);
+  const generatedNodeIds = generatedNodes.map((node) => node.id);
+  const highlightedNodeIds = [
+    ...matchedEvidenceNodeIds,
+    ...matchedConceptNodeIds,
+    ...generatedNodeIds,
+  ];
+
+  return {
+    evidence,
+    generatedNodeIds,
+    graph,
+    guideStatusByNodeId: {},
+    highlightedNodeIds: [...new Set(highlightedNodeIds)],
+    mode: 'explore',
+    question,
+    relatedConcepts,
+    relatedStepTitlesByNodeId: buildRelatedStepTitlesByNodeId(lensViewModel),
+    viewModel: lensViewModel,
+  };
+}
+
+export function buildLearningGuideGraphLens(
+  documentViewModel: LearningGraphViewModel,
+  fullViewModel: LearningGraphViewModel,
+  progress: LearningGuideProgressSnapshot | null | undefined
+): LearningGraphLens {
+  const guideStatusByNodeId = buildEmptyGuideStatusByNodeId(documentViewModel);
+  const completedStepIndexes = new Set((progress?.completedSteps ?? []).map((step) => step.stepIndex));
+
+  for (const stepNode of fullViewModel.graph.nodes) {
+    if (stepNode.type !== 'LessonStep') {
+      continue;
+    }
+
+    const stepIndex = getNodeStepIndex(stepNode);
+    if (stepIndex == null) {
+      continue;
+    }
+
+    const status: LearningGuideNodeStatus | null = completedStepIndexes.has(stepIndex)
+      ? 'completed'
+      : progress?.currentStepIndex === stepIndex
+        ? 'current'
+        : null;
+
+    if (!status) {
+      continue;
+    }
+
+    for (const nodeId of collectGuideStepNodeIds(stepNode.id, fullViewModel)) {
+      if (!documentViewModel.nodeById[nodeId]) {
+        continue;
+      }
+
+      const previousStatus = guideStatusByNodeId[nodeId];
+      if (previousStatus === 'completed') {
+        continue;
+      }
+
+      guideStatusByNodeId[nodeId] = status;
+    }
+  }
+
+  return {
+    evidence: [],
+    generatedNodeIds: [],
+    graph: documentViewModel.graph,
+    guideStatusByNodeId,
+    highlightedNodeIds: Object.entries(guideStatusByNodeId)
+      .filter(([, status]) => status === 'completed' || status === 'current')
+      .map(([nodeId]) => nodeId),
+    mode: 'guide',
+    question: null,
+    relatedConcepts: [],
+    relatedStepTitlesByNodeId: buildRelatedStepTitlesByNodeId(documentViewModel, fullViewModel),
+    viewModel: documentViewModel,
+  };
+}
+
+function resolveGuideStatusLabel(status: LearningGuideNodeStatus) {
+  switch (status) {
+    case 'completed':
+      return '已点亮';
+    case 'current':
+      return '正在学习';
+    case 'pending':
+    default:
+      return '待学习';
+  }
+}
+
+export function buildLearningGraphSelectionPresentation(
+  mode: LearningGraphMode,
+  selection: LearningGraphSelection,
+  lens: LearningGraphLens
+): LearningGraphSelectionPresentation {
+  const relatedFragments = selection.relatedFragments.slice(0, 3);
+
+  if (mode === 'explore') {
+    const isGenerated = lens.generatedNodeIds.includes(selection.node.id);
+    const relationLines = [
+      isGenerated
+        ? '来自最近一轮 Explore 发散出的概念'
+        : lens.highlightedNodeIds.includes(selection.node.id)
+          ? '当前探索直接命中了这个节点'
+          : '这个节点位于基础图谱中，但当前探索还没有直接命中它',
+    ];
+
+    if (lens.question) {
+      relationLines.push(`当前问题：${lens.question}`);
+    }
+
+    return {
+      description: selection.description,
+      eyebrow: 'Explore',
+      metadata: selection.metadata,
+      relatedFragments,
+      sections: [
+        {
+          lines: relationLines,
+          title: '探索关系',
+        },
+      ],
+      statusLabel: isGenerated ? '探索新增' : null,
+      title: selection.title.trim(),
+      typeLabel: selection.typeLabel,
+    };
+  }
+
+  if (mode === 'guide') {
+    const status = lens.guideStatusByNodeId[selection.node.id] ?? 'pending';
+    const stepTitles = lens.relatedStepTitlesByNodeId[selection.node.id] ?? [];
+
+    return {
+      description: selection.description,
+      eyebrow: 'Guide',
+      metadata: selection.metadata,
+      relatedFragments,
+      sections: [
+        {
+          lines: [resolveGuideStatusLabel(status)],
+          title: '学习状态',
+        },
+        ...(stepTitles.length > 0
+          ? [
+              {
+                lines: stepTitles.slice(0, 3),
+                title: '相关导学',
+              },
+            ]
+          : []),
+      ],
+      statusLabel: resolveGuideStatusLabel(status),
+      title: selection.title.trim(),
+      typeLabel: selection.typeLabel,
+    };
+  }
+
+  return {
+    description: selection.description,
+    eyebrow: 'Global',
+    metadata: selection.metadata,
+    relatedFragments,
+    sections: [
+      {
+        lines: [
+          `直接连接 ${selection.neighborCount} 个节点`,
+          selection.relatedAssets.length > 0
+            ? `关联 ${selection.relatedAssets.length} 份来源文件`
+            : '这个节点当前没有映射到额外来源文件',
+        ],
+        title: '图谱位置',
+      },
+    ],
+    statusLabel: null,
+    title: selection.title.trim(),
+    typeLabel: selection.typeLabel,
   };
 }
 

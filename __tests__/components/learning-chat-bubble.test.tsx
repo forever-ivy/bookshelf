@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react-native';
+import { Platform, StyleSheet } from 'react-native';
 import React from 'react';
 
 import { LearningChatBubble } from '@/components/learning/learning-chat-bubble';
@@ -53,5 +54,31 @@ describe('learning chat bubble', () => {
     expect(screen.queryByTestId('learning-assistant-thinking-label')).toBeNull();
     expect(screen.queryByLabelText('复制回答')).toBeNull();
     expect(screen.queryByText('我的回答')).toBeNull();
+  });
+
+  it('does not force plain user text to flex inside the compact bubble', () => {
+    render(<LearningChatBubble role="user" text="帮我总结这一节的核心线索" />);
+
+    expect(
+      StyleSheet.flatten(screen.getByText('帮我总结这一节的核心线索').props.style).flex
+    ).toBeUndefined();
+  });
+
+  it('matches user plain text typography to the assistant reply body typography', () => {
+    render(<LearningChatBubble role="user" text="帮我总结这一节的核心线索" />);
+
+    const style = StyleSheet.flatten(screen.getByText('帮我总结这一节的核心线索').props.style);
+
+    expect(style.fontFamily).toBe(
+      Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' })
+    );
+    expect(style.fontSize).toBe(17);
+    expect(style.lineHeight).toBe(28);
+  });
+
+  it('gives rich user replies a stable width so the webview content does not collapse', () => {
+    render(<LearningChatBubble role="user" text="$$ f(x) = \\frac{x}{1 - x^2} $$" />);
+
+    expect(StyleSheet.flatten(screen.getByTestId('learning-user-bubble').props.style).width).toBe('84%');
   });
 });

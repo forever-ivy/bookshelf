@@ -8,6 +8,9 @@ import type {
   LearningGraphRuntimeOutputMessage,
   LearningGraphRuntimeTheme,
 } from '../../lib/learning/graph-bridge';
+import {
+  syncLearningGraphViewportSelection,
+} from '../../lib/learning/graph-runtime-focus';
 import { readLearningGraphBootstrapPayload } from '../../lib/learning/graph-runtime';
 
 type RuntimeLink = {
@@ -24,6 +27,14 @@ type RuntimeNode = {
   x?: number;
   y?: number;
 };
+
+function resolveRuntimeLinkEndpointId(endpoint: RuntimeLink['source']) {
+  if (typeof endpoint === 'string') {
+    return endpoint;
+  }
+
+  return (endpoint as { id?: string })?.id ?? null;
+}
 
 function buildEdgeKey(edge: { source: string; target: string; type: string }) {
   return `${edge.source}::${edge.target}::${edge.type}`;
@@ -110,8 +121,13 @@ function resolveLabelVisibility(
   node: RuntimeNode,
   zoom: number,
   selectedNodeId: string | null,
+  selectedNeighborhoodNodeIds: Set<string> | null,
   conceptLabelZoom: number
 ) {
+  if (selectedNeighborhoodNodeIds?.has(node.id)) {
+    return true;
+  }
+
   if (node.type === 'Book' || node.type === 'SourceAsset' || node.type === 'LessonStep') {
     return true;
   }
@@ -125,6 +141,61 @@ function resolveLabelVisibility(
   }
 
   return false;
+}
+
+function resolveNodeVisualState(
+  node: RuntimeNode,
+  hydratePayload: LearningGraphHydratePayload,
+  selectedNodeId: string | null,
+  selectedNeighborhoodNodeIds: Set<string> | null
+) {
+  const baseColor = resolveNodeColor(node.type, hydratePayload.theme);
+  const generatedNodeIds = new Set(hydratePayload.generatedNodeIds);
+  const highlightedNodeIds = new Set(hydratePayload.highlightedNodeIds);
+  const guideStatus = hydratePayload.guideStatusByNodeId[node.id];
+  const active = selectedNodeId === node.id;
+  const generated = generatedNodeIds.has(node.id);
+
+  let alpha = 0.88;
+  let color = baseColor;
+  let emphasis: 'completed' | 'current' | 'generated' | 'normal' = 'normal';
+
+  if (hydratePayload.mode === 'explore') {
+    alpha = highlightedNodeIds.has(node.id) ? 0.96 : 0.56;
+    if (generated) {
+      alpha = 0.98;
+      color = hydratePayload.theme.explore;
+      emphasis = 'generated';
+    }
+  }
+
+  if (hydratePayload.mode === 'guide') {
+    if (guideStatus === 'completed') {
+      alpha = 0.94;
+      color = hydratePayload.theme.success;
+      emphasis = 'completed';
+    } else if (guideStatus === 'current') {
+      alpha = 0.98;
+      color = hydratePayload.theme.warning;
+      emphasis = 'current';
+    } else {
+      alpha = node.type === 'Book' ? 0.78 : 0.34;
+    }
+  }
+
+  if (selectedNeighborhoodNodeIds) {
+    alpha = selectedNeighborhoodNodeIds.has(node.id)
+      ? Math.max(alpha, active ? 1 : 0.92)
+      : Math.min(alpha, 0.18);
+  }
+
+  return {
+    active,
+    alpha,
+    color,
+    emphasis,
+    generated,
+  };
 }
 
 function App() {
@@ -265,7 +336,7 @@ function App() {
     };
   }, [hydratePayload]);
 
-  const highlightedNodeIds = React.useMemo(() => {
+  const selectedNeighborhoodNodeIds = React.useMemo(() => {
     if (!hydratePayload || !selectedNodeId) {
       return null;
     }
@@ -283,6 +354,54 @@ function App() {
 
     return new Set(hydratePayload.edgeKeysByNodeId[selectedNodeId] ?? []);
   }, [hydratePayload, selectedNodeId]);
+  const modeHighlightedNodeIds = React.useMemo(
+    () => new Set(hydratePayload?.highlightedNodeIds ?? []),
+    [hydratePayload]
+  );
+  const runtimeNodeById = React.useMemo(
+    () => Object.fromEntries(graphData.nodes.map((node) => [node.id, node])),
+    [graphData.nodes]
+  );
+
+  const syncViewportToSelection = React.useCallback(
+    (targetNodeId: string | null, retryCount = 0) => {
+      const graph = graphRef.current;
+      if (!graph) {
+        postStatus('viewport:missingGraphRef');
+        return;
+      }
+
+      const targetNode = targetNodeId ? runtimeNodeById[targetNodeId] ?? null : null;
+      if (
+        targetNodeId &&
+        (!targetNode || typeof targetNode.x !== 'number' || typeof targetNode.y !== 'number')
+      ) {
+        if (retryCount < 4) {
+          window.setTimeout(() => {
+            syncViewportToSelection(targetNodeId, retryCount + 1);
+          }, 90);
+          return;
+        }
+      }
+
+      const status = syncLearningGraphViewportSelection(graph, targetNode, {
+        resetWhenMissing: !targetNodeId,
+      });
+
+      if (status === 'focused' && targetNodeId) {
+        postStatus('viewport:focusNode', targetNodeId);
+        return;
+      }
+
+      if (status === 'reset') {
+        postStatus(targetNodeId ? 'viewport:resetAfterMiss' : 'viewport:zoomToFit');
+        return;
+      }
+
+      postStatus('viewport:preserve');
+    },
+    [runtimeNodeById]
+  );
 
   React.useEffect(() => {
     if (!hydratePayload) {
@@ -331,8 +450,7 @@ function App() {
       window.requestAnimationFrame(() => {
         window.setTimeout(() => {
           try {
-            graph.zoomToFit?.(300, 56);
-            postStatus('effect:zoomToFit');
+            syncViewportToSelection(hydratePayload.selectedNodeId);
           } catch (error) {
             postToNative({
               message: formatRuntimeError(error),
@@ -347,7 +465,22 @@ function App() {
         type: 'runtimeError',
       });
     }
-  }, [hydratePayload, hydrateToken]);
+  }, [hydratePayload, hydrateToken, syncViewportToSelection]);
+
+  React.useEffect(() => {
+    if (!hydratePayload) {
+      return;
+    }
+
+    try {
+      syncViewportToSelection(selectedNodeId);
+    } catch (error) {
+      postToNative({
+        message: formatRuntimeError(error),
+        type: 'runtimeError',
+      });
+    }
+  }, [hydratePayload, selectedNodeId, syncViewportToSelection]);
 
   if (!hydratePayload) {
     return null;
@@ -362,13 +495,24 @@ function App() {
         graphData={graphData}
         height={viewport.height}
         linkColor={(link) => {
+          const current = link as RuntimeLink;
           if (!highlightedEdgeKeys) {
-            return hydratePayload.theme.edge;
+            const sourceId = resolveRuntimeLinkEndpointId(current.source);
+            const targetId = resolveRuntimeLinkEndpointId(current.target);
+            if (hydratePayload.mode === 'global') {
+              return hydratePayload.theme.edge;
+            }
+            if (
+              (modeHighlightedNodeIds.has(String(sourceId)) || modeHighlightedNodeIds.has(String(targetId)))
+            ) {
+              return hydratePayload.theme.edge;
+            }
+            return 'rgba(78, 99, 121, 0.08)';
           }
 
-          return highlightedEdgeKeys.has((link as RuntimeLink).__key)
+          return highlightedEdgeKeys.has(current.__key)
             ? hydratePayload.theme.edge
-            : 'rgba(102, 98, 88, 0.08)';
+            : 'rgba(78, 99, 121, 0.06)';
         }}
         linkCurvature={(link) => {
           const current = link as RuntimeLink;
@@ -382,28 +526,77 @@ function App() {
             current.type === 'TESTS';
 
           if (!highlightedEdgeKeys) {
-            return emphasized ? 2 : 1;
+            const sourceId = resolveRuntimeLinkEndpointId(current.source);
+            const targetId = resolveRuntimeLinkEndpointId(current.target);
+            if (hydratePayload.mode === 'global') {
+              return emphasized ? 1.2 : 0.8;
+            }
+            if (
+              (modeHighlightedNodeIds.has(String(sourceId)) || modeHighlightedNodeIds.has(String(targetId)))
+            ) {
+              return emphasized ? 1.9 : 1.2;
+            }
+            return emphasized ? 1.0 : 0.55;
           }
 
-          return highlightedEdgeKeys.has(current.__key) ? (emphasized ? 2.2 : 1.4) : 0.6;
+          return highlightedEdgeKeys.has(current.__key) ? (emphasized ? 1.9 : 1.2) : 0.5;
         }}
         nodeCanvasObject={(node, canvasContext, globalScale) => {
           const current = node as RuntimeNode;
-          const radius = hydratePayload.config.nodeSizes[current.type] ?? 6;
-          const highlighted = highlightedNodeIds?.has(current.id) ?? true;
-          const active = selectedNodeId === current.id;
-          const alpha = !highlightedNodeIds ? 0.94 : highlighted ? (active ? 1 : 0.92) : 0.16;
+          const baseRadius = hydratePayload.config.nodeSizes[current.type] ?? 6;
+          const { active, alpha, color, emphasis, generated } = resolveNodeVisualState(
+            current,
+            hydratePayload,
+            selectedNodeId,
+            selectedNeighborhoodNodeIds
+          );
+          const radius = active
+            ? baseRadius + 2
+            : selectedNeighborhoodNodeIds?.has(current.id)
+              ? baseRadius + 1
+              : baseRadius;
 
           canvasContext.save();
           canvasContext.globalAlpha = alpha;
+
+          if (alpha > 0.24) {
+            canvasContext.shadowColor = color;
+            canvasContext.shadowBlur = active
+              ? 10
+              : emphasis === 'generated' || emphasis === 'current'
+                ? 6
+                : emphasis === 'completed'
+                  ? 4
+                  : 0;
+          }
+
           canvasContext.beginPath();
           canvasContext.arc(current.x ?? 0, current.y ?? 0, radius, 0, 2 * Math.PI, false);
-          canvasContext.fillStyle = resolveNodeColor(current.type, hydratePayload.theme);
+          canvasContext.fillStyle = color;
           canvasContext.fill();
-
-          if (active || current.type === 'Book') {
-            canvasContext.lineWidth = active ? 2 : 1.5;
+          canvasContext.shadowBlur = 0;
+          
+          if (active || current.type === 'Book' || emphasis !== 'normal') {
+            canvasContext.lineWidth = active ? 2.2 : 1.2;
             canvasContext.strokeStyle = hydratePayload.theme.surface ?? '#FFFFFF';
+            canvasContext.stroke();
+          }
+
+          if (generated) {
+            canvasContext.beginPath();
+            canvasContext.setLineDash([5, 4]);
+            canvasContext.arc(current.x ?? 0, current.y ?? 0, radius + 3, 0, 2 * Math.PI, false);
+            canvasContext.lineWidth = 1;
+            canvasContext.strokeStyle = hydratePayload.theme.explore;
+            canvasContext.stroke();
+            canvasContext.setLineDash([]);
+          }
+
+          if (active) {
+            canvasContext.beginPath();
+            canvasContext.arc(current.x ?? 0, current.y ?? 0, radius + 5, 0, 2 * Math.PI, false);
+            canvasContext.lineWidth = 1;
+            canvasContext.strokeStyle = color;
             canvasContext.stroke();
           }
 
@@ -412,6 +605,7 @@ function App() {
               current,
               globalScale,
               selectedNodeId,
+              selectedNeighborhoodNodeIds,
               hydratePayload.config.conceptLabelZoom
             )
           ) {

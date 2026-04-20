@@ -584,25 +584,59 @@ function normalizeLearningDashboardContinueSession(
   };
 }
 
+function normalizeSseChunk(chunk: string) {
+  return chunk.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
 function decodeSseFrames(chunk: string) {
-  return chunk
-    .split('\n\n')
-    .map((frame) => frame.trim())
-    .filter(Boolean);
+  const normalized = normalizeSseChunk(chunk);
+  const segments = normalized.split('\n\n');
+  const remainder = normalized.endsWith('\n\n') ? '' : (segments.pop() ?? '');
+
+  return {
+    frames: segments.map((frame) => frame.trim()).filter(Boolean),
+    remainder,
+  };
 }
 
 function parseSsePayload(frame: string) {
-  const payload = frame
+  let eventName: string | undefined;
+  const payload = normalizeSseChunk(frame)
     .split('\n')
-    .filter((line) => line.startsWith('data:'))
-    .map((line) => line.slice(5).trim())
-    .join('');
+    .reduce<string[]>((lines, line) => {
+      if (line.startsWith('event:')) {
+        const nextEventName = line.slice(6).trim();
+        eventName = nextEventName.length > 0 ? nextEventName : undefined;
+        return lines;
+      }
+
+      if (line.startsWith('data:')) {
+        lines.push(line.slice(5).trimStart());
+      }
+
+      return lines;
+    }, [])
+    .join('\n');
 
   if (!payload) {
     return null;
   }
 
-  return JSON.parse(payload) as { data?: any; event?: string };
+  const parsed = JSON.parse(payload) as { data?: any; event?: string } | Record<string, unknown>;
+  if (parsed && typeof parsed === 'object' && ('event' in parsed || 'data' in parsed)) {
+    return {
+      data: 'data' in parsed ? parsed.data : parsed,
+      event:
+        typeof (parsed as { event?: unknown }).event === 'string'
+          ? (parsed as { event: string }).event
+          : eventName,
+    };
+  }
+
+  return {
+    data: parsed,
+    event: eventName,
+  } as { data?: any; event?: string };
 }
 
 function normalizeLearningFinalMessage(raw: any): LearningSessionMessage {
@@ -1080,8 +1114,8 @@ export async function* streamLearningSessionReply(
   while (true) {
     const { done, value } = await reader.read();
     buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
-    const frames = decodeSseFrames(buffer);
-    buffer = buffer.endsWith('\n\n') ? '' : frames.pop() ?? '';
+    const { frames, remainder } = decodeSseFrames(buffer);
+    buffer = remainder;
 
     for (const frame of frames) {
       const parsed = parseSsePayload(frame);

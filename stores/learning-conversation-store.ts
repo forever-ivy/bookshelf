@@ -25,6 +25,7 @@ export type LearningConversationState = {
   latestStatus: LearningWorkspaceStatusSignal | null;
   messages: LearningWorkspaceRenderedMessage[];
   mode: LearningConversationMode;
+  userMessageId: string | null;
 };
 
 type LearningConversationStore = LearningConversationState & {
@@ -150,6 +151,18 @@ function buildRenderedDraftMessage(
   };
 }
 
+function findPendingUserMessage(state: LearningConversationState) {
+  if (!state.userMessageId) {
+    return null;
+  }
+
+  const message = state.messages.find(
+    (item) => item.id === state.userMessageId && item.role === 'user'
+  );
+
+  return message ?? null;
+}
+
 function updateAssistantDraft(
   state: LearningConversationState,
   updater: (
@@ -186,6 +199,7 @@ export function createInitialLearningConversationState(input: {
     latestStatus: null,
     messages: createDraftMessages(input),
     mode: input.mode,
+    userMessageId: input.userMessageId,
   };
 }
 
@@ -308,6 +322,7 @@ const initialStoreState: LearningConversationState = {
   latestStatus: null,
   messages: [],
   mode: 'guide',
+  userMessageId: null,
 };
 
 export const useLearningConversationStore = create<LearningConversationStore>((set) => ({
@@ -320,6 +335,7 @@ export const useLearningConversationStore = create<LearningConversationStore>((s
       ...state,
       assistantMessageId: null,
       messages: state.messages.filter((message) => !message.streaming),
+      userMessageId: null,
     }));
   },
   commitDraft: () => {
@@ -329,16 +345,32 @@ export const useLearningConversationStore = create<LearningConversationStore>((s
       messages: state.messages.map((message) =>
         message.id === state.assistantMessageId ? { ...message, streaming: false } : message
       ),
+      userMessageId: null,
     }));
   },
   hydrateHistory: (messages) => {
     set((state) => {
-      const draftMessages = state.messages.filter((message) => message.streaming);
-      const nextMessages = draftMessages.length > 0 ? [...messages, ...draftMessages] : messages;
+      const pendingUserMessage = findPendingUserMessage(state);
+      const historyHasPendingUser =
+        pendingUserMessage !== null &&
+        messages.some(
+          (message) => message.role === 'user' && message.text === pendingUserMessage.text
+        );
+      const draftMessages = state.messages.filter(
+        (message) =>
+          message.id === state.assistantMessageId ||
+          (state.userMessageId !== null && message.id === state.userMessageId)
+      );
+      const preservedMessages = historyHasPendingUser
+        ? draftMessages.filter((message) => message.id !== state.userMessageId)
+        : draftMessages;
+      const nextMessages =
+        preservedMessages.length > 0 ? [...messages, ...preservedMessages] : messages;
 
       return {
         ...state,
         messages: nextMessages,
+        userMessageId: historyHasPendingUser ? null : state.userMessageId,
       };
     });
   },
@@ -372,6 +404,7 @@ export const useLearningConversationStore = create<LearningConversationStore>((s
       latestStatus: null,
       messages: [...state.messages.filter((message) => !message.streaming), ...createDraftMessages(input)],
       mode: input.mode,
+      userMessageId: input.userMessageId,
     }));
   },
 }));
