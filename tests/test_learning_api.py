@@ -76,6 +76,19 @@ def parse_sse_lines(lines: list[str]) -> list[dict]:
     return events
 
 
+def parse_ai_sdk_sse_lines(lines: list[str]) -> list[dict]:
+    events: list[dict] = []
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or not line.startswith("data: "):
+            continue
+        payload = line[6:]
+        if payload == "[DONE]":
+            continue
+        events.append(json.loads(payload))
+    return events
+
+
 def create_ready_learning_session(client: TestClient) -> tuple[dict[str, int], dict[str, str], int]:
     state = seed_reader_with_book()
     headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
@@ -897,7 +910,16 @@ def test_learning_session_creates_remediation_plan_for_weak_answer(client):
     assert report_payload["suggestedNextAction"]
 
 
-def test_explore_session_stream_returns_free_qa_without_progress_or_checkpoint(client):
+def test_explore_session_stream_returns_free_qa_without_progress_or_checkpoint(client, monkeypatch):
+    def fake_explore_answer(self, *, focus_context, citations, user_content):
+        return {
+            "answer": "进程是资源分配单位，线程是调度执行单位。",
+            "relatedConcepts": ["并发模型"],
+            "reasoningContent": None,
+        }
+
+    monkeypatch.setattr("app.learning.llm_flow.LearningLLMWorkflow.explore_answer", fake_explore_answer)
+
     state = seed_reader_with_book()
     headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
 
@@ -1048,7 +1070,391 @@ def test_explore_session_stream_includes_reasoning_delta_and_persists_reasoning_
     assert turn["presentation"]["reasoningContent"] == "先识别问题在比较两个概念，再抓定义维度和调度维度。"
 
 
-def test_explore_session_stream_returns_model_unavailable_message_when_llm_disabled(client):
+def test_explore_session_ai_sdk_stream_creates_run_before_agent_and_proxies_agent_events(
+    client,
+    monkeypatch,
+):
+    monkeypatch.setenv("LIBRARY_LEARNING_AI_AGENT_URL", "http://learning-agent.test")
+    get_settings.cache_clear()
+    state = seed_reader_with_book()
+    headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
+
+    create_response = client.post(
+        "/api/v2/learning/profiles",
+        headers=headers,
+        json={
+            "title": "操作系统导学空间",
+            "goalMode": "preview",
+            "difficultyMode": "guided",
+            "sources": [{"kind": "book", "bookId": state["book_id"]}],
+        },
+    )
+    profile_id = create_response.json()["profile"]["id"]
+    client.post(f"/api/v2/learning/profiles/{profile_id}/generate", headers=headers)
+    session_response = client.post(
+        "/api/v2/learning/sessions",
+        headers=headers,
+        json={"profileId": profile_id, "learningMode": "preview", "sessionKind": "explore"},
+    )
+    explore_session_id = session_response.json()["session"]["id"]
+
+    resume_response = client.get(
+        f"/api/v2/learning/sessions/{explore_session_id}/stream",
+        headers=headers,
+    )
+    assert resume_response.status_code == 204
+
+    class FakeAgentResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        async def aiter_text(self):
+            yield 'data: {"type":"data-user-message","data":{"message":{"id":"user-message-1","role":"user","parts":[{"type":"text","text":"详细讲解一个文档中的例题"}]}}}\n\n'
+            yield 'data: {"type":"data-status","data":{"phase":"retrieving"}}\n\n'
+            yield 'data: {"type":"reasoning-delta","id":"reasoning-1","delta":"先定位引用。"}\n\n'
+            yield 'data: {"type":"text-delta","id":"answer-1","delta":"进程是资源分配单位，"}\n\n'
+            yield 'data: {"type":"text-delta","id":"answer-1","delta":"线程是调度执行单位。"}\n\n'
+            yield 'data: {"type":"finish"}\n\n'
+            yield "data: [DONE]\n\n"
+
+    class FakeAgentStream:
+        async def __aenter__(self):
+            session = get_session_factory()()
+            try:
+                count = session.execute(text("SELECT COUNT(*) FROM learning_ai_runs")).scalar_one()
+                assert count == 1
+            finally:
+                session.close()
+            return FakeAgentResponse()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        def stream(self, method, url, *, json):
+            assert method == "POST"
+            assert url == "http://learning-agent.test/internal/ai-sdk/learning/explore/runs/1/stream"
+            assert json["runId"] == 1
+            assert json["sessionId"] == explore_session_id
+            assert json["userContent"] == "详细讲解一个文档中的例题"
+            assert json["citations"]
+            return FakeAgentStream()
+
+    monkeypatch.setattr("app.learning.router.httpx.AsyncClient", FakeAsyncClient)
+
+    with client.stream(
+        "POST",
+        f"/api/v2/learning/sessions/{explore_session_id}/stream",
+        headers=headers,
+        json={
+            "id": f"learning-session-{explore_session_id}",
+            "message": {
+                "id": "user-message-1",
+                "role": "user",
+                "parts": [{"type": "text", "text": "详细讲解一个文档中的例题"}],
+            },
+        },
+    ) as response:
+        assert response.status_code == 200
+        events = parse_ai_sdk_sse_lines(list(response.iter_lines()))
+
+    event_types = [event["type"] for event in events]
+    assert event_types[:2] == ["data-user-message", "data-status"]
+    assert "reasoning-delta" in event_types
+    assert "text-delta" in event_types
+    assert event_types[-1] == "finish"
+
+    turns_response = client.get(f"/api/v2/learning/sessions/{explore_session_id}/turns", headers=headers)
+    assert turns_response.status_code == 200
+    assert turns_response.json()["items"] == []
+
+    session = get_session_factory()()
+    try:
+        run_row = session.execute(
+            text(
+                "SELECT status, active_stream_id FROM learning_ai_runs WHERE session_id = :session_id ORDER BY id DESC LIMIT 1"
+            ),
+            {"session_id": explore_session_id},
+        ).mappings().one()
+        assert run_row["status"] == "running"
+        assert run_row["active_stream_id"] == "learning-ai-run-1"
+    finally:
+        session.close()
+
+
+def test_explore_ai_run_complete_callback_persists_turn_and_clears_active_stream(client, monkeypatch):
+    monkeypatch.setenv("LIBRARY_LEARNING_AI_AGENT_URL", "http://learning-agent.test")
+    monkeypatch.setenv("LIBRARY_LEARNING_AI_CALLBACK_BASE_URL", "http://library-core-api.test")
+    get_settings.cache_clear()
+    state = seed_reader_with_book()
+    headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
+
+    create_response = client.post(
+        "/api/v2/learning/profiles",
+        headers=headers,
+        json={
+            "title": "操作系统导学空间",
+            "goalMode": "preview",
+            "difficultyMode": "guided",
+            "sources": [{"kind": "book", "bookId": state["book_id"]}],
+        },
+    )
+    profile_id = create_response.json()["profile"]["id"]
+    client.post(f"/api/v2/learning/profiles/{profile_id}/generate", headers=headers)
+    session_response = client.post(
+        "/api/v2/learning/sessions",
+        headers=headers,
+        json={"profileId": profile_id, "learningMode": "preview", "sessionKind": "explore"},
+    )
+    explore_session_id = session_response.json()["session"]["id"]
+
+    class FakeAgentResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        async def aiter_text(self):
+            yield 'data: {"type":"data-status","data":{"phase":"reasoning"}}\n\n'
+            yield 'data: {"type":"text-delta","id":"answer-1","delta":"进程是资源分配单位，"}\n\n'
+            yield 'data: {"type":"finish"}\n\n'
+            yield "data: [DONE]\n\n"
+
+    class FakeAgentStream:
+        async def __aenter__(self):
+            return FakeAgentResponse()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        def stream(self, method, url, *, json):
+            assert method == "POST"
+            assert json["callbackUrl"] == "http://library-core-api.test/internal/learning/ai-runs/1/complete"
+            return FakeAgentStream()
+
+    monkeypatch.setattr("app.learning.router.httpx.AsyncClient", FakeAsyncClient)
+
+    with client.stream(
+        "POST",
+        f"/api/v2/learning/sessions/{explore_session_id}/stream",
+        headers=headers,
+        json={"content": "详细讲解一个文档中的例题"},
+    ) as response:
+        assert response.status_code == 200
+        events = parse_ai_sdk_sse_lines(list(response.iter_lines()))
+
+    assert [event["type"] for event in events][-1] == "finish"
+
+    turns_response = client.get(f"/api/v2/learning/sessions/{explore_session_id}/turns", headers=headers)
+    assert turns_response.status_code == 200
+    assert turns_response.json()["items"] == []
+
+    complete_response = client.post(
+        "/internal/learning/ai-runs/1/complete",
+        json={
+            "status": "completed",
+            "answerText": "进程是资源分配单位，线程是调度执行单位。",
+            "reasoningContent": "先定位引用。",
+        },
+    )
+    assert complete_response.status_code == 200
+    complete_payload = complete_response.json()
+    assert complete_payload["ok"] is True
+    assert complete_payload["turn"]["assistantContent"] == "进程是资源分配单位，线程是调度执行单位。"
+    assert complete_payload["turn"]["presentation"]["reasoningContent"] == "先定位引用。"
+
+    turns_response = client.get(f"/api/v2/learning/sessions/{explore_session_id}/turns", headers=headers)
+    assert turns_response.status_code == 200
+    turn = turns_response.json()["items"][0]
+    assert turn["assistantContent"] == "进程是资源分配单位，线程是调度执行单位。"
+    assert turn["presentation"]["reasoningContent"] == "先定位引用。"
+
+    session = get_session_factory()()
+    try:
+        run_row = session.execute(
+            text(
+                "SELECT status, active_stream_id, reasoning_content FROM learning_ai_runs WHERE id = 1"
+            )
+        ).mappings().one()
+        assert run_row["status"] == "completed"
+        assert run_row["active_stream_id"] is None
+        assert run_row["reasoning_content"] == "先定位引用。"
+    finally:
+        session.close()
+
+
+def test_explore_session_resume_stream_proxies_active_run(client, monkeypatch):
+    monkeypatch.setenv("LIBRARY_LEARNING_AI_AGENT_URL", "http://learning-agent.test")
+    monkeypatch.setenv("LIBRARY_LEARNING_AI_CALLBACK_BASE_URL", "http://library-core-api.test")
+    get_settings.cache_clear()
+    state = seed_reader_with_book()
+    headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
+
+    create_response = client.post(
+        "/api/v2/learning/profiles",
+        headers=headers,
+        json={
+            "title": "操作系统导学空间",
+            "goalMode": "preview",
+            "difficultyMode": "guided",
+            "sources": [{"kind": "book", "bookId": state["book_id"]}],
+        },
+    )
+    profile_id = create_response.json()["profile"]["id"]
+    client.post(f"/api/v2/learning/profiles/{profile_id}/generate", headers=headers)
+    session_response = client.post(
+        "/api/v2/learning/sessions",
+        headers=headers,
+        json={"profileId": profile_id, "learningMode": "preview", "sessionKind": "explore"},
+    )
+    explore_session_id = session_response.json()["session"]["id"]
+
+    class FakePostAgentResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        async def aiter_text(self):
+            yield 'data: {"type":"text-delta","id":"answer-1","delta":"进程是资源分配单位。"}\n\n'
+            yield 'data: {"type":"finish"}\n\n'
+            yield "data: [DONE]\n\n"
+
+    class FakeResumeAgentResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        async def aiter_bytes(self):
+            yield 'data: {"type":"data-user-message","data":{"message":{"id":"user-message-1","role":"user","parts":[{"type":"text","text":"详细讲解一个文档中的例题"}]}}}\n\n'.encode(
+                "utf-8"
+            )
+            yield 'data: {"type":"text-delta","id":"answer-1","delta":"线程是调度执行单位。"}\n\n'.encode("utf-8")
+            yield b"data: [DONE]\n\n"
+
+    class FakeAgentStream:
+        def __init__(self, response):
+            self.response = response
+
+        async def __aenter__(self):
+            return self.response
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        def stream(self, method, url, *, json=None):
+            if method == "POST":
+                return FakeAgentStream(FakePostAgentResponse())
+            assert method == "GET"
+            assert url == "http://learning-agent.test/internal/ai-sdk/streams/learning-ai-run-1"
+            return FakeAgentStream(FakeResumeAgentResponse())
+
+    monkeypatch.setattr("app.learning.router.httpx.AsyncClient", FakeAsyncClient)
+
+    with client.stream(
+        "POST",
+        f"/api/v2/learning/sessions/{explore_session_id}/stream",
+        headers=headers,
+        json={"content": "详细讲解一个文档中的例题"},
+    ) as response:
+        assert response.status_code == 200
+        list(response.iter_lines())
+
+    with client.stream(
+        "GET",
+        f"/api/v2/learning/sessions/{explore_session_id}/stream",
+        headers=headers,
+    ) as response:
+        assert response.status_code == 200
+        events = parse_ai_sdk_sse_lines(list(response.iter_lines()))
+
+    assert [event["type"] for event in events] == ["data-user-message", "text-delta"]
+
+
+def test_explore_session_stream_returns_model_request_error_when_llm_answer_times_out(client, monkeypatch):
+    state = seed_reader_with_book()
+    headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
+
+    create_response = client.post(
+        "/api/v2/learning/profiles",
+        headers=headers,
+        json={
+            "title": "操作系统导学空间",
+            "goalMode": "preview",
+            "difficultyMode": "guided",
+            "sources": [{"kind": "book", "bookId": state["book_id"]}],
+        },
+    )
+    profile_id = create_response.json()["profile"]["id"]
+    client.post(f"/api/v2/learning/profiles/{profile_id}/generate", headers=headers)
+
+    session_response = client.post(
+        "/api/v2/learning/sessions",
+        headers=headers,
+        json={
+            "profileId": profile_id,
+            "learningMode": "preview",
+            "sessionKind": "explore",
+        },
+    )
+
+    assert session_response.status_code == 201
+    explore_session_id = session_response.json()["session"]["id"]
+
+    class TimeoutLLMProvider:
+        def chat(self, *, text: str, context: dict) -> str:
+            raise AssertionError("Explore fallback should not call plain chat")
+
+        def chat_with_reasoning(self, *, text: str, context: dict) -> tuple[str, str | None]:
+            raise APITimeoutError(request=httpx.Request("POST", "https://api.deepseek.com/chat/completions"))
+
+    monkeypatch.setattr("app.learning.llm_flow.build_llm_provider", lambda: TimeoutLLMProvider())
+
+    with client.stream(
+        "POST",
+        f"/api/v2/learning/sessions/{explore_session_id}/stream",
+        headers=headers,
+        json={"content": "详细讲解一个文档中的例题"},
+    ) as response:
+        assert response.status_code == 200
+        events = parse_sse_lines(list(response.iter_lines()))
+
+    assert events[-1]["event"] == "error"
+    assert events[-1]["data"] == {
+        "code": "learning_model_request_error",
+        "message": "模型请求错误",
+    }
+
+    turns_response = client.get(f"/api/v2/learning/sessions/{explore_session_id}/turns", headers=headers)
+    assert turns_response.status_code == 200
+    assert turns_response.json()["items"] == []
+
+
+def test_explore_session_stream_returns_model_request_error_when_llm_disabled(client):
     state = seed_reader_with_book()
     headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
 
@@ -1085,11 +1491,11 @@ def test_explore_session_stream_returns_model_unavailable_message_when_llm_disab
         assert response.status_code == 200
         events = parse_sse_lines(list(response.iter_lines()))
 
-    final_event = events[-1]
-    answer_content = final_event["data"]["turn"]["presentation"]["answer"]["content"]
-    assert "模型暂时不可用" in answer_content
-    assert "自由问答：" not in answer_content
-    assert "围绕你的问题" not in answer_content
+    assert events[-1]["event"] == "error"
+    assert events[-1]["data"] == {
+        "code": "learning_model_request_error",
+        "message": "模型请求错误",
+    }
 
 
 def test_bridge_expand_step_to_explore_reuses_focus_context(client):
@@ -1141,7 +1547,16 @@ def test_bridge_expand_step_to_explore_reuses_focus_context(client):
     assert second_bridge_response.json()["session"]["id"] == payload["session"]["id"]
 
 
-def test_bridge_attach_explore_turn_to_guide_step_becomes_context_evidence(client):
+def test_bridge_attach_explore_turn_to_guide_step_becomes_context_evidence(client, monkeypatch):
+    def fake_explore_answer(self, *, focus_context, citations, user_content):
+        return {
+            "answer": "从实验角度看，线程切换通常共享进程资源，进程切换需要切换更完整的地址空间和资源上下文。",
+            "relatedConcepts": ["线程切换", "进程切换"],
+            "reasoningContent": None,
+        }
+
+    monkeypatch.setattr("app.learning.llm_flow.LearningLLMWorkflow.explore_answer", fake_explore_answer)
+
     state = seed_reader_with_book()
     headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
 

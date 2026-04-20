@@ -1,0 +1,15 @@
+{
+  "name": "@bookshelf/learning-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file-if-exists=../.env.local src/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@ai-sdk/deepseek": "^2.0.29",
+    "ai": "^6.0.168",
+    "redis": "^5.8.2"
+  }
+}

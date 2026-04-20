@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     learning_chunk_overlap: int = 120
     learning_retrieval_top_k: int = 6
     learning_orchestrator_url: str | None = None
+    learning_ai_agent_url: str | None = None
+    learning_ai_callback_base_url: str | None = None
+    learning_ai_agent_timeout_seconds: float = 180.0
     graph_provider: str = "disabled"
     graph_uri: str | None = None
     graph_username: str | None = None

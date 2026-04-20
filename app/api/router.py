@@ -11,6 +11,7 @@ from app.catalog.router import router as catalog_router
 from app.conversation.router import router as conversation_router
 from app.favorites.router import router as favorites_router
 from app.inventory.router import router as inventory_router
+from app.learning.router import internal_router as learning_internal_router
 from app.learning.router import router as learning_router
 from app.notifications.router import router as notifications_router
 from app.orders.router import router as orders_router
@@ -35,6 +36,7 @@ api_router.include_router(robot_sim_router)
 api_router.include_router(recommendation_router)
 api_router.include_router(conversation_router)
 api_router.include_router(learning_router)
+api_router.include_router(learning_internal_router)
 api_router.include_router(voice_router)
 api_router.include_router(analytics_router)
 api_router.include_router(admin_router)

@@ -243,6 +243,29 @@ class LearningAgentRun(Base):
     created_at: Mapped[datetime | None] = mapped_column(default=utc_now, nullable=True)
 
 
+class LearningAiRun(Base):
+    __tablename__ = "learning_ai_runs"
+    __table_args__ = (
+        Index("ix_learning_ai_runs_session_status", "session_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("learning_sessions.id"), index=True)
+    reader_id: Mapped[int] = mapped_column(Integer, index=True)
+    status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
+    provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    model_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    active_stream_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    user_message_json: Mapped[dict | None] = mapped_column(JSON_VARIANT, nullable=True)
+    assistant_message_json: Mapped[dict | None] = mapped_column(JSON_VARIANT, nullable=True)
+    reasoning_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON_VARIANT, nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(default=utc_now, nullable=True, index=True)
+    updated_at: Mapped[datetime | None] = mapped_column(default=utc_now, onupdate=utc_now, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+
 class LearningCheckpoint(Base):
     __tablename__ = "learning_checkpoints"
 

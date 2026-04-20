@@ -65,6 +65,8 @@ services:
       LIBRARY_OBJECT_STORE_SECRET_KEY: minioadmin
       LIBRARY_OBJECT_STORE_BUCKET: library-learning
       LIBRARY_MINERU_BASE_URL: http://mineru:8000
+      LIBRARY_LEARNING_AI_AGENT_URL: http://learning-agent:8787
+      LIBRARY_LEARNING_AI_CALLBACK_BASE_URL: http://library-core-api:8000
       LIBRARY_LEARNING_ORCHESTRATOR_URL: http://learning-orchestrator:8010
     depends_on:
       - postgres
@@ -72,8 +74,23 @@ services:
       - neo4j
       - minio
       - mineru
+      - learning-agent
     ports:
       - "8000:8000"
+
+  learning-agent:
+    image: node:22-alpine
+    working_dir: /workspace/learning-agent
+    volumes:
+      - .:/workspace
+    command: sh -c "npm install && npm start"
+    environment:
+      LIBRARY_LLM_API_KEY: ${LIBRARY_LLM_API_KEY:-}
+      LIBRARY_LLM_BASE_URL: ${LIBRARY_LLM_BASE_URL:-https://api.deepseek.com}
+      LIBRARY_LLM_MODEL: ${LIBRARY_LLM_MODEL:-deepseek-reasoner}
+      LIBRARY_REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8787:8787"
 
   learning-orchestrator:
     build: .

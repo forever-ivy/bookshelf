@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
+
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, Request, UploadFile
+from fastapi import Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -14,6 +17,7 @@ from app.core.sse import sse_response
 from app.learning import repository
 from app.learning.orchestrator import LearningOrchestrator
 from app.learning.schemas import (
+    LearningAiRunCallbackRequest,
     LearningBridgeActionRequest,
     LearningProfileCreateRequest,
     LearningSessionCreateRequest,
@@ -35,6 +39,45 @@ from app.learning.service import LearningBridgeService, LearningService
 
 
 router = APIRouter(prefix="/api/v2/learning", tags=["learning"])
+internal_router = APIRouter(prefix="/internal/learning", tags=["learning-internal"])
+
+
+def _encode_ai_sdk_sse(payload: dict | str) -> str:
+    if payload == "[DONE]":
+        return "data: [DONE]\n\n"
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _normalize_sse_chunk(chunk: str) -> str:
+    return chunk.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _decode_sse_frames(buffer: str) -> tuple[list[str], str]:
+    normalized = _normalize_sse_chunk(buffer)
+    segments = normalized.split("\n\n")
+    remainder = "" if normalized.endswith("\n\n") else (segments.pop() if segments else "")
+    return [segment.strip() for segment in segments if segment.strip()], remainder
+
+
+def _parse_ai_sdk_sse_frame(frame: str) -> dict | str | None:
+    payload_lines: list[str] = []
+    for line in _normalize_sse_chunk(frame).split("\n"):
+        if line.startswith("data:"):
+            payload_lines.append(line[5:].lstrip())
+    payload = "\n".join(payload_lines).strip()
+    if not payload:
+        return None
+    if payload == "[DONE]":
+        return "[DONE]"
+    return json.loads(payload)
+
+
+def _ai_sdk_delta_text(part: dict) -> str:
+    for key in ("delta", "text", "content"):
+        value = part.get(key)
+        if isinstance(value, str):
+            return value
+    return ""
 
 
 def _dispatch_generation_task(profile_id: int, reader_id: int) -> None:
@@ -234,15 +277,120 @@ def get_learning_session(
     return {"ok": True, "session": serialize_session(learning_session)}
 
 
+async def _stream_explore_ai_sdk_reply(
+    db: Session,
+    *,
+    agent_base_url: str,
+    callback_base_url: str | None,
+    orchestrator: LearningOrchestrator,
+    reader_id: int,
+    learning_session,
+    profile,
+    user_content: str,
+    chat_id: str | None,
+    user_message: dict | None,
+    timeout_seconds: float,
+):
+    explore = orchestrator.explore_orchestrator
+    run = explore.prepare_ai_sdk_run(
+        db,
+        reader_id=reader_id,
+        learning_session=learning_session,
+        profile=profile,
+        user_content=user_content,
+        chat_id=chat_id,
+        user_message=user_message,
+    )
+    run.status = "running"
+    run.active_stream_id = f"learning-ai-run-{run.id}"
+    db.add(run)
+    db.commit()
+
+    metadata = run.metadata_json or {}
+    citations = metadata.get("citations") or []
+    related_concepts = metadata.get("relatedConcepts") or []
+    followups = metadata.get("followups") or []
+    bridge_actions = metadata.get("bridgeActions") or []
+    callback_url = (
+        f"{callback_base_url.rstrip('/')}/internal/learning/ai-runs/{run.id}/complete"
+        if callback_base_url
+        else None
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout_seconds) as client:
+            async with client.stream(
+                "POST",
+                f"{agent_base_url}/internal/ai-sdk/learning/explore/runs/{run.id}/stream",
+                json={
+                    "runId": run.id,
+                    "sessionId": run.session_id,
+                    "readerId": run.reader_id,
+                    "streamId": run.active_stream_id,
+                    "model": run.model_name,
+                    "userContent": user_content,
+                    "callbackUrl": callback_url,
+                    "message": user_message
+                    or {
+                        "role": "user",
+                        "parts": [{"type": "text", "text": user_content}],
+                    },
+                    "focusContext": metadata.get("focusContext") or {},
+                    "citations": citations,
+                    "relatedConcepts": related_concepts,
+                    "followups": followups,
+                    "bridgeActions": bridge_actions,
+                },
+            ) as response:
+                response.raise_for_status()
+                async for chunk in response.aiter_text():
+                    if chunk:
+                        yield chunk
+    except Exception:
+        active_run = repository.get_ai_run(db, run_id=run.id) or run
+        explore.mark_ai_sdk_run_failed(db, run=active_run, error_code="learning_model_request_error")
+        yield _encode_ai_sdk_sse({"type": "error", "errorText": "模型请求错误"})
+        yield _encode_ai_sdk_sse("[DONE]")
+
+
 @router.post("/sessions/{session_id}/stream")
 async def stream_learning_session(
     session_id: int,
     payload: LearningStreamRequest,
+    request: Request,
     identity: AuthIdentity = Depends(require_reader),
     db: Session = Depends(get_db),
 ):
-    repository.require_owned_session(db, session_id=session_id, reader_id=identity.profile_id)
+    user_content = payload.extract_content()
+    if not user_content:
+        raise ApiError(400, "missing_content", "Content is required")
+    learning_session = repository.require_owned_session(db, session_id=session_id, reader_id=identity.profile_id)
     settings = get_settings()
+    if getattr(learning_session, "session_kind", "guide") == "explore" and settings.learning_ai_agent_url:
+        profile = repository.require_owned_profile(
+            db,
+            profile_id=learning_session.profile_id,
+            reader_id=identity.profile_id,
+        )
+        orchestrator = LearningOrchestrator()
+        callback_base_url = settings.learning_ai_callback_base_url or str(request.base_url).rstrip("/")
+        return StreamingResponse(
+            _stream_explore_ai_sdk_reply(
+                db,
+                agent_base_url=settings.learning_ai_agent_url.rstrip("/"),
+                callback_base_url=callback_base_url,
+                orchestrator=orchestrator,
+                reader_id=identity.profile_id,
+                learning_session=learning_session,
+                profile=profile,
+                user_content=user_content,
+                chat_id=payload.id,
+                user_message=payload.message,
+                timeout_seconds=settings.learning_ai_agent_timeout_seconds,
+            ),
+            media_type="text/event-stream",
+        )
+
     if settings.learning_orchestrator_url:
         base_url = settings.learning_orchestrator_url.rstrip("/")
 
@@ -252,7 +400,7 @@ async def stream_learning_session(
                     "POST",
                     f"{base_url}/internal/learning/sessions/{session_id}/stream",
                     params={"reader_id": identity.profile_id},
-                    json={"content": payload.content},
+                    json={"content": user_content},
                 ) as response:
                     response.raise_for_status()
                     async for chunk in response.aiter_bytes():
@@ -267,9 +415,81 @@ async def stream_learning_session(
             db,
             reader_id=identity.profile_id,
             session_id=session_id,
-            user_content=payload.content,
+            user_content=user_content,
         )
     )
+
+
+@router.get("/sessions/{session_id}/stream")
+async def resume_learning_session_stream(
+    session_id: int,
+    identity: AuthIdentity = Depends(require_reader),
+    db: Session = Depends(get_db),
+):
+    repository.require_owned_session(db, session_id=session_id, reader_id=identity.profile_id)
+    settings = get_settings()
+    active_run = repository.get_active_session_ai_run(
+        db,
+        session_id=session_id,
+        reader_id=identity.profile_id,
+    )
+    if active_run is None or not active_run.active_stream_id or not settings.learning_ai_agent_url:
+        return Response(status_code=204)
+
+    async def proxy_stream():
+        try:
+            async with httpx.AsyncClient(timeout=settings.learning_ai_agent_timeout_seconds) as client:
+                async with client.stream(
+                    "GET",
+                    f"{settings.learning_ai_agent_url.rstrip('/')}/internal/ai-sdk/streams/{active_run.active_stream_id}",
+                ) as response:
+                    response.raise_for_status()
+                    async for chunk in response.aiter_bytes():
+                        if chunk:
+                            yield chunk
+        except Exception:
+            refreshed_run = repository.get_ai_run(db, run_id=active_run.id) or active_run
+            LearningOrchestrator().explore_orchestrator.mark_ai_sdk_run_failed(
+                db,
+                run=refreshed_run,
+                error_code="learning_model_request_error",
+            )
+            yield _encode_ai_sdk_sse({"type": "error", "errorText": "模型请求错误"}).encode("utf-8")
+            yield _encode_ai_sdk_sse("[DONE]").encode("utf-8")
+
+    return StreamingResponse(proxy_stream(), media_type="text/event-stream")
+
+
+@internal_router.post("/ai-runs/{run_id}/complete")
+def complete_learning_ai_run(
+    run_id: int,
+    payload: LearningAiRunCallbackRequest,
+    db: Session = Depends(get_db),
+) -> dict:
+    run = repository.get_ai_run(db, run_id=run_id)
+    if run is None:
+        raise ApiError(404, "learning_ai_run_not_found", "Learning AI run not found")
+    if run.status == "completed":
+        return {"ok": True}
+    if payload.status == "failed":
+        LearningOrchestrator().explore_orchestrator.mark_ai_sdk_run_failed(
+            db,
+            run=run,
+            error_code=payload.error_code or "learning_model_request_error",
+        )
+        return {"ok": True}
+
+    answer_text = payload.extract_answer_text()
+    if not answer_text:
+        raise ApiError(400, "learning_ai_run_answer_required", "Answer text is required")
+    final_payload = LearningOrchestrator().explore_orchestrator.finalize_ai_sdk_run(
+        db,
+        run=run,
+        user_content=LearningStreamRequest(message=run.user_message_json).extract_content(),
+        answer_text=answer_text,
+        reasoning_content=payload.extract_reasoning_content(),
+    )
+    return {"ok": True, **final_payload}
 
 
 @router.get("/sessions/{session_id}/turns")

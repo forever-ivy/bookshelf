@@ -34,7 +34,76 @@ class LearningSessionCreateRequest(BaseModel):
 
 
 class LearningStreamRequest(BaseModel):
-    content: str
+    content: str | None = None
+    id: str | None = None
+    message: dict[str, Any] | None = None
+
+    def extract_content(self) -> str:
+        if isinstance(self.content, str) and self.content.strip():
+            return self.content.strip()
+
+        message = self.message if isinstance(self.message, dict) else {}
+        content = message.get("content")
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+
+        text = message.get("text")
+        if isinstance(text, str) and text.strip():
+            return text.strip()
+
+        parts = message.get("parts")
+        if isinstance(parts, list):
+            part_text = "".join(
+                str(part.get("text") or "")
+                for part in parts
+                if isinstance(part, dict) and part.get("type") in {"text", "input_text"}
+            ).strip()
+            if part_text:
+                return part_text
+
+        return ""
+
+
+class LearningAiRunCallbackRequest(BaseModel):
+    status: Literal["completed", "failed"]
+    answer_text: str | None = Field(default=None, alias="answerText")
+    reasoning_content: str | None = Field(default=None, alias="reasoningContent")
+    assistant_message: dict[str, Any] | None = Field(default=None, alias="assistantMessage")
+    error_code: str | None = Field(default=None, alias="errorCode")
+
+    def extract_answer_text(self) -> str:
+        if isinstance(self.answer_text, str) and self.answer_text.strip():
+            return self.answer_text.strip()
+
+        message = self.assistant_message if isinstance(self.assistant_message, dict) else {}
+        parts = message.get("parts")
+        if isinstance(parts, list):
+            answer_text = "".join(
+                str(part.get("text") or "")
+                for part in parts
+                if isinstance(part, dict) and part.get("type") in {"text", "output_text"}
+            ).strip()
+            if answer_text:
+                return answer_text
+
+        return ""
+
+    def extract_reasoning_content(self) -> str | None:
+        if isinstance(self.reasoning_content, str) and self.reasoning_content.strip():
+            return self.reasoning_content.strip()
+
+        message = self.assistant_message if isinstance(self.assistant_message, dict) else {}
+        parts = message.get("parts")
+        if isinstance(parts, list):
+            reasoning_text = "".join(
+                str(part.get("text") or "")
+                for part in parts
+                if isinstance(part, dict) and part.get("type") == "reasoning"
+            ).strip()
+            if reasoning_text:
+                return reasoning_text
+
+        return None
 
 
 class LearningBridgeActionRequest(BaseModel):

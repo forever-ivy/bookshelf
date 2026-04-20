@@ -1,10 +1,22 @@
 from __future__ import annotations
 
 import json
+import logging
+import threading
 from typing import Any
+
+import httpx
 
 from app.core.config import Settings, get_settings
 from app.llm.provider import NullLLMProvider, build_llm_provider
+
+try:
+    from openai import APITimeoutError
+except Exception:  # pragma: no cover - optional dependency during tests
+    APITimeoutError = None  # type: ignore[assignment]
+
+
+logger = logging.getLogger(__name__)
 
 
 def _clean_json_payload(text: str) -> str:
@@ -67,6 +79,39 @@ def _parse_json_payload(text: str) -> Any | None:
 def _truncate(text: str, *, limit: int = 5000) -> str:
     compact = " ".join((text or "").split())
     return compact[:limit]
+
+
+def _is_timeout_error(exc: Exception) -> bool:
+    timeout_types: list[type[BaseException]] = [TimeoutError, httpx.TimeoutException]
+    if APITimeoutError is not None:
+        timeout_types.append(APITimeoutError)
+    return isinstance(exc, tuple(timeout_types))
+
+
+def _run_with_timeout(
+    *,
+    timeout_seconds: float,
+    func,
+    **kwargs,
+):
+    result: dict[str, Any] = {}
+    error: dict[str, Exception] = {}
+
+    def _runner() -> None:
+        try:
+            result["value"] = func(**kwargs)
+        except Exception as exc:  # pragma: no cover - exercised via caller
+            error["value"] = exc
+
+    worker = threading.Thread(target=_runner, daemon=True)
+    worker.start()
+    worker.join(max(timeout_seconds, 0.0))
+
+    if worker.is_alive():
+        return None, True
+    if "value" in error:
+        raise error["value"]
+    return result.get("value"), False
 
 
 class LearningLLMWorkflow:
@@ -220,10 +265,24 @@ class LearningLLMWorkflow:
             "focusContext": focus_context,
             "citations": citations[:4],
         }
-        reply, reasoning_content = self.provider.chat_with_reasoning(
-            text=user_content,
-            context=context,
-        )
+        try:
+            response, did_timeout = _run_with_timeout(
+                timeout_seconds=self.settings.llm_timeout_seconds,
+                func=self.provider.chat_with_reasoning,
+                text=user_content,
+                context=context,
+            )
+        except Exception as exc:
+            if not _is_timeout_error(exc):
+                raise
+            logger.warning("LLM explore answer timed out; returning no answer")
+            return None
+
+        if did_timeout:
+            logger.warning("LLM explore answer exceeded %.2fs; returning no answer", self.settings.llm_timeout_seconds)
+            return None
+
+        reply, reasoning_content = response
         parsed = _parse_json_payload(reply)
         if isinstance(parsed, dict) and parsed.get("answer"):
             return {

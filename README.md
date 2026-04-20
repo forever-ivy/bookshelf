@@ -141,17 +141,31 @@ uv run python scripts/bootstrap_demo_database.py --reset
 
 ```bash
 cd /Volumes/Disk/Code/bookshelf
+export LIBRARY_LEARNING_AI_AGENT_URL=http://127.0.0.1:8787
+export LIBRARY_LEARNING_AI_CALLBACK_BASE_URL=http://127.0.0.1:8000
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 7. 终端 3：启动 learning worker
+### 7. 终端 3：启动 Explore AI SDK agent
+
+```bash
+cd /Volumes/Disk/Code/bookshelf/learning-agent
+npm install
+LIBRARY_REDIS_URL=redis://127.0.0.1:6379/0 \
+LIBRARY_LLM_API_KEY=你的 DeepSeek Key \
+LIBRARY_LLM_BASE_URL=https://api.deepseek.com \
+LIBRARY_LLM_MODEL=deepseek-reasoner \
+npm start
+```
+
+### 8. 终端 4：启动 learning worker
 
 ```bash
 cd /Volumes/Disk/Code/bookshelf
 uv run celery -A app.learning.tasks.celery_app worker -Q learning --loglevel=INFO
 ```
 
-### 8. 验证第一次启动是否成功
+### 9. 验证第一次启动是否成功
 
 至少先检查下面三个地址：
 
@@ -257,6 +271,8 @@ uv run celery -A app.learning.tasks.celery_app worker -Q learning --loglevel=INF
 | --- | --- | --- |
 | `LIBRARY_DATABASE_URL` | PostgreSQL 连接串 | `postgresql+psycopg://library:library@localhost:55432/service` |
 | `LIBRARY_REDIS_URL` | Redis 连接串 | `redis://localhost:6379/0` |
+| `LIBRARY_LEARNING_AI_AGENT_URL` | Explore AI SDK agent 地址 | 空 |
+| `LIBRARY_LEARNING_AI_CALLBACK_BASE_URL` | Explore AI SDK 完成回调地址 | 空 |
 | `LIBRARY_JWT_SECRET` | JWT 签名密钥 | `library-service-dev-secret-2026-change-me` |
 | `LIBRARY_AUTO_CREATE_SCHEMA` | 启动时自动建表 | `true` |
 | `LIBRARY_LLM_PROVIDER` | LLM 提供方 | `null` |

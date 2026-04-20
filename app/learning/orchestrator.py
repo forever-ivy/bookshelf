@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.errors import ApiError
+from app.db.base import utc_now
 from app.learning import repository
 from app.learning.llm_flow import LearningLLMWorkflow
 from app.learning.retrieval import LearningRetrievalService
@@ -139,6 +140,83 @@ def _build_explore_answer(
 
 def _append_event(state: dict[str, Any], event_name: str, data: dict[str, Any]) -> dict[str, Any]:
     state.setdefault("events", []).append(sse_event(event_name, data))
+    return state
+
+
+STREAM_BREAK_CHARS = set("。！？!?；;：:,，、")
+
+
+def _chunk_text_for_streaming(text: str, *, chunk_size: int = 24) -> list[str]:
+    normalized = (text or "").strip()
+    if not normalized:
+        return []
+    if chunk_size <= 1:
+        return [normalized]
+
+    chunks: list[str] = []
+    current: list[str] = []
+    min_break_size = max(1, chunk_size // 2)
+    whitespace_run = False
+
+    for char in normalized:
+        if char == "\n":
+            chunk = "".join(current)
+            if chunk.strip():
+                chunks.append(chunk)
+            current = []
+            whitespace_run = False
+            continue
+
+        current.append(char)
+        current_text = "".join(current)
+        should_flush = len(current_text) >= chunk_size
+        if char in STREAM_BREAK_CHARS and len(current_text) >= min_break_size:
+            should_flush = True
+        if char.isspace():
+            whitespace_run = True
+        elif whitespace_run and len(current_text) >= min_break_size:
+            should_flush = True
+            whitespace_run = False
+
+        if should_flush:
+            if current_text.strip():
+                chunk = current_text
+                chunks.append(chunk)
+            current = []
+            whitespace_run = False
+
+    tail = "".join(current)
+    if tail.strip():
+        chunks.append(tail)
+
+    return chunks
+
+
+def _append_status(state: dict[str, Any], phase: str) -> dict[str, Any]:
+    data: dict[str, Any] = {"phase": phase}
+    learning_session = state.get("learning_session")
+    if learning_session is not None and getattr(learning_session, "id", None) is not None:
+        data["sessionId"] = learning_session.id
+    return _append_event(state, "status", data)
+
+
+def _append_chunked_text_events(
+    state: dict[str, Any],
+    *,
+    public_event_name: str,
+    text: str,
+    telemetry_event_name: str | None = None,
+) -> dict[str, Any]:
+    normalized = (text or "").strip()
+    if not normalized:
+        return state
+
+    if telemetry_event_name:
+        _append_event(state, telemetry_event_name, {"delta": normalized})
+
+    for chunk in _chunk_text_for_streaming(normalized):
+        _append_event(state, public_event_name, {"delta": chunk})
+
     return state
 
 
@@ -559,6 +637,7 @@ class GuideOrchestrator:
 
     def _teacher_node(self, state: dict[str, Any]) -> dict[str, Any]:
         current_step = state["current_step"]
+        _append_status(state, "reasoning")
         if state["intent_kind"] == "step_answer":
             teacher_text = self.llm_workflow.teacher_reply(
                 step=current_step,
@@ -578,12 +657,18 @@ class GuideOrchestrator:
             )
             state["response_mode"] = "coach"
         state["teacher_text"] = teacher_text
-        _append_event(state, "agent.teacher.delta", {"delta": teacher_text})
-        _append_event(state, "teacher.delta", {"delta": teacher_text})
+        _append_status(state, "writing")
+        _append_chunked_text_events(
+            state,
+            public_event_name="teacher.delta",
+            telemetry_event_name="agent.teacher.delta",
+            text=teacher_text,
+        )
         return state
 
     def _peer_node(self, state: dict[str, Any]) -> dict[str, Any]:
         current_step = state["current_step"]
+        _append_status(state, "reasoning")
         evaluation = self.llm_workflow.examine(step=current_step, user_content=state["user_content"].strip()) or _evaluate_answer(
             step=current_step,
             user_content=state["user_content"].strip(),
@@ -595,8 +680,13 @@ class GuideOrchestrator:
         ) or _build_peer_reply(step=current_step, passed=bool(evaluation["passed"]))
         state["evaluation"] = evaluation
         state["peer_text"] = peer_text
-        _append_event(state, "agent.peer.delta", {"delta": peer_text})
-        _append_event(state, "peer.delta", {"delta": peer_text})
+        _append_status(state, "writing")
+        _append_chunked_text_events(
+            state,
+            public_event_name="peer.delta",
+            telemetry_event_name="agent.peer.delta",
+            text=peer_text,
+        )
         return state
 
     def _examiner_node(self, state: dict[str, Any]) -> dict[str, Any]:
@@ -822,6 +912,7 @@ class GuideOrchestrator:
         return state
 
     def _finalize(self, state: dict[str, Any]) -> dict[str, Any]:
+        _append_status(state, "finalizing")
         _append_event(state, "assistant.final", state["final_payload"])
         return state
 
@@ -942,28 +1033,31 @@ class ExploreOrchestrator:
 
     def _answer_node(self, state: dict[str, Any]) -> dict[str, Any]:
         focus_context = state["focus_context"]
+        _append_status(state, "reasoning")
         llm_answer = self.llm_workflow.explore_answer(
             focus_context=focus_context,
             citations=state["citations"],
             user_content=state["user_content"],
         )
-        if llm_answer is not None:
-            answer_text = llm_answer["answer"]
-            if llm_answer["relatedConcepts"]:
-                state["related_concepts"] = llm_answer["relatedConcepts"]
-            state["reasoning_content"] = llm_answer.get("reasoningContent")
-        else:
-            answer_text = _build_explore_answer(
-                focus_context=focus_context,
-                citations=state["citations"],
-                user_content=state["user_content"],
-                related_concepts=state["related_concepts"],
-            )
-            state["reasoning_content"] = None
+        if llm_answer is None:
+            raise ApiError(503, "learning_model_request_error", "模型请求错误")
+        answer_text = llm_answer["answer"]
+        if llm_answer["relatedConcepts"]:
+            state["related_concepts"] = llm_answer["relatedConcepts"]
+        state["reasoning_content"] = llm_answer.get("reasoningContent")
         state["answer_text"] = answer_text
-        _append_event(state, "explore.answer.delta", {"delta": answer_text})
+        _append_status(state, "writing")
+        _append_chunked_text_events(
+            state,
+            public_event_name="explore.answer.delta",
+            text=answer_text,
+        )
         if state.get("reasoning_content"):
-            _append_event(state, "explore.reasoning.delta", {"delta": state["reasoning_content"]})
+            _append_chunked_text_events(
+                state,
+                public_event_name="explore.reasoning.delta",
+                text=state["reasoning_content"],
+            )
         return state
 
     def _related_concepts_node(self, state: dict[str, Any]) -> dict[str, Any]:
@@ -1053,7 +1147,177 @@ class ExploreOrchestrator:
         }
         return state
 
+    def prepare_ai_sdk_run(
+        self,
+        session: Session,
+        *,
+        reader_id: int,
+        learning_session: Any,
+        profile: Any,
+        user_content: str,
+        chat_id: str | None = None,
+        user_message: dict[str, Any] | None = None,
+    ) -> Any:
+        state: dict[str, Any] = {
+            "db_session": session,
+            "reader_id": reader_id,
+            "learning_session": learning_session,
+            "profile": profile,
+            "user_content": user_content,
+            "started_at": time.perf_counter(),
+            "events": [],
+        }
+        state = self._load_session(state)
+        state = self._retrieve_evidence(state)
+        focus_context = state["focus_context"]
+        followups = _build_explore_followups(
+            focus_context=focus_context,
+            related_concepts=state["related_concepts"],
+        )
+        bridge_actions = _build_explore_bridge_actions(
+            focus_context=focus_context,
+            guide_session_id=getattr(learning_session, "source_session_id", None),
+            step_index=getattr(learning_session, "focus_step_index", None),
+        )
+        run = repository.create_ai_run(
+            session,
+            session_id=learning_session.id,
+            reader_id=reader_id,
+            status="pending",
+            provider=self.settings.llm_provider,
+            model_name=self.settings.llm_model,
+            user_message_json=user_message
+            or {
+                "id": chat_id,
+                "role": "user",
+                "parts": [{"type": "text", "text": user_content}],
+            },
+            metadata_json={
+                "mode": "explore",
+                "chatId": chat_id,
+                "focusContext": focus_context,
+                "focusStepIndex": getattr(learning_session, "focus_step_index", None),
+                "citations": state["citations"],
+                "relatedConcepts": state["related_concepts"],
+                "followups": followups,
+                "bridgeActions": bridge_actions,
+                "startedPerf": state["started_at"],
+            },
+        )
+        session.commit()
+        return run
+
+    def mark_ai_sdk_run_failed(self, session: Session, *, run: Any, error_code: str) -> None:
+        run.status = "failed"
+        run.active_stream_id = None
+        run.error_code = error_code
+        run.completed_at = utc_now()
+        run.updated_at = utc_now()
+        session.add(run)
+        session.commit()
+
+    def finalize_ai_sdk_run(
+        self,
+        session: Session,
+        *,
+        run: Any,
+        user_content: str,
+        answer_text: str,
+        reasoning_content: str | None,
+    ) -> dict[str, Any]:
+        learning_session = repository.require_owned_session(
+            session,
+            session_id=run.session_id,
+            reader_id=run.reader_id,
+        )
+        metadata = run.metadata_json or {}
+        focus_context = metadata.get("focusContext") or {}
+        focus_step_index = metadata.get("focusStepIndex")
+        citations = metadata.get("citations") or []
+        related_concepts = metadata.get("relatedConcepts") or []
+        followups = metadata.get("followups") or []
+        presentation = _build_explore_presentation(
+            focus_context=focus_context,
+            answer_text=answer_text,
+            reasoning_content=reasoning_content,
+            citations=citations,
+            related_concepts=related_concepts,
+            followups=followups,
+            bridge_actions=[],
+        )
+        started_at = metadata.get("startedPerf")
+        latency_ms = (
+            int((time.perf_counter() - float(started_at)) * 1000)
+            if isinstance(started_at, int | float)
+            else None
+        )
+        turn = repository.create_turn(
+            session,
+            session_id=learning_session.id,
+            turn_kind="explore",
+            user_content=user_content.strip(),
+            teacher_content=None,
+            peer_content=None,
+            assistant_content=answer_text,
+            citations_json=citations,
+            evaluation_json=None,
+            related_concepts_json=related_concepts,
+            bridge_metadata_json={
+                "focusStepIndex": focus_step_index,
+                "focusStepTitle": focus_context.get("stepTitle"),
+            },
+            latency_ms=latency_ms,
+            metadata_json={"mode": "explore", "presentation": presentation},
+        )
+        bridge_actions = _build_explore_bridge_actions(
+            focus_context=focus_context,
+            guide_session_id=getattr(learning_session, "source_session_id", None),
+            step_index=focus_step_index,
+            turn_id=turn.id,
+        )
+        presentation["bridgeActions"] = bridge_actions
+        turn.metadata_json = {
+            **(turn.metadata_json or {}),
+            "presentation": presentation,
+        }
+        repository.create_agent_run(
+            session,
+            turn_id=turn.id,
+            agent_name="Explore",
+            model_name=run.model_name or self.settings.llm_model,
+            status="completed",
+            input_summary=user_content[:180],
+            output_summary=answer_text[:180],
+            latency_ms=latency_ms,
+            metadata_json={"focusStepIndex": focus_step_index, "aiRunId": run.id},
+        )
+        repository.upsert_report(
+            session,
+            session_id=learning_session.id,
+            report_type="session_summary",
+            summary=answer_text,
+            weak_points_json=[],
+            suggested_next_action="继续追问，或把这轮自由探索收编回导学步骤。",
+            metadata_json={"relatedConcepts": related_concepts},
+        )
+        run.status = "completed"
+        run.active_stream_id = None
+        run.assistant_message_json = {
+            "role": "assistant",
+            "parts": [
+                *([{"type": "reasoning", "text": reasoning_content}] if reasoning_content else []),
+                {"type": "text", "text": answer_text},
+            ],
+        }
+        run.reasoning_content = reasoning_content
+        run.completed_at = utc_now()
+        run.updated_at = utc_now()
+        session.add(run)
+        session.commit()
+        return {"turn": serialize_stream_turn(turn)}
+
     def _finalize(self, state: dict[str, Any]) -> dict[str, Any]:
+        _append_status(state, "finalizing")
         _append_event(state, "assistant.final", state["final_payload"])
         return state
 
@@ -1113,8 +1377,19 @@ class LearningOrchestrator:
         learning_session = repository.require_owned_session(session, session_id=session_id, reader_id=reader_id)
         profile = repository.require_owned_profile(session, profile_id=learning_session.profile_id, reader_id=reader_id)
         session_kind = getattr(learning_session, "session_kind", "guide")
-        if session_kind == "explore":
-            async for event in self.explore_orchestrator.stream_session_reply(
+        try:
+            if session_kind == "explore":
+                async for event in self.explore_orchestrator.stream_session_reply(
+                    session,
+                    reader_id=reader_id,
+                    learning_session=learning_session,
+                    profile=profile,
+                    user_content=user_content,
+                ):
+                    yield event
+                return
+
+            async for event in self.guide_orchestrator.stream_session_reply(
                 session,
                 reader_id=reader_id,
                 learning_session=learning_session,
@@ -1122,13 +1397,11 @@ class LearningOrchestrator:
                 user_content=user_content,
             ):
                 yield event
-            return
-
-        async for event in self.guide_orchestrator.stream_session_reply(
-            session,
-            reader_id=reader_id,
-            learning_session=learning_session,
-            profile=profile,
-            user_content=user_content,
-        ):
-            yield event
+        except Exception:
+            yield sse_event(
+                "error",
+                {
+                    "code": "learning_model_request_error",
+                    "message": "模型请求错误",
+                },
+            )

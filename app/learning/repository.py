@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.catalog.models import Book, BookSourceDocument
 from app.core.errors import ApiError
 from app.learning.models import (
+    LearningAiRun,
     LearningAgentRun,
     LearningBridgeAction,
     LearningCheckpoint,
@@ -531,6 +532,62 @@ def list_turn_agent_runs(session: Session, *, turn_id: int) -> Sequence[Learning
         .order_by(LearningAgentRun.id.asc())
     )
     return session.execute(statement).scalars().all()
+
+
+def create_ai_run(
+    session: Session,
+    *,
+    session_id: int,
+    reader_id: int,
+    status: str,
+    provider: str | None,
+    model_name: str | None,
+    active_stream_id: str | None = None,
+    user_message_json: dict | None = None,
+    assistant_message_json: dict | None = None,
+    reasoning_content: str | None = None,
+    error_code: str | None = None,
+    metadata_json: dict | None = None,
+) -> LearningAiRun:
+    run = LearningAiRun(
+        session_id=session_id,
+        reader_id=reader_id,
+        status=status,
+        provider=provider,
+        model_name=model_name,
+        active_stream_id=active_stream_id,
+        user_message_json=user_message_json,
+        assistant_message_json=assistant_message_json,
+        reasoning_content=reasoning_content,
+        error_code=error_code,
+        metadata_json=metadata_json,
+    )
+    session.add(run)
+    session.flush()
+    return run
+
+
+def get_ai_run(session: Session, *, run_id: int) -> LearningAiRun | None:
+    return session.get(LearningAiRun, run_id)
+
+
+def get_active_session_ai_run(
+    session: Session,
+    *,
+    session_id: int,
+    reader_id: int,
+) -> LearningAiRun | None:
+    statement = (
+        select(LearningAiRun)
+        .where(
+            LearningAiRun.session_id == session_id,
+            LearningAiRun.reader_id == reader_id,
+            LearningAiRun.status.in_(["pending", "running"]),
+        )
+        .order_by(LearningAiRun.created_at.desc(), LearningAiRun.id.desc())
+        .limit(1)
+    )
+    return session.execute(statement).scalars().first()
 
 
 def get_linked_explore_session(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import time
 import zipfile
 from io import BytesIO
 from types import SimpleNamespace
@@ -13,7 +14,11 @@ from app.core.config import Settings
 from app.learning.graph import LearningGraphService
 from app.learning.llm_flow import LearningLLMWorkflow
 from app.learning.mineru import MinerUClient
-from app.learning.orchestrator import ExploreOrchestrator, GuideOrchestrator
+from app.learning.orchestrator import (
+    ExploreOrchestrator,
+    GuideOrchestrator,
+    _chunk_text_for_streaming,
+)
 from app.learning.retrieval import LearningRetrievalService
 from app.learning.service import LearningService
 
@@ -31,6 +36,16 @@ class FakeLLMProvider:
     def chat_with_reasoning(self, *, text: str, context: dict) -> tuple[str, str | None]:
         self.calls.append({"text": text, "context": context, "mode": "reasoning"})
         return self.reply, self.reasoning_content
+
+
+class SlowLLMProvider(FakeLLMProvider):
+    def __init__(self, reply: str, *, delay_seconds: float, reasoning_content: str | None = None) -> None:
+        super().__init__(reply, reasoning_content=reasoning_content)
+        self.delay_seconds = delay_seconds
+
+    def chat_with_reasoning(self, *, text: str, context: dict) -> tuple[str, str | None]:
+        time.sleep(self.delay_seconds)
+        return super().chat_with_reasoning(text=text, context=context)
 
 
 class FakeMinerUClient:
@@ -180,6 +195,31 @@ def test_learning_llm_workflow_explore_answer_returns_reasoning_content(monkeypa
         "relatedConcepts": ["岗位匹配"],
         "reasoningContent": "先确定问题范围，再比对简历中的直接证据。",
     }
+
+
+def test_learning_llm_workflow_explore_answer_returns_none_when_provider_exceeds_timeout(monkeypatch):
+    provider = SlowLLMProvider(
+        """
+        {
+          "answer": "先看候选人的语言方向和项目证据。",
+          "relatedConcepts": ["岗位匹配"]
+        }
+        """,
+        delay_seconds=0.2,
+    )
+    monkeypatch.setattr("app.learning.llm_flow.build_llm_provider", lambda: provider)
+
+    workflow = LearningLLMWorkflow(settings=Settings(llm_timeout_seconds=0.01, _env_file=None))
+    started_at = time.perf_counter()
+    result = workflow.explore_answer(
+        focus_context={},
+        citations=[],
+        user_content="这份简历先看什么？",
+    )
+    elapsed = time.perf_counter() - started_at
+
+    assert result is None
+    assert elapsed < 0.15
 
 
 def test_learning_service_prefers_mineru_for_pdf_when_enabled(tmp_path, monkeypatch):
@@ -603,6 +643,77 @@ def test_runtime_orchestrators_compile_langgraph_graphs():
         "persist_turn_and_report",
         "finalize",
     ]
+
+
+def test_chunk_text_for_streaming_breaks_long_text_into_small_contiguous_chunks():
+    text = "先确定问题范围，再比对资料证据，最后组织回答。"
+
+    chunks = _chunk_text_for_streaming(text, chunk_size=6)
+
+    assert "".join(chunks) == text
+    assert len(chunks) > 1
+    assert all(chunk for chunk in chunks)
+    assert all(len(chunk) <= 6 for chunk in chunks)
+
+
+def test_guide_teacher_node_emits_reasoning_and_writing_status_before_chunked_teacher_deltas():
+    guide = GuideOrchestrator()
+    guide.llm_workflow = SimpleNamespace(
+        teacher_reply=lambda **kwargs: "先回到整体框架。再拆模型、数据和目标。"
+    )
+
+    state = {
+        "citations": [],
+        "current_step": {"title": "建立整体框架"},
+        "events": [],
+        "intent_kind": "step_answer",
+        "learning_session": SimpleNamespace(id=301),
+        "user_content": "帮我总结这一节的核心线索",
+    }
+
+    result = guide._teacher_node(state)
+
+    public_events = [event for event in result["events"] if event["event"] != "agent.teacher.delta"]
+    assert public_events[0] == {
+        "data": {"phase": "reasoning", "sessionId": 301},
+        "event": "status",
+    }
+    assert public_events[1] == {
+        "data": {"phase": "writing", "sessionId": 301},
+        "event": "status",
+    }
+    assert all(event["event"] == "teacher.delta" for event in public_events[2:])
+    assert "".join(event["data"]["delta"] for event in public_events[2:]) == (
+        "先回到整体框架。再拆模型、数据和目标。"
+    )
+    assert len(public_events[2:]) > 1
+
+
+def test_explore_finalize_keeps_full_presentation_payload_on_assistant_final():
+    explore = ExploreOrchestrator()
+    final_payload = {
+        "turn": {
+            "assistantContent": "先看任务目标，再拆主要章节。",
+            "id": 990,
+            "presentation": {
+                "answer": {"content": "先看任务目标，再拆主要章节。"},
+                "bridgeActions": [{"actionType": "attach_explore_turn_to_guide_step", "label": "收编回 Guide"}],
+                "evidence": [{"excerpt": "摘要片段", "sourceTitle": "test.pdf"}],
+                "followups": ["继续展开第二段"],
+                "kind": "explore",
+                "reasoningContent": "先确定问题范围，再比对资料证据。",
+                "relatedConcepts": ["任务分解"],
+            },
+            "sessionId": 901,
+        }
+    }
+
+    state = explore._finalize({"events": [], "final_payload": final_payload})
+
+    assert state["events"][-1] == {
+        "data": final_payload,
+        "event": "assistant.final",
+    }
 
 
 def test_learning_retrieval_service_guide_search_enforces_three_tier_order(monkeypatch):
