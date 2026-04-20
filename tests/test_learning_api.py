@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from openai import APITimeoutError
 from sqlalchemy import text
 
-from app.catalog.models import Book
+from app.catalog.models import Book, BookSourceDocument
 from app.core.database import init_engine, init_schema, reset_engine
 from app.core.errors import ApiError
 from app.core.config import get_settings
@@ -111,6 +111,71 @@ def create_ready_learning_session(client: TestClient) -> tuple[dict[str, int], d
     )
     assert session_response.status_code == 201
     return state, headers, session_response.json()["session"]["id"]
+
+
+def test_learning_profile_document_streams_primary_book_pdf(client, tmp_path):
+    state = seed_reader_with_book()
+    headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
+    pdf_path = tmp_path / "os-lab.pdf"
+    pdf_bytes = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF"
+    pdf_path.write_bytes(pdf_bytes)
+
+    session = get_session_factory()()
+    try:
+        session.add(
+            BookSourceDocument(
+                book_id=state["book_id"],
+                source_kind="upload_file",
+                mime_type="application/pdf",
+                file_name="os-lab.pdf",
+                storage_path=str(pdf_path),
+                parse_status="parsed",
+                is_primary=True,
+            )
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    create_response = client.post(
+        "/api/v2/learning/profiles",
+        headers=headers,
+        json={
+            "title": "操作系统导学空间",
+            "goalMode": "preview",
+            "difficultyMode": "guided",
+            "sources": [{"kind": "book", "bookId": state["book_id"]}],
+        },
+    )
+    profile_id = create_response.json()["profile"]["id"]
+
+    response = client.get(f"/api/v2/learning/profiles/{profile_id}/document", headers=headers)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/pdf")
+    assert response.headers["content-disposition"].startswith('inline; filename="os-lab.pdf"')
+    assert response.content == pdf_bytes
+
+
+def test_learning_profile_document_returns_404_when_pdf_is_unavailable(client):
+    state = seed_reader_with_book()
+    headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
+    create_response = client.post(
+        "/api/v2/learning/profiles",
+        headers=headers,
+        json={
+            "title": "操作系统导学空间",
+            "goalMode": "preview",
+            "difficultyMode": "guided",
+            "sources": [{"kind": "book", "bookId": state["book_id"]}],
+        },
+    )
+    profile_id = create_response.json()["profile"]["id"]
+
+    response = client.get(f"/api/v2/learning/profiles/{profile_id}/document", headers=headers)
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "learning_pdf_not_available"
 
 
 @pytest.mark.parametrize(
