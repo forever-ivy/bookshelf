@@ -1,95 +1,156 @@
 import {
-  focusLearningGraphNode,
-  syncLearningGraphViewportSelection,
+  buildLearningGraphCameraTarget,
   resetLearningGraphViewport,
-  resolveLearningGraphFocusZoom,
+  syncLearningGraphViewportSelection,
+  type LearningGraphViewportNode,
 } from '@/lib/learning/graph-runtime-focus';
 
 describe('learning graph runtime focus helpers', () => {
-  it('pans and zooms toward a selected node', () => {
+  it('builds a click-to-focus camera target for a selected node', () => {
+    const target = buildLearningGraphCameraTarget(
+      {
+        id: 'concept:limits',
+        type: 'Concept',
+        x: 120,
+        y: -40,
+        z: 60,
+      },
+      {
+        Book: 220,
+        Concept: 140,
+        Default: 160,
+        Fragment: 110,
+        LessonStep: 150,
+        SourceAsset: 170,
+      },
+      900
+    );
+
+    expect(target).toEqual({
+      durationMs: 900,
+      lookAt: { x: 120, y: -40, z: 60 },
+      position: expect.objectContaining({
+        x: expect.any(Number),
+        y: expect.any(Number),
+        z: expect.any(Number),
+      }),
+    });
+    expect(target?.position.x).toBeGreaterThan(120);
+    expect(target?.position.z).toBeGreaterThan(60);
+  });
+
+  it('returns null when the node has no coordinates yet', () => {
+    const target = buildLearningGraphCameraTarget(
+      {
+        id: 'concept:limits',
+        type: 'Concept',
+      },
+      {
+        Book: 220,
+        Concept: 140,
+        Default: 160,
+        Fragment: 110,
+        LessonStep: 150,
+        SourceAsset: 170,
+      },
+      900
+    );
+
+    expect(target).toBeNull();
+  });
+
+  it('moves the camera toward a selected node', () => {
     const graph = {
-      centerAt: jest.fn(),
-      zoom: jest.fn(),
+      cameraPosition: jest.fn(),
       zoomToFit: jest.fn(),
     };
 
-    const focused = focusLearningGraphNode(graph, {
-      id: 'concept:limits',
-      type: 'Concept',
-      x: 128,
-      y: -36,
-    });
+    const focused = syncLearningGraphViewportSelection(
+      graph,
+      {
+        id: 'concept:limits',
+        type: 'Concept',
+        x: 128,
+        y: -36,
+        z: 42,
+      } as LearningGraphViewportNode,
+      {
+        cameraFocusDistanceByNodeType: {
+          Book: 220,
+          Concept: 140,
+          Default: 160,
+          Fragment: 110,
+          LessonStep: 150,
+          SourceAsset: 170,
+        },
+        cameraFocusDurationMs: 900,
+        resetWhenMissing: false,
+      }
+    );
 
-    expect(focused).toBe(true);
-    expect(graph.centerAt).toHaveBeenCalledWith(128, -36, 700);
-    expect(graph.zoom).toHaveBeenCalledWith(2.35, 900);
+    expect(focused).toBe('focused');
+    expect(graph.cameraPosition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        x: expect.any(Number),
+        y: expect.any(Number),
+        z: expect.any(Number),
+      }),
+      { x: 128, y: -36, z: 42 },
+      900
+    );
     expect(graph.zoomToFit).not.toHaveBeenCalled();
-  });
-
-  it('does not focus when the node has no coordinates yet', () => {
-    const graph = {
-      centerAt: jest.fn(),
-      zoom: jest.fn(),
-      zoomToFit: jest.fn(),
-    };
-
-    const focused = focusLearningGraphNode(graph, {
-      id: 'concept:limits',
-      type: 'Concept',
-    });
-
-    expect(focused).toBe(false);
-    expect(graph.centerAt).not.toHaveBeenCalled();
-    expect(graph.zoom).not.toHaveBeenCalled();
-  });
-
-  it('zooms different node types to different reading distances', () => {
-    expect(resolveLearningGraphFocusZoom('Book')).toBe(1.4);
-    expect(resolveLearningGraphFocusZoom('SourceAsset')).toBe(1.7);
-    expect(resolveLearningGraphFocusZoom('Concept')).toBe(2.35);
-    expect(resolveLearningGraphFocusZoom('Fragment')).toBe(2.75);
-    expect(resolveLearningGraphFocusZoom('Unknown')).toBe(2);
   });
 
   it('resets the viewport back to the full graph', () => {
     const graph = {
-      centerAt: jest.fn(),
-      zoom: jest.fn(),
       zoomToFit: jest.fn(),
     };
 
     resetLearningGraphViewport(graph);
 
     expect(graph.zoomToFit).toHaveBeenCalledWith(360, 56);
-    expect(graph.centerAt).not.toHaveBeenCalled();
-    expect(graph.zoom).not.toHaveBeenCalled();
   });
 
   it('keeps the current viewport when selection is cleared interactively', () => {
     const graph = {
-      centerAt: jest.fn(),
-      zoom: jest.fn(),
+      cameraPosition: jest.fn(),
       zoomToFit: jest.fn(),
     };
 
     const result = syncLearningGraphViewportSelection(graph, null, {
+      cameraFocusDistanceByNodeType: {
+        Book: 220,
+        Concept: 140,
+        Default: 160,
+        Fragment: 110,
+        LessonStep: 150,
+        SourceAsset: 170,
+      },
+      cameraFocusDurationMs: 900,
       resetWhenMissing: false,
     });
 
     expect(result).toBe('idle');
-    expect(graph.centerAt).not.toHaveBeenCalled();
-    expect(graph.zoom).not.toHaveBeenCalled();
+    expect(graph.cameraPosition).not.toHaveBeenCalled();
     expect(graph.zoomToFit).not.toHaveBeenCalled();
   });
 
   it('resets to the full graph when hydrate starts without a selected node', () => {
     const graph = {
-      centerAt: jest.fn(),
-      zoom: jest.fn(),
+      cameraPosition: jest.fn(),
       zoomToFit: jest.fn(),
     };
 
     const result = syncLearningGraphViewportSelection(graph, null, {
+      cameraFocusDistanceByNodeType: {
+        Book: 220,
+        Concept: 140,
+        Default: 160,
+        Fragment: 110,
+        LessonStep: 150,
+        SourceAsset: 170,
+      },
+      cameraFocusDurationMs: 900,
       resetWhenMissing: true,
     });
 

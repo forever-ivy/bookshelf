@@ -18,7 +18,9 @@ export type LearningGraphRuntimeTheme = {
 };
 
 export type LearningGraphRuntimeConfig = {
-  conceptLabelZoom: number;
+  cameraFocusDistanceByNodeType: Record<string, number>;
+  cameraFocusDurationMs: number;
+  controlType: 'trackball';
   cooldownTicks: number;
   linkDistances: Record<string, number>;
   nodeSizes: Record<string, number>;

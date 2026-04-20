@@ -13,6 +13,7 @@ export default function BorrowingLayout() {
         contentStyle: {
           backgroundColor: theme.colors.backgroundTask,
         },
+        gestureEnabled: false,
         headerBackButtonDisplayMode: 'minimal',
         headerLargeStyle: isIos
           ? {

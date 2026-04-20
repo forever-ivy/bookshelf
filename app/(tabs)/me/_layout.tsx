@@ -11,6 +11,7 @@ export default function MeLayout() {
         contentStyle: {
           backgroundColor: theme.colors.backgroundTask,
         },
+        gestureEnabled: false,
         headerBackButtonDisplayMode: 'minimal',
         headerShadowVisible: false,
         headerStyle: {

@@ -89,6 +89,7 @@ describe('RootLayout', () => {
     expect(screen.queryByTestId('profile-sheet-layer')).toBeNull();
     expect(mockRecordedStackScreenOptions).toEqual(
       expect.objectContaining({
+        gestureEnabled: false,
         headerBackButtonDisplayMode: 'minimal',
         headerShadowVisible: false,
         headerTitleStyle:

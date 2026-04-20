@@ -60,7 +60,16 @@ import type { LearningGraphHydratePayload } from '@/lib/learning/graph-bridge';
 import { buildLearningGraphRuntimeTheme } from '@/lib/learning/graph-theme';
 
 const GRAPH_RUNTIME_CONFIG = {
-  conceptLabelZoom: 1.8,
+  cameraFocusDistanceByNodeType: {
+    Book: 220,
+    Concept: 140,
+    Default: 160,
+    Fragment: 110,
+    LessonStep: 150,
+    SourceAsset: 170,
+  },
+  cameraFocusDurationMs: 900,
+  controlType: 'trackball',
   cooldownTicks: 120,
   linkDistances: {
     DERIVED_FROM: 88,

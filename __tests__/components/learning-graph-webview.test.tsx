@@ -40,7 +40,16 @@ describe('learning graph webview availability', () => {
       <LearningGraphWebView
         hydratePayload={{
           config: {
-            conceptLabelZoom: 1.8,
+            cameraFocusDistanceByNodeType: {
+              Book: 220,
+              Concept: 140,
+              Default: 160,
+              Fragment: 110,
+              LessonStep: 150,
+              SourceAsset: 170,
+            },
+            cameraFocusDurationMs: 900,
+            controlType: 'trackball',
             cooldownTicks: 120,
             linkDistances: {
               DERIVED_FROM: 88,
@@ -125,7 +134,16 @@ describe('learning graph webview availability', () => {
       <LearningGraphWebView
         hydratePayload={{
           config: {
-            conceptLabelZoom: 1.8,
+            cameraFocusDistanceByNodeType: {
+              Book: 220,
+              Concept: 140,
+              Default: 160,
+              Fragment: 110,
+              LessonStep: 150,
+              SourceAsset: 170,
+            },
+            cameraFocusDurationMs: 900,
+            controlType: 'trackball',
             cooldownTicks: 120,
             linkDistances: {
               DERIVED_FROM: 88,

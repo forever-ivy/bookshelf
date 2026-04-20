@@ -13,6 +13,7 @@ export default function LearningTabLayout() {
         contentStyle: {
           backgroundColor: theme.colors.backgroundWorkspace,
         },
+        gestureEnabled: false,
         headerBackButtonDisplayMode: 'minimal',
         headerLargeStyle: isIos
           ? {

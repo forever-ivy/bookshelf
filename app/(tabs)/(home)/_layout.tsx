@@ -13,6 +13,7 @@ export default function HomeStackLayout() {
         contentStyle: {
           backgroundColor: theme.colors.background,
         },
+        gestureEnabled: false,
         headerBackButtonDisplayMode: 'minimal',
         headerLargeStyle: isIos
           ? {

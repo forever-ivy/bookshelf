@@ -13,6 +13,7 @@ export default function SearchLayout() {
         contentStyle: {
           backgroundColor: theme.colors.backgroundTask,
         },
+        gestureEnabled: false,
         headerBackButtonDisplayMode: 'minimal',
         headerShown: true,
         headerLargeStyle: isIos

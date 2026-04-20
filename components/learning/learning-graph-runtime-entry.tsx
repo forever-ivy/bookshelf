@@ -1,17 +1,26 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import ForceGraph2D from 'react-force-graph-2d';
+import ForceGraph3D from 'react-force-graph-3d';
+import SpriteText from 'three-spritetext';
+import {
+  Group,
+  Mesh,
+  MeshBasicMaterial,
+  MeshStandardMaterial,
+  SphereGeometry,
+} from 'three';
 
 import type {
   LearningGraphHydratePayload,
   LearningGraphRuntimeInputMessage,
   LearningGraphRuntimeOutputMessage,
-  LearningGraphRuntimeTheme,
 } from '../../lib/learning/graph-bridge';
 import {
-  syncLearningGraphViewportSelection,
-} from '../../lib/learning/graph-runtime-focus';
+  resolveLearningGraph3DLabelVisibility,
+  resolveLearningGraph3DNodeVisualState,
+} from '../../lib/learning/graph-runtime-3d';
 import { readLearningGraphBootstrapPayload } from '../../lib/learning/graph-runtime';
+import { syncLearningGraphViewportSelection } from '../../lib/learning/graph-runtime-focus';
 
 type RuntimeLink = {
   __key: string;
@@ -26,6 +35,20 @@ type RuntimeNode = {
   type: string;
   x?: number;
   y?: number;
+  z?: number;
+};
+
+type RuntimeGraphRef = {
+  cameraPosition: (
+    position: { x: number; y: number; z: number },
+    lookAt?: { x: number; y: number; z: number },
+    durationMs?: number
+  ) => unknown;
+  controls?: () => Record<string, unknown>;
+  d3Force: (forceName: string) => { distance?: (value: (link: RuntimeLink) => number) => void; strength?: (value: (node: RuntimeNode) => number) => void } | undefined;
+  d3VelocityDecay: (value: number) => void;
+  refresh?: () => unknown;
+  zoomToFit: (durationMs?: number, padding?: number) => unknown;
 };
 
 function resolveRuntimeLinkEndpointId(endpoint: RuntimeLink['source']) {
@@ -100,106 +123,118 @@ class RuntimeErrorBoundary extends React.Component<
   }
 }
 
-function resolveNodeColor(type: string, theme: LearningGraphRuntimeTheme) {
-  switch (type) {
-    case 'Book':
-      return theme.primary;
-    case 'Concept':
-      return theme.primary;
-    case 'Fragment':
-      return theme.fragment;
-    case 'LessonStep':
-      return theme.step;
-    case 'SourceAsset':
-      return theme.source;
-    default:
-      return theme.textSoft;
-  }
-}
-
-function resolveLabelVisibility(
+function buildNodeRadius(
   node: RuntimeNode,
-  zoom: number,
-  selectedNodeId: string | null,
+  hydratePayload: LearningGraphHydratePayload,
   selectedNeighborhoodNodeIds: Set<string> | null,
-  conceptLabelZoom: number
+  selectedNodeId: string | null
 ) {
+  const baseRadius = hydratePayload.config.nodeSizes[node.type] ?? 6;
+
+  if (selectedNodeId === node.id) {
+    return baseRadius + 2;
+  }
+
   if (selectedNeighborhoodNodeIds?.has(node.id)) {
-    return true;
+    return baseRadius + 1;
   }
 
-  if (node.type === 'Book' || node.type === 'SourceAsset' || node.type === 'LessonStep') {
-    return true;
-  }
-
-  if (node.type === 'Concept') {
-    return selectedNodeId === node.id || zoom >= conceptLabelZoom;
-  }
-
-  if (node.type === 'Fragment') {
-    return selectedNodeId === node.id;
-  }
-
-  return false;
+  return baseRadius;
 }
 
-function resolveNodeVisualState(
+function buildLabelTextHeight(node: RuntimeNode) {
+  switch (node.type) {
+    case 'Book':
+      return 12;
+    case 'SourceAsset':
+      return 9;
+    case 'Fragment':
+      return 6.5;
+    default:
+      return 8;
+  }
+}
+
+function buildNodeObject(
   node: RuntimeNode,
   hydratePayload: LearningGraphHydratePayload,
   selectedNodeId: string | null,
   selectedNeighborhoodNodeIds: Set<string> | null
 ) {
-  const baseColor = resolveNodeColor(node.type, hydratePayload.theme);
-  const generatedNodeIds = new Set(hydratePayload.generatedNodeIds);
-  const highlightedNodeIds = new Set(hydratePayload.highlightedNodeIds);
-  const guideStatus = hydratePayload.guideStatusByNodeId[node.id];
-  const active = selectedNodeId === node.id;
-  const generated = generatedNodeIds.has(node.id);
+  const radius = buildNodeRadius(node, hydratePayload, selectedNeighborhoodNodeIds, selectedNodeId);
+  const visualState = resolveLearningGraph3DNodeVisualState(node, {
+    generatedNodeIds: hydratePayload.generatedNodeIds,
+    guideStatusByNodeId: hydratePayload.guideStatusByNodeId,
+    highlightedNodeIds: hydratePayload.highlightedNodeIds,
+    mode: hydratePayload.mode,
+    selectedNeighborhoodNodeIds,
+    selectedNodeId,
+    theme: hydratePayload.theme,
+  });
+  const group = new Group();
+  const sphere = new Mesh(
+    new SphereGeometry(radius, 18, 18),
+    new MeshStandardMaterial({
+      color: visualState.color,
+      emissive: visualState.color,
+      emissiveIntensity: visualState.active ? 0.36 : visualState.emphasis !== 'normal' ? 0.16 : 0.05,
+      metalness: 0.1,
+      opacity: visualState.opacity,
+      roughness: visualState.active ? 0.36 : 0.52,
+      transparent: visualState.opacity < 1,
+    })
+  );
+  group.add(sphere);
 
-  let alpha = 0.88;
-  let color = baseColor;
-  let emphasis: 'completed' | 'current' | 'generated' | 'normal' = 'normal';
-
-  if (hydratePayload.mode === 'explore') {
-    alpha = highlightedNodeIds.has(node.id) ? 0.96 : 0.56;
-    if (generated) {
-      alpha = 0.98;
-      color = hydratePayload.theme.explore;
-      emphasis = 'generated';
-    }
+  if (visualState.generated || visualState.emphasis !== 'normal' || visualState.active) {
+    const shell = new Mesh(
+      new SphereGeometry(
+        radius *
+          (visualState.active
+            ? 1.42
+            : visualState.generated
+              ? 1.34
+              : 1.22),
+        16,
+        16
+      ),
+      new MeshBasicMaterial({
+        color: visualState.generated ? hydratePayload.theme.explore : visualState.color,
+        opacity: visualState.active ? 0.78 : 0.48,
+        transparent: true,
+        wireframe: true,
+      })
+    );
+    group.add(shell);
   }
 
-  if (hydratePayload.mode === 'guide') {
-    if (guideStatus === 'completed') {
-      alpha = 0.94;
-      color = hydratePayload.theme.success;
-      emphasis = 'completed';
-    } else if (guideStatus === 'current') {
-      alpha = 0.98;
-      color = hydratePayload.theme.warning;
-      emphasis = 'current';
-    } else {
-      alpha = node.type === 'Book' ? 0.78 : 0.34;
-    }
+  const showLabel = resolveLearningGraph3DLabelVisibility(node, {
+    generatedNodeIds: hydratePayload.generatedNodeIds,
+    guideStatusByNodeId: hydratePayload.guideStatusByNodeId,
+    highlightedNodeIds: hydratePayload.highlightedNodeIds,
+    mode: hydratePayload.mode,
+    selectedNeighborhoodNodeIds,
+    selectedNodeId,
+  });
+
+  if (showLabel) {
+    const textHeight = buildLabelTextHeight(node);
+    const sprite = new SpriteText(node.label, textHeight, hydratePayload.theme.text);
+    sprite.material.depthWrite = false;
+    sprite.borderRadius = 4;
+    sprite.borderWidth = visualState.active ? 1 : 0;
+    sprite.borderColor = visualState.color;
+    sprite.fontWeight = visualState.active ? '700' : '500';
+    sprite.padding = 1;
+    sprite.position.set(0, radius + textHeight * 0.9, 0);
+    group.add(sprite);
   }
 
-  if (selectedNeighborhoodNodeIds) {
-    alpha = selectedNeighborhoodNodeIds.has(node.id)
-      ? Math.max(alpha, active ? 1 : 0.92)
-      : Math.min(alpha, 0.18);
-  }
-
-  return {
-    active,
-    alpha,
-    color,
-    emphasis,
-    generated,
-  };
+  return group;
 }
 
 function App() {
-  const graphRef = React.useRef<any>(null);
+  const graphRef = React.useRef<RuntimeGraphRef | null>(null);
   const bootstrapPayload = React.useMemo(
     () => readLearningGraphBootstrapPayload(window as unknown as Record<string, unknown>),
     []
@@ -354,10 +389,12 @@ function App() {
 
     return new Set(hydratePayload.edgeKeysByNodeId[selectedNodeId] ?? []);
   }, [hydratePayload, selectedNodeId]);
+
   const modeHighlightedNodeIds = React.useMemo(
     () => new Set(hydratePayload?.highlightedNodeIds ?? []),
     [hydratePayload]
   );
+
   const runtimeNodeById = React.useMemo(
     () => Object.fromEntries(graphData.nodes.map((node) => [node.id, node])),
     [graphData.nodes]
@@ -366,7 +403,7 @@ function App() {
   const syncViewportToSelection = React.useCallback(
     (targetNodeId: string | null, retryCount = 0) => {
       const graph = graphRef.current;
-      if (!graph) {
+      if (!graph || !hydratePayload) {
         postStatus('viewport:missingGraphRef');
         return;
       }
@@ -374,9 +411,12 @@ function App() {
       const targetNode = targetNodeId ? runtimeNodeById[targetNodeId] ?? null : null;
       if (
         targetNodeId &&
-        (!targetNode || typeof targetNode.x !== 'number' || typeof targetNode.y !== 'number')
+        (!targetNode ||
+          typeof targetNode.x !== 'number' ||
+          typeof targetNode.y !== 'number' ||
+          typeof targetNode.z !== 'number')
       ) {
-        if (retryCount < 4) {
+        if (retryCount < 6) {
           window.setTimeout(() => {
             syncViewportToSelection(targetNodeId, retryCount + 1);
           }, 90);
@@ -385,6 +425,8 @@ function App() {
       }
 
       const status = syncLearningGraphViewportSelection(graph, targetNode, {
+        cameraFocusDistanceByNodeType: hydratePayload.config.cameraFocusDistanceByNodeType,
+        cameraFocusDurationMs: hydratePayload.config.cameraFocusDurationMs,
         resetWhenMissing: !targetNodeId,
       });
 
@@ -400,7 +442,7 @@ function App() {
 
       postStatus('viewport:preserve');
     },
-    [runtimeNodeById]
+    [hydratePayload, runtimeNodeById]
   );
 
   React.useEffect(() => {
@@ -441,11 +483,18 @@ function App() {
 
       const linkForce = graph.d3Force('link');
       if (linkForce?.distance) {
-        linkForce.distance((link: RuntimeLink) => {
-          return hydratePayload.config.linkDistances[link.type] ?? 80;
-        });
+        linkForce.distance((link: RuntimeLink) => hydratePayload.config.linkDistances[link.type] ?? 80);
       }
       postStatus('effect:linkForce');
+
+      const controls = graph.controls?.();
+      if (controls && typeof controls === 'object') {
+        (controls as { dynamicDampingFactor?: number }).dynamicDampingFactor = 0.12;
+        (controls as { rotateSpeed?: number }).rotateSpeed = 2.2;
+        (controls as { zoomSpeed?: number }).zoomSpeed = 1.05;
+      }
+
+      graph.refresh?.();
 
       window.requestAnimationFrame(() => {
         window.setTimeout(() => {
@@ -473,6 +522,7 @@ function App() {
     }
 
     try {
+      graphRef.current?.refresh?.();
       syncViewportToSelection(selectedNodeId);
     } catch (error) {
       postToNative({
@@ -480,7 +530,7 @@ function App() {
         type: 'runtimeError',
       });
     }
-  }, [hydratePayload, selectedNodeId, syncViewportToSelection]);
+  }, [hydratePayload, selectedNeighborhoodNodeIds, selectedNodeId, syncViewportToSelection]);
 
   if (!hydratePayload) {
     return null;
@@ -488,8 +538,9 @@ function App() {
 
   return (
     <RuntimeErrorBoundary>
-      <ForceGraph2D
+      <ForceGraph3D
         backgroundColor={hydratePayload.theme.background}
+        controlType={hydratePayload.config.controlType}
         cooldownTicks={hydratePayload.config.cooldownTicks}
         enableNodeDrag={false}
         graphData={graphData}
@@ -500,24 +551,27 @@ function App() {
             const sourceId = resolveRuntimeLinkEndpointId(current.source);
             const targetId = resolveRuntimeLinkEndpointId(current.target);
             if (hydratePayload.mode === 'global') {
-              return hydratePayload.theme.edge;
+              return 'rgba(83, 113, 145, 0.46)';
             }
             if (
-              (modeHighlightedNodeIds.has(String(sourceId)) || modeHighlightedNodeIds.has(String(targetId)))
+              modeHighlightedNodeIds.has(String(sourceId)) ||
+              modeHighlightedNodeIds.has(String(targetId))
             ) {
               return hydratePayload.theme.edge;
             }
-            return 'rgba(78, 99, 121, 0.08)';
+            return 'rgba(78, 99, 121, 0.16)';
           }
 
           return highlightedEdgeKeys.has(current.__key)
             ? hydratePayload.theme.edge
-            : 'rgba(78, 99, 121, 0.06)';
+            : 'rgba(78, 99, 121, 0.14)';
         }}
         linkCurvature={(link) => {
           const current = link as RuntimeLink;
           return current.source === current.target ? 0.25 : 0;
         }}
+        linkOpacity={1}
+        linkResolution={10}
         linkWidth={(link) => {
           const current = link as RuntimeLink;
           const emphasized =
@@ -529,106 +583,28 @@ function App() {
             const sourceId = resolveRuntimeLinkEndpointId(current.source);
             const targetId = resolveRuntimeLinkEndpointId(current.target);
             if (hydratePayload.mode === 'global') {
-              return emphasized ? 1.2 : 0.8;
+              return emphasized ? 1.3 : 0.72;
             }
             if (
-              (modeHighlightedNodeIds.has(String(sourceId)) || modeHighlightedNodeIds.has(String(targetId)))
+              modeHighlightedNodeIds.has(String(sourceId)) ||
+              modeHighlightedNodeIds.has(String(targetId))
             ) {
-              return emphasized ? 1.9 : 1.2;
+              return emphasized ? 2.1 : 1.35;
             }
-            return emphasized ? 1.0 : 0.55;
+            return emphasized ? 1.1 : 0.48;
           }
 
-          return highlightedEdgeKeys.has(current.__key) ? (emphasized ? 1.9 : 1.2) : 0.5;
+          return highlightedEdgeKeys.has(current.__key) ? (emphasized ? 2.2 : 1.45) : 0.42;
         }}
-        nodeCanvasObject={(node, canvasContext, globalScale) => {
-          const current = node as RuntimeNode;
-          const baseRadius = hydratePayload.config.nodeSizes[current.type] ?? 6;
-          const { active, alpha, color, emphasis, generated } = resolveNodeVisualState(
-            current,
+        nodeLabel={() => ''}
+        nodeThreeObject={(node) =>
+          buildNodeObject(
+            node as RuntimeNode,
             hydratePayload,
             selectedNodeId,
             selectedNeighborhoodNodeIds
-          );
-          const radius = active
-            ? baseRadius + 2
-            : selectedNeighborhoodNodeIds?.has(current.id)
-              ? baseRadius + 1
-              : baseRadius;
-
-          canvasContext.save();
-          canvasContext.globalAlpha = alpha;
-
-          if (alpha > 0.24) {
-            canvasContext.shadowColor = color;
-            canvasContext.shadowBlur = active
-              ? 10
-              : emphasis === 'generated' || emphasis === 'current'
-                ? 6
-                : emphasis === 'completed'
-                  ? 4
-                  : 0;
-          }
-
-          canvasContext.beginPath();
-          canvasContext.arc(current.x ?? 0, current.y ?? 0, radius, 0, 2 * Math.PI, false);
-          canvasContext.fillStyle = color;
-          canvasContext.fill();
-          canvasContext.shadowBlur = 0;
-          
-          if (active || current.type === 'Book' || emphasis !== 'normal') {
-            canvasContext.lineWidth = active ? 2.2 : 1.2;
-            canvasContext.strokeStyle = hydratePayload.theme.surface ?? '#FFFFFF';
-            canvasContext.stroke();
-          }
-
-          if (generated) {
-            canvasContext.beginPath();
-            canvasContext.setLineDash([5, 4]);
-            canvasContext.arc(current.x ?? 0, current.y ?? 0, radius + 3, 0, 2 * Math.PI, false);
-            canvasContext.lineWidth = 1;
-            canvasContext.strokeStyle = hydratePayload.theme.explore;
-            canvasContext.stroke();
-            canvasContext.setLineDash([]);
-          }
-
-          if (active) {
-            canvasContext.beginPath();
-            canvasContext.arc(current.x ?? 0, current.y ?? 0, radius + 5, 0, 2 * Math.PI, false);
-            canvasContext.lineWidth = 1;
-            canvasContext.strokeStyle = color;
-            canvasContext.stroke();
-          }
-
-          if (
-            resolveLabelVisibility(
-              current,
-              globalScale,
-              selectedNodeId,
-              selectedNeighborhoodNodeIds,
-              hydratePayload.config.conceptLabelZoom
-            )
-          ) {
-            const fontSize = current.type === 'Book' ? 12 : current.type === 'Fragment' ? 10 : 11;
-            canvasContext.font = `${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
-            canvasContext.fillStyle = hydratePayload.theme.text;
-            canvasContext.fillText(
-              current.label,
-              (current.x ?? 0) + radius + 4,
-              (current.y ?? 0) + fontSize / 2
-            );
-          }
-
-          canvasContext.restore();
-        }}
-        nodePointerAreaPaint={(node, color, canvasContext) => {
-          const current = node as RuntimeNode;
-          const radius = (hydratePayload.config.nodeSizes[current.type] ?? 6) + 6;
-          canvasContext.fillStyle = color;
-          canvasContext.beginPath();
-          canvasContext.arc(current.x ?? 0, current.y ?? 0, radius, 0, 2 * Math.PI, false);
-          canvasContext.fill();
-        }}
+          )
+        }
         onBackgroundClick={() => {
           setSelectedNodeId(null);
           postToNative({ type: 'backgroundTap' });
@@ -638,7 +614,8 @@ function App() {
           setSelectedNodeId(current.id);
           postToNative({ nodeId: current.id, type: 'nodeTap' });
         }}
-        ref={graphRef}
+        ref={graphRef as React.MutableRefObject<any>}
+        showNavInfo={false}
         width={viewport.width}
       />
     </RuntimeErrorBoundary>

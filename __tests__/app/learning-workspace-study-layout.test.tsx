@@ -51,6 +51,7 @@ describe('LearningWorkspaceStudyLayout', () => {
     expect(screen.getByTestId('learning-workspace-study-stack')).toBeTruthy();
     expect(mockRecordedScreenOptions).toEqual(
       expect.objectContaining({
+        gestureEnabled: false,
         headerBackButtonDisplayMode: 'minimal',
         headerShadowVisible: false,
         headerShown: true,

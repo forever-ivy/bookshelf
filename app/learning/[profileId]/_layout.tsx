@@ -17,6 +17,7 @@ export default function LearningWorkspaceStackLayout() {
           contentStyle: {
             backgroundColor: theme.colors.surface,
           },
+          gestureEnabled: false,
           headerBackButtonDisplayMode: 'minimal',
           headerShadowVisible: true,
           headerStyle: {

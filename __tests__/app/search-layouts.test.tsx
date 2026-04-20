@@ -56,6 +56,7 @@ describe('search stack layouts', () => {
     expect(screen.getByTestId('mock-stack')).toBeTruthy();
     expect(recordedScreenOptions).toEqual(
       expect.objectContaining({
+        gestureEnabled: false,
         headerTitleStyle:
           Platform.OS === 'ios' ? expect.objectContaining({ color: 'transparent' }) : undefined,
         headerTransparent: Platform.OS === 'ios',
@@ -79,6 +80,7 @@ describe('search stack layouts', () => {
     expect(screen.getByTestId('mock-stack')).toBeTruthy();
     expect(recordedScreenOptions).toEqual(
       expect.objectContaining({
+        gestureEnabled: false,
         headerLargeStyle:
           Platform.OS === 'ios' ? expect.objectContaining({ backgroundColor: 'transparent' }) : undefined,
         headerTransparent: Platform.OS === 'ios',

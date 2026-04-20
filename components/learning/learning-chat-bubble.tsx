@@ -134,6 +134,71 @@ function ChatGPTCursor({ inline = false }: { inline?: boolean }) {
   );
 }
 
+function ThinkingPulse() {
+  const { theme } = useAppTheme();
+  const scale = React.useRef(new Animated.Value(1)).current;
+  const opacity = React.useRef(new Animated.Value(0.8)).current;
+
+  React.useEffect(() => {
+    const animation = Animated.loop(
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(scale, {
+            toValue: 1.04,
+            duration: 700,
+            useNativeDriver: true,
+          }),
+          Animated.timing(scale, {
+            toValue: 1,
+            duration: 700,
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.sequence([
+          Animated.timing(opacity, {
+            toValue: 1,
+            duration: 700,
+            useNativeDriver: true,
+          }),
+          Animated.timing(opacity, {
+            toValue: 0.72,
+            duration: 700,
+            useNativeDriver: true,
+          }),
+        ]),
+      ])
+    );
+
+    animation.start();
+    return () => animation.stop();
+  }, [opacity, scale]);
+
+  return (
+    <Animated.View
+      style={{
+        alignSelf: 'flex-start',
+        backgroundColor: theme.colors.primarySoft,
+        borderColor: theme.colors.borderSoft,
+        borderRadius: theme.radii.pill,
+        borderWidth: 1,
+        opacity,
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        transform: [{ scale }],
+      }}>
+      <Text
+        selectable
+        style={{
+          color: theme.colors.primaryStrong,
+          ...theme.typography.semiBold,
+          fontSize: 15,
+        }}>
+        Thinking
+      </Text>
+    </Animated.View>
+  );
+}
+
 function AssistantAction({
   accessibilityLabel,
   icon: Icon,
@@ -198,7 +263,7 @@ export function LearningChatBubble({
             gap: 8,
             paddingVertical: 8,
           }}>
-          <ChatGPTCursor />
+          <ThinkingPulse />
         </View>
       </View>
     );

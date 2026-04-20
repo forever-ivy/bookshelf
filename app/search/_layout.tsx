@@ -15,6 +15,7 @@ export default function SearchGroupLayout() {
         contentStyle: {
           backgroundColor: theme.colors.backgroundTask,
         },
+        gestureEnabled: false,
         headerBackButtonDisplayMode: 'minimal',
         headerShown: true,
         headerShadowVisible: false,

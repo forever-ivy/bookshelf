@@ -65,6 +65,7 @@ describe('tab stack layouts', () => {
     expect(screen.getByTestId('mock-stack')).toBeTruthy();
     expect(mockRecordedScreenOptions).toEqual(
       expect.objectContaining({
+        gestureEnabled: false,
         headerLargeStyle:
           Platform.OS === 'ios' ? expect.objectContaining({ backgroundColor: 'transparent' }) : undefined,
         headerTitleStyle:
@@ -89,6 +90,7 @@ describe('tab stack layouts', () => {
     expect(screen.getByTestId('mock-stack')).toBeTruthy();
     expect(mockRecordedScreenOptions).toEqual(
       expect.objectContaining({
+        gestureEnabled: false,
         headerLargeStyle:
           Platform.OS === 'ios' ? expect.objectContaining({ backgroundColor: 'transparent' }) : undefined,
         headerTitleStyle:
@@ -112,6 +114,7 @@ describe('tab stack layouts', () => {
     expect(screen.getByTestId('mock-stack')).toBeTruthy();
     expect(mockRecordedScreenOptions).toEqual(
       expect.objectContaining({
+        gestureEnabled: false,
         headerLargeStyle:
           Platform.OS === 'ios' ? expect.objectContaining({ backgroundColor: 'transparent' }) : undefined,
         headerShown: true,
@@ -136,6 +139,7 @@ describe('tab stack layouts', () => {
     expect(screen.getByTestId('mock-stack')).toBeTruthy();
     expect(mockRecordedScreenOptions).toEqual(
       expect.objectContaining({
+        gestureEnabled: false,
         headerLargeStyle:
           Platform.OS === 'ios' ? expect.objectContaining({ backgroundColor: 'transparent' }) : undefined,
         headerTitleStyle:

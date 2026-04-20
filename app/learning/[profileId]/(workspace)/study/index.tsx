@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import React from 'react';
 import {
   Keyboard,
+  type LayoutChangeEvent,
   Platform,
   Pressable,
   StyleSheet,
@@ -121,25 +122,70 @@ function StarterPromptStrip({
 
 function ConversationSection({
   emptyLabel,
+  focusMessageId,
   messages,
   onAction,
+  onFocusAnchorYChange,
 }: {
   emptyLabel: string;
+  focusMessageId?: string | null;
   messages: ReturnType<typeof useLearningWorkspaceScreen>['renderedMessages'];
   onAction?: (action: LearningBridgeAction) => void;
+  onFocusAnchorYChange?: (y: number | null) => void;
 }) {
   const { theme } = useAppTheme();
+  const sectionYRef = React.useRef(0);
+  const focusLocalYRef = React.useRef<number | null>(null);
+
+  const commitFocusAnchor = React.useCallback(() => {
+    if (!onFocusAnchorYChange) {
+      return;
+    }
+
+    if (!focusMessageId || focusLocalYRef.current === null) {
+      onFocusAnchorYChange(null);
+      return;
+    }
+
+    onFocusAnchorYChange(sectionYRef.current + focusLocalYRef.current);
+  }, [focusMessageId, onFocusAnchorYChange]);
+
+  const handleSectionLayout = React.useCallback(
+    (event: LayoutChangeEvent) => {
+      sectionYRef.current = event.nativeEvent.layout.y;
+      commitFocusAnchor();
+    },
+    [commitFocusAnchor]
+  );
+
+  const handleFocusMessageLayout = React.useCallback(
+    (event: LayoutChangeEvent) => {
+      focusLocalYRef.current = event.nativeEvent.layout.y;
+      commitFocusAnchor();
+    },
+    [commitFocusAnchor]
+  );
+
+  React.useEffect(() => {
+    focusLocalYRef.current = null;
+    if (!focusMessageId) {
+      onFocusAnchorYChange?.(null);
+    }
+  }, [focusMessageId, onFocusAnchorYChange]);
 
   return (
-    <View style={{ gap: theme.spacing.lg }}>
+    <View onLayout={handleSectionLayout} style={{ gap: theme.spacing.lg }}>
       <View style={{ gap: 14 }}>
         {messages.length > 0 ? (
           messages.map((message) => (
-            <LearningConversationMessage
+            <View
               key={message.id}
-              message={message}
-              onAction={onAction}
-            />
+              onLayout={message.id === focusMessageId ? handleFocusMessageLayout : undefined}>
+              <LearningConversationMessage
+                message={message}
+                onAction={onAction}
+              />
+            </View>
           ))
         ) : (
           <GlassSurface
@@ -180,6 +226,21 @@ function ExplorePane({
   starterPrompts: string[];
   topPadding?: number;
 }) {
+  const [focusAnchorY, setFocusAnchorY] = React.useState<number | null>(null);
+  const focusMessageId = React.useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      if (messages[index]?.role === 'user') {
+        return messages[index]?.id ?? null;
+      }
+    }
+
+    return messages.length > 0 ? messages[messages.length - 1]?.id ?? null : null;
+  }, [messages]);
+
+  React.useEffect(() => {
+    setFocusAnchorY(null);
+  }, [focusMessageId]);
+
   return (
     <LearningConversationScroll
       contentContainerStyle={[
@@ -188,6 +249,8 @@ function ExplorePane({
         bottomPadding ? { paddingBottom: bottomPadding } : null,
       ]}
       contentInsetAdjustmentBehavior="never"
+      focusAnchorOffset={(topPadding ?? 0) + 24}
+      focusAnchorY={focusAnchorY}
       keyboardDismissMode="interactive"
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
@@ -198,8 +261,10 @@ function ExplorePane({
         ) : null}
         <ConversationSection
           emptyLabel="问一个更细、更偏应用或更偏例子的延展问题，系统会基于当前资料给出答案。"
+          focusMessageId={focusMessageId}
           messages={messages}
           onAction={onAction}
+          onFocusAnchorYChange={setFocusAnchorY}
         />
       </View>
     </LearningConversationScroll>

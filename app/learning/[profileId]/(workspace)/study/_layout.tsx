@@ -14,6 +14,7 @@ export default function LearningWorkspaceStudyLayout() {
         contentStyle: {
           backgroundColor: theme.colors.backgroundWorkspace,
         },
+        gestureEnabled: false,
         headerBackButtonDisplayMode: 'minimal',
         headerShadowVisible: false,
         headerShown: true,

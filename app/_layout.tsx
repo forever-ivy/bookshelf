@@ -38,6 +38,7 @@ export default function RootLayout() {
                   contentStyle: {
                     backgroundColor: theme.colors.background,
                   },
+                  gestureEnabled: false,
                   headerBackButtonDisplayMode: 'minimal',
                   headerShadowVisible: false,
                   headerStyle: {
