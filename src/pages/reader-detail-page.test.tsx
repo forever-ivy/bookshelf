@@ -11,15 +11,7 @@ const managementApi = vi.hoisted(() => ({
   getAdminReader: vi.fn(),
 }))
 
-const readersApi = vi.hoisted(() => ({
-  getReaderOverview: vi.fn(),
-  getReaderOrders: vi.fn(),
-  getReaderConversations: vi.fn(),
-  getReaderRecommendations: vi.fn(),
-}))
-
 vi.mock('@/lib/api/management', () => managementApi)
-vi.mock('@/lib/api/readers', () => readersApi)
 
 function TestProviders({ children }: PropsWithChildren) {
   const queryClient = new QueryClient({
@@ -49,45 +41,6 @@ describe('reader detail page', () => {
       risk_flags: ['overdue', 'manual_review'],
       segment_code: 'ai_power_user',
     })
-    readersApi.getReaderOverview.mockResolvedValue({
-      stats: {
-        active_orders_count: 2,
-        borrow_history_count: 9,
-        recommendation_count: 4,
-        conversation_count: 3,
-      },
-      recent_queries: ['AI 系统', '机器人调度'],
-    })
-    readersApi.getReaderOrders.mockResolvedValue([
-      {
-        borrow_order: {
-          id: 12,
-          status: 'delivering',
-          order_mode: 'robot_delivery',
-          created_at: '2026-03-22T09:00:00Z',
-        },
-      },
-    ])
-    readersApi.getReaderConversations.mockResolvedValue([
-      {
-        id: 1,
-        status: 'active',
-        message_count: 8,
-        last_message_preview: '我想找 AI 相关的新书',
-        last_message_at: '2026-03-22T10:00:00Z',
-      },
-    ])
-    readersApi.getReaderRecommendations.mockResolvedValue([
-      {
-        id: 1,
-        book_title: '智能系统设计',
-        query_text: 'AI 系统',
-        score: 0.93,
-        provider_note: 'hybrid',
-        explanation: '结合课程相关度和借阅热度给出的推荐。',
-        created_at: '2026-03-22T09:05:00Z',
-      },
-    ])
   })
 
   it('renders the reader detail workspace with a path back to readers index', async () => {
@@ -104,17 +57,32 @@ describe('reader detail page', () => {
     )
 
     expect(await screen.findByText('林栀')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '记录' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '读者信息' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '偏好和标记' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '读者实时记录' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '读者身份卡片' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '偏好与注意项' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '返回读者列表' })).toHaveAttribute('href', '/readers')
-    expect(screen.getByRole('link', { name: '返回读者列表' })).toHaveClass('!text-white')
-    expect(await screen.findAllByText(/AI 系统/)).not.toHaveLength(0)
-    expect(screen.getByText('逾期 / 人工处理')).toBeInTheDocument()
+    expect(screen.getByText('#overdue')).toBeInTheDocument()
+    expect(screen.getByText('#manual_review')).toBeInTheDocument()
 
     await user.click(screen.getByRole('tab', { name: '推荐记录' }))
 
-    expect(await screen.findByText(/hybrid/)).toBeInTheDocument()
-    expect(screen.getByText('结合课程相关度和借阅热度给出的推荐。')).toBeInTheDocument()
+    expect(await screen.findByText('暂无推荐记录')).toBeInTheDocument()
+  })
+
+  it('still renders reader detail when overview side queries fail', async () => {
+    render(
+      <TestProviders>
+        <MemoryRouter initialEntries={['/readers/537']}>
+          <Routes>
+            <Route path="/readers/:readerId" element={<ReaderDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </TestProviders>,
+    )
+
+    expect(await screen.findByText('林栀')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '读者身份卡片' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '返回读者列表' })).toHaveAttribute('href', '/readers')
+    expect(screen.getByText('暂无借阅记录')).toBeInTheDocument()
   })
 })

@@ -3,6 +3,8 @@ import { createColumnHelper, type ColumnDef } from '@tanstack/react-table'
 import { Link } from 'react-router-dom'
 import { useEffect, useMemo, useState } from 'react'
 
+import { CalendarClock, Moon, PackageCheck, Shield, User, Zap } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { DataTable } from '@/components/shared/data-table'
 import { EmptyState } from '@/components/shared/empty-state'
 import { LoadingState } from '@/components/shared/loading-state'
@@ -13,11 +15,11 @@ import { WorkspacePanel } from '@/components/shared/workspace-panel'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Textarea } from '@/components/ui/textarea'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { getAdminReaders, updateAdminReader } from '@/lib/api/management'
-import { formatRiskFlagList } from '@/lib/display-labels'
+import { formatRiskFlagLabel, formatRiskFlagList, formatStatusLabel } from '@/lib/display-labels'
 import { getAdminPageHero } from '@/lib/page-hero'
 import { patchSearchParams, readOptionalSearchParam, readSearchParam, useOptionalSearchParams } from '@/lib/search-params'
 import type { AdminReader } from '@/types/domain'
@@ -31,7 +33,27 @@ const EMPTY_READER_EDITOR = {
   restrictionStatus: '',
   restrictionUntil: '',
   segmentCode: '',
-  riskFlags: '',
+  riskFlags: [] as string[],
+}
+
+const DEFAULT_RESTRICTION_STATUS_OPTIONS = ['none', 'limited', 'blacklist']
+const DEFAULT_SEGMENT_OPTIONS = ['ai_power_user', 'cold_start', 'risk_watch', 'casual']
+const DEFAULT_RISK_FLAG_OPTIONS = ['overdue', 'manual_review', 'high_frequency']
+
+function formatDateTimeLocalValue(value?: string | null) {
+  if (!value) {
+    return ''
+  }
+
+  const normalizedValue = value.replace(' ', 'T')
+  const parsed = new Date(normalizedValue)
+
+  if (Number.isNaN(parsed.getTime())) {
+    return normalizedValue.slice(0, 16)
+  }
+
+  const localDate = new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60_000)
+  return localDate.toISOString().slice(0, 16)
 }
 
 export function ReadersPage() {
@@ -89,9 +111,9 @@ export function ReadersPage() {
     }
     setEditor({
       restrictionStatus: selectedReader.restriction_status ?? '',
-      restrictionUntil: selectedReader.restriction_until ?? '',
+      restrictionUntil: formatDateTimeLocalValue(selectedReader.restriction_until),
       segmentCode: selectedReader.segment_code ?? '',
-      riskFlags: selectedReader.risk_flags.join(', '),
+      riskFlags: selectedReader.risk_flags,
     })
   }, [selectedReader])
 
@@ -101,13 +123,10 @@ export function ReadersPage() {
         throw new Error('No selected reader')
       }
       return updateAdminReader(selectedReader.id, {
-        restriction_status: editor.restrictionStatus.trim() || undefined,
-        restriction_until: editor.restrictionUntil.trim() || undefined,
-        segment_code: editor.segmentCode.trim() || undefined,
-        risk_flags: editor.riskFlags
-          .split(',')
-          .map((item) => item.trim())
-          .filter(Boolean),
+        restriction_status: editor.restrictionStatus || undefined,
+        restriction_until: editor.restrictionUntil || undefined,
+        segment_code: editor.segmentCode || undefined,
+        risk_flags: editor.riskFlags,
       })
     },
     onSuccess: () => {
@@ -122,6 +141,37 @@ export function ReadersPage() {
   const totalActiveOrders = useMemo(
     () => readers.reduce((sum, reader) => sum + reader.active_orders_count, 0),
     [readers],
+  )
+  const lateNightRatio = Number(selectedReader?.preference_profile_json?.late_night_ratio ?? 0)
+  const restrictionStatusOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          [...DEFAULT_RESTRICTION_STATUS_OPTIONS, ...readers.map((reader) => reader.restriction_status), selectedReader?.restriction_status]
+            .filter((value): value is string => Boolean(value)),
+        ),
+      ),
+    [readers, selectedReader?.restriction_status],
+  )
+  const segmentOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          [...DEFAULT_SEGMENT_OPTIONS, ...readers.map((reader) => reader.segment_code), selectedReader?.segment_code]
+            .filter((value): value is string => Boolean(value)),
+        ),
+      ),
+    [readers, selectedReader?.segment_code],
+  )
+  const riskFlagOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          [...DEFAULT_RISK_FLAG_OPTIONS, ...readers.flatMap((reader) => reader.risk_flags), ...editor.riskFlags]
+            .filter((value): value is string => Boolean(value)),
+        ),
+      ),
+    [editor.riskFlags, readers],
   )
   const restrictedCount = useMemo(
     () => readers.filter((reader) => Boolean(reader.restriction_status) && reader.restriction_status !== 'none').length,
@@ -288,7 +338,7 @@ export function ReadersPage() {
       </WorkspacePanel>
 
       <Sheet open={isEditorOpen} onOpenChange={setIsEditorOpen}>
-        <SheetContent>
+        <SheetContent className="w-full sm:max-w-xl">
           <SheetHeader>
             <SheetTitle>编辑读者资料</SheetTitle>
             <SheetDescription>在这里修改限制状态、分组和注意标记，也能顺手看看最近使用情况。</SheetDescription>
@@ -301,85 +351,194 @@ export function ReadersPage() {
               <EmptyState title="没有找到内容" description="当前没有可编辑的读者。" />
             )
           ) : (
-            <>
-              <section className="space-y-5">
-                <div className="rounded-[1.5rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.78)] px-5 py-5">
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="space-y-1">
-                      <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">当前读者</p>
-                      <p className="text-xl font-semibold tracking-[-0.04em] text-[var(--foreground)]">{selectedReader.display_name}</p>
-                      <p className="text-sm text-[var(--muted-foreground)]">{selectedReader.username}</p>
+            <div className="flex h-full flex-col">
+              <ScrollArea className="flex-1 px-1">
+                <div className="space-y-8 pb-8 pr-1 pt-2">
+                  <div className="flex items-center justify-between gap-4 rounded-[1.25rem] border border-[var(--line-subtle)] bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
+                    <div className="flex items-center gap-4">
+                      <div className="flex size-14 items-center justify-center rounded-2xl bg-[var(--surface-container-low)] border border-[var(--line-subtle)] text-[var(--muted-foreground)]">
+                        <User className="size-7" />
+                      </div>
+                      <div>
+                        <h4 className="text-[18px] font-bold tracking-tight text-[var(--foreground)]">{selectedReader.display_name}</h4>
+                        <p className="text-[13px] text-[var(--muted-foreground)] font-medium">{selectedReader.username}</p>
+                        <div className="mt-1.5 flex items-center gap-2 text-[12px] font-semibold text-[var(--muted-foreground)] opacity-70">
+                          <span>{selectedReader.college ?? '未分配学院'}</span>
+                          <span className="opacity-30">·</span>
+                          <span>{selectedReader.major ?? '未分配专业'}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="space-y-2 text-right">
-                      <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">当前限制</p>
-                      <StatusBadge status={selectedReader.restriction_status ?? 'none'} />
+                    <div className="text-right">
+                       <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--muted-foreground)]">借阅限制</p>
+                       <StatusBadge status={selectedReader.restriction_status ?? 'none'} />
                     </div>
                   </div>
-                  <div className="mt-4 grid gap-3 text-sm text-[var(--muted-foreground)] sm:grid-cols-2">
-                    <p>{selectedReader.college ?? '暂未填写学院'}</p>
-                    <p>{selectedReader.major ?? '暂未填写专业'}</p>
-                  </div>
-                </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="reader-restriction-status">限制状态</Label>
-                    <Input
-                      id="reader-restriction-status"
-                      value={editor.restrictionStatus}
-                      onChange={(event) => setEditor((current) => ({ ...current, restrictionStatus: event.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="reader-restriction-until">限制到期</Label>
-                    <Input
-                      id="reader-restriction-until"
-                      value={editor.restrictionUntil}
-                      onChange={(event) => setEditor((current) => ({ ...current, restrictionUntil: event.target.value }))}
-                    />
-                  </div>
-                </div>
+                  <section className="space-y-6">
+                    <div className="grid gap-5 md:grid-cols-2">
+                      <div className="space-y-2.5">
+                        <Label className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--muted-foreground)] ml-1" id="reader-restriction-status-label">
+                          限制状态
+                        </Label>
+                        <Select
+                          value={editor.restrictionStatus || 'none'}
+                          onValueChange={(value) => setEditor((current) => ({ ...current, restrictionStatus: value }))}
+                        >
+                          <SelectTrigger aria-labelledby="reader-restriction-status-label" className="h-10 rounded-xl border-[var(--line-subtle)] bg-white/50 focus:bg-white transition-colors">
+                            <SelectValue placeholder="选择限制状态" />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-[1rem]">
+                            {restrictionStatusOptions.map((value) => (
+                              <SelectItem key={value} value={value} className="rounded-lg">
+                                {formatStatusLabel(value)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2.5">
+                        <Label className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--muted-foreground)] ml-1" htmlFor="reader-restriction-until">
+                          限制到期
+                        </Label>
+                        <Input
+                          id="reader-restriction-until"
+                          type="datetime-local"
+                          className="h-10 rounded-xl border-[var(--line-subtle)] bg-white/50 focus:bg-white transition-colors"
+                          value={editor.restrictionUntil}
+                          onChange={(event) => setEditor((current) => ({ ...current, restrictionUntil: event.target.value }))}
+                        />
+                      </div>
+                    </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="reader-segment-code">分组</Label>
-                  <Input
-                    id="reader-segment-code"
-                    value={editor.segmentCode}
-                    onChange={(event) => setEditor((current) => ({ ...current, segmentCode: event.target.value }))}
-                  />
-                </div>
+                    <div className="space-y-2.5">
+                      <Label className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--muted-foreground)] ml-1" id="reader-segment-code-label">
+                        分组
+                      </Label>
+                      <Select
+                        value={editor.segmentCode || segmentOptions[0] || 'casual'}
+                        onValueChange={(value) => setEditor((current) => ({ ...current, segmentCode: value }))}
+                      >
+                        <SelectTrigger aria-labelledby="reader-segment-code-label" className="h-10 rounded-xl border-[var(--line-subtle)] bg-white/50 focus:bg-white transition-colors">
+                          <SelectValue placeholder="选择分组" />
+                        </SelectTrigger>
+                        <SelectContent className="rounded-[1rem]">
+                          {segmentOptions.map((value) => (
+                            <SelectItem key={value} value={value} className="rounded-lg">
+                              {value}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="reader-risk-flags">注意标记</Label>
-                  <Textarea
-                    id="reader-risk-flags"
-                    value={editor.riskFlags}
-                    onChange={(event) => setEditor((current) => ({ ...current, riskFlags: event.target.value }))}
-                  />
-                </div>
-              </section>
+                    <div className="space-y-2.5">
+                      <Label className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--muted-foreground)] ml-1">
+                        注意标记
+                      </Label>
+                      <div className="grid gap-2 rounded-2xl border border-[var(--line-subtle)] bg-white/50 p-4">
+                        {riskFlagOptions.map((flag) => (
+                          <label key={flag} className="flex items-center gap-3 rounded-xl border border-transparent px-3 py-2 text-sm text-[var(--foreground)] transition-colors hover:border-[var(--line-subtle)] hover:bg-white">
+                            <input
+                              type="checkbox"
+                              className="size-4 rounded border-[var(--line-subtle)] text-[var(--primary)] focus:ring-[var(--ring)]/35"
+                              checked={editor.riskFlags.includes(flag)}
+                              onChange={(event) =>
+                                setEditor((current) => ({
+                                  ...current,
+                                  riskFlags: event.target.checked
+                                    ? Array.from(new Set([...current.riskFlags, flag]))
+                                    : current.riskFlags.filter((item) => item !== flag),
+                                }))
+                              }
+                            />
+                            <span>{formatRiskFlagLabel(flag)}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </section>
 
-              <section className="space-y-4 border-t border-[var(--line-subtle)] pt-5">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.62)] px-4 py-4">
-                    <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">最近活跃</p>
-                    <p className="mt-2 text-sm font-semibold text-[var(--foreground)]">{formatDateTime(selectedReader.last_active_at)}</p>
-                  </div>
-                  <div className="rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.62)] px-4 py-4">
-                    <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">进行中订单</p>
-                    <p className="mt-2 text-sm font-semibold text-[var(--foreground)]">{selectedReader.active_orders_count}</p>
-                  </div>
-                </div>
+                  <section className="pt-2">
+                    <Label className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--muted-foreground)] ml-1">借阅偏好</Label>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                       <div className="flex items-center justify-between rounded-2xl border border-[var(--line-subtle)] bg-[var(--surface-bright)] p-4 shadow-sm transition-colors hover:border-[var(--line-strong)]">
+                         <div className="flex items-center gap-3">
+                           <div className="flex size-8 items-center justify-center rounded-full bg-[rgba(33,73,140,0.08)]">
+                            <Zap className="size-4 text-[var(--primary)]" />
+                           </div>
+                           <span className="text-[13px] font-bold text-[var(--foreground)]">账户分组</span>
+                         </div>
+                         <Badge variant="outline" className="rounded-full bg-white px-3 font-bold text-[11px] h-6 shadow-none border-[var(--line-subtle)]">
+                            {selectedReader.preference_profile_json?.segment === 'regular' ? '普通用户' : String(selectedReader.preference_profile_json?.segment ?? '系统默认')}
+                         </Badge>
+                       </div>
 
-                <div className="rounded-[1.35rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.62)] px-4 py-4">
-                  <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted-foreground)]">借阅偏好</p>
-                  <pre className="mt-3 whitespace-pre-wrap break-all text-sm leading-6 text-[var(--foreground)]">
-                    {JSON.stringify(selectedReader.preference_profile_json ?? {}, null, 2)}
-                  </pre>
-                </div>
-              </section>
+                       <div className="rounded-2xl border border-[var(--line-subtle)] bg-[var(--surface-bright)] p-4 shadow-sm transition-colors hover:border-[var(--line-strong)]">
+                         <div className="flex items-center gap-3 mb-3">
+                           <div className="flex size-8 items-center justify-center rounded-full bg-[rgba(18,180,104,0.08)]">
+                            <Shield className="size-4 text-[#0c8f54]" />
+                           </div>
+                           <span className="text-[13px] font-bold text-[var(--foreground)]">偏好模式</span>
+                         </div>
+                         <div className="flex flex-wrap gap-1.5">
+                           {Array.isArray(selectedReader.preference_profile_json?.preferred_modes) ? (
+                              selectedReader.preference_profile_json.preferred_modes.map(mode => (
+                                <Badge key={mode} variant="default" className="rounded-full text-[10px] px-2 py-0.5 font-bold shadow-none">
+                                  {mode === 'semantic' ? '语义搜索' : mode === 'chat' ? '对话模式' : String(mode)}
+                                </Badge>
+                              ))
+                           ) : (
+                              <span className="text-[12px] text-[var(--muted-foreground)]">暂无偏好记录</span>
+                           )}
+                         </div>
+                       </div>
 
-              <SheetFooter>
+                       <div className="col-span-full rounded-2xl border border-[var(--line-subtle)] bg-[var(--surface-bright)] p-4 shadow-sm transition-colors hover:border-[var(--line-strong)]">
+                         <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              <div className="flex size-8 items-center justify-center rounded-full bg-[rgba(185,56,45,0.08)]">
+                                <Moon className="size-4 text-[var(--error)]" />
+                              </div>
+                              <span className="text-[13px] font-bold text-[var(--foreground)]">深夜活跃度</span>
+                            </div>
+                            <span className="text-[14px] font-black text-[var(--foreground)] tracking-tight">
+                              {(lateNightRatio * 100).toFixed(1)}%
+                            </span>
+                         </div>
+                         <div className="h-2 w-full rounded-full bg-[var(--surface-container)] overflow-hidden">
+                            <div
+                              className="h-full bg-[var(--error)] rounded-full transition-all duration-500"
+                              style={{ width: `${lateNightRatio * 100}%` }}
+                            />
+                         </div>
+                         <p className="mt-3 text-[11px] text-[var(--muted-foreground)] leading-relaxed font-medium">
+                            基于最近 90 天的统计数据。活跃度越高，说明该读者更倾向于在 23:00 之后进行书籍检索。
+                         </p>
+                       </div>
+                    </div>
+                  </section>
+
+                  <section className="grid gap-3 sm:grid-cols-2 pt-2">
+                    <div className="rounded-2xl border border-[var(--line-subtle)] bg-white p-4 shadow-sm">
+                      <div className="flex items-center gap-2.5 mb-2">
+                        <CalendarClock className="size-4 text-[var(--muted-foreground)] opacity-70" />
+                        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--muted-foreground)]">最近活跃</p>
+                      </div>
+                      <p className="text-[14px] font-bold text-[var(--foreground)]">{formatDateTime(selectedReader.last_active_at)}</p>
+                    </div>
+                    <div className="rounded-2xl border border-[var(--line-subtle)] bg-white p-4 shadow-sm">
+                      <div className="flex items-center gap-2.5 mb-2">
+                        <PackageCheck className="size-4 text-[var(--muted-foreground)] opacity-70" />
+                        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--muted-foreground)]">进行中订单</p>
+                      </div>
+                      <p className="text-[14px] font-bold text-[var(--foreground)]">{selectedReader.active_orders_count}</p>
+                    </div>
+                  </section>
+                </div>
+              </ScrollArea>
+
+              <div className="mt-auto border-t border-[var(--line-subtle)] bg-[var(--surface-panel)] p-6 rounded-t-3xl">
                 <Button
                   type="button"
                   className="min-w-36"
@@ -388,8 +547,8 @@ export function ReadersPage() {
                 >
                   {updateReaderMutation.isPending ? '保存中…' : '保存读者资料'}
                 </Button>
-              </SheetFooter>
-            </>
+              </div>
+            </div>
           )}
         </SheetContent>
       </Sheet>

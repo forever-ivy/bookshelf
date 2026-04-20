@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createColumnHelper, type ColumnDef } from '@tanstack/react-table'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { DataTable } from '@/components/shared/data-table'
 import { EmptyState } from '@/components/shared/empty-state'
@@ -25,6 +25,7 @@ import { formatDateTime } from '@/utils'
 
 const taskColumnHelper = createColumnHelper<RobotTask>()
 const pageHero = getAdminPageHero('robots')
+const TASKS_PAGE_SIZE = 20
 
 export function RobotsPage() {
   const queryClient = useQueryClient()
@@ -40,6 +41,7 @@ export function RobotsPage() {
   const [selectedRobotId, setSelectedRobotId] = useState('')
   const [reassignReason, setReassignReason] = useState('')
   const [activeTab, setActiveTab] = useState('console')
+  const [taskPage, setTaskPage] = useState(1)
 
   const tasks = tasksQuery.data ?? []
   const robots = robotsQuery.data ?? []
@@ -55,6 +57,17 @@ export function RobotsPage() {
     () => visibleTasks.filter((task) => task.status !== 'completed'),
     [visibleTasks],
   )
+  const pagedTasks = useMemo(() => {
+    const startIndex = (taskPage - 1) * TASKS_PAGE_SIZE
+    return visibleTasks.slice(startIndex, startIndex + TASKS_PAGE_SIZE)
+  }, [taskPage, visibleTasks])
+  const totalTaskPages = Math.max(1, Math.ceil(visibleTasks.length / TASKS_PAGE_SIZE))
+
+  useEffect(() => {
+    if (taskPage > totalTaskPages) {
+      setTaskPage(totalTaskPages)
+    }
+  }, [taskPage, totalTaskPages])
 
   const reassignMutation = useMutation({
     mutationFn: () =>
@@ -289,11 +302,12 @@ export function RobotsPage() {
                 <div className="h-3 w-[1px] bg-[var(--line-subtle)]" />
                 <Select
                   value={taskStatusFilter ?? 'all'}
-                  onValueChange={(value) =>
+                  onValueChange={(value) => {
+                    setTaskPage(1)
                     updateRobotFilters({
                       task_status: value === 'all' ? undefined : value,
                     })
-                  }
+                  }}
                 >
                   <SelectTrigger aria-label="任务状态筛选" className="h-full w-auto min-w-[5.5rem] border-0 bg-transparent px-1.5 py-0 text-[12px] font-medium text-[var(--foreground)] shadow-none focus:ring-0">
                     <SelectValue placeholder="全部任务" />
@@ -308,7 +322,18 @@ export function RobotsPage() {
               </div>
             }
           >
-            <DataTable columns={columns} data={visibleTasks} emptyTitle="没有找到内容" emptyDescription="换个条件再试试。" />
+            <DataTable
+              columns={columns}
+              data={pagedTasks}
+              emptyTitle="没有找到内容"
+              emptyDescription="换个条件再试试。"
+              pagination={{
+                page: taskPage,
+                pageSize: TASKS_PAGE_SIZE,
+                total: visibleTasks.length,
+                onPageChange: setTaskPage,
+              }}
+            />
           </WorkspacePanel>
         </TabsContent>
 

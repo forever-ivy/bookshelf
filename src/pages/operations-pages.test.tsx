@@ -511,6 +511,52 @@ describe('operations pages', () => {
     })
   })
 
+  it('paginates robot tasks inside the task hall workspace', async () => {
+    const user = userEvent.setup()
+
+    adminApi.getAdminTasks.mockResolvedValue(
+      Array.from({ length: 21 }, (_, index) => ({
+        id: index + 1,
+        robot_id: (index % 3) + 1,
+        delivery_order_id: 1000 + index + 1,
+        status: 'assigned',
+        attempt_count: 1,
+        failure_reason: `reason-${String(index + 1).padStart(2, '0')}`,
+        updated_at: `2026-03-22T10:${String(index).padStart(2, '0')}:00Z`,
+      })),
+    )
+
+    render(
+      <TestProviders>
+        <MemoryRouter>
+          <RobotsPage />
+        </MemoryRouter>
+      </TestProviders>,
+    )
+
+    expect(await screen.findByRole('heading', { name: '机器人' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: '任务大厅' }))
+
+    expect(await screen.findByRole('navigation', { name: '翻页' })).toBeInTheDocument()
+    expect(
+      screen.getByText((_, node) => node?.textContent?.replace(/\s+/g, '') === '第1页，共2页，合计21条'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('reason-01')).toBeInTheDocument()
+    expect(screen.getByText('reason-20')).toBeInTheDocument()
+    expect(screen.queryByText('reason-21')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('link', { name: '下一页' }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByText((_, node) => node?.textContent?.replace(/\s+/g, '') === '第2页，共2页，合计21条'),
+      ).toBeInTheDocument()
+    })
+    expect(screen.getByText('reason-21')).toBeInTheDocument()
+    expect(screen.queryByText('reason-01')).not.toBeInTheDocument()
+  })
+
   it('shows the operator fulfillment summary on the robots event feed', async () => {
     render(
       <TestProviders>

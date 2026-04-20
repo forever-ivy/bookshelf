@@ -1598,19 +1598,18 @@ describe('management pages', () => {
     expect(await screen.findAllByText('reader-01')).not.toHaveLength(0)
     await user.click(screen.getAllByRole('button', { name: '编辑资料' })[0])
     const editorDrawer = await screen.findByRole('dialog', { name: '编辑读者资料' })
-    await user.clear(within(editorDrawer).getByLabelText('限制状态'))
-    await user.type(within(editorDrawer).getByLabelText('限制状态'), 'blacklist')
+
+    await chooseSelectOption('限制状态', '禁止借阅', within(editorDrawer))
     await user.clear(within(editorDrawer).getByLabelText('限制到期'))
-    await user.type(within(editorDrawer).getByLabelText('限制到期'), '2026-04-05T10:00:00Z')
-    await user.clear(within(editorDrawer).getByLabelText('分组'))
-    await user.type(within(editorDrawer).getByLabelText('分组'), 'risk_watch')
-    await user.clear(within(editorDrawer).getByLabelText('注意标记'))
-    await user.type(within(editorDrawer).getByLabelText('注意标记'), 'overdue, manual_review')
+    await user.type(within(editorDrawer).getByLabelText('限制到期'), '2026-04-05T10:00')
+    await chooseSelectOption('分组', 'risk_watch', within(editorDrawer))
+    await user.click(within(editorDrawer).getByRole('checkbox', { name: '借阅频繁' }))
+    await user.click(within(editorDrawer).getByRole('checkbox', { name: '人工处理' }))
     await user.click(within(editorDrawer).getByRole('button', { name: '保存读者资料' }))
 
     expect(managementApi.updateAdminReader).toHaveBeenCalledWith(1, {
       restriction_status: 'blacklist',
-      restriction_until: '2026-04-05T10:00:00Z',
+      restriction_until: '2026-04-05T10:00',
       segment_code: 'risk_watch',
       risk_flags: ['overdue', 'manual_review'],
     })

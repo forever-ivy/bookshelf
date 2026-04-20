@@ -103,9 +103,23 @@ export function AlertsPage() {
         }
         className="space-y-5"
       >
-        <TabsList>
-          {canManageAlerts ? <TabsTrigger value="alerts">异常</TabsTrigger> : null}
-          {canViewAudit ? <TabsTrigger value="audit">操作记录</TabsTrigger> : null}
+        <TabsList className="flex w-fit bg-[var(--surface-container-lowest)] p-1 rounded-full border border-[var(--line-subtle)] shadow-sm">
+          {canManageAlerts ? (
+            <TabsTrigger
+              value="alerts"
+              className="rounded-full px-6 py-1.5 text-[13px] font-medium transition-all data-[state=active]:bg-white data-[state=active]:text-[var(--foreground)] data-[state=active]:shadow-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+            >
+              异常
+            </TabsTrigger>
+          ) : null}
+          {canViewAudit ? (
+            <TabsTrigger
+              value="audit"
+              className="rounded-full px-6 py-1.5 text-[13px] font-medium transition-all data-[state=active]:bg-white data-[state=active]:text-[var(--foreground)] data-[state=active]:shadow-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+            >
+              操作记录
+            </TabsTrigger>
+          ) : null}
         </TabsList>
 
         {canManageAlerts ? (
@@ -114,48 +128,57 @@ export function AlertsPage() {
               title="异常列表"
               description="按严重程度、来源和处理状态查看当前异常。"
               action={
-                <div className="flex flex-col gap-3 xl:w-[28rem] xl:flex-row">
-                  <Select
-                    value={alertStatus}
-                    onValueChange={(value) =>
-                      setSearchParams(
-                        patchSearchParams(searchParams, {
-                          status: value === 'open' ? undefined : value,
-                        }),
-                        { replace: true },
-                      )
-                    }
-                  >
-                    <SelectTrigger aria-label="警告状态筛选" className="xl:flex-1">
-                      <SelectValue placeholder="待处理" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="open">待处理</SelectItem>
-                      <SelectItem value="acknowledged">已确认</SelectItem>
-                      <SelectItem value="resolved">已解决</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select
-                    value={alertSeverity ?? 'all'}
-                    onValueChange={(value) =>
-                      setSearchParams(
-                        patchSearchParams(searchParams, {
-                          severity: value === 'all' ? undefined : value,
-                        }),
-                        { replace: true },
-                      )
-                    }
-                  >
-                    <SelectTrigger aria-label="警告级别筛选" className="xl:flex-1">
-                      <SelectValue placeholder="全部级别" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">全部级别</SelectItem>
-                      <SelectItem value="critical">严重</SelectItem>
-                      <SelectItem value="warning">警告</SelectItem>
-                      <SelectItem value="info">提示</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex h-8 items-center gap-2 rounded-full border border-[var(--line-subtle)] bg-[var(--surface-bright)] pl-3 pr-1 transition-colors hover:bg-[var(--surface-container)] focus-within:border-[var(--line-strong)] focus-within:ring-1 focus-within:ring-[var(--line-strong)] shadow-sm">
+                    <span className="text-[12px] text-[var(--muted-foreground)] whitespace-nowrap">状态</span>
+                    <div className="h-3 w-[1px] bg-[var(--line-subtle)]" />
+                    <Select
+                      value={alertStatus}
+                      onValueChange={(value) =>
+                        setSearchParams(
+                          patchSearchParams(searchParams, {
+                            status: value === 'open' ? undefined : value,
+                          }),
+                          { replace: true },
+                        )
+                      }
+                    >
+                      <SelectTrigger aria-label="警告状态筛选" className="h-full w-auto min-w-[5.5rem] border-0 bg-transparent px-1.5 py-0 text-[12px] font-medium text-[var(--foreground)] shadow-none focus:ring-0">
+                        <SelectValue placeholder="待处理" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl">
+                        <SelectItem value="open" className="text-[12px] rounded-lg">待处理</SelectItem>
+                        <SelectItem value="acknowledged" className="text-[12px] rounded-lg">已确认</SelectItem>
+                        <SelectItem value="resolved" className="text-[12px] rounded-lg">已解决</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex h-8 items-center gap-2 rounded-full border border-[var(--line-subtle)] bg-[var(--surface-bright)] pl-3 pr-1 transition-colors hover:bg-[var(--surface-container)] focus-within:border-[var(--line-strong)] focus-within:ring-1 focus-within:ring-[var(--line-strong)] shadow-sm">
+                    <span className="text-[12px] text-[var(--muted-foreground)] whitespace-nowrap">级别</span>
+                    <div className="h-3 w-[1px] bg-[var(--line-subtle)]" />
+                    <Select
+                      value={alertSeverity ?? 'all'}
+                      onValueChange={(value) =>
+                        setSearchParams(
+                          patchSearchParams(searchParams, {
+                            severity: value === 'all' ? undefined : value,
+                          }),
+                          { replace: true },
+                        )
+                      }
+                    >
+                      <SelectTrigger aria-label="警告级别筛选" className="h-full w-auto min-w-[5.5rem] border-0 bg-transparent px-1.5 py-0 text-[12px] font-medium text-[var(--foreground)] shadow-none focus:ring-0">
+                        <SelectValue placeholder="全部级别" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl">
+                        <SelectItem value="all" className="text-[12px] rounded-lg">全部级别</SelectItem>
+                        <SelectItem value="critical" className="text-[12px] rounded-lg">严重</SelectItem>
+                        <SelectItem value="warning" className="text-[12px] rounded-lg">警告</SelectItem>
+                        <SelectItem value="info" className="text-[12px] rounded-lg">提示</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               }
             >
@@ -164,43 +187,48 @@ export function AlertsPage() {
               ) : alerts.length === 0 ? (
                 <EmptyState title="没有找到内容" description="换个条件再试试。" />
               ) : (
-                <div className="space-y-4">
-                  {alerts.map((alert) => (
-                    <div key={alert.id} className="rounded-[1.45rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.4)] px-5 py-5">
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <StatusBadge status={alert.severity} />
-                            <StatusBadge status={alert.status} />
-                            <span className="text-xs uppercase tracking-[0.12em] text-[var(--muted-foreground)]">{alert.source_type}</span>
+                  <div className="grid gap-4">
+                    {alerts.map((alert) => (
+                      <div key={alert.id} className="rounded-[1.25rem] border border-[var(--line-subtle)] bg-white p-5 shadow-sm transition-all hover:border-[var(--line-strong)] hover:shadow-md">
+                        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="space-y-3.5 flex-1">
+                            <div className="flex flex-wrap items-center gap-2.5">
+                              <StatusBadge status={alert.severity} />
+                              <StatusBadge status={alert.status} />
+                              <div className="size-1 rounded-full bg-[var(--line-subtle)]" />
+                              <span className="text-[12px] font-bold uppercase tracking-[0.05em] text-[var(--muted-foreground)] opacity-60">{alert.source_type}</span>
+                            </div>
+                            <div className="space-y-2">
+                              <h3 className="text-[16px] font-bold tracking-tight text-[var(--foreground)] leading-snug">{alert.title}</h3>
+                              <p className="text-[13px] leading-relaxed text-[var(--muted-foreground)] font-medium max-w-2xl">
+                                {alert.message ?? '暂无详细异常说明。'}
+                              </p>
+                            </div>
                           </div>
-                          <div className="space-y-1">
-                            <h3 className="text-lg font-semibold tracking-[-0.03em] text-[var(--foreground)]">{alert.title}</h3>
-                            <p className="text-sm leading-6 text-[var(--muted-foreground)]">
-                              {alert.message ?? '暂无说明。'}
-                            </p>
+                          <div className="flex flex-col items-end gap-6 min-w-fit">
+                            <p className="text-[11px] font-bold text-[var(--muted-foreground)] opacity-50 tracking-wide uppercase">{formatDateTime(alert.created_at)}</p>
+                            <div className="flex flex-wrap items-center justify-end gap-2.5">
+                              <Button
+                                variant="secondary"
+                                className="rounded-full h-9 px-5 text-[13px] font-bold transition-all hover:bg-[var(--surface-container-high)] shadow-sm active:scale-[0.98]"
+                                onClick={() => acknowledgeMutation.mutate(alert.id)}
+                                disabled={acknowledgeMutation.isPending || resolveMutation.isPending}
+                              >
+                                确认
+                              </Button>
+                              <Button
+                                className="rounded-full h-9 px-5 text-[13px] font-bold shadow-sm active:scale-[0.98] transition-all"
+                                onClick={() => resolveMutation.mutate(alert.id)}
+                                disabled={acknowledgeMutation.isPending || resolveMutation.isPending}
+                              >
+                                解决
+                              </Button>
+                            </div>
                           </div>
                         </div>
-                        <p className="text-sm text-[var(--muted-foreground)]">{formatDateTime(alert.created_at)}</p>
                       </div>
-                      <div className="mt-5 flex flex-wrap gap-3">
-                        <Button
-                          variant="secondary"
-                          onClick={() => acknowledgeMutation.mutate(alert.id)}
-                          disabled={acknowledgeMutation.isPending || resolveMutation.isPending}
-                        >
-                          确认
-                        </Button>
-                        <Button
-                          onClick={() => resolveMutation.mutate(alert.id)}
-                          disabled={acknowledgeMutation.isPending || resolveMutation.isPending}
-                        >
-                          解决
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
               )}
             </WorkspacePanel>
           </TabsContent>
@@ -212,11 +240,9 @@ export function AlertsPage() {
               title="操作记录"
               description="按时间顺序查看人工修改、配置改动和权限操作。"
               action={(
-                <div className="flex flex-col gap-3 xl:w-[36rem] xl:flex-row">
-                  <div className="min-w-0 flex-1 space-y-2">
-                    <label className="text-xs font-medium uppercase tracking-[0.12em] text-[var(--muted-foreground)]" htmlFor="audit-action">
-                      操作名称
-                    </label>
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex h-9 items-center gap-3 rounded-full border border-[var(--line-subtle)] bg-white px-3 shadow-sm transition-shadow focus-within:ring-2 focus-within:ring-[var(--primary)]/10">
+                    <span className="text-[12px] font-semibold text-[var(--muted-foreground)] whitespace-nowrap">名称</span>
                     <Input
                       id="audit-action"
                       value={auditAction}
@@ -228,14 +254,12 @@ export function AlertsPage() {
                           { replace: true },
                         )
                       }
-                      placeholder="例如：更新角色"
-                      className="h-10 rounded-xl"
+                      placeholder="搜索操作..."
+                      className="h-full border-0 bg-transparent px-0 text-[12px] focus-visible:ring-0 w-24 sm:w-32"
                     />
                   </div>
-                  <div className="min-w-0 flex-1 space-y-2">
-                    <label className="text-xs font-medium uppercase tracking-[0.12em] text-[var(--muted-foreground)]" htmlFor="audit-target-type">
-                      操作对象
-                    </label>
+                  <div className="flex h-9 items-center gap-3 rounded-full border border-[var(--line-subtle)] bg-white px-3 shadow-sm transition-shadow focus-within:ring-2 focus-within:ring-[var(--primary)]/10">
+                    <span className="text-[12px] font-semibold text-[var(--muted-foreground)] whitespace-nowrap">对象</span>
                     <Input
                       id="audit-target-type"
                       value={auditTargetType}
@@ -247,8 +271,8 @@ export function AlertsPage() {
                           { replace: true },
                         )
                       }
-                      placeholder="例如：角色"
-                      className="h-10 rounded-xl"
+                      placeholder="搜索对象..."
+                      className="h-full border-0 bg-transparent px-0 text-[12px] focus-visible:ring-0 w-24 sm:w-32"
                     />
                   </div>
                 </div>
@@ -259,20 +283,20 @@ export function AlertsPage() {
               ) : auditLogs.length === 0 ? (
                 <EmptyState title="没有找到内容" description="换个条件再试试。" />
               ) : (
-                <div className="space-y-4">
+                <div className="grid gap-3">
                   {auditLogs.map((log) => (
-                    <div key={log.id} className="rounded-[1.45rem] border border-[var(--line-subtle)] bg-[rgba(255,255,255,0.4)] px-5 py-5">
+                    <div key={log.id} className="rounded-[1.25rem] border border-[var(--line-subtle)] bg-white p-5 shadow-sm transition-colors hover:border-[var(--line-strong)]">
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                         <div className="space-y-3">
                           <div className="flex flex-wrap items-center gap-2">
-                            <StatusBadge status="permission" label="操作" />
-                            <span className="text-sm font-medium text-[var(--foreground)]">
+                            <StatusBadge status="permission" label="系统操作" />
+                            <span className="text-[12px] font-bold tracking-tight text-[var(--foreground)]">
                               对象 #{log.target_ref || log.target_id || '—'}
                             </span>
                           </div>
-                          <p className="text-sm leading-6 text-[var(--foreground)]">{log.note ?? '无备注'}</p>
+                          <p className="text-[13px] leading-relaxed text-[var(--foreground)] font-medium">{log.note ?? '无备注'}</p>
                         </div>
-                        <p className="text-sm text-[var(--muted-foreground)]">{formatDateTime(log.created_at)}</p>
+                        <p className="text-[12px] font-medium text-[var(--muted-foreground)] opacity-80">{formatDateTime(log.created_at)}</p>
                       </div>
                     </div>
                   ))}
