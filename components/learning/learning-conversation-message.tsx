@@ -1,5 +1,6 @@
 import React from 'react';
 import { Platform, Pressable, Text, View } from 'react-native';
+import Animated, { FadeInDown, FadeOutUp } from 'react-native-reanimated';
 
 import { AppIcon } from '@/components/base/app-icon';
 import { LearningChatBubble } from '@/components/learning/learning-chat-bubble';
@@ -352,36 +353,27 @@ function ExploreMessage({
   const exploreReasoning = presentation?.reasoningContent?.trim() ?? '';
   const showThinkingOnly = message.streaming && !answerContent && !exploreReasoning;
 
-  if (!presentation) {
-    return null;
-  }
+  const handleToggle = React.useCallback(() => {
+    if (!exploreReasoning) return;
+    setExploreReasoningExpanded((v) => !v);
+  }, [exploreReasoning]);
 
-  if (showThinkingOnly) {
-    return <LearningChatBubble role="assistant" text="" thinking />;
-  }
+  if (!presentation) return null;
+  if (showThinkingOnly) return <LearningChatBubble role="assistant" text="" thinking />;
 
   return (
     <View style={{ gap: 16, width: '100%' }}>
       <View style={{ gap: 10 }}>
+        {/* Header row: label + chevron + streaming status */}
         <Pressable
           accessibilityRole={exploreReasoning ? 'button' : undefined}
           disabled={!exploreReasoning}
-          onPress={() => {
-            if (!exploreReasoning) {
-              return;
-            }
-            setExploreReasoningExpanded((value) => !value);
-          }}
+          onPress={handleToggle}
           style={({ pressed }) => ({
-            opacity: pressed && exploreReasoning ? 0.88 : 1,
+            opacity: pressed && exploreReasoning ? 0.8 : 1,
           })}
           testID={exploreReasoning ? 'learning-conversation-reasoning-toggle' : undefined}>
-          <View
-            style={{
-              alignItems: 'center',
-              flexDirection: 'row',
-              gap: 6,
-            }}>
+          <View style={{ alignItems: 'center', flexDirection: 'row', gap: 6 }}>
             <Text
               selectable
               style={{
@@ -413,19 +405,25 @@ function ExploreMessage({
             ) : null}
           </View>
         </Pressable>
-        {exploreReasoningExpanded ? (
-          <View
-            style={{
-              borderBottomColor: theme.colors.borderSoft,
-              borderBottomWidth: 1,
-              paddingBottom: 14,
-            }}>
-            <ReasoningSection content={exploreReasoning} />
-          </View>
+
+        {/* Reasoning body — conditionally mounted, enters with fade+slide */}
+        {exploreReasoningExpanded && exploreReasoning ? (
+          <Animated.View
+            entering={FadeInDown.duration(320).springify().damping(20).stiffness(140)}
+            exiting={FadeOutUp.duration(200)}>
+            <View
+              style={{
+                borderBottomColor: theme.colors.borderSoft,
+                borderBottomWidth: 1,
+                paddingBottom: 14,
+              }}>
+              <ReasoningSection content={exploreReasoning} />
+            </View>
+          </Animated.View>
         ) : null}
       </View>
+
       {answerContent || message.streaming ? <TextSection content={answerContent} /> : null}
-      <ActionSection actions={presentation.bridgeActions} onAction={onAction} title="收编动作" />
     </View>
   );
 }

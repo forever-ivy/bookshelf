@@ -33,4 +33,17 @@ describe('learning rich text helpers', () => {
     expect(html).toContain('<math');
     expect(html).toContain('class="math-inline"');
   });
+
+  it('does not leak orphan display math delimiters as raw latex', () => {
+    const html = buildLearningRichTextHtml(
+      '4: Stolz定理 $$ \\text { 极限 } \\lim _{x \\rightarrow + \\infty } \\frac {1+ \\fra',
+      '#111111'
+    );
+
+    expect(html).toContain('4: Stolz定理');
+    expect(html).not.toContain('$$');
+    expect(html).not.toContain('\\text');
+    expect(html).not.toContain('\\lim');
+    expect(html).not.toContain('\\frac');
+  });
 });

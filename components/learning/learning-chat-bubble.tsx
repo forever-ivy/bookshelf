@@ -136,65 +136,110 @@ function ChatGPTCursor({ inline = false }: { inline?: boolean }) {
 
 function ThinkingPulse() {
   const { theme } = useAppTheme();
-  const scale = React.useRef(new Animated.Value(1)).current;
-  const opacity = React.useRef(new Animated.Value(0.8)).current;
+  const breathOpacity = React.useRef(new Animated.Value(0.55)).current;
+  const breathScale = React.useRef(new Animated.Value(1)).current;
+  const shimmerX = React.useRef(new Animated.Value(-80)).current;
 
   React.useEffect(() => {
-    const animation = Animated.loop(
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(scale, {
-            toValue: 1.04,
-            duration: 700,
-            useNativeDriver: true,
-          }),
-          Animated.timing(scale, {
-            toValue: 1,
-            duration: 700,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.sequence([
-          Animated.timing(opacity, {
-            toValue: 1,
-            duration: 700,
-            useNativeDriver: true,
-          }),
-          Animated.timing(opacity, {
-            toValue: 0.72,
-            duration: 700,
-            useNativeDriver: true,
-          }),
-        ]),
+    // Slow breath: opacity pulses smoothly
+    const breathAnim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(breathOpacity, {
+          toValue: 0.95,
+          duration: 1800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(breathOpacity, {
+          toValue: 0.55,
+          duration: 1800,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    // Subtle scale
+    const scaleAnim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(breathScale, {
+          toValue: 1.025,
+          duration: 1800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(breathScale, {
+          toValue: 1,
+          duration: 1800,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    // Shimmer sweep
+    const shimmerAnim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerX, {
+          toValue: 120,
+          duration: 1400,
+          useNativeDriver: true,
+        }),
+        Animated.delay(600),
+        Animated.timing(shimmerX, {
+          toValue: -80,
+          duration: 0,
+          useNativeDriver: true,
+        }),
       ])
     );
 
-    animation.start();
-    return () => animation.stop();
-  }, [opacity, scale]);
+    breathAnim.start();
+    scaleAnim.start();
+    shimmerAnim.start();
+    return () => {
+      breathAnim.stop();
+      scaleAnim.stop();
+      shimmerAnim.stop();
+    };
+  }, []);
 
   return (
     <Animated.View
+      testID="learning-assistant-thinking-indicator"
       style={{
         alignSelf: 'flex-start',
-        backgroundColor: theme.colors.primarySoft,
-        borderColor: theme.colors.borderSoft,
-        borderRadius: theme.radii.pill,
-        borderWidth: 1,
-        opacity,
-        paddingHorizontal: 14,
-        paddingVertical: 8,
-        transform: [{ scale }],
+        opacity: breathOpacity,
+        overflow: 'hidden',
+        transform: [{ scale: breathScale }],
       }}>
-      <Text
-        selectable
+      <View
         style={{
-          color: theme.colors.primaryStrong,
-          ...theme.typography.semiBold,
-          fontSize: 15,
+          borderColor: theme.colors.borderSoft,
+          borderRadius: theme.radii.pill,
+          borderWidth: 1,
+          paddingHorizontal: 14,
+          paddingVertical: 8,
         }}>
-        Thinking
-      </Text>
+        <Text
+          selectable={false}
+          style={{
+            color: theme.colors.textSoft,
+            ...theme.typography.semiBold,
+            fontSize: 14,
+            letterSpacing: 0.3,
+          }}>
+          Thinking
+        </Text>
+        {/* Shimmer highlight */}
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            bottom: 0,
+            left: 0,
+            position: 'absolute',
+            top: 0,
+            transform: [{ translateX: shimmerX }],
+            width: 72,
+            backgroundColor: 'rgba(255,255,255,0.28)',
+            borderRadius: theme.radii.pill,
+          }}
+        />
+      </View>
     </Animated.View>
   );
 }
@@ -255,18 +300,7 @@ export function LearningChatBubble({
   }, [isAssistant, text, thinking]);
 
   if (isAssistant && thinking) {
-    return (
-      <View style={{ alignItems: 'flex-start', width: '100%' }}>
-        <View
-          testID="learning-assistant-thinking-indicator"
-          style={{
-            gap: 8,
-            paddingVertical: 8,
-          }}>
-          <ThinkingPulse />
-        </View>
-      </View>
-    );
+    return <ThinkingPulse />;
   }
 
   if (isAssistant) {

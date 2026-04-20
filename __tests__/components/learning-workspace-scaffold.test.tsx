@@ -23,7 +23,7 @@ jest.mock('@/components/learning/learning-workspace-provider', () => ({
   useLearningWorkspaceScreen: () => ({
     closeWorkspace: jest.fn(),
     isRetryPending: false,
-    openOverview: jest.fn(),
+    openDocumentViewer: jest.fn(),
     profile: {
       title: 'Translator-20Interview-20Pr...',
     },

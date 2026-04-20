@@ -3,10 +3,15 @@ import { createRoot } from 'react-dom/client';
 import ForceGraph3D from 'react-force-graph-3d';
 import SpriteText from 'three-spritetext';
 import {
+  AdditiveBlending,
+  DodecahedronGeometry,
+  FogExp2,
   Group,
+  IcosahedronGeometry,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  OctahedronGeometry,
   SphereGeometry,
 } from 'three';
 
@@ -145,13 +150,29 @@ function buildNodeRadius(
 function buildLabelTextHeight(node: RuntimeNode) {
   switch (node.type) {
     case 'Book':
-      return 12;
+      return 24;
     case 'SourceAsset':
-      return 9;
+      return 18;
     case 'Fragment':
-      return 6.5;
+      return 13;
     default:
-      return 8;
+      return 16;
+  }
+}
+
+function buildNodeGeometry(type: string, radius: number) {
+  switch (type) {
+    case 'Book':
+      return new IcosahedronGeometry(radius, 1);
+    case 'Concept':
+      return new OctahedronGeometry(radius);
+    case 'LessonStep':
+      return new DodecahedronGeometry(radius);
+    case 'SourceAsset':
+      return new IcosahedronGeometry(radius, 0);
+    case 'Fragment':
+    default:
+      return new SphereGeometry(radius, 20, 20);
   }
 }
 
@@ -172,42 +193,108 @@ function buildNodeObject(
     theme: hydratePayload.theme,
   });
   const group = new Group();
-  const sphere = new Mesh(
-    new SphereGeometry(radius, 18, 18),
+  const glowColor = visualState.generated ? hydratePayload.theme.explore : visualState.color;
+
+  // 1. Inner bright core — energy orb center
+  const coreRadius = radius * 0.35;
+  const core = new Mesh(
+    new SphereGeometry(coreRadius, 12, 12),
+    new MeshBasicMaterial({
+      color: visualState.color,
+      fog: false,
+      opacity: visualState.active ? 0.95 : 0.8,
+      transparent: true,
+    })
+  );
+  group.add(core);
+
+  // 2. Main body — type-specific crystal geometry
+  const body = new Mesh(
+    buildNodeGeometry(node.type, radius),
     new MeshStandardMaterial({
       color: visualState.color,
       emissive: visualState.color,
-      emissiveIntensity: visualState.active ? 0.36 : visualState.emphasis !== 'normal' ? 0.16 : 0.05,
-      metalness: 0.1,
+      emissiveIntensity: visualState.active ? 0.6 : visualState.emphasis !== 'normal' ? 0.3 : 0.12,
+      metalness: 0.35,
       opacity: visualState.opacity,
-      roughness: visualState.active ? 0.36 : 0.52,
+      roughness: visualState.active ? 0.18 : 0.32,
       transparent: visualState.opacity < 1,
     })
   );
-  group.add(sphere);
+  group.add(body);
 
+  // 3. Inner glow shell — close aura
+  const innerGlowScale = visualState.active
+    ? 1.4
+    : visualState.generated
+      ? 1.35
+      : visualState.emphasis !== 'normal'
+        ? 1.25
+        : 1.15;
+  const innerGlowOpacity = visualState.active
+    ? 0.32
+    : visualState.generated
+      ? 0.24
+      : visualState.emphasis !== 'normal'
+        ? 0.18
+        : 0.06;
+  const innerGlow = new Mesh(
+    new SphereGeometry(radius * innerGlowScale, 16, 16),
+    new MeshBasicMaterial({
+      blending: AdditiveBlending,
+      color: glowColor,
+      depthWrite: false,
+      fog: false,
+      opacity: innerGlowOpacity,
+      transparent: true,
+    })
+  );
+  group.add(innerGlow);
+
+  // 4. Outer glow shell — far aura for volumetric presence
+  const outerGlowScale = visualState.active
+    ? 2.0
+    : visualState.generated
+      ? 1.8
+      : visualState.emphasis !== 'normal'
+        ? 1.6
+        : 1.45;
+  const outerGlowOpacity = visualState.active
+    ? 0.14
+    : visualState.generated
+      ? 0.1
+      : visualState.emphasis !== 'normal'
+        ? 0.07
+        : 0.025;
+  const outerGlow = new Mesh(
+    new SphereGeometry(radius * outerGlowScale, 12, 12),
+    new MeshBasicMaterial({
+      blending: AdditiveBlending,
+      color: glowColor,
+      depthWrite: false,
+      fog: false,
+      opacity: outerGlowOpacity,
+      transparent: true,
+    })
+  );
+  group.add(outerGlow);
+
+  // 5. Wireframe cage for selected/emphasized nodes
   if (visualState.generated || visualState.emphasis !== 'normal' || visualState.active) {
-    const shell = new Mesh(
-      new SphereGeometry(
-        radius *
-          (visualState.active
-            ? 1.42
-            : visualState.generated
-              ? 1.34
-              : 1.22),
-        16,
-        16
-      ),
+    const wireScale = visualState.active ? 1.9 : visualState.generated ? 1.75 : 1.5;
+    const wireShell = new Mesh(
+      buildNodeGeometry(node.type, radius * wireScale),
       new MeshBasicMaterial({
-        color: visualState.generated ? hydratePayload.theme.explore : visualState.color,
-        opacity: visualState.active ? 0.78 : 0.48,
+        color: glowColor,
+        opacity: visualState.active ? 0.55 : 0.28,
         transparent: true,
         wireframe: true,
       })
     );
-    group.add(shell);
+    group.add(wireShell);
   }
 
+  // 6. Label
   const showLabel = resolveLearningGraph3DLabelVisibility(node, {
     generatedNodeIds: hydratePayload.generatedNodeIds,
     guideStatusByNodeId: hydratePayload.guideStatusByNodeId,
@@ -219,14 +306,17 @@ function buildNodeObject(
 
   if (showLabel) {
     const textHeight = buildLabelTextHeight(node);
-    const sprite = new SpriteText(node.label, textHeight, hydratePayload.theme.text);
+    const sprite = new SpriteText(node.label, textHeight, '#ffffff');
     sprite.material.depthWrite = false;
-    sprite.borderRadius = 4;
-    sprite.borderWidth = visualState.active ? 1 : 0;
-    sprite.borderColor = visualState.color;
+    sprite.backgroundColor = visualState.active
+      ? 'rgba(0, 0, 0, 0.65)'
+      : 'rgba(0, 0, 0, 0.4)';
+    sprite.borderRadius = 8;
+    sprite.borderWidth = visualState.active ? 2 : 0.5;
+    sprite.borderColor = visualState.active ? visualState.color : 'rgba(255, 255, 255, 0.12)';
     sprite.fontWeight = visualState.active ? '700' : '500';
-    sprite.padding = 1;
-    sprite.position.set(0, radius + textHeight * 0.9, 0);
+    sprite.padding = 4;
+    sprite.position.set(0, radius + textHeight * 1.2, 0);
     group.add(sprite);
   }
 
@@ -250,6 +340,7 @@ function App() {
     bootstrapPayload?.selectedNodeId ?? null
   );
   const [hydrateToken, setHydrateToken] = React.useState(bootstrapPayload ? 1 : 0);
+  const autoRotateTimerRef = React.useRef<number | null>(null);
 
   React.useEffect(() => {
     if (!bootstrapPayload) {
@@ -400,6 +491,20 @@ function App() {
     [graphData.nodes]
   );
 
+  const getCurrentCameraPosition = React.useCallback(() => {
+    const graph = graphRef.current;
+    if (!graph) return null;
+    try {
+      const pos = (graph as any).camera?.()?.position;
+      if (pos && typeof pos.x === 'number') {
+        return { x: pos.x, y: pos.y, z: pos.z };
+      }
+    } catch {
+      // camera access may not be available
+    }
+    return null;
+  }, []);
+
   const syncViewportToSelection = React.useCallback(
     (targetNodeId: string | null, retryCount = 0) => {
       const graph = graphRef.current;
@@ -427,6 +532,7 @@ function App() {
       const status = syncLearningGraphViewportSelection(graph, targetNode, {
         cameraFocusDistanceByNodeType: hydratePayload.config.cameraFocusDistanceByNodeType,
         cameraFocusDurationMs: hydratePayload.config.cameraFocusDurationMs,
+        currentCameraPosition: getCurrentCameraPosition(),
         resetWhenMissing: !targetNodeId,
       });
 
@@ -442,7 +548,7 @@ function App() {
 
       postStatus('viewport:preserve');
     },
-    [hydratePayload, runtimeNodeById]
+    [getCurrentCameraPosition, hydratePayload, runtimeNodeById]
   );
 
   React.useEffect(() => {
@@ -489,9 +595,24 @@ function App() {
 
       const controls = graph.controls?.();
       if (controls && typeof controls === 'object') {
-        (controls as { dynamicDampingFactor?: number }).dynamicDampingFactor = 0.12;
-        (controls as { rotateSpeed?: number }).rotateSpeed = 2.2;
-        (controls as { zoomSpeed?: number }).zoomSpeed = 1.05;
+        (controls as any).enableDamping = true;
+        (controls as any).dampingFactor = 0.22;
+        (controls as any).rotateSpeed = 1.4;
+        (controls as any).zoomSpeed = 0.85;
+        (controls as any).autoRotate = true;
+        (controls as any).autoRotateSpeed = 0.3;
+        (controls as any).minDistance = 40;
+        (controls as any).maxDistance = 800;
+      }
+
+      // Add fog for depth perception
+      try {
+        const scene = (graph as any).scene?.();
+        if (scene) {
+          scene.fog = new FogExp2(hydratePayload.theme.background, 0.0018);
+        }
+      } catch {
+        // Scene access may not be available
       }
 
       graph.refresh?.();
@@ -532,6 +653,35 @@ function App() {
     }
   }, [hydratePayload, selectedNeighborhoodNodeIds, selectedNodeId, syncViewportToSelection]);
 
+  // Auto-rotation management: pause when a node is selected, resume when idle
+  React.useEffect(() => {
+    if (autoRotateTimerRef.current) {
+      clearTimeout(autoRotateTimerRef.current);
+      autoRotateTimerRef.current = null;
+    }
+
+    if (selectedNodeId) {
+      const controls = graphRef.current?.controls?.() as any;
+      if (controls) {
+        controls.autoRotate = false;
+      }
+    } else {
+      autoRotateTimerRef.current = window.setTimeout(() => {
+        const controls = graphRef.current?.controls?.() as any;
+        if (controls) {
+          controls.autoRotate = true;
+        }
+      }, 3000);
+    }
+
+    return () => {
+      if (autoRotateTimerRef.current) {
+        clearTimeout(autoRotateTimerRef.current);
+        autoRotateTimerRef.current = null;
+      }
+    };
+  }, [selectedNodeId]);
+
   if (!hydratePayload) {
     return null;
   }
@@ -542,7 +692,8 @@ function App() {
         backgroundColor={hydratePayload.theme.background}
         controlType={hydratePayload.config.controlType}
         cooldownTicks={hydratePayload.config.cooldownTicks}
-        enableNodeDrag={false}
+        d3AlphaDecay={0.025}
+        enableNodeDrag
         graphData={graphData}
         height={viewport.height}
         linkColor={(link) => {
@@ -564,7 +715,7 @@ function App() {
 
           return highlightedEdgeKeys.has(current.__key)
             ? hydratePayload.theme.edge
-            : 'rgba(78, 99, 121, 0.14)';
+            : 'rgba(78, 99, 121, 0.06)';
         }}
         linkCurvature={(link) => {
           const current = link as RuntimeLink;
@@ -594,8 +745,12 @@ function App() {
             return emphasized ? 1.1 : 0.48;
           }
 
-          return highlightedEdgeKeys.has(current.__key) ? (emphasized ? 2.2 : 1.45) : 0.42;
+          return highlightedEdgeKeys.has(current.__key) ? (emphasized ? 3.0 : 2.0) : 0.3;
         }}
+        linkDirectionalParticleColor={hydratePayload.theme.primary}
+        linkDirectionalParticles={2}
+        linkDirectionalParticleSpeed={0.004}
+        linkDirectionalParticleWidth={1.2}
         nodeLabel={() => ''}
         nodeThreeObject={(node) =>
           buildNodeObject(
@@ -606,6 +761,14 @@ function App() {
           )
         }
         onBackgroundClick={() => {
+          const now = Date.now();
+          const lastTap = (window as any).__lastBgTap ?? 0;
+          (window as any).__lastBgTap = now;
+          if (now - lastTap < 350) {
+            // Double-tap: zoom to fit
+            graphRef.current?.zoomToFit(800, 72);
+            (window as any).__lastBgTap = 0;
+          }
           setSelectedNodeId(null);
           postToNative({ type: 'backgroundTap' });
         }}
@@ -616,6 +779,7 @@ function App() {
         }}
         ref={graphRef as React.MutableRefObject<any>}
         showNavInfo={false}
+        warmupTicks={30}
         width={viewport.width}
       />
     </RuntimeErrorBoundary>

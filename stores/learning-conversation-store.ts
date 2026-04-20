@@ -25,14 +25,23 @@ export type LearningConversationState = {
   latestStatus: LearningWorkspaceStatusSignal | null;
   messages: LearningWorkspaceRenderedMessage[];
   mode: LearningConversationMode;
+  sessionId: number | null;
   userMessageId: string | null;
 };
 
 type LearningConversationStore = LearningConversationState & {
   applyEvent: (event: LearningStreamEvent) => void;
+  discardAssistantDraft: () => void;
+  ensureResumeDraft: (input: {
+    assistantMessageId: string;
+    mode: LearningConversationMode;
+    sessionId: number;
+    userMessageId: string;
+    userText: string;
+  }) => void;
   clearDraft: () => void;
   commitDraft: () => void;
-  hydrateHistory: (messages: LearningWorkspaceRenderedMessage[]) => void;
+  hydrateHistory: (messages: LearningWorkspaceRenderedMessage[], sessionId?: number | null) => void;
   reset: () => void;
   setLatestEvaluation: (evaluation: LearningStepEvaluation | null) => void;
   setLatestSessionSignal: (signal: LearningWorkspaceSessionSignal | null) => void;
@@ -40,10 +49,15 @@ type LearningConversationStore = LearningConversationState & {
   startDraft: (input: {
     assistantMessageId: string;
     mode: LearningConversationMode;
+    sessionId?: number;
     userMessageId: string;
     userText: string;
   }) => void;
 };
+
+function isLocalUserMessage(message: LearningWorkspaceRenderedMessage) {
+  return message.role === 'user' && message.id.startsWith('local-user-');
+}
 
 function createDraftMessages(input: {
   assistantMessageId: string;
@@ -151,18 +165,6 @@ function buildRenderedDraftMessage(
   };
 }
 
-function findPendingUserMessage(state: LearningConversationState) {
-  if (!state.userMessageId) {
-    return null;
-  }
-
-  const message = state.messages.find(
-    (item) => item.id === state.userMessageId && item.role === 'user'
-  );
-
-  return message ?? null;
-}
-
 function updateAssistantDraft(
   state: LearningConversationState,
   updater: (
@@ -199,7 +201,129 @@ export function createInitialLearningConversationState(input: {
     latestStatus: null,
     messages: createDraftMessages(input),
     mode: input.mode,
+    sessionId: null,
     userMessageId: input.userMessageId,
+  };
+}
+
+function findMatchingHistoryIndex(
+  message: LearningWorkspaceRenderedMessage,
+  historyMessages: LearningWorkspaceRenderedMessage[],
+  usedHistoryIndexes: Set<number>
+) {
+  const exactMatchIndex = historyMessages.findIndex(
+    (candidate, index) => !usedHistoryIndexes.has(index) && candidate.id === message.id
+  );
+  if (exactMatchIndex >= 0) {
+    return exactMatchIndex;
+  }
+
+  if (!isLocalUserMessage(message)) {
+    if (message.role === 'assistant' && !message.streaming) {
+      return historyMessages.findIndex(
+        (candidate, index) =>
+          !usedHistoryIndexes.has(index) &&
+          candidate.role === 'assistant' &&
+          candidate.text === message.text
+      );
+    }
+
+    return -1;
+  }
+
+  return historyMessages.findIndex(
+    (candidate, index) =>
+      !usedHistoryIndexes.has(index) &&
+      candidate.role === 'user' &&
+      candidate.text === message.text
+  );
+}
+
+function findMessageIndex(messages: LearningWorkspaceRenderedMessage[], id: string) {
+  return messages.findIndex((message) => message.id === id);
+}
+
+function findLastMessageIndex(messages: LearningWorkspaceRenderedMessage[], id: string) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.id === id) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function resolveHistoryInsertIndex(
+  nextMessages: LearningWorkspaceRenderedMessage[],
+  historyMessages: LearningWorkspaceRenderedMessage[],
+  historyIndex: number
+) {
+  for (let index = historyIndex - 1; index >= 0; index -= 1) {
+    const anchorId = historyMessages[index]?.id;
+    if (!anchorId) {
+      continue;
+    }
+
+    const anchorIndex = findLastMessageIndex(nextMessages, anchorId);
+    if (anchorIndex >= 0) {
+      return anchorIndex + 1;
+    }
+  }
+
+  for (let index = historyIndex + 1; index < historyMessages.length; index += 1) {
+    const anchorId = historyMessages[index]?.id;
+    if (!anchorId) {
+      continue;
+    }
+
+    const anchorIndex = findMessageIndex(nextMessages, anchorId);
+    if (anchorIndex >= 0) {
+      return anchorIndex;
+    }
+  }
+
+  return 0;
+}
+
+function mergeHydratedHistory(
+  state: LearningConversationState,
+  historyMessages: LearningWorkspaceRenderedMessage[]
+) {
+  if (state.messages.length === 0) {
+    return {
+      historyHasPendingUser: false,
+      messages: historyMessages,
+    };
+  }
+
+  const usedHistoryIndexes = new Set<number>();
+  let historyHasPendingUser = false;
+  const nextMessages = state.messages.map((message) => {
+    const matchingHistoryIndex = findMatchingHistoryIndex(message, historyMessages, usedHistoryIndexes);
+    if (matchingHistoryIndex < 0) {
+      return message;
+    }
+
+    usedHistoryIndexes.add(matchingHistoryIndex);
+    if (message.id === state.userMessageId) {
+      historyHasPendingUser = true;
+    }
+
+    return historyMessages[matchingHistoryIndex]!;
+  });
+
+  historyMessages.forEach((message, historyIndex) => {
+    if (usedHistoryIndexes.has(historyIndex)) {
+      return;
+    }
+
+    const insertIndex = resolveHistoryInsertIndex(nextMessages, historyMessages, historyIndex);
+    nextMessages.splice(insertIndex, 0, message);
+  });
+
+  return {
+    historyHasPendingUser,
+    messages: nextMessages,
   };
 }
 
@@ -322,6 +446,7 @@ const initialStoreState: LearningConversationState = {
   latestStatus: null,
   messages: [],
   mode: 'guide',
+  sessionId: null,
   userMessageId: null,
 };
 
@@ -329,6 +454,72 @@ export const useLearningConversationStore = create<LearningConversationStore>((s
   ...initialStoreState,
   applyEvent: (event) => {
     set((state) => reduceLearningConversationEvent(state, event));
+  },
+  discardAssistantDraft: () => {
+    set((state) => ({
+      ...state,
+      assistantMessageId: null,
+      messages: state.messages.filter((message) => message.id !== state.assistantMessageId),
+    }));
+  },
+  ensureResumeDraft: (input) => {
+    set((state) => {
+      const sameSession =
+        state.sessionId === null || state.sessionId === input.sessionId;
+      const baseMessages = sameSession ? state.messages.filter((message) => !message.streaming) : [];
+      const hasAssistantDraft =
+        sameSession &&
+        Boolean(
+          state.assistantMessageId &&
+            state.messages.some((message) => message.id === state.assistantMessageId)
+        );
+
+      if (hasAssistantDraft) {
+        return {
+          ...state,
+          mode: input.mode,
+          sessionId: input.sessionId,
+        };
+      }
+
+      const lastMessage = baseMessages[baseMessages.length - 1] ?? null;
+      const shouldAppendUser =
+        lastMessage?.role !== 'user' || lastMessage.text !== input.userText;
+
+      return {
+        ...state,
+        assistantMessageId: input.assistantMessageId,
+        latestEvaluation: null,
+        latestSessionSignal: null,
+        latestStatus: null,
+        messages: [
+          ...baseMessages,
+          ...(shouldAppendUser
+            ? [
+                {
+                  cards: [],
+                  id: input.userMessageId,
+                  presentation: null,
+                  role: 'user' as const,
+                  streaming: false,
+                  text: input.userText,
+                },
+              ]
+            : []),
+          {
+            cards: [],
+            id: input.assistantMessageId,
+            presentation: createDraftPresentation(input.mode),
+            role: 'assistant',
+            streaming: true,
+            text: '',
+          },
+        ],
+        mode: input.mode,
+        sessionId: input.sessionId,
+        userMessageId: input.userMessageId,
+      };
+    });
   },
   clearDraft: () => {
     set((state) => ({
@@ -348,28 +539,26 @@ export const useLearningConversationStore = create<LearningConversationStore>((s
       userMessageId: null,
     }));
   },
-  hydrateHistory: (messages) => {
+  hydrateHistory: (messages, sessionId) => {
     set((state) => {
-      const pendingUserMessage = findPendingUserMessage(state);
-      const historyHasPendingUser =
-        pendingUserMessage !== null &&
-        messages.some(
-          (message) => message.role === 'user' && message.text === pendingUserMessage.text
-        );
-      const draftMessages = state.messages.filter(
-        (message) =>
-          message.id === state.assistantMessageId ||
-          (state.userMessageId !== null && message.id === state.userMessageId)
+      if (typeof sessionId === 'number' && state.sessionId !== null && state.sessionId !== sessionId) {
+        return {
+          ...initialStoreState,
+          messages,
+          mode: state.mode,
+          sessionId,
+        };
+      }
+
+      const { historyHasPendingUser, messages: nextMessages } = mergeHydratedHistory(
+        state,
+        messages
       );
-      const preservedMessages = historyHasPendingUser
-        ? draftMessages.filter((message) => message.id !== state.userMessageId)
-        : draftMessages;
-      const nextMessages =
-        preservedMessages.length > 0 ? [...messages, ...preservedMessages] : messages;
 
       return {
         ...state,
         messages: nextMessages,
+        sessionId: typeof sessionId === 'number' ? sessionId : state.sessionId,
         userMessageId: historyHasPendingUser ? null : state.userMessageId,
       };
     });
@@ -396,14 +585,22 @@ export const useLearningConversationStore = create<LearningConversationStore>((s
     }));
   },
   startDraft: (input) => {
+    const nextSessionId =
+      typeof input.sessionId === 'number' ? input.sessionId : null;
     set((state) => ({
       ...state,
       assistantMessageId: input.assistantMessageId,
       latestEvaluation: null,
       latestSessionSignal: null,
       latestStatus: null,
-      messages: [...state.messages.filter((message) => !message.streaming), ...createDraftMessages(input)],
+      messages: [
+        ...((nextSessionId === null || state.sessionId === null || state.sessionId === nextSessionId)
+          ? state.messages.filter((message) => !message.streaming)
+          : []),
+        ...createDraftMessages(input),
+      ],
       mode: input.mode,
+      sessionId: nextSessionId ?? state.sessionId,
       userMessageId: input.userMessageId,
     }));
   },

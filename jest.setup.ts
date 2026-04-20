@@ -18,7 +18,9 @@ jest.mock('react-native-reanimated', () => {
       ease: 'ease',
       inOut: (value: unknown) => value,
     },
+    FadeInDown: chain,
     FadeInUp: chain,
+    Layout: chain,
     LinearTransition: chain,
     useAnimatedStyle: (updater: () => Record<string, unknown>) => updater(),
     useSharedValue: (value: unknown) => ({ value }),
@@ -94,6 +96,10 @@ jest.mock('expo-image-picker', () => {
 
 jest.mock('expo-document-picker', () => ({
   getDocumentAsync: jest.fn(async () => ({ assets: null, canceled: true })),
+}));
+
+jest.mock('expo/fetch', () => ({
+  fetch: (...args: Parameters<typeof fetch>) => global.fetch(...args),
 }));
 
 jest.mock('expo-blur', () => {

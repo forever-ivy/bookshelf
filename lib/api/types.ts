@@ -510,6 +510,11 @@ export type LearningStreamEvent =
       type: 'followups.items';
     }
   | {
+      messageId?: string | null;
+      text: string;
+      type: 'resume.user_message';
+    }
+  | {
       delta: string;
       type: 'explore.answer.delta';
     }
@@ -541,6 +546,7 @@ export type LearningStreamEvent =
       type: 'teacher.delta';
     }
   | {
+      code?: string;
       message: string;
       type: 'error';
     };

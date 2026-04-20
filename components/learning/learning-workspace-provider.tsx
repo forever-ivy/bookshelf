@@ -11,8 +11,8 @@ import {
   useLearningWorkspace,
   type LearningWorkspaceGate,
 } from '@/hooks/use-learning-workspace';
-import { getLibraryErrorMessage } from '@/lib/api/client';
-import { streamLearningSessionReply } from '@/lib/api/learning';
+import { getLibraryErrorMessage, LibraryApiError } from '@/lib/api/client';
+import { resumeLearningSessionReply, streamLearningSessionReply } from '@/lib/api/learning';
 import type { LearningSessionMessage, LearningStepEvaluation } from '@/lib/api/types';
 import {
   buildSyntheticCompletedSteps,
@@ -70,17 +70,34 @@ type LearningWorkspaceContextValue = {
 const LearningWorkspaceContext = React.createContext<LearningWorkspaceContextValue | null>(null);
 
 function getLearningReplyFailureFallback(mode: LearningStudyMode) {
-  return mode === 'explore' ? 'Explore 回复失败，请稍后再试。' : '导学回复失败，请稍后再试。';
+  return '模型请求错误';
 }
 
-function hasStreamedAssistantDraftContent() {
+function hasVisibleAssistantDraftContent() {
   const { assistantMessageId, messages } = useLearningConversationStore.getState();
   if (!assistantMessageId) {
     return false;
   }
 
   const assistantDraft = messages.find((message) => message.id === assistantMessageId);
-  return Boolean(assistantDraft?.text.trim());
+  if (!assistantDraft) {
+    return false;
+  }
+
+  if (assistantDraft.text.trim()) {
+    return true;
+  }
+
+  const presentation = assistantDraft.presentation;
+  if (!presentation) {
+    return false;
+  }
+
+  if (presentation.kind === 'explore') {
+    return Boolean(presentation.reasoningContent?.trim()) || presentation.bridgeActions.length > 0;
+  }
+
+  return assistantDraft.cards.length > 0;
 }
 
 export function buildOptimisticUserHistoryMessage(
@@ -178,6 +195,10 @@ export function LearningWorkspaceProvider({
 }) {
   const pathname = usePathname();
   const { mode } = useLocalSearchParams<{ mode?: string | string[] }>();
+  const { activeTab, studyMode } = React.useMemo(
+    () => resolveLearningWorkspaceNavigationState(pathname, mode),
+    [mode, pathname]
+  );
   const router = useRouter();
   const queryClient = useQueryClient();
   const { token } = useAppSession();
@@ -189,7 +210,7 @@ export function LearningWorkspaceProvider({
     setWorkspaceSession,
     workspaceGate,
     workspaceSession,
-  } = useLearningWorkspace(profileId);
+  } = useLearningWorkspace(profileId, studyMode);
   const sessionMessagesQuery = useLearningSessionMessagesQuery(workspaceSession?.id ?? Number.NaN);
   const [draft, setDraft] = React.useState('');
   const [isSending, setIsSending] = React.useState(false);
@@ -200,9 +221,10 @@ export function LearningWorkspaceProvider({
   const hydrateConversationHistory = useLearningConversationStore((state) => state.hydrateHistory);
   const startConversationDraft = useLearningConversationStore((state) => state.startDraft);
   const applyConversationEvent = useLearningConversationStore((state) => state.applyEvent);
+  const discardAssistantDraft = useLearningConversationStore((state) => state.discardAssistantDraft);
+  const ensureResumeConversationDraft = useLearningConversationStore((state) => state.ensureResumeDraft);
   const clearConversationDraft = useLearningConversationStore((state) => state.clearDraft);
   const commitConversationDraft = useLearningConversationStore((state) => state.commitDraft);
-  const resetConversation = useLearningConversationStore((state) => state.reset);
   const setConversationLatestStatus = useLearningConversationStore((state) => state.setLatestStatus);
   const setConversationLatestSessionSignal = useLearningConversationStore(
     (state) => state.setLatestSessionSignal
@@ -214,6 +236,7 @@ export function LearningWorkspaceProvider({
     content: string;
     session: NonNullable<ReturnType<typeof useLearningWorkspace>['workspaceSession']>;
   } | null>(null);
+  const lastResumeAttemptKeyRef = React.useRef<string | null>(null);
 
   const baseRenderedMessages = React.useMemo(
     () => createLearningRenderedMessages(sessionMessagesQuery.data ?? []),
@@ -221,12 +244,12 @@ export function LearningWorkspaceProvider({
   );
 
   React.useEffect(() => {
-    resetConversation();
-  }, [resetConversation, workspaceSession?.id]);
+    if (!workspaceSession?.id) {
+      return;
+    }
 
-  React.useEffect(() => {
-    hydrateConversationHistory(baseRenderedMessages);
-  }, [baseRenderedMessages, hydrateConversationHistory]);
+    hydrateConversationHistory(baseRenderedMessages, workspaceSession.id);
+  }, [baseRenderedMessages, hydrateConversationHistory, workspaceSession?.id]);
 
   const sourceCards = React.useMemo(
     () => (profile ? buildLearningWorkspaceSources(profile) : []),
@@ -308,11 +331,6 @@ export function LearningWorkspaceProvider({
     [queryClient, token]
   );
 
-  const { activeTab, studyMode } = React.useMemo(
-    () => resolveLearningWorkspaceNavigationState(pathname, mode),
-    [mode, pathname]
-  );
-
   const handleSend = React.useCallback(async (nextDraft?: string, options?: LearningSendOptions) => {
     const normalized = (nextDraft ?? draft).trim();
     const activeSession = options?.session ?? workspaceSession;
@@ -344,6 +362,7 @@ export function LearningWorkspaceProvider({
     startConversationDraft({
       assistantMessageId,
       mode: activeMode,
+      sessionId: activeSession.id,
       userMessageId,
       userText: normalized,
     });
@@ -414,12 +433,18 @@ export function LearningWorkspaceProvider({
         }
 
         if (event.type === 'error') {
-          throw new Error(event.message);
+          throw new LibraryApiError(event.message, {
+            code: event.code ?? 'learning_model_request_error',
+            status: 503,
+          });
         }
       }
 
       if (!finalAssistantMessage && !redirected) {
-        throw new Error('learning_stream_missing_final');
+        throw new LibraryApiError('模型请求错误', {
+          code: 'learning_model_request_error',
+          status: 503,
+        });
       }
     } catch (error) {
       const [messagesResult] = await Promise.allSettled([sessionMessagesQuery.refetch(), sessionsQuery.refetch()]);
@@ -432,10 +457,10 @@ export function LearningWorkspaceProvider({
         syncedMessages.some(
           (message) => message.role === 'assistant' && (Number(message.id) || 0) > previousLatestMessageId
         );
-      const hasVisibleDraftReply = !finalAssistantMessage && hasStreamedAssistantDraftContent();
+      const hasVisibleDraftReply = !finalAssistantMessage && hasVisibleAssistantDraftContent();
 
       if (recoveredAssistantReply) {
-        clearConversationDraft();
+        discardAssistantDraft();
         setConversationLatestStatus(null);
       } else if (hasVisibleDraftReply) {
         commitConversationDraft();
@@ -444,9 +469,9 @@ export function LearningWorkspaceProvider({
           tone: 'warning',
         });
       } else if (!finalAssistantMessage) {
-        clearConversationDraft();
+        discardAssistantDraft();
         setConversationLatestStatus({
-          label: '这一轮导学没有成功返回，正在和后端重新同步。',
+          label: '模型请求错误',
           tone: 'warning',
         });
         toast.error(getLibraryErrorMessage(error, getLearningReplyFailureFallback(activeMode)));
@@ -456,6 +481,7 @@ export function LearningWorkspaceProvider({
     }
   }, [
     applyConversationEvent,
+    discardAssistantDraft,
     clearConversationDraft,
     commitConversationDraft,
     draft,
@@ -495,6 +521,135 @@ export function LearningWorkspaceProvider({
     });
   }, [handleSend, isSending, studyMode, workspaceSession]);
 
+  React.useEffect(() => {
+    if (studyMode !== 'explore' || !workspaceSession?.id || !token || isSending) {
+      return;
+    }
+
+    const resumeAttemptKey = `${studyMode}:${workspaceSession.id}`;
+    if (lastResumeAttemptKeyRef.current === resumeAttemptKey) {
+      return;
+    }
+    lastResumeAttemptKeyRef.current = resumeAttemptKey;
+
+    let cancelled = false;
+
+    const resumeStream = async () => {
+      let finalAssistantMessage: LearningSessionMessage | null = null;
+      let resumeUserText: string | null = null;
+
+      setIsSending(true);
+      try {
+        for await (const event of resumeLearningSessionReply(workspaceSession.id, token)) {
+          if (cancelled) {
+            return;
+          }
+
+          if (event.type === 'resume.user_message') {
+            resumeUserText = event.text;
+            ensureResumeConversationDraft({
+              assistantMessageId: `resume-assistant-${workspaceSession.id}`,
+              mode: 'explore',
+              sessionId: workspaceSession.id,
+              userMessageId: event.messageId ?? `resume-user-${workspaceSession.id}`,
+              userText: event.text,
+            });
+            continue;
+          }
+
+          if (event.type === 'status') {
+            setConversationLatestStatus(resolveLearningStreamStatusSignal(event.phase));
+            continue;
+          }
+
+          if (
+            event.type === 'assistant.delta' ||
+            event.type === 'teacher.delta' ||
+            event.type === 'peer.delta' ||
+            event.type === 'explore.answer.delta' ||
+            event.type === 'explore.reasoning.delta' ||
+            event.type === 'evaluation' ||
+            event.type === 'evidence.items' ||
+            event.type === 'followups.items' ||
+            event.type === 'bridge.actions' ||
+            event.type === 'explore.related_concepts' ||
+            event.type === 'assistant.final'
+          ) {
+            applyConversationEvent(event);
+            if (event.type === 'assistant.final') {
+              finalAssistantMessage = event.message;
+              if (resumeUserText) {
+                updateMessagesCache(
+                  workspaceSession.id,
+                  {
+                    cards: [],
+                    id: `resume-user-${workspaceSession.id}`,
+                    presentation: null,
+                    role: 'user',
+                    streaming: false,
+                    text: resumeUserText,
+                  },
+                  event.message
+                );
+              }
+            }
+            continue;
+          }
+
+          if (event.type === 'error') {
+            throw new LibraryApiError(event.message, {
+              code: event.code ?? 'learning_model_request_error',
+              status: 503,
+            });
+          }
+        }
+
+        if (finalAssistantMessage) {
+          setConversationLatestStatus(null);
+        }
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        if (hasVisibleAssistantDraftContent()) {
+          commitConversationDraft();
+          setConversationLatestStatus({
+            label: '这一轮回复连接中断，已保留当前内容并继续和后端同步。',
+            tone: 'warning',
+          });
+        } else {
+          discardAssistantDraft();
+          setConversationLatestStatus({
+            label: '模型请求错误',
+            tone: 'warning',
+          });
+          toast.error(getLibraryErrorMessage(error, getLearningReplyFailureFallback('explore')));
+        }
+      } finally {
+        if (!cancelled) {
+          setIsSending(false);
+        }
+      }
+    };
+
+    void resumeStream();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    applyConversationEvent,
+    commitConversationDraft,
+    discardAssistantDraft,
+    ensureResumeConversationDraft,
+    setConversationLatestStatus,
+    token,
+    updateMessagesCache,
+    workspaceSession,
+    studyMode,
+  ]);
+
   const navigateToTab = React.useCallback(
     (tab: LearningWorkspaceTab) => {
       if (!Number.isFinite(profileId) || profileId <= 0) {
@@ -520,13 +675,11 @@ export function LearningWorkspaceProvider({
         return;
       }
 
-      const resolvedMode = nextMode === 'guide' ? 'explore' : nextMode;
-
-      if (activeTab === 'study' && studyMode === resolvedMode) {
+      if (activeTab === 'study' && studyMode === nextMode) {
         return;
       }
 
-      router.replace(`/learning/${profileId}/study?mode=${resolvedMode}`);
+      router.replace(`/learning/${profileId}/study?mode=${nextMode}`);
     },
     [activeTab, profileId, router, studyMode]
   );

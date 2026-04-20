@@ -29,7 +29,6 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 jest.mock('react-native-reanimated', () => {
-  const React = require('react');
   const { View } = require('react-native');
 
   return {
@@ -273,10 +272,9 @@ describe('LearningWorkspaceGraphScreen', () => {
       expect(screen.getByTestId('learning-graph-mode-tabs')).toBeTruthy();
       expect(screen.getByText('Global')).toBeTruthy();
       expect(screen.getByText('Explore')).toBeTruthy();
-      expect(screen.getByText('Guide')).toBeTruthy();
+      expect(screen.queryByText('Guide')).toBeNull();
       expect(screen.getByTestId('learning-graph-webview')).toBeTruthy();
     });
-
     fireEvent(screen.getByTestId('learning-graph-webview'), 'message', {
       nativeEvent: {
         data: JSON.stringify({
@@ -291,6 +289,24 @@ describe('LearningWorkspaceGraphScreen', () => {
       expect(screen.getByText('图谱位置')).toBeTruthy();
       expect(screen.getByText('函数极限的定义')).toBeTruthy();
     });
+    expect(screen.queryByTestId('learning-graph-selection-swift-scroll-view')).toBeNull();
+    expect(
+      StyleSheet.flatten(screen.getByTestId('learning-graph-selection-scroll').props.contentContainerStyle)
+    ).toEqual(
+      expect.objectContaining({
+        flexGrow: 1,
+      })
+    );
+    expect(StyleSheet.flatten(screen.getByTestId('learning-graph-selection-content').props.style)).toEqual(
+      expect.objectContaining({
+        alignSelf: 'stretch',
+      })
+    );
+    expect(screen.getByTestId('swift-rn-host').props.style).toBeUndefined();
+    expect(screen.getByTestId('swift-rn-host').props.matchContents).toBeUndefined();
+    expect(screen.getByText('极限').props.allowFontScaling).toBe(false);
+    expect(screen.getByText('图谱位置').props.allowFontScaling).toBe(false);
+    expect(screen.getByText('函数极限的定义').props.allowFontScaling).toBe(false);
 
     fireEvent.press(screen.getByText('Explore'));
 
@@ -307,23 +323,6 @@ describe('LearningWorkspaceGraphScreen', () => {
       expect(screen.getByText('无穷小')).toBeTruthy();
       expect(screen.getByText('探索关系')).toBeTruthy();
       expect(screen.getByText('来自最近一轮 Explore 发散出的概念')).toBeTruthy();
-    });
-
-    fireEvent.press(screen.getByText('Guide'));
-
-    fireEvent(screen.getByTestId('learning-graph-webview'), 'message', {
-      nativeEvent: {
-        data: JSON.stringify({
-          nodeId: 'concept:limits',
-          type: 'nodeTap',
-        }),
-      },
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('学习状态')).toBeTruthy();
-      expect(screen.getAllByText('已点亮').length).toBeGreaterThan(0);
-      expect(screen.getByText('建立整体认知')).toBeTruthy();
     });
   });
 
@@ -353,5 +352,135 @@ describe('LearningWorkspaceGraphScreen', () => {
       expect(screen.getByText('暂无可展示的图谱')).toBeTruthy();
       expect(screen.getByText('上传资料来源摘要')).toBeTruthy();
     });
+  });
+
+  it('avoids showing raw markdown and malformed latex as fragment titles and previews', async () => {
+    const rawFragmentText =
+      '# 微积分A(1)期中复习讲座 # 零、自测题目： $\\{ c_{n,k} \\}$ E k n $\\left\\{ a_{n';
+    mockGetLearningGraph.mockResolvedValue({
+      edges: [
+        { source: 'asset:1', target: 'book:profile', type: 'DERIVED_FROM' },
+        { source: 'fragment:1', target: 'asset:1', type: 'DERIVED_FROM' },
+      ],
+      nodes: [
+        { id: 'book:profile', label: 'test.pdf', type: 'Book' },
+        { assetKind: 'upload', fileName: 'test.pdf', id: 'asset:1', label: 'test.pdf', type: 'SourceAsset' },
+        {
+          assetId: 1,
+          chapterLabel: 'Section 1',
+          chunkIndex: 0,
+          fragmentId: 1,
+          id: 'fragment:1',
+          label: rawFragmentText,
+          semanticSummary: rawFragmentText,
+          type: 'Fragment',
+        },
+      ],
+      provider: 'fallback',
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          gcTime: Infinity,
+          retry: false,
+        },
+      },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <LearningWorkspaceGraphScreen />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('learning-graph-webview')).toBeTruthy();
+    });
+
+    const runtimeHtml = screen.getByTestId('learning-graph-webview').props.source?.html;
+
+    expect(runtimeHtml).toContain('Section 1');
+    expect(runtimeHtml).not.toContain(rawFragmentText);
+    expect(runtimeHtml).not.toContain('\\left');
+
+    fireEvent(screen.getByTestId('learning-graph-webview'), 'message', {
+      nativeEvent: {
+        data: JSON.stringify({
+          nodeId: 'fragment:1',
+          type: 'nodeTap',
+        }),
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Section 1').length).toBeGreaterThan(0);
+      expect(screen.getByText('来源片段')).toBeTruthy();
+    });
+
+    expect(
+      screen.queryByText('# 微积分A(1)期中复习讲座 # 零、自测题目： $\\{ c_{n,k} \\}$ E k n $\\left\\{ a_{n')
+    ).toBeNull();
+  });
+
+  it('strips markdown markers when malformed fragment content falls back to plain text', async () => {
+    mockGetLearningGraph.mockResolvedValue({
+      edges: [
+        { source: 'asset:1', target: 'book:profile', type: 'DERIVED_FROM' },
+        { source: 'fragment:1', target: 'asset:1', type: 'DERIVED_FROM' },
+      ],
+      nodes: [
+        { id: 'book:profile', label: 'test.pdf', type: 'Book' },
+        { assetKind: 'upload', fileName: 'test.pdf', id: 'asset:1', label: 'test.pdf', type: 'SourceAsset' },
+        {
+          assetId: 1,
+          chapterLabel: 'Section 2',
+          chunkIndex: 1,
+          fragmentId: 2,
+          id: 'fragment:1',
+          label: '# 标题 **加粗** $\\left\\{ x',
+          semanticSummary: '# 标题 **加粗** $\\left\\{ x',
+          type: 'Fragment',
+        },
+      ],
+      provider: 'fallback',
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          gcTime: Infinity,
+          retry: false,
+        },
+      },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <LearningWorkspaceGraphScreen />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('learning-graph-webview')).toBeTruthy();
+    });
+
+    fireEvent(screen.getByTestId('learning-graph-webview'), 'message', {
+      nativeEvent: {
+        data: JSON.stringify({
+          nodeId: 'fragment:1',
+          type: 'nodeTap',
+        }),
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/标题 加粗/).length).toBeGreaterThan(0);
+    });
+
+    expect(screen.queryByText(/#/)).toBeNull();
+    expect(screen.queryByText(/\*\*/)).toBeNull();
+    expect(screen.queryByText(/\$/)).toBeNull();
+    expect(screen.queryByText(/\\/)).toBeNull();
   });
 });

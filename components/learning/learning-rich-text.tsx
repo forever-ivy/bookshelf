@@ -4,9 +4,15 @@ import { StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 import { useAppTheme } from '@/hooks/use-app-theme';
+import {
+  learningTextHasMalformedMath,
+  sanitizeMalformedLearningText,
+} from '@/lib/learning/text-formatting';
 
 type LearningRichTextProps = {
+  allowFontScaling?: boolean;
   content: string;
+  maxFontSizeMultiplier?: number;
   numberOfLines?: number;
   style?: any;
 };
@@ -170,7 +176,10 @@ export function buildLearningRichTextHtml(
   typography: LearningRichTextTypography | string
 ) {
   const resolvedTypography = resolveLearningRichTextTypography(typography);
-  const normalizedContent = normalizeLearningRichTextContent(content);
+  const safeContent = learningTextHasMalformedMath(content)
+    ? sanitizeMalformedLearningText(content)
+    : content;
+  const normalizedContent = normalizeLearningRichTextContent(safeContent);
   const { chunks, tokenizedContent } = replaceMathWithTokens(normalizedContent);
   const escapedContent = escapeHtml(tokenizedContent);
   const markdownContent = applyBasicMarkdown(escapedContent);
@@ -233,13 +242,24 @@ export function buildLearningRichTextHtml(
 <body>
   <div id="content">${richContent}</div>
   <script>
-    const updateHeight = () => {
-      const target = document.documentElement.scrollHeight || document.body.scrollHeight || 0;
-      window.ReactNativeWebView.postMessage(String(target));
+    const el = document.getElementById('content');
+    const report = () => {
+      const h = document.documentElement.scrollHeight || document.body.scrollHeight || 0;
+      if (h > 0) window.ReactNativeWebView.postMessage(String(h));
     };
-    window.addEventListener('load', updateHeight);
-    requestAnimationFrame(updateHeight);
-    setTimeout(updateHeight, 50);
+    // Immediate
+    report();
+    // After layout / fonts
+    window.addEventListener('load', report);
+    // After MathML / KaTeX finishes painting
+    if (window.ResizeObserver) {
+      const ro = new ResizeObserver(report);
+      if (el) ro.observe(el);
+      ro.observe(document.body);
+    } else {
+      setTimeout(report, 80);
+      setTimeout(report, 300);
+    }
   </script>
 </body>
 </html>
@@ -257,17 +277,24 @@ export function learningTextNeedsRichRendering(content: string) {
 }
 
 export function LearningRichText({
+  allowFontScaling = true,
   content,
+  maxFontSizeMultiplier,
   numberOfLines,
   style,
 }: LearningRichTextProps) {
   const { theme } = useAppTheme();
   const hasFormatting = learningTextNeedsRichRendering(content);
   const flattenedStyle = StyleSheet.flatten(style) ?? {};
+  const [height, setHeight] = React.useState(numberOfLines ? numberOfLines * 24 : 120);
 
   if (!hasFormatting) {
     return (
-      <Text numberOfLines={numberOfLines} style={style}>
+      <Text
+        allowFontScaling={allowFontScaling}
+        maxFontSizeMultiplier={maxFontSizeMultiplier}
+        numberOfLines={numberOfLines}
+        style={style}>
         {content}
       </Text>
     );
@@ -282,7 +309,6 @@ export function LearningRichText({
     letterSpacing: flattenedStyle.letterSpacing,
     lineHeight: flattenedStyle.lineHeight,
   });
-  const [height, setHeight] = React.useState(numberOfLines ? numberOfLines * 20 : 60);
 
   return (
     <View style={[{ height }, style]}>

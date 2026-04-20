@@ -1,9 +1,10 @@
 import React from 'react';
-import { ScrollView } from 'react-native';
+import { Platform, ScrollView } from 'react-native';
 
 type LearningConversationScrollProps = React.ComponentProps<typeof ScrollView> & {
   focusAnchorOffset?: number;
   focusAnchorY?: number | null;
+  onScrollToEndRequest?: (fn: () => void) => void;
 };
 
 export function LearningConversationScroll({
@@ -11,9 +12,16 @@ export function LearningConversationScroll({
   focusAnchorY = null,
   onContentSizeChange,
   onLayout,
+  onScrollToEndRequest,
   ...props
 }: LearningConversationScrollProps) {
   const scrollViewRef = React.useRef<ScrollView | null>(null);
+
+  const scrollToEnd = React.useCallback(() => {
+    requestAnimationFrame(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    });
+  }, []);
 
   const scrollToLatestMessage = React.useCallback(() => {
     requestAnimationFrame(() => {
@@ -30,6 +38,10 @@ export function LearningConversationScroll({
   }, [focusAnchorOffset, focusAnchorY]);
 
   React.useEffect(() => {
+    onScrollToEndRequest?.(scrollToEnd);
+  }, [onScrollToEndRequest, scrollToEnd]);
+
+  React.useEffect(() => {
     if (typeof focusAnchorY !== 'number') {
       return;
     }
@@ -40,6 +52,7 @@ export function LearningConversationScroll({
   return (
     <ScrollView
       {...props}
+      automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
       onContentSizeChange={(width, height) => {
         onContentSizeChange?.(width, height);
         scrollToLatestMessage();

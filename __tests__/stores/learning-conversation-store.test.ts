@@ -239,6 +239,41 @@ describe('learning conversation store helpers', () => {
     ]);
   });
 
+  it('recreates an assistant draft for a resumed stream without duplicating the last user turn', () => {
+    useLearningConversationStore.getState().hydrateHistory(
+      [
+        {
+          cards: [],
+          id: 'history-user-5',
+          presentation: null,
+          role: 'user',
+          streaming: false,
+          text: '详细讲解一个文档中的例题',
+        },
+      ],
+      301
+    );
+
+    useLearningConversationStore.getState().ensureResumeDraft({
+      assistantMessageId: 'resume-assistant-301',
+      mode: 'explore',
+      sessionId: 301,
+      userMessageId: 'resume-user-301',
+      userText: '详细讲解一个文档中的例题',
+    });
+
+    expect(useLearningConversationStore.getState().messages).toMatchObject([
+      expect.objectContaining({
+        id: 'history-user-5',
+        text: '详细讲解一个文档中的例题',
+      }),
+      expect.objectContaining({
+        id: 'resume-assistant-301',
+        streaming: true,
+      }),
+    ]);
+  });
+
   it('keeps the optimistic user message after assistant.final until synced history includes that user turn', () => {
     let state = createInitialLearningConversationState({
       assistantMessageId: 'local-assistant-5',
@@ -289,15 +324,230 @@ describe('learning conversation store helpers', () => {
       },
     ]);
 
-    expect(useLearningConversationStore.getState().messages).toMatchObject([
-      expect.objectContaining({
-        id: 'history-assistant-1',
-      }),
-      expect.objectContaining({
-        id: 'local-user-5',
-        role: 'user',
-        text: '帮我总结这份资料的重点',
-      }),
-    ]);
+    const messages = useLearningConversationStore.getState().messages;
+
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'history-assistant-1',
+        }),
+        expect.objectContaining({
+          id: 'local-user-5',
+          role: 'user',
+          text: '帮我总结这份资料的重点',
+        }),
+      ])
+    );
+    expect(messages.findIndex((message) => message.id === 'local-user-5')).toBeLessThan(
+      messages.findIndex((message) => message.id === 'history-assistant-1')
+    );
+  });
+
+  it('keeps earlier optimistic user turns when later history syncs still omit them', () => {
+    useLearningConversationStore.getState().hydrateHistory(
+      [
+        {
+          cards: [],
+          id: 'history-assistant-1',
+          presentation: {
+            answer: {
+              content: '这是第一轮之前的上下文。',
+            },
+            bridgeActions: [],
+            evidence: [],
+            followups: [],
+            kind: 'explore',
+            relatedConcepts: [],
+          },
+          role: 'assistant',
+          streaming: false,
+          text: '这是第一轮之前的上下文。',
+        },
+      ],
+      301
+    );
+
+    useLearningConversationStore.getState().startDraft({
+      assistantMessageId: 'local-assistant-6',
+      mode: 'explore',
+      sessionId: 301,
+      userMessageId: 'local-user-6',
+      userText: '第一个问题',
+    });
+    useLearningConversationStore.getState().applyEvent({
+      message: {
+        content: '第一个回答',
+        createdAt: '2026-04-08T08:31:00Z',
+        id: 901,
+        role: 'assistant',
+        learningSessionId: 301,
+        presentation: {
+          answer: {
+            content: '第一个回答',
+          },
+          bridgeActions: [],
+          evidence: [],
+          followups: [],
+          kind: 'explore',
+          relatedConcepts: [],
+        },
+      },
+      type: 'assistant.final',
+    });
+    useLearningConversationStore.getState().hydrateHistory(
+      [
+        {
+          cards: [],
+          id: 'history-assistant-1',
+          presentation: {
+            answer: {
+              content: '这是第一轮之前的上下文。',
+            },
+            bridgeActions: [],
+            evidence: [],
+            followups: [],
+            kind: 'explore',
+            relatedConcepts: [],
+          },
+          role: 'assistant',
+          streaming: false,
+          text: '这是第一轮之前的上下文。',
+        },
+        {
+          cards: [],
+          id: 'history-assistant-2',
+          presentation: {
+            answer: {
+              content: '第一个回答',
+            },
+            bridgeActions: [],
+            evidence: [],
+            followups: [],
+            kind: 'explore',
+            relatedConcepts: [],
+          },
+          role: 'assistant',
+          streaming: false,
+          text: '第一个回答',
+        },
+      ],
+      301
+    );
+
+    useLearningConversationStore.getState().startDraft({
+      assistantMessageId: 'local-assistant-7',
+      mode: 'explore',
+      sessionId: 301,
+      userMessageId: 'local-user-7',
+      userText: '第二个问题',
+    });
+    useLearningConversationStore.getState().applyEvent({
+      message: {
+        content: '第二个回答',
+        createdAt: '2026-04-08T08:32:00Z',
+        id: 902,
+        role: 'assistant',
+        learningSessionId: 301,
+        presentation: {
+          answer: {
+            content: '第二个回答',
+          },
+          bridgeActions: [],
+          evidence: [],
+          followups: [],
+          kind: 'explore',
+          relatedConcepts: [],
+        },
+      },
+      type: 'assistant.final',
+    });
+    useLearningConversationStore.getState().hydrateHistory(
+      [
+        {
+          cards: [],
+          id: 'history-assistant-1',
+          presentation: {
+            answer: {
+              content: '这是第一轮之前的上下文。',
+            },
+            bridgeActions: [],
+            evidence: [],
+            followups: [],
+            kind: 'explore',
+            relatedConcepts: [],
+          },
+          role: 'assistant',
+          streaming: false,
+          text: '这是第一轮之前的上下文。',
+        },
+        {
+          cards: [],
+          id: 'history-assistant-2',
+          presentation: {
+            answer: {
+              content: '第一个回答',
+            },
+            bridgeActions: [],
+            evidence: [],
+            followups: [],
+            kind: 'explore',
+            relatedConcepts: [],
+          },
+          role: 'assistant',
+          streaming: false,
+          text: '第一个回答',
+        },
+        {
+          cards: [],
+          id: 'history-assistant-3',
+          presentation: {
+            answer: {
+              content: '第二个回答',
+            },
+            bridgeActions: [],
+            evidence: [],
+            followups: [],
+            kind: 'explore',
+            relatedConcepts: [],
+          },
+          role: 'assistant',
+          streaming: false,
+          text: '第二个回答',
+        },
+      ],
+      301
+    );
+
+    const messages = useLearningConversationStore.getState().messages;
+
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'history-assistant-1',
+        }),
+        expect.objectContaining({
+          id: 'history-assistant-2',
+        }),
+        expect.objectContaining({
+          id: 'local-user-6',
+          role: 'user',
+          text: '第一个问题',
+        }),
+        expect.objectContaining({
+          id: 'history-assistant-3',
+        }),
+        expect.objectContaining({
+          id: 'local-user-7',
+          role: 'user',
+          text: '第二个问题',
+        }),
+      ])
+    );
+    expect(messages.findIndex((message) => message.id === 'local-user-6')).toBeLessThan(
+      messages.findIndex((message) => message.id === 'history-assistant-2')
+    );
+    expect(messages.findIndex((message) => message.id === 'local-user-7')).toBeLessThan(
+      messages.findIndex((message) => message.id === 'history-assistant-3')
+    );
   });
 });

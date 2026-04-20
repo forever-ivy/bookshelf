@@ -20,7 +20,7 @@ export type LearningGraphRuntimeTheme = {
 export type LearningGraphRuntimeConfig = {
   cameraFocusDistanceByNodeType: Record<string, number>;
   cameraFocusDurationMs: number;
-  controlType: 'trackball';
+  controlType: 'trackball' | 'orbit';
   cooldownTicks: number;
   linkDistances: Record<string, number>;
   nodeSizes: Record<string, number>;

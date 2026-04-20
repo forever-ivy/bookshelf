@@ -3,6 +3,7 @@ import React from 'react';
 import {
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -22,11 +23,9 @@ import {
   ScrollView as SwiftScrollView,
 } from '@expo/ui/swift-ui';
 import {
-  background,
   interactiveDismissDisabled,
   presentationDetents,
   presentationDragIndicator,
-  scrollContentBackground,
 } from '@expo/ui/swift-ui/modifiers';
 import { useQuery } from '@tanstack/react-query';
 import Animated, { FadeInDown, FadeInUp, Layout, useAnimatedStyle, withSpring } from 'react-native-reanimated';
@@ -45,6 +44,10 @@ import { useAppTheme } from '@/hooks/use-app-theme';
 import { useLearningSessionsQuery } from '@/hooks/use-library-app-data';
 import { getLearningGraph } from '@/lib/api/learning';
 import {
+  learningTextHasMalformedMath,
+  sanitizeLearningTextForDisplay,
+} from '@/lib/learning/text-formatting';
+import {
   buildLearningDocumentGraphViewModel,
   buildLearningExploreGraphLens,
   buildLearningGlobalGraphLens,
@@ -53,8 +56,10 @@ import {
   buildLearningGuideGraphLens,
   getLearningGraphSelection,
   resolveLearningExploreGraphFocus,
+  type LearningGraph,
   type LearningGraphLens,
   type LearningGraphMode,
+  type LearningGraphNode,
 } from '@/lib/learning/graph';
 import type { LearningGraphHydratePayload } from '@/lib/learning/graph-bridge';
 import { buildLearningGraphRuntimeTheme } from '@/lib/learning/graph-theme';
@@ -68,9 +73,9 @@ const GRAPH_RUNTIME_CONFIG = {
     LessonStep: 150,
     SourceAsset: 170,
   },
-  cameraFocusDurationMs: 900,
+  cameraFocusDurationMs: 1400,
   controlType: 'trackball',
-  cooldownTicks: 120,
+  cooldownTicks: 90,
   linkDistances: {
     DERIVED_FROM: 88,
     EVIDENCE_FOR: 76,
@@ -88,7 +93,7 @@ const GRAPH_RUNTIME_CONFIG = {
     LessonStep: 9,
     SourceAsset: 10,
   },
-  velocityDecay: 0.25,
+  velocityDecay: 0.32,
 } as const;
 
 const GRAPH_MODE_LABELS: Record<LearningGraphMode, string> = {
@@ -101,7 +106,7 @@ const GRAPH_MODE_SEGMENT_MAX_WIDTH = 280;
 const GRAPH_MODE_SEGMENT_MIN_HEIGHT = 38;
 const GRAPH_MODE_SEGMENT_VISUAL_HEIGHT =
   GRAPH_MODE_SEGMENT_MIN_HEIGHT + GRAPH_MODE_SEGMENT_HORIZONTAL_PADDING * 2;
-const GRAPH_MODE_VALUES: LearningGraphMode[] = ['global', 'explore', 'guide'];
+const GRAPH_MODE_VALUES: LearningGraphMode[] = ['global', 'explore'];
 const GRAPH_MODE_OVERLAY_SIDE_INSET = 20 + LEARNING_WORKSPACE_FLOATING_BUTTON_SIZE + 12;
 
 export default function LearningWorkspaceGraphScreen() {
@@ -199,7 +204,7 @@ export default function LearningWorkspaceGraphScreen() {
       config: GRAPH_RUNTIME_CONFIG,
       edgeKeysByNodeId: graphViewModel.edgeKeysByNodeId,
       generatedNodeIds: graphLens.generatedNodeIds,
-      graph: graphViewModel.graph,
+      graph: buildRuntimeGraph(graphViewModel.graph),
       guideStatusByNodeId: graphLens.guideStatusByNodeId,
       highlightedNodeIds: graphLens.highlightedNodeIds,
       linkedNodeIdsByNodeId: graphViewModel.linkedNodeIdsByNodeId,
@@ -265,6 +270,24 @@ export default function LearningWorkspaceGraphScreen() {
       </LearningWorkspaceScaffold>
     </>
   );
+}
+
+function buildRuntimeGraph(graph: LearningGraph): LearningGraph {
+  return {
+    ...graph,
+    nodes: graph.nodes.map(sanitizeRuntimeGraphNode),
+  };
+}
+
+function sanitizeRuntimeGraphNode(node: LearningGraphNode): LearningGraphNode {
+  return {
+    ...node,
+    label: sanitizeLearningTextForDisplay(node.label ?? node.id) || String(node.id),
+    semanticSummary:
+      typeof node.semanticSummary === 'string'
+        ? sanitizeLearningTextForDisplay(node.semanticSummary)
+        : node.semanticSummary,
+  };
 }
 
 function GraphModeTabs({
@@ -477,8 +500,6 @@ function LearningGraphSelectionSheet({
   presentation: any;
   onDismiss: () => void;
 }) {
-  const { theme } = useAppTheme();
-
   if (!presentation) return null;
 
   if (Platform.OS === 'ios') {
@@ -496,14 +517,8 @@ function LearningGraphSelectionSheet({
               interactiveDismissDisabled(false),
             ]}>
             {!!presentation ? (
-              <SwiftScrollView
-                modifiers={[
-                  scrollContentBackground('hidden'),
-                  background(theme.colors.surface),
-                ]}
-                style={{ flex: 1 }}
-                showsIndicators={false}>
-                <SwiftRNHostView matchContents style={{ flex: 1, width: '100%', alignItems: 'stretch' }}>
+              <SwiftScrollView showsIndicators={false}>
+                <SwiftRNHostView>
                   <SelectionContent presentation={presentation} />
                 </SwiftRNHostView>
               </SwiftScrollView>
@@ -519,10 +534,10 @@ function LearningGraphSelectionSheet({
   if (Platform.OS === 'android') {
     return (
       <View testID="graph-selection-compose-host">
-        <ComposeHost matchContents style={{ position: 'absolute' }}>
+        <ComposeHost matchContents={{ vertical: true, horizontal: false }} style={{ position: 'absolute' }}>
           {!!presentation ? (
             <ModalBottomSheet onDismissRequest={onDismiss} skipPartiallyExpanded={false}>
-              <ComposeRNHostView style={{ width: '100%', alignItems: 'stretch' }}>
+              <ComposeRNHostView>
                 <SelectionContent presentation={presentation} />
               </ComposeRNHostView>
             </ModalBottomSheet>
@@ -562,109 +577,246 @@ function LearningGraphSelectionSheet({
 
 function SelectionContent({ presentation }: { presentation: any }) {
   const { theme } = useAppTheme();
-  
+
   return (
-    <View style={{ 
-      gap: 32, 
-      width: '100%',
-      paddingTop: Platform.OS === 'web' ? 0 : 20, 
-      paddingBottom: Platform.OS === 'web' ? 0 : 64, 
-      paddingHorizontal: Platform.OS === 'web' ? 0 : 24 
-    }}>
-      <View style={[styles.detailsSection, { marginTop: 8 }]}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <View style={[styles.modeChip, { backgroundColor: theme.colors.primarySoft }]}>
-            <Text style={{ color: theme.colors.primaryStrong, ...theme.typography.bold, fontSize: 10, letterSpacing: 1, textTransform: 'uppercase' }}>
-              {presentation.eyebrow}
-            </Text>
-          </View>
-          {presentation.statusLabel ? (
-            <View style={[styles.modeChip, { backgroundColor: theme.colors.warningSoft }]}>
-              <Text style={{ color: theme.colors.warningStrong, ...theme.typography.bold, fontSize: 10, letterSpacing: 0.5, textTransform: 'uppercase' }}>
-                {presentation.statusLabel}
-              </Text>
+    <ScrollView
+      contentContainerStyle={{
+        flexGrow: 1,
+      }}
+      showsVerticalScrollIndicator={false}
+      style={{ alignSelf: 'stretch', flex: 1 }}
+      testID="learning-graph-selection-scroll">
+      <View
+        testID="learning-graph-selection-content"
+        style={{
+          alignSelf: 'stretch',
+          gap: 32,
+          paddingTop: Platform.OS === 'web' ? 0 : 20,
+          paddingBottom: Platform.OS === 'web' ? 0 : 64,
+          paddingHorizontal: Platform.OS === 'web' ? 0 : 24,
+        }}>
+        <View style={[styles.detailsSection, { marginTop: 8 }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <View style={[styles.modeChip, { backgroundColor: theme.colors.primarySoft }]}>
+              <GraphSheetText
+                style={{
+                  color: theme.colors.primaryStrong,
+                  ...theme.typography.bold,
+                  fontSize: 10,
+                  letterSpacing: 1,
+                  textTransform: 'uppercase',
+                }}>
+                {presentation.eyebrow}
+              </GraphSheetText>
             </View>
-          ) : null}
-        </View>
-        
-        <View style={{ gap: 8 }}>
-          <Text 
-            style={{ 
-              color: theme.colors.text, 
-              ...theme.typography.heading, 
-              fontSize: 28, 
-              letterSpacing: -0.8, 
-              lineHeight: 34,
-            }}>
-            {presentation.title}
-          </Text>
-          <Text style={{ color: theme.colors.textMuted, ...theme.typography.medium, fontSize: 15 }}>
-            {presentation.typeLabel}
-          </Text>
-          
-          {presentation.description ? (
-            <Text style={{ color: theme.colors.text, ...theme.typography.body, fontSize: 15, lineHeight: 22, marginTop: 8 }}>
-              {presentation.description}
-            </Text>
-          ) : null}
-        </View>
-      </View>
-
-      {presentation.sections?.map((section: any) => (
-        <View key={section.title} style={styles.detailsSection}>
-          <Text style={{ color: theme.colors.textSoft, ...theme.typography.semiBold, fontSize: 12, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 4 }}>
-            {section.title}
-          </Text>
-          <View style={styles.metadataList}>
-            {section.lines.map((line: string, idx: number) => (
-              <View key={`${line}-${idx}`} style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
-                <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: theme.colors.borderStrong }} />
-                <Text style={{ color: theme.colors.text, ...theme.typography.body, fontSize: 15, lineHeight: 21, flex: 1 }}>
-                  {line}
-                </Text>
+            {presentation.statusLabel ? (
+              <View style={[styles.modeChip, { backgroundColor: theme.colors.warningSoft }]}>
+                <GraphSheetText
+                  style={{
+                    color: theme.colors.warningStrong,
+                    ...theme.typography.bold,
+                    fontSize: 10,
+                    letterSpacing: 0.5,
+                    textTransform: 'uppercase',
+                  }}>
+                  {presentation.statusLabel}
+                </GraphSheetText>
               </View>
-            ))}
+            ) : null}
+          </View>
+
+          <View style={{ gap: 8 }}>
+            <GraphSheetText
+              style={{
+                color: theme.colors.text,
+                ...theme.typography.heading,
+                fontSize: 28,
+                letterSpacing: -0.8,
+                lineHeight: 34,
+              }}>
+              {presentation.title}
+            </GraphSheetText>
+            <GraphSheetText
+              style={{ color: theme.colors.textMuted, ...theme.typography.medium, fontSize: 15 }}>
+              {presentation.typeLabel}
+            </GraphSheetText>
+
+            {presentation.description ? (
+              <GraphDetailBody
+                content={presentation.description}
+                style={{
+                  color: theme.colors.text,
+                  ...theme.typography.body,
+                  fontSize: 15,
+                  lineHeight: 22,
+                  marginTop: 8,
+                }}
+              />
+            ) : null}
           </View>
         </View>
-      ))}
 
-      {presentation.relatedFragments?.length ? (
-        <View style={styles.detailsSection}>
-          <Text style={{ color: theme.colors.textSoft, ...theme.typography.semiBold, fontSize: 12, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 12 }}>
-            有关资料切片
-          </Text>
-          <View style={styles.relatedList}>
-            {presentation.relatedFragments.slice(0, 3).map((fragment: any) => (
-              <View 
-                key={fragment.id} 
-                style={[
-                  styles.relatedItem, 
-                  { 
-                    backgroundColor: theme.colors.surface, 
-                    borderColor: theme.colors.borderSoft,
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.05,
-                    shadowRadius: 4,
-                    elevation: 2,
-                  }
-                ]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.primaryStrong }} />
-                  <Text style={{ color: theme.colors.textSoft, ...theme.typography.semiBold, fontSize: 11, textTransform: 'uppercase' }}>
-                    {typeof fragment.chapterLabel === 'string' ? fragment.chapterLabel : `片段 ${Number(fragment.chunkIndex ?? 0) + 1}`}
-                  </Text>
+        {presentation.sections?.map((section: any) => (
+          <View key={section.title} style={styles.detailsSection}>
+            <GraphSheetText
+              style={{
+                color: theme.colors.textSoft,
+                ...theme.typography.semiBold,
+                fontSize: 12,
+                letterSpacing: 0.8,
+                marginBottom: 4,
+                textTransform: 'uppercase',
+              }}>
+              {section.title}
+            </GraphSheetText>
+            <View style={styles.metadataList}>
+              {section.lines.map((line: string, idx: number) => (
+                <View
+                  key={`${line}-${idx}`}
+                  style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+                  <View
+                    style={{
+                      width: 4,
+                      height: 4,
+                      borderRadius: 2,
+                      backgroundColor: theme.colors.borderStrong,
+                    }}
+                  />
+                  <GraphSheetText
+                    style={{
+                      color: theme.colors.text,
+                      ...theme.typography.body,
+                      fontSize: 15,
+                      lineHeight: 21,
+                      flex: 1,
+                    }}>
+                    {line}
+                  </GraphSheetText>
                 </View>
-                <LearningRichText 
-                  content={typeof fragment.semanticSummary === 'string' ? fragment.semanticSummary : fragment.label}
-                  numberOfLines={4}
-                  style={{ color: theme.colors.text, ...theme.typography.medium, fontSize: 15, lineHeight: 22 }}
-                />
-              </View>
-            ))}
+              ))}
+            </View>
           </View>
-        </View>
-      ) : null}
-    </View>
+        ))}
+
+        {presentation.relatedFragments?.length ? (
+          <View style={styles.detailsSection}>
+            <GraphSheetText
+              style={{
+                color: theme.colors.textSoft,
+                ...theme.typography.semiBold,
+                fontSize: 12,
+                letterSpacing: 0.8,
+                marginBottom: 12,
+                textTransform: 'uppercase',
+              }}>
+              有关资料切片
+            </GraphSheetText>
+            <View style={styles.relatedList}>
+              {presentation.relatedFragments.slice(0, 3).map((fragment: any) => (
+                <View
+                  key={fragment.id}
+                  style={[
+                    styles.relatedItem,
+                    {
+                      backgroundColor: theme.colors.surface,
+                      borderColor: theme.colors.borderSoft,
+                      shadowColor: '#000',
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.05,
+                      shadowRadius: 4,
+                      elevation: 2,
+                    },
+                  ]}>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
+                      marginBottom: 8,
+                    }}>
+                    <View
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: 4,
+                        backgroundColor: theme.colors.primaryStrong,
+                      }}
+                    />
+                    <GraphSheetText
+                      style={{
+                        color: theme.colors.textSoft,
+                        ...theme.typography.semiBold,
+                        fontSize: 11,
+                        textTransform: 'uppercase',
+                      }}>
+                      {typeof fragment.chapterLabel === 'string'
+                        ? fragment.chapterLabel
+                        : `片段 ${Number(fragment.chunkIndex ?? 0) + 1}`}
+                    </GraphSheetText>
+                  </View>
+                  <LearningRichText
+                    allowFontScaling={false}
+                    content={sanitizeGraphDetailText(
+                      typeof fragment.semanticSummary === 'string'
+                        ? fragment.semanticSummary
+                        : fragment.label
+                    )}
+                    maxFontSizeMultiplier={1}
+                    numberOfLines={4}
+                    style={{
+                      color: theme.colors.text,
+                      ...theme.typography.medium,
+                      fontSize: 15,
+                      lineHeight: 22,
+                    }}
+                  />
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+      </View>
+    </ScrollView>
+  );
+}
+
+function GraphSheetText({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: any;
+}) {
+  return (
+    <Text allowFontScaling={false} maxFontSizeMultiplier={1} style={style}>
+      {children}
+    </Text>
+  );
+}
+
+function sanitizeGraphDetailText(value: unknown) {
+  return sanitizeLearningTextForDisplay(value);
+}
+
+function GraphDetailBody({
+  content,
+  style,
+}: {
+  content: string;
+  style?: any;
+}) {
+  const sanitizedContent = sanitizeGraphDetailText(content);
+
+  if (learningTextHasMalformedMath(String(content ?? ''))) {
+    return <GraphSheetText style={style}>{sanitizedContent}</GraphSheetText>;
+  }
+
+  return (
+    <LearningRichText
+      allowFontScaling={false}
+      content={sanitizedContent}
+      maxFontSizeMultiplier={1}
+      style={style}
+    />
   );
 }

@@ -303,14 +303,6 @@ export function buildLearningWorkspaceMessageCards(
     });
   }
 
-  if (presentation.bridgeActions.length > 0) {
-    cards.push({
-      actions: presentation.bridgeActions,
-      kind: 'bridge_actions',
-      title: '收编动作',
-    });
-  }
-
   return cards;
 }
 

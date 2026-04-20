@@ -157,6 +157,40 @@ describe('learning graph adapter', () => {
     ]);
   });
 
+  it('uses safe fragment labels and descriptions when source math is truncated', () => {
+    const rawFragmentText =
+      '4: Stolz定理 $$ \\text { 极限 } \\lim _{x \\rightarrow + \\infty } \\frac {1+ \\fra';
+    const viewModel = buildLearningGraphViewModel({
+      edges: [{ source: 'fragment:stolz', target: 'concept:limits', type: 'MENTIONS' }],
+      nodes: [
+        {
+          assetId: 1,
+          chapterLabel: 'Section 5',
+          chunkIndex: 4,
+          fragmentId: 1005,
+          id: 'fragment:stolz',
+          label: rawFragmentText,
+          semanticSummary: rawFragmentText,
+          type: 'Fragment',
+        },
+        { concept: '极限', id: 'concept:limits', label: '极限', type: 'Concept' },
+      ],
+      provider: 'fallback',
+    });
+
+    const selection = getLearningGraphSelection(viewModel, 'fragment:stolz');
+    const runtimeFragment = viewModel.graph.nodes.find((node) => node.id === 'fragment:stolz');
+
+    expect(runtimeFragment?.label).toBe('Section 5');
+    expect(runtimeFragment?.label).not.toContain('$$');
+    expect(runtimeFragment?.label).not.toContain('\\lim');
+    expect(selection?.title).toBe('Section 5');
+    expect(selection?.description).toContain('Stolz定理');
+    expect(selection?.description).not.toContain('$$');
+    expect(selection?.description).not.toContain('\\lim');
+    expect(selection?.description).not.toContain('\\frac');
+  });
+
   it('derives the latest explore focus from rendered messages', () => {
     const focus = resolveLearningExploreGraphFocus([
       {

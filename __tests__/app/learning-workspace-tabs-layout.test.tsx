@@ -6,7 +6,7 @@ import LearningWorkspaceTabsLayout from '@/app/learning/[profileId]/(workspace)/
 import { LEARNING_WORKSPACE_TOP_CHROME_OFFSET } from '@/components/learning/learning-workspace-scaffold';
 
 const mockCloseWorkspace = jest.fn();
-const mockOpenOverview = jest.fn();
+const mockOpenDocumentViewer = jest.fn();
 let mockWorkspaceScreen: any;
 
 jest.mock('expo-router/unstable-native-tabs', () => {
@@ -107,11 +107,11 @@ jest.mock('@/components/navigation/liquid-glass-icon-button', () => ({
 describe('LearningWorkspaceTabsLayout', () => {
   beforeEach(() => {
     mockCloseWorkspace.mockReset();
-    mockOpenOverview.mockReset();
+    mockOpenDocumentViewer.mockReset();
     mockWorkspaceScreen = {
       activeTab: 'study',
       closeWorkspace: mockCloseWorkspace,
-      openOverview: mockOpenOverview,
+      openDocumentViewer: mockOpenDocumentViewer,
       workspaceGate: {
         description: 'ready',
         kind: 'ready',
@@ -120,7 +120,7 @@ describe('LearningWorkspaceTabsLayout', () => {
     };
   });
 
-  it('registers graph, review, and a search-role study tab in that order', () => {
+  it('registers graph and a search-role study tab in that order', () => {
     const view = render(<LearningWorkspaceTabsLayout />);
     const triggerNodes = view.UNSAFE_root.findAll(
       (node) =>
@@ -131,18 +131,17 @@ describe('LearningWorkspaceTabsLayout', () => {
     expect(screen.getByTestId('learning-workspace-native-tabs-root')).toBeTruthy();
     expect(screen.getByTestId('learning-workspace-native-tab-study')).toBeTruthy();
     expect(screen.getByTestId('learning-workspace-native-tab-graph')).toBeTruthy();
-    expect(screen.getByTestId('learning-workspace-native-tab-review')).toBeTruthy();
+    expect(screen.queryByTestId('learning-workspace-native-tab-review')).toBeNull();
     expect(screen.getByTestId('learning-workspace-native-tab-study').props.accessibilityLabel).toBe(
       'search'
     );
     expect([...new Set(triggerNodes.map((node) => node.props.testID))]).toEqual([
       'learning-workspace-native-tab-graph',
-      'learning-workspace-native-tab-review',
       'learning-workspace-native-tab-study',
     ]);
     expect(screen.getByText('学习')).toBeTruthy();
     expect(screen.getByText('图谱')).toBeTruthy();
-    expect(screen.getByText('复盘')).toBeTruthy();
+    expect(screen.queryByText('复盘')).toBeNull();
   });
 
   it('matches the home tabs minimize behavior for native tab animation', () => {
@@ -167,7 +166,7 @@ describe('LearningWorkspaceTabsLayout', () => {
     fireEvent.press(screen.getByTestId('learning-workspace-info-glass'));
 
     expect(mockCloseWorkspace).toHaveBeenCalledTimes(1);
-    expect(mockOpenOverview).toHaveBeenCalledTimes(1);
+    expect(mockOpenDocumentViewer).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the shared floating chrome on the graph tab because the graph control only aligns visually with it', () => {

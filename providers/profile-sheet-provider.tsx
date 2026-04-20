@@ -3,14 +3,11 @@ import {
   Group,
   Host as SwiftHost,
   RNHostView as SwiftRNHostView,
-  ScrollView as SwiftScrollView,
 } from '@expo/ui/swift-ui';
 import {
-  background,
   interactiveDismissDisabled,
   presentationDetents,
   presentationDragIndicator,
-  scrollContentBackground,
 } from '@expo/ui/swift-ui/modifiers';
 import {
   Host as ComposeHost,
@@ -21,7 +18,6 @@ import React from 'react';
 import { Platform, View } from 'react-native';
 
 import { ProfileSheetContent } from '@/components/profile/profile-sheet-content';
-import { useAppTheme } from '@/hooks/use-app-theme';
 
 type ProfileSheetContextValue = {
   closeProfileSheet: () => void;
@@ -38,8 +34,6 @@ function NativeProfileSheet({
   isPresented: boolean;
   onDismiss: () => void;
 }) {
-  const { theme } = useAppTheme();
-
   if (Platform.OS === 'ios') {
     return (
       <SwiftHost style={{ position: 'absolute' }} testID="profile-sheet-swift-host">
@@ -58,17 +52,9 @@ function NativeProfileSheet({
               interactiveDismissDisabled(false),
             ]}>
             {isPresented ? (
-              <SwiftScrollView
-                modifiers={[
-                  scrollContentBackground('hidden'),
-                  background(theme.colors.backgroundStrong),
-                ]}
-                showsIndicators={false}
-                testID="profile-sheet-swift-scroll-view">
-                <SwiftRNHostView matchContents>
-                  <ProfileSheetContent onDismiss={onDismiss} scrollMode="external-native" />
-                </SwiftRNHostView>
-              </SwiftScrollView>
+              <SwiftRNHostView>
+                <ProfileSheetContent onDismiss={onDismiss} scrollMode="react-native" />
+              </SwiftRNHostView>
             ) : (
               <View />
             )}
@@ -81,14 +67,14 @@ function NativeProfileSheet({
   if (Platform.OS === 'android') {
     return (
       <View testID="profile-sheet-compose-host">
-        <ComposeHost matchContents style={{ position: 'absolute' }}>
+        <ComposeHost matchContents={{ vertical: true, horizontal: false }} style={{ position: 'absolute' }}>
           {isPresented ? (
             <View testID="profile-sheet-compose-sheet">
               <ModalBottomSheet
                 onDismissRequest={onDismiss}
                 skipPartiallyExpanded>
                 <ComposeRNHostView>
-                  <ProfileSheetContent onDismiss={onDismiss} />
+                  <ProfileSheetContent onDismiss={onDismiss} scrollMode="react-native" />
                 </ComposeRNHostView>
               </ModalBottomSheet>
             </View>

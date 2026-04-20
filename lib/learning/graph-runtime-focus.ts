@@ -24,6 +24,7 @@ type LearningGraphViewportController = {
 type LearningGraphViewportSyncOptions = {
   cameraFocusDistanceByNodeType: Record<string, number>;
   cameraFocusDurationMs: number;
+  currentCameraPosition?: LearningGraphCameraPosition | null;
   resetWhenMissing: boolean;
 };
 
@@ -34,7 +35,7 @@ type LearningGraphCameraTarget = {
 };
 
 const RESET_DURATION_MS = 360;
-const RESET_PADDING_PX = 56;
+const RESET_PADDING_PX = 72;
 
 function resolveLearningGraphFocusDistance(
   nodeType: string,
@@ -46,7 +47,8 @@ function resolveLearningGraphFocusDistance(
 export function buildLearningGraphCameraTarget(
   node: LearningGraphViewportNode | null | undefined,
   distanceByNodeType: Record<string, number>,
-  durationMs: number
+  durationMs: number,
+  currentCameraPosition?: LearningGraphCameraPosition | null
 ): LearningGraphCameraTarget | null {
   if (
     !node ||
@@ -60,16 +62,35 @@ export function buildLearningGraphCameraTarget(
   const y = node.y;
   const z = typeof node.z === 'number' ? node.z : 0;
   const distance = resolveLearningGraphFocusDistance(node.type, distanceByNodeType);
-  const vectorLength = Math.hypot(x, y, z) || 1;
-  const distanceRatio = 1 + distance / vectorLength;
+
+  // If we have a current camera position, approach from the current viewing angle
+  // instead of from the origin direction. This preserves spatial context.
+  let dirX: number;
+  let dirY: number;
+  let dirZ: number;
+
+  if (currentCameraPosition) {
+    dirX = currentCameraPosition.x - x;
+    dirY = currentCameraPosition.y - y;
+    dirZ = currentCameraPosition.z - z;
+  } else {
+    dirX = x;
+    dirY = y;
+    dirZ = z;
+  }
+
+  const dirLength = Math.hypot(dirX, dirY, dirZ) || 1;
+  const normalizedX = dirX / dirLength;
+  const normalizedY = dirY / dirLength;
+  const normalizedZ = dirZ / dirLength;
 
   return {
     durationMs,
     lookAt: { x, y, z },
     position: {
-      x: x * distanceRatio,
-      y: y * distanceRatio,
-      z: z * distanceRatio,
+      x: x + normalizedX * distance,
+      y: y + normalizedY * distance,
+      z: z + normalizedZ * distance,
     },
   };
 }
@@ -93,7 +114,8 @@ export function syncLearningGraphViewportSelection(
   const target = buildLearningGraphCameraTarget(
     node,
     options.cameraFocusDistanceByNodeType,
-    options.cameraFocusDurationMs
+    options.cameraFocusDurationMs,
+    options.currentCameraPosition
   );
 
   if (graph && target) {

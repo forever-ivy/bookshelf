@@ -6,6 +6,10 @@ import type {
   LearningGraphEdge,
   LearningGraphNode,
 } from '@/lib/api/types';
+import {
+  learningTextHasMalformedMath,
+  sanitizeLearningTextForDisplay,
+} from '@/lib/learning/text-formatting';
 import type { LearningWorkspaceRenderedMessage } from '@/lib/learning/workspace';
 
 type LearningGraphNodeBuckets = {
@@ -93,6 +97,52 @@ function normalizeGraphSlug(value: unknown) {
     .replace(/\s+/g, '-')
     .replace(/[^\p{L}\p{N}\-_]+/gu, '')
     .toLowerCase();
+}
+
+function sanitizeGraphPreviewText(value: unknown) {
+  return sanitizeLearningTextForDisplay(value);
+}
+
+function resolveFragmentSelectionTitle(node: LearningGraphNode) {
+  const chapterLabel =
+    typeof node.chapterLabel === 'string' && node.chapterLabel.trim()
+      ? node.chapterLabel.trim()
+      : null;
+  const chunkLabel =
+    typeof node.chunkIndex === 'number' ? `片段 ${node.chunkIndex + 1}` : null;
+  const preferredFallback = chapterLabel ?? chunkLabel ?? String(node.id);
+  const preferredCandidate = sanitizeGraphPreviewText(node.semanticSummary ?? node.label);
+
+  if (!preferredCandidate) {
+    return preferredFallback;
+  }
+
+  const looksTooLong = preferredCandidate.length > 48;
+  const looksStructured = /[#\n]/.test(String(node.semanticSummary ?? node.label ?? ''));
+  const looksMathHeavy = learningTextHasMalformedMath(
+    String(node.semanticSummary ?? node.label ?? '')
+  );
+
+  if (looksTooLong || looksStructured || looksMathHeavy) {
+    return preferredFallback;
+  }
+
+  return preferredCandidate;
+}
+
+function resolveGraphNodeDisplayLabel(node: LearningGraphNode) {
+  if (node.type === 'Fragment') {
+    return resolveFragmentSelectionTitle(node);
+  }
+
+  return sanitizeLearningTextForDisplay(node.label ?? node.id) || String(node.id);
+}
+
+function sanitizeGraphNodeForDisplay(node: LearningGraphNode): LearningGraphNode {
+  return {
+    ...node,
+    label: resolveGraphNodeDisplayLabel(node),
+  };
 }
 
 function dedupeNodes(nodes: LearningGraphNode[]) {
@@ -227,7 +277,9 @@ function buildNodeMetadata(
 
 function buildNodeDescription(node: LearningGraphNode) {
   if (node.type === 'Fragment') {
-    return typeof node.semanticSummary === 'string' ? node.semanticSummary : String(node.label ?? '');
+    return sanitizeGraphPreviewText(
+      typeof node.semanticSummary === 'string' ? node.semanticSummary : String(node.label ?? '')
+    );
   }
 
   if (node.type === 'LessonStep') {
@@ -409,7 +461,7 @@ function collectGuideStepNodeIds(stepNodeId: string, fullViewModel: LearningGrap
 }
 
 export function buildLearningGraphViewModel(graph: LearningGraph): LearningGraphViewModel {
-  const nodes = dedupeNodes(graph.nodes);
+  const nodes = dedupeNodes(graph.nodes).map(sanitizeGraphNodeForDisplay);
   const nodeById = Object.fromEntries(nodes.map((node) => [node.id, node]));
   const linkedNodeIds = new Map<string, Set<string>>();
   const edgeKeys = new Map<string, Set<string>>();
@@ -783,7 +835,10 @@ export function getLearningGraphSelection(
     relatedAssets: viewModel.relatedAssetsByNodeId[nodeId] ?? [],
     relatedFragments: viewModel.relatedFragmentsByNodeId[nodeId] ?? [],
     relatedSteps: viewModel.relatedStepsByNodeId[nodeId] ?? [],
-    title: String(node.label ?? node.id),
+    title:
+      node.type === 'Fragment'
+        ? resolveFragmentSelectionTitle(node)
+        : String(node.label ?? node.id),
     typeLabel: resolveNodeTypeLabel(node.type),
   };
 }

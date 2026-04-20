@@ -34,13 +34,6 @@ export default function LearningWorkspaceTabsLayout() {
           />
           <NativeTabs.Trigger.Label>图谱</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
-        <NativeTabs.Trigger name="review">
-          <NativeTabs.Trigger.Icon
-            md="history"
-            sf={{ default: 'clock.arrow.trianglehead.counterclockwise.rotate.90', selected: 'clock.arrow.trianglehead.counterclockwise.rotate.90' }}
-          />
-          <NativeTabs.Trigger.Label>复盘</NativeTabs.Trigger.Label>
-        </NativeTabs.Trigger>
         <NativeTabs.Trigger name="study" role="search">
           <NativeTabs.Trigger.Icon
             md="auto_awesome"

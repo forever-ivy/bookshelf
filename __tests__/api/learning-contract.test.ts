@@ -6,6 +6,7 @@ import {
   listLearningSessionMessages,
   listLearningSessions,
   retryGenerateLearningProfile,
+  resumeLearningSessionReply,
   startLearningSession,
   streamLearningSessionReply,
   uploadLearningProfile,
@@ -174,6 +175,57 @@ describe('learning contract', () => {
     expect(sessions[0]?.progressLabel).toBe('1 / 2 步');
   });
 
+  it('parses resumed ai sdk stream events from the explore resume endpoint', async () => {
+    const encoder = new TextEncoder();
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            encoder.encode(
+              'data: {"type":"data-user-message","data":{"message":{"id":"user-message-1","parts":[{"type":"text","text":"详细讲解一个文档中的例题"}]}}}\n\n'
+            )
+          );
+          controller.enqueue(
+            encoder.encode(
+              'data: {"type":"text-delta","id":"answer-1","delta":"线程是调度执行单位。"}\n\n'
+            )
+          );
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          controller.close();
+        },
+      }),
+      ok: true,
+      status: 200,
+    });
+
+    const events = [];
+    for await (const event of resumeLearningSessionReply(301, 'reader-token')) {
+      events.push(event);
+    }
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://library.example/api/v2/learning/sessions/301/stream',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Accept: 'text/event-stream',
+          Authorization: 'Bearer reader-token',
+        }),
+        method: 'GET',
+      })
+    );
+    expect(events).toEqual([
+      {
+        messageId: 'user-message-1',
+        text: '详细讲解一个文档中的例题',
+        type: 'resume.user_message',
+      },
+      {
+        delta: '线程是调度执行单位。',
+        type: 'explore.answer.delta',
+      },
+    ]);
+  });
+
   it('normalizes profile details, turn history, and session bootstrap payloads from v2 learning', async () => {
     (global.fetch as jest.Mock)
       .mockResolvedValueOnce({
@@ -198,6 +250,7 @@ describe('learning contract', () => {
               metadata: { bookTitle: '机器学习从零到一' },
               mimeType: 'text/markdown',
               parseStatus: 'parsed',
+              storagePath: '/srv/learning-storage/book-1.md',
             },
           ],
           jobs: [
@@ -349,6 +402,7 @@ describe('learning contract', () => {
       originBookSourceDocumentId: 41,
       parseStatus: 'parsed',
       profileId: 101,
+      storagePath: '/srv/learning-storage/book-1.md',
     });
     expect(messages).toHaveLength(2);
     expect(messages[0]).toMatchObject({
@@ -762,6 +816,99 @@ describe('learning contract', () => {
         presentation: expect.objectContaining({
           kind: 'explore',
           reasoningContent: '先识别问题在比较两个概念，再抓定义维度和调度维度。',
+        }),
+      },
+      type: 'assistant.final',
+    });
+  });
+
+  it('parses AI SDK UI message stream parts for explore sessions', async () => {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            [
+              'data: {"type":"data-status","data":{"phase":"retrieving"}}',
+              '',
+              'data: {"type":"data-evidence","data":{"items":[{"chunkId":11,"sourceTitle":"微积分A(1)","excerpt":"Leibniz公式。"}]}}',
+              '',
+              'data: {"type":"data-related-concepts","data":{"items":["莱布尼茨公式"]}}',
+              '',
+              'data: {"type":"data-followups","data":{"items":["继续讲第二题"]}}',
+              '',
+              'data: {"type":"data-bridge-actions","data":{"items":[{"actionType":"attach_explore_turn_to_guide_step","label":"收编回导学"}]}}',
+              '',
+              'data: {"type":"reasoning-start","id":"reasoning-1"}',
+              '',
+              'data: {"type":"reasoning-delta","id":"reasoning-1","delta":"先定位题目引用。"}',
+              '',
+              'data: {"type":"reasoning-end","id":"reasoning-1"}',
+              '',
+              'data: {"type":"text-start","id":"answer-1"}',
+              '',
+              'data: {"type":"text-delta","id":"answer-1","delta":"这道题先拆乘积，"}',
+              '',
+              'data: {"type":"text-delta","id":"answer-1","delta":"再套用 Leibniz 公式。"}',
+              '',
+              'data: {"type":"text-end","id":"answer-1"}',
+              '',
+              'data: {"type":"data-learning-final","data":{"turn":{"id":990,"sessionId":901,"assistantContent":"这道题先拆乘积，再套用 Leibniz 公式。","presentation":{"kind":"explore","answer":{"content":"这道题先拆乘积，再套用 Leibniz 公式。"},"reasoningContent":"先定位题目引用。","evidence":[{"chunkId":11,"sourceTitle":"微积分A(1)","excerpt":"Leibniz公式。"}],"relatedConcepts":["莱布尼茨公式"],"followups":["继续讲第二题"],"bridgeActions":[{"actionType":"attach_explore_turn_to_guide_step","label":"收编回导学"}]},"createdAt":"2026-04-08T09:02:00Z"}}}',
+              '',
+              'data: {"type":"finish"}',
+              '',
+              'data: [DONE]',
+              '',
+            ].join('\n')
+          )
+        );
+        controller.close();
+      },
+    });
+
+    (global.fetch as jest.Mock).mockResolvedValue({
+      body: stream,
+      headers: { get: () => 'text/event-stream' },
+      ok: true,
+      status: 200,
+    });
+
+    const events = [];
+    for await (const event of streamLearningSessionReply(
+      901,
+      { content: '详细讲解文档里的第二题' },
+      'reader-token'
+    )) {
+      events.push(event);
+    }
+
+    expect(JSON.parse(String((global.fetch as jest.Mock).mock.calls[0]?.[1]?.body))).toMatchObject({
+      message: {
+        role: 'user',
+        parts: [{ type: 'text', text: '详细讲解文档里的第二题' }],
+      },
+    });
+    expect(events.map((event) => event.type)).toEqual([
+      'status',
+      'evidence.items',
+      'explore.related_concepts',
+      'followups.items',
+      'bridge.actions',
+      'explore.reasoning.delta',
+      'explore.answer.delta',
+      'explore.answer.delta',
+      'assistant.final',
+    ]);
+    expect(events[5]).toMatchObject({
+      delta: '先定位题目引用。',
+      type: 'explore.reasoning.delta',
+    });
+    expect(events[8]).toMatchObject({
+      message: {
+        learningSessionId: 901,
+        presentation: expect.objectContaining({
+          kind: 'explore',
+          reasoningContent: '先定位题目引用。',
         }),
       },
       type: 'assistant.final',

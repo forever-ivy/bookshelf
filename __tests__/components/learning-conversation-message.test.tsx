@@ -190,14 +190,9 @@ describe('learning conversation message', () => {
     expect(screen.queryByText('无穷小量')).toBeNull();
     expect(screen.queryByText('继续追问')).toBeNull();
     expect(screen.queryByText('那它和数列极限的关系是什么？')).toBeNull();
-    expect(screen.getByText('收编动作')).toBeTruthy();
-    fireEvent.press(screen.getByText('收编回 Guide'));
-    expect(handleAction).toHaveBeenCalledWith(
-      expect.objectContaining({
-        actionType: 'attach_explore_turn_to_guide_step',
-        label: '收编回 Guide',
-      })
-    );
+    expect(screen.queryByText('收编动作')).toBeNull();
+    expect(screen.queryByText('收编回 Guide')).toBeNull();
+    expect(handleAction).not.toHaveBeenCalled();
   });
 
   it('renders an expandable reasoning row for explore messages when reasoning content exists', () => {

@@ -1,3 +1,5 @@
+import { fetch as expoFetch } from 'expo/fetch';
+
 import type {
   CreateLearningProfileInput,
   LearningBridgeAction,
@@ -622,7 +624,17 @@ function parseSsePayload(frame: string) {
     return null;
   }
 
+  if (payload === '[DONE]') {
+    return null;
+  }
+
   const parsed = JSON.parse(payload) as { data?: any; event?: string } | Record<string, unknown>;
+  if (parsed && typeof parsed === 'object' && typeof (parsed as { type?: unknown }).type === 'string') {
+    return {
+      data: parsed,
+      event: eventName,
+    };
+  }
   if (parsed && typeof parsed === 'object' && ('event' in parsed || 'data' in parsed)) {
     return {
       data: 'data' in parsed ? parsed.data : parsed,
@@ -663,7 +675,169 @@ function normalizeLearningFinalMessage(raw: any): LearningSessionMessage {
   );
 }
 
+function normalizeAiSdkLearningStreamEvents(part: any): LearningStreamEvent[] {
+  switch (part?.type) {
+    case 'data-user-message': {
+      const message = part.data?.message ?? {};
+      const parts = Array.isArray(message.parts) ? message.parts : [];
+      const text = parts
+        .map((item: any) =>
+          item && typeof item === 'object' && (item.type === 'text' || item.type === 'input_text')
+            ? String(item.text ?? '')
+            : ''
+        )
+        .join('')
+        .trim();
+      if (!text) {
+        return [];
+      }
+      return [
+        {
+          messageId: typeof message.id === 'string' ? message.id : null,
+          text,
+          type: 'resume.user_message',
+        },
+      ];
+    }
+    case 'data-status':
+      return [
+        {
+          phase: part.data?.phase ?? null,
+          type: 'status',
+        },
+      ];
+    case 'data-evidence':
+      return [
+        {
+          items: Array.isArray(part.data?.items)
+            ? part.data.items.map((item: any) => normalizeLearningCitation(item))
+            : [],
+          type: 'evidence.items',
+        },
+      ];
+    case 'data-followups':
+      return [
+        {
+          items: Array.isArray(part.data?.items)
+            ? part.data.items.filter((item: unknown) => typeof item === 'string')
+            : [],
+          type: 'followups.items',
+        },
+      ];
+    case 'data-bridge-actions':
+      return [
+        {
+          actions: Array.isArray(part.data?.items)
+            ? part.data.items.map((item: any) => normalizeLearningBridgeAction(item))
+            : [],
+          type: 'bridge.actions',
+        },
+      ];
+    case 'data-related-concepts':
+      return [
+        {
+          items: Array.isArray(part.data?.items)
+            ? part.data.items.filter((item: unknown) => typeof item === 'string')
+            : [],
+          type: 'explore.related_concepts',
+        },
+      ];
+    case 'reasoning-delta':
+      return [
+        {
+          delta: String(part.delta ?? part.text ?? ''),
+          type: 'explore.reasoning.delta',
+        },
+      ];
+    case 'text-delta':
+      return [
+        {
+          delta: String(part.delta ?? part.text ?? ''),
+          type: 'explore.answer.delta',
+        },
+      ];
+    case 'data-learning-final':
+      return [
+        {
+          message: normalizeLearningFinalMessage(part.data),
+          type: 'assistant.final',
+        },
+      ];
+    case 'error':
+      return [
+        {
+          code: 'learning_model_request_error',
+          message: typeof part.errorText === 'string' ? part.errorText : '模型请求错误',
+          type: 'error',
+        },
+      ];
+    default:
+      return [];
+  }
+}
+
+async function* streamLearningEventsFromResponse(
+  response: Response
+): AsyncGenerator<LearningStreamEvent, void, void> {
+  if (!response.ok) {
+    throw new LibraryApiError('learning_stream_http_error', {
+      code: `http_${response.status}`,
+      status: response.status,
+    });
+  }
+
+  if (response.status === 204) {
+    return;
+  }
+
+  if (!response.body) {
+    throw new LibraryApiError('learning_stream_missing_body', {
+      code: 'stream_missing_body',
+      status: response.status,
+    });
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+    const { frames, remainder } = decodeSseFrames(buffer);
+    buffer = remainder;
+
+    for (const frame of frames) {
+      const parsed = parseSsePayload(frame);
+      if (!parsed) {
+        continue;
+      }
+
+      for (const event of normalizeLearningStreamEvents(parsed)) {
+        yield event;
+      }
+    }
+
+    if (done) {
+      break;
+    }
+  }
+
+  if (buffer.trim()) {
+    const parsed = parseSsePayload(buffer.trim());
+    if (parsed) {
+      for (const event of normalizeLearningStreamEvents(parsed)) {
+        yield event;
+      }
+    }
+  }
+}
+
 function normalizeLearningStreamEvents(raw: { data?: any; event?: string }): LearningStreamEvent[] {
+  if (!raw.event && raw.data && typeof raw.data === 'object' && typeof raw.data.type === 'string') {
+    return normalizeAiSdkLearningStreamEvents(raw.data);
+  }
+
   switch (raw.event) {
     case 'status':
     case 'session.status':
@@ -826,6 +1000,7 @@ function normalizeLearningStreamEvents(raw: { data?: any; event?: string }): Lea
     case 'error':
       return [
         {
+          code: typeof raw.data?.code === 'string' ? raw.data.code : undefined,
           message: raw.data?.message ?? '导学回复失败，请稍后重试。',
           type: 'error',
         },
@@ -1078,8 +1253,16 @@ export async function* streamLearningSessionReply(
 
   let response: Response;
   try {
-    response = await fetch(`${baseUrl}/api/v2/learning/sessions/${sessionId}/stream`, {
-      body: JSON.stringify({ content: input.content }),
+    response = await expoFetch(`${baseUrl}/api/v2/learning/sessions/${sessionId}/stream`, {
+      body: JSON.stringify({
+        content: input.content,
+        id: `learning-session-${sessionId}`,
+        message: {
+          id: `user-${Date.now()}`,
+          parts: [{ text: input.content, type: 'text' }],
+          role: 'user',
+        },
+      }),
       headers: {
         Accept: 'text/event-stream',
         'Content-Type': 'application/json',
@@ -1093,54 +1276,34 @@ export async function* streamLearningSessionReply(
     });
   }
 
-  if (!response.ok) {
-    throw new LibraryApiError('learning_stream_http_error', {
-      code: `http_${response.status}`,
-      status: response.status,
+  yield* streamLearningEventsFromResponse(response);
+}
+
+export async function* resumeLearningSessionReply(
+  sessionId: number,
+  token?: string | null
+): AsyncGenerator<LearningStreamEvent, void, void> {
+  const baseUrl = getLibraryServiceBaseUrl();
+  if (!baseUrl) {
+    learningServiceNotConfigured();
+  }
+
+  let response: Response;
+  try {
+    response = await expoFetch(`${baseUrl}/api/v2/learning/sessions/${sessionId}/stream`, {
+      headers: {
+        Accept: 'text/event-stream',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      method: 'GET',
+    });
+  } catch {
+    throw new LibraryApiError('library_network_error', {
+      code: 'network_error',
     });
   }
 
-  if (!response.body) {
-    throw new LibraryApiError('learning_stream_missing_body', {
-      code: 'stream_missing_body',
-      status: response.status,
-    });
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
-    const { frames, remainder } = decodeSseFrames(buffer);
-    buffer = remainder;
-
-    for (const frame of frames) {
-      const parsed = parseSsePayload(frame);
-      if (!parsed) {
-        continue;
-      }
-
-      for (const event of normalizeLearningStreamEvents(parsed)) {
-        yield event;
-      }
-    }
-
-    if (done) {
-      break;
-    }
-  }
-
-  if (buffer.trim()) {
-    const parsed = parseSsePayload(buffer.trim());
-    if (parsed) {
-      for (const event of normalizeLearningStreamEvents(parsed)) {
-        yield event;
-      }
-    }
-  }
+  yield* streamLearningEventsFromResponse(response);
 }
 
 export async function submitLearningBridgeAction(

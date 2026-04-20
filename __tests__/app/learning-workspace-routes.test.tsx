@@ -20,6 +20,7 @@ import {
   LEARNING_WORKSPACE_TOP_CHROME_OFFSET,
 } from '@/components/learning/learning-workspace-scaffold';
 import { streamLearningSessionReply } from '@/lib/api/learning';
+import { useLearningConversationStore } from '@/stores/learning-conversation-store';
 
 const mockRouter = {
   back: jest.fn(),
@@ -447,6 +448,7 @@ function WorkspaceProbe() {
 describe('learning workspace routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    useLearningConversationStore.getState().reset();
     mockRouter.back.mockReset();
     mockRouter.canDismiss.mockReset();
     mockRouter.canDismiss.mockReturnValue(false);
@@ -533,13 +535,14 @@ describe('learning workspace routes', () => {
 
     const redirects = screen.getAllByTestId('route-redirect').map((node) => node.props.href);
 
-    expect(redirects).toContain('/learning/101/study?mode=explore');
+    expect(redirects).toContain('/learning/101/study?mode=guide');
     expect(redirects).toContain('/learning/101/study?mode=explore');
   });
 
-  it('forces legacy guide study mode back to explore', async () => {
+  it('keeps explicit guide study mode on the study route without forcing an explore redirect', async () => {
     mockUsePathname.mockReturnValue('/learning/101/study');
     mockUseLocalSearchParams.mockReturnValue({ mode: 'guide', profileId: '101' });
+    mockSessionsData = [createGuideSession({ id: 305 })];
 
     renderWithWorkspaceProvider(
       <>
@@ -548,9 +551,9 @@ describe('learning workspace routes', () => {
       </>
     );
 
-    await waitFor(() => {
-      expect(mockRouter.replace).toHaveBeenCalledWith('/learning/101/study?mode=explore');
-    });
+    expect(screen.getByText('study-mode:guide')).toBeTruthy();
+    expect(screen.getByText('workspace-session:305')).toBeTruthy();
+    expect(mockRouter.replace).not.toHaveBeenCalledWith('/learning/101/study?mode=explore');
   });
 
   it('starts a session automatically when the profile is ready but no active session exists', async () => {
@@ -595,6 +598,26 @@ describe('learning workspace routes', () => {
       });
     });
     expect(mockSubmitLearningBridgeAction).not.toHaveBeenCalled();
+  });
+
+  it('starts a guide session when guide mode opens without an active guide session', async () => {
+    mockUsePathname.mockReturnValue('/learning/101/study');
+    mockUseLocalSearchParams.mockReturnValue({ mode: 'guide', profileId: '101' });
+    mockSessionsData = [createActiveSession()];
+
+    renderWithWorkspaceProvider(
+      <>
+        <LearningWorkspaceStudyRoute />
+        <WorkspaceProbe />
+      </>
+    );
+
+    await waitFor(() => {
+      expect(mockStartSessionMutateAsync).toHaveBeenCalledWith({
+        profileId: 101,
+        sessionKind: 'guide',
+      });
+    });
   });
 
   it('ignores linked explore sessions and starts a standalone explore session', async () => {
@@ -849,7 +872,7 @@ describe('learning workspace routes', () => {
     expect(screen.queryByText('Explore 工作区')).toBeNull();
   });
 
-  it('tracks active tab and study mode separately and keeps guide navigation hidden', () => {
+  it('tracks active tab and study mode separately and lets study switch between explore and guide', () => {
     mockUsePathname.mockReturnValue('/learning/101/study');
     mockUseLocalSearchParams.mockReturnValue({ mode: 'explore', profileId: '101' });
 
@@ -864,7 +887,7 @@ describe('learning workspace routes', () => {
     expect(screen.getByText('study-mode:explore')).toBeTruthy();
 
     fireEvent.press(screen.getByTestId('workspace-probe-go-guide'));
-    expect(mockRouter.replace).not.toHaveBeenCalled();
+    expect(mockRouter.replace).toHaveBeenCalledWith('/learning/101/study?mode=guide');
 
     fireEvent.press(screen.getByTestId('workspace-probe-go-graph'));
     expect(mockRouter.replace).toHaveBeenCalledWith('/learning/101/graph');
@@ -1147,6 +1170,77 @@ describe('learning workspace routes', () => {
     expect(screen.getAllByText('当前导学本的所有步骤都已完成。').length).toBeGreaterThan(0);
   });
 
+  it('streams guide replies on the guide study route and keeps the latest turn visible', async () => {
+    mockUsePathname.mockReturnValue('/learning/101/study');
+    mockUseLocalSearchParams.mockReturnValue({ mode: 'guide', profileId: '101' });
+    mockSessionsData = [createGuideSession({ id: 305 })];
+    (streamLearningSessionReply as jest.Mock).mockImplementation(async function* () {
+      yield { phase: 'reasoning', type: 'status' };
+      yield { delta: '先把这道例题的已知条件和目标分开。', type: 'teacher.delta' };
+      yield {
+        evaluation: {
+          confidence: 0.74,
+          masteryScore: 74,
+          missingConcepts: [],
+          passed: true,
+          reasoning: '这轮回答已经把例题的切入点说清楚了。',
+          stepIndex: 1,
+        },
+        type: 'evaluation',
+      };
+      yield {
+        message: {
+          content: '先把这道例题的已知条件和目标分开。',
+          createdAt: '2026-04-08T08:31:00Z',
+          id: 990,
+          role: 'assistant',
+          learningSessionId: 305,
+          presentation: {
+            bridgeActions: [],
+            evidence: [],
+            examiner: {
+              confidence: 0.74,
+              feedback: null,
+              masteryScore: 74,
+              missingConcepts: [],
+              passed: true,
+              reasoning: '这轮回答已经把例题的切入点说清楚了。',
+              stepIndex: 1,
+            },
+            followups: [],
+            kind: 'guide',
+            peer: null,
+            relatedConcepts: [],
+            step: null,
+            teacher: {
+              content: '先把这道例题的已知条件和目标分开。',
+            },
+          },
+        },
+        type: 'assistant.final',
+      };
+    });
+
+    renderWithWorkspaceProvider(
+      <>
+        <LearningWorkspaceStudyRoute />
+        <WorkspaceProbe />
+      </>
+    );
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('workspace-probe-send'));
+    });
+
+    expect(streamLearningSessionReply).toHaveBeenCalledWith(
+      305,
+      { content: '帮我总结这一节的核心线索' },
+      'reader-token'
+    );
+    expect(screen.getAllByText('帮我总结这一节的核心线索').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('先把这道例题的已知条件和目标分开。').length).toBeGreaterThan(0);
+  });
+
   it('does not auto-bridge guide sessions on open', async () => {
     mockUsePathname.mockReturnValue('/learning/101/study');
     mockUseLocalSearchParams.mockReturnValue({ mode: 'explore', profileId: '101' });
@@ -1392,7 +1486,36 @@ describe('learning workspace routes', () => {
     expect(toast.error).not.toHaveBeenCalledWith('导学回复失败，请稍后再试。');
   });
 
-  it('shows an explore failure toast when the stream ends without assistant.final', async () => {
+  it('keeps visible explore reasoning when the stream breaks before any answer delta arrives', async () => {
+    (streamLearningSessionReply as jest.Mock).mockImplementation(async function* () {
+      yield { phase: 'retrieving', type: 'status' };
+      yield {
+        delta: '我先确认这个问题依赖的是哪一段上下文，再决定怎么展开。',
+        type: 'explore.reasoning.delta',
+      };
+      throw new Error('native stream interrupted before answer delta arrived');
+    });
+
+    renderWithWorkspaceProvider(
+      <>
+        <LearningWorkspaceStudyRoute />
+        <WorkspaceProbe />
+      </>
+    );
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('workspace-probe-send'));
+    });
+
+    fireEvent.press(screen.getByTestId('learning-conversation-reasoning-toggle'));
+
+    expect(
+      screen.getByText('我先确认这个问题依赖的是哪一段上下文，再决定怎么展开。')
+    ).toBeTruthy();
+    expect(toast.error).not.toHaveBeenCalledWith('Explore 回复失败，请稍后再试。');
+  });
+
+  it('shows an inline model request error when the stream ends without assistant.final', async () => {
     (streamLearningSessionReply as jest.Mock).mockImplementation(async function* () {
       yield { phase: 'retrieving', type: 'status' };
     });
@@ -1409,8 +1532,71 @@ describe('learning workspace routes', () => {
     });
 
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith('Explore 回复失败，请稍后再试。');
+      expect(toast.error).toHaveBeenCalledWith('模型请求错误');
     });
+    expect(screen.getByText('模型请求错误')).toBeTruthy();
+  });
+
+  it('keeps the latest optimistic user turn after an interrupted stream when leaving and reopening the same explore session', async () => {
+    const interruptedInput = '讲下这个例题';
+    (streamLearningSessionReply as jest.Mock).mockImplementation(async function* () {
+      yield { phase: 'retrieving', type: 'status' };
+    });
+
+    const view = renderWithWorkspaceProvider(
+      <>
+        <LearningWorkspaceStudyRoute />
+        <WorkspaceProbe />
+      </>
+    );
+
+    fireEvent.changeText(screen.getByTestId('learning-study-native-search-bar'), interruptedInput);
+
+    await act(async () => {
+      fireEvent(screen.getByTestId('learning-study-native-search-bar'), 'submitEditing', {
+        nativeEvent: {
+          text: interruptedInput,
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('模型请求错误');
+    });
+
+    view.unmount();
+
+    renderWithWorkspaceProvider(
+      <>
+        <LearningWorkspaceStudyRoute />
+        <WorkspaceProbe />
+      </>
+    );
+
+    expect(screen.getAllByText(interruptedInput).length).toBeGreaterThan(0);
+  });
+
+  it('shows a model request error when the stream emits an explicit error event', async () => {
+    (streamLearningSessionReply as jest.Mock).mockImplementation(async function* () {
+      yield { phase: 'reasoning', type: 'status' };
+      yield { code: 'learning_model_request_error', message: '模型请求错误', type: 'error' };
+    });
+
+    renderWithWorkspaceProvider(
+      <>
+        <LearningWorkspaceStudyRoute />
+        <WorkspaceProbe />
+      </>
+    );
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('workspace-probe-send'));
+    });
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('模型请求错误');
+    });
+    expect(screen.getByText('模型请求错误')).toBeTruthy();
   });
 
   it('renders overview as a secondary workspace summary route', () => {

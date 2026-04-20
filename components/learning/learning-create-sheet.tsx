@@ -3,14 +3,11 @@ import {
   Group,
   Host as SwiftHost,
   RNHostView as SwiftRNHostView,
-  ScrollView as SwiftScrollView,
 } from '@expo/ui/swift-ui';
 import {
-  background,
   interactiveDismissDisabled,
   presentationDetents,
   presentationDragIndicator,
-  scrollContentBackground,
 } from '@expo/ui/swift-ui/modifiers';
 import {
   Host as ComposeHost,
@@ -90,8 +87,11 @@ function LearningCreateSheetContent({
 
   return (
     <View
+      testID="learning-create-sheet-content"
       style={{
+        alignSelf: 'stretch',
         backgroundColor: theme.colors.surface,
+        flex: 1,
         gap: theme.spacing.lg,
         paddingBottom: theme.spacing.xxl,
         paddingHorizontal: theme.spacing.xl,
@@ -236,7 +236,6 @@ export function LearningCreateSheet({
   onDocumentPicked: (doc: PickedDocument) => void | Promise<void>;
   visible: boolean;
 }) {
-  const { theme } = useAppTheme();
   const contentProps = {
     creating,
     onClose,
@@ -259,16 +258,9 @@ export function LearningCreateSheet({
               interactiveDismissDisabled(false),
             ]}>
             {visible ? (
-              <SwiftScrollView
-                modifiers={[
-                  scrollContentBackground('hidden'),
-                  background(theme.colors.surface),
-                ]}
-                showsIndicators={false}>
-                <SwiftRNHostView matchContents>
-                  <LearningCreateSheetContent {...contentProps} />
-                </SwiftRNHostView>
-              </SwiftScrollView>
+              <SwiftRNHostView>
+                <LearningCreateSheetContent {...contentProps} />
+              </SwiftRNHostView>
             ) : (
               <View />
             )}
@@ -281,7 +273,7 @@ export function LearningCreateSheet({
   if (Platform.OS === 'android') {
     return (
       <View testID="learning-create-sheet-compose-host">
-        <ComposeHost matchContents style={{ position: 'absolute' }}>
+        <ComposeHost matchContents={{ vertical: true, horizontal: false }} style={{ position: 'absolute' }}>
           {visible ? (
             <ModalBottomSheet onDismissRequest={onClose} skipPartiallyExpanded>
               <ComposeRNHostView>

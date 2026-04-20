@@ -125,20 +125,34 @@ export function resolveLearningWorkspaceSourceSummary(profile: LearningProfile) 
   return resolveWorkspaceSourceSummary(profile);
 }
 
-export function useLearningWorkspace(profileId: number) {
+function pickLatestActiveSession(sessions: LearningSession[]) {
+  return [...sessions].sort(
+    (left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
+  )[0] ?? null;
+}
+
+export function useLearningWorkspace(
+  profileId: number,
+  studyMode: 'guide' | 'explore' = 'explore'
+) {
   const profileQuery = useLearningProfileQuery(profileId);
   const sessionsQuery = useLearningSessionsQuery();
   const startSessionMutation = useStartLearningSessionMutation();
   const generateProfileMutation = useGenerateLearningProfileMutation();
   const autoTriggeredGenerationProfileRef = React.useRef<number | null>(null);
   const profile = profileQuery.data;
-  const startingExploreSessionRef = React.useRef(false);
+  const startingSessionRef = React.useRef(false);
+  const targetSessionKind = studyMode === 'guide' ? 'guide' : 'explore';
   const activeSessions = React.useMemo(
     () =>
       (sessionsQuery.data ?? []).filter(
         (item) => item.learningProfileId === profileId && item.status !== 'completed'
       ),
     [profileId, sessionsQuery.data]
+  );
+  const activeGuideSessions = React.useMemo(
+    () => activeSessions.filter((item) => item.sessionKind === 'guide'),
+    [activeSessions]
   );
   const standaloneExploreSessions = React.useMemo(
     () =>
@@ -149,11 +163,10 @@ export function useLearningWorkspace(profileId: number) {
   );
   const defaultSession = React.useMemo(
     () =>
-      [...standaloneExploreSessions].sort(
-        (left, right) =>
-          new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
-      )[0] ?? null,
-    [standaloneExploreSessions]
+      targetSessionKind === 'guide'
+        ? pickLatestActiveSession(activeGuideSessions)
+        : pickLatestActiveSession(standaloneExploreSessions),
+    [activeGuideSessions, standaloneExploreSessions, targetSessionKind]
   );
   const [workspaceSession, setWorkspaceSession] = React.useState<LearningSession | null>(
     defaultSession ?? null
@@ -165,7 +178,7 @@ export function useLearningWorkspace(profileId: number) {
         ? activeSessions.find((item) => item.id === workspaceSession.id) ?? null
         : null;
 
-    if (matchedCurrent) {
+    if (matchedCurrent && matchedCurrent.sessionKind === targetSessionKind) {
       setWorkspaceSession((current) => {
         if (
           current &&
@@ -183,21 +196,36 @@ export function useLearningWorkspace(profileId: number) {
     if (
       workspaceSession &&
       workspaceSession.learningProfileId === profileId &&
-      workspaceSession.sessionKind === 'explore' &&
+      workspaceSession.sessionKind === targetSessionKind &&
       workspaceSession.status !== 'completed'
     ) {
       return;
     }
 
     if (defaultSession) {
-      setWorkspaceSession(defaultSession);
+      setWorkspaceSession((current) => {
+        if (
+          current &&
+          current.id === defaultSession.id &&
+          current.updatedAt === defaultSession.updatedAt
+        ) {
+          return current;
+        }
+
+        return defaultSession;
+      });
       return;
     }
 
     if (profile?.status !== 'ready') {
       setWorkspaceSession(null);
+      return;
     }
-  }, [activeSessions, defaultSession, profile?.status, profileId, workspaceSession]);
+
+    if (workspaceSession !== null) {
+      setWorkspaceSession(null);
+    }
+  }, [activeGuideSessions, activeSessions, defaultSession, profile?.status, profileId, targetSessionKind, workspaceSession]);
 
   React.useEffect(() => {
     if (
@@ -205,16 +233,16 @@ export function useLearningWorkspace(profileId: number) {
       profile.status !== 'ready' ||
       workspaceSession ||
       startSessionMutation.isPending ||
-      startingExploreSessionRef.current
+      startingSessionRef.current
     ) {
       return;
     }
 
     let isActive = true;
-    startingExploreSessionRef.current = true;
+    startingSessionRef.current = true;
 
     startSessionMutation
-      .mutateAsync({ profileId: profile.id, sessionKind: 'explore' })
+      .mutateAsync({ profileId: profile.id, sessionKind: targetSessionKind })
       .then((result) => {
         if (isActive) {
           setWorkspaceSession(result.session);
@@ -227,14 +255,14 @@ export function useLearningWorkspace(profileId: number) {
       })
       .finally(() => {
         if (isActive) {
-          startingExploreSessionRef.current = false;
+          startingSessionRef.current = false;
         }
       });
 
     return () => {
       isActive = false;
     };
-  }, [profile, workspaceSession, startSessionMutation]);
+  }, [profile, startSessionMutation, targetSessionKind, workspaceSession]);
 
   React.useEffect(() => {
     if (!profile || generateProfileMutation.isPending) {
