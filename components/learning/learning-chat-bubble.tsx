@@ -137,11 +137,8 @@ function ChatGPTCursor({ inline = false }: { inline?: boolean }) {
 function ThinkingPulse() {
   const { theme } = useAppTheme();
   const breathOpacity = React.useRef(new Animated.Value(0.55)).current;
-  const breathScale = React.useRef(new Animated.Value(1)).current;
-  const shimmerX = React.useRef(new Animated.Value(-80)).current;
 
   React.useEffect(() => {
-    // Slow breath: opacity pulses smoothly
     const breathAnim = Animated.loop(
       Animated.sequence([
         Animated.timing(breathOpacity, {
@@ -156,91 +153,27 @@ function ThinkingPulse() {
         }),
       ])
     );
-    // Subtle scale
-    const scaleAnim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(breathScale, {
-          toValue: 1.025,
-          duration: 1800,
-          useNativeDriver: true,
-        }),
-        Animated.timing(breathScale, {
-          toValue: 1,
-          duration: 1800,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    // Shimmer sweep
-    const shimmerAnim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(shimmerX, {
-          toValue: 120,
-          duration: 1400,
-          useNativeDriver: true,
-        }),
-        Animated.delay(600),
-        Animated.timing(shimmerX, {
-          toValue: -80,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-      ])
-    );
 
     breathAnim.start();
-    scaleAnim.start();
-    shimmerAnim.start();
     return () => {
       breathAnim.stop();
-      scaleAnim.stop();
-      shimmerAnim.stop();
     };
-  }, []);
+  }, [breathOpacity]);
 
   return (
-    <Animated.View
+    <Animated.Text
+      selectable={false}
       testID="learning-assistant-thinking-indicator"
       style={{
         alignSelf: 'flex-start',
+        color: theme.colors.textSoft,
         opacity: breathOpacity,
-        overflow: 'hidden',
-        transform: [{ scale: breathScale }],
+        ...theme.typography.medium,
+        fontSize: 13,
+        lineHeight: 20,
       }}>
-      <View
-        style={{
-          borderColor: theme.colors.borderSoft,
-          borderRadius: theme.radii.pill,
-          borderWidth: 1,
-          paddingHorizontal: 14,
-          paddingVertical: 8,
-        }}>
-        <Text
-          selectable={false}
-          style={{
-            color: theme.colors.textSoft,
-            ...theme.typography.semiBold,
-            fontSize: 14,
-            letterSpacing: 0.3,
-          }}>
-          Thinking
-        </Text>
-        {/* Shimmer highlight */}
-        <Animated.View
-          pointerEvents="none"
-          style={{
-            bottom: 0,
-            left: 0,
-            position: 'absolute',
-            top: 0,
-            transform: [{ translateX: shimmerX }],
-            width: 72,
-            backgroundColor: 'rgba(255,255,255,0.28)',
-            borderRadius: theme.radii.pill,
-          }}
-        />
-      </View>
-    </Animated.View>
+      Explore
+    </Animated.Text>
   );
 }
 

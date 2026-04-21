@@ -162,6 +162,7 @@ function normalizeLearningSourceDocument(raw: any, profileId: number): LearningS
       null,
     parseStatus: raw?.parseStatus ?? raw?.parse_status ?? null,
     profileId: Number(raw?.profileId ?? raw?.profile_id ?? profileId),
+    storagePath: raw?.storagePath ?? raw?.storage_path ?? null,
   };
 }
 
@@ -217,7 +218,7 @@ function resolveLearningSourceTypeFromAsset(asset: any): LearningSourceType {
   return assetKind.startsWith('book') ? 'book' : 'upload';
 }
 
-function buildDefaultLearningPersona(sourceType: LearningSourceType): LearningPersona {
+function buildDefaultLearningPersona(sourceType: LearningSourceType, title?: string): LearningPersona {
   if (sourceType === 'book') {
     return {
       coachingFocus: '先搭起阅读框架，再用自己的话解释关键概念。',
@@ -227,11 +228,13 @@ function buildDefaultLearningPersona(sourceType: LearningSourceType): LearningPe
     };
   }
 
+  const documentName = title ? `《${title}》` : '这份资料';
+
   return {
-    coachingFocus: '先看清这份资料要完成什么，再拆出关键步骤。',
-    greeting: '我们先把这份资料真正拆明白。',
-    name: '资料陪练助手',
-    style: '先定位任务，再聚焦重点概念',
+    coachingFocus: '通过多轮对话发掘深层信息。',
+    greeting: `${documentName}已解析就绪。随时可以向我提问，或让我为你提取核心观点。`,
+    name: '文档助教',
+    style: '直接回答并在需要时引用文档',
   };
 }
 
@@ -258,7 +261,8 @@ function normalizeLearningProfile(
       : raw?.sourceType === 'book'
         ? 'book'
         : 'upload';
-  const persona = buildDefaultLearningPersona(sourceType);
+  const title = raw?.title ?? '未命名导学';
+  const persona = buildDefaultLearningPersona(sourceType, title);
   const curriculum =
     steps.length > 0
       ? steps.map((step: any, index: number) => normalizeLearningCurriculumStep(step, index))
@@ -285,7 +289,7 @@ function normalizeLearningProfile(
     sources: assets.map((source) => normalizeLearningSourceDocument(source, Number(raw?.id ?? 0))),
     status: raw?.status ?? 'queued',
     teachingGoal: raw?.teachingGoal ?? raw?.teaching_goal ?? null,
-    title: raw?.title ?? '未命名导学',
+    title,
     updatedAt:
       raw?.updatedAt ?? raw?.updated_at ?? raw?.createdAt ?? raw?.created_at ?? nowIso(),
   };

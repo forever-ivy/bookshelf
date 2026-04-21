@@ -77,8 +77,15 @@ describe('ProfileSheetContent', () => {
     expect(surfaceStyle.borderRadius).toBeUndefined();
     expect(surfaceStyle.borderWidth).toBeUndefined();
     expect(surfaceStyle.flex).toBe(1);
-    expect(surfaceStyle.paddingBottom).toBe(24);
-    expect(screen.getByTestId('profile-sheet-scroll-content')).toBeTruthy();
+    expect(screen.getByTestId('profile-sheet-surface').props.contentInsetAdjustmentBehavior).toBe(
+      'automatic'
+    );
+    expect(screen.getByTestId('profile-sheet-surface').props.contentContainerStyle).toEqual(
+      expect.objectContaining({
+        paddingBottom: 24 + appTheme.spacing.lg,
+        paddingTop: appTheme.spacing.lg,
+      })
+    );
     expect(screen.queryByTestId('profile-sheet-close-button')).toBeNull();
   });
 
@@ -86,11 +93,15 @@ describe('ProfileSheetContent', () => {
     render(<ProfileSheetContent onDismiss={jest.fn()} scrollMode="external-native" />);
 
     const surfaceStyle = StyleSheet.flatten(screen.getByTestId('profile-sheet-surface').props.style);
+    const contentStackStyle = StyleSheet.flatten(
+      screen.getByTestId('profile-sheet-content-stack').props.style
+    );
 
     expect(surfaceStyle.flex).toBeUndefined();
     expect(screen.queryByTestId('profile-sheet-scroll-content')).toBeNull();
     expect(screen.getByText('个人中心')).toBeTruthy();
     expect(screen.getByText('me-content')).toBeTruthy();
+    expect(contentStackStyle.paddingTop).toBe(appTheme.spacing.lg);
   });
 
   it('dismisses the sheet before logout leaves the sheet content onscreen', () => {

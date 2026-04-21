@@ -268,6 +268,7 @@ export type LearningSourceDocument = {
   originBookSourceDocumentId?: number | null;
   parseStatus?: string | null;
   profileId: number;
+  storagePath?: string | null;
 };
 
 export type LearningGenerationJob = {

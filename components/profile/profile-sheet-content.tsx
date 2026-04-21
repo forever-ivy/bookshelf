@@ -17,6 +17,12 @@ export function ProfileSheetContent({
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
   const usesExternalNativeScroll = scrollMode === 'external-native';
+  const contentSpacing = {
+    gap: theme.spacing.xxl,
+    paddingBottom: insets.bottom + theme.spacing.lg,
+    paddingHorizontal: theme.spacing.xl,
+    paddingTop: theme.spacing.lg,
+  } as const;
   const content = (
     <>
       <View
@@ -47,39 +53,42 @@ export function ProfileSheetContent({
     </>
   );
 
+  if (!usesExternalNativeScroll) {
+    return (
+      <ScrollView
+        bounces={false}
+        contentContainerStyle={contentSpacing}
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardDismissMode="on-drag"
+        style={{
+          backgroundColor: theme.colors.backgroundStrong,
+          flex: 1,
+        }}
+        testID="profile-sheet-surface"
+        showsVerticalScrollIndicator={false}>
+        {content}
+      </ScrollView>
+    );
+  }
+
   return (
     <View
       testID="profile-sheet-surface"
       style={{
         alignSelf: 'stretch',
         backgroundColor: theme.colors.backgroundStrong,
-        flex: usesExternalNativeScroll ? undefined : 1,
         paddingBottom: insets.bottom,
       }}>
-      {usesExternalNativeScroll ? (
-        <View
-          style={{
-            gap: theme.spacing.xxl,
-            paddingBottom: theme.spacing.lg,
-            paddingHorizontal: theme.spacing.xl,
-            paddingTop: theme.spacing.xxxl + theme.spacing.xl,
-          }}>
-          {content}
-        </View>
-      ) : (
-        <ScrollView
-          bounces={false}
-          contentContainerStyle={{
-            gap: theme.spacing.xxl,
-            paddingBottom: theme.spacing.lg,
-            paddingHorizontal: theme.spacing.xl,
-            paddingTop: theme.spacing.xxxl + theme.spacing.xl,
-          }}
-          testID="profile-sheet-scroll-content"
-          showsVerticalScrollIndicator={false}>
-          {content}
-        </ScrollView>
-      )}
+      <View
+        testID="profile-sheet-content-stack"
+        style={{
+          gap: theme.spacing.xxl,
+          paddingBottom: theme.spacing.lg,
+          paddingHorizontal: theme.spacing.xl,
+          paddingTop: theme.spacing.lg,
+        }}>
+        {content}
+      </View>
     </View>
   );
 }

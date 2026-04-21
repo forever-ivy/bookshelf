@@ -1,5 +1,5 @@
 import React from 'react';
-import { View } from 'react-native';
+import { View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 
 export type BookCoverTone = 'apricot' | 'blue' | 'coral' | 'lavender' | 'mint';
@@ -89,6 +89,14 @@ const TONE_OFFSETS: Record<BookCoverTone, number> = {
   mint: 23,
 };
 
+const BOOK_COVER_GLOW_COLORS: Record<BookCoverTone, string> = {
+  apricot: 'rgba(237, 231, 222, 0.96)',
+  blue: 'rgba(233, 238, 243, 0.96)',
+  coral: 'rgba(234, 227, 219, 0.96)',
+  lavender: 'rgba(238, 241, 245, 0.96)',
+  mint: 'rgba(231, 236, 231, 0.96)',
+};
+
 function hashSeed(seed: string) {
   let hash = 0;
 
@@ -122,6 +130,13 @@ type BookCoverProps = {
   shellTestID?: string;
 };
 
+type BookCoverGlowProps = {
+  children: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+  testID?: string;
+  tone: BookCoverTone;
+};
+
 export function BookCover({
   height,
   imageTestID,
@@ -151,6 +166,30 @@ export function BookCover({
         }}
         testID={imageTestID}
       />
+    </View>
+  );
+}
+
+export function BookCoverGlow({
+  children,
+  style,
+  testID,
+  tone,
+}: BookCoverGlowProps) {
+  return (
+    <View
+      style={[
+        {
+          alignItems: 'center',
+          backgroundColor: BOOK_COVER_GLOW_COLORS[tone],
+          boxShadow: '0 10px 28px rgba(25, 23, 20, 0.08)',
+          justifyContent: 'center',
+          overflow: 'hidden',
+        },
+        style,
+      ]}
+      testID={testID}>
+      {children}
     </View>
   );
 }

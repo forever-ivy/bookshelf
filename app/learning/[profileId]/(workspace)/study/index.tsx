@@ -12,24 +12,25 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SearchBarCommands } from 'react-native-screens';
 import { toast } from 'sonner-native';
-import Animated from 'react-native-reanimated';
 
 
-import { LearningConversationMessage } from '@/components/learning/learning-conversation-message';
 import { LearningComposer } from '@/components/learning/learning-composer';
+import { LearningConversationMessage } from '@/components/learning/learning-conversation-message';
 import { LearningConversationScroll } from '@/components/learning/learning-conversation-scroll';
 import { LearningWorkspaceLoadingState } from '@/components/learning/learning-workspace-loading-state';
+import {
+  useLearningWorkspaceScreen,
+} from '@/components/learning/learning-workspace-provider';
 import {
   LEARNING_WORKSPACE_FLOATING_BUTTON_SIZE,
   LEARNING_WORKSPACE_TOP_CHROME_OFFSET,
 } from '@/components/learning/learning-workspace-scaffold';
-import {
-  useLearningWorkspaceScreen,
-} from '@/components/learning/learning-workspace-provider';
 import { useAppSession } from '@/hooks/use-app-session';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import { useConversationFocusAnchor } from '@/hooks/use-conversation-focus-anchor';
 import { submitLearningBridgeAction } from '@/lib/api/learning';
 import type { LearningBridgeAction } from '@/lib/api/types';
+import { resolveLatestTurnFocusMessageId } from '@/lib/learning/conversation-focus';
 
 
 function supportsBottomToolbarSearch() {
@@ -218,7 +219,6 @@ function ExplorePane({
   messages,
   onAction,
   onPromptPress,
-  onScrollToEndRequest,
   starterPrompts,
   topPadding,
 }: {
@@ -226,25 +226,12 @@ function ExplorePane({
   messages: ReturnType<typeof useLearningWorkspaceScreen>['renderedMessages'];
   onAction?: (action: LearningBridgeAction) => void;
   onPromptPress: (prompt: string) => void;
-  onScrollToEndRequest?: (fn: () => void) => void;
   starterPrompts: string[];
   topPadding?: number;
 }) {
   const { theme } = useAppTheme();
-  const [focusAnchorY, setFocusAnchorY] = React.useState<number | null>(null);
-  const focusMessageId = React.useMemo(() => {
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      if (messages[index]?.role === 'user') {
-        return messages[index]?.id ?? null;
-      }
-    }
-
-    return messages.length > 0 ? messages[messages.length - 1]?.id ?? null : null;
-  }, [messages]);
-
-  React.useEffect(() => {
-    setFocusAnchorY(null);
-  }, [focusMessageId]);
+  const focusMessageId = React.useMemo(() => resolveLatestTurnFocusMessageId(messages), [messages]);
+  const { focusAnchorY, setFocusAnchorY } = useConversationFocusAnchor(focusMessageId);
 
   return (
     <LearningConversationScroll
@@ -257,7 +244,6 @@ function ExplorePane({
       focusAnchorY={focusAnchorY}
       keyboardDismissMode="interactive"
       keyboardShouldPersistTaps="handled"
-      onScrollToEndRequest={onScrollToEndRequest}
       showsVerticalScrollIndicator={false}
       testID="learning-workspace-screen">
       <View style={{ gap: 28 }}>
@@ -298,7 +284,6 @@ export default function LearningWorkspaceStudyRoute() {
     workspaceGate,
   } = useLearningWorkspaceScreen();
   const [isActivatingExplore, setIsActivatingExplore] = React.useState(false);
-  const scrollToEndRef = React.useRef<(() => void) | null>(null);
   const isActivatingExploreRef = React.useRef(false);
   const isMountedRef = React.useRef(true);
   const searchBarRef = React.useRef<SearchBarCommands>(null);
@@ -320,15 +305,6 @@ export default function LearningWorkspaceStudyRoute() {
     },
     []
   );
-
-  React.useEffect(() => {
-    // On keyboard show, scroll so the last message is above the keyboard
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const showSub = Keyboard.addListener(showEvent, () => {
-      scrollToEndRef.current?.();
-    });
-    return () => showSub.remove();
-  }, []);
 
   React.useEffect(() => {
     if (
@@ -434,16 +410,16 @@ export default function LearningWorkspaceStudyRoute() {
     () =>
       usesHeaderSearchBar
         ? {
-            hideNavigationBar: false,
-            onCancelButtonPress: () => {
-              setDraft('');
-            },
-            onChangeText: handleSearchTextChange,
-            onSearchButtonPress: handleSearchSubmit,
-            placement: 'automatic' as const,
-            placeholder: inputPlaceholder,
-            ref: searchBarRef,
-          }
+          hideNavigationBar: false,
+          onCancelButtonPress: () => {
+            setDraft('');
+          },
+          onChangeText: handleSearchTextChange,
+          onSearchButtonPress: handleSearchSubmit,
+          placement: 'automatic' as const,
+          placeholder: inputPlaceholder,
+          ref: searchBarRef,
+        }
         : undefined,
     [handleSearchSubmit, handleSearchTextChange, inputPlaceholder, setDraft, usesHeaderSearchBar]
   );
@@ -486,11 +462,11 @@ export default function LearningWorkspaceStudyRoute() {
             primaryAction={
               workspaceGate.kind === 'failed'
                 ? {
-                    label: isRetryPending ? '重新生成中...' : '重新生成',
-                    onPress: () => {
-                      void retryGenerate(profile?.id);
-                    },
-                  }
+                  label: isRetryPending ? '重新生成中...' : '重新生成',
+                  onPress: () => {
+                    void retryGenerate(profile?.id);
+                  },
+                }
                 : undefined
             }
             secondaryAction={{
@@ -540,7 +516,6 @@ export default function LearningWorkspaceStudyRoute() {
           messages={renderedMessages}
           onAction={handleConversationAction}
           onPromptPress={handleStarterPromptPress}
-          onScrollToEndRequest={(fn) => { scrollToEndRef.current = fn; }}
           starterPrompts={usesNativeSearchBar ? starterPrompts : []}
           topPadding={topChromePadding}
         />

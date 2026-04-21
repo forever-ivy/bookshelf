@@ -8,6 +8,7 @@ import { appTheme } from '@/constants/app-theme';
 let mockPathname = '/';
 let mockRecordedStackScreenOptions: Record<string, unknown> | undefined;
 let mockRecordedScreens: { name?: string; options?: Record<string, unknown> }[] = [];
+const mockPush = jest.fn();
 
 jest.mock('react-native-reanimated', () => ({}));
 
@@ -45,6 +46,7 @@ jest.mock('expo-router', () => {
     usePathname: () => mockPathname,
     useRouter: () => ({
       back: jest.fn(),
+      push: mockPush,
     }),
   };
 });
@@ -80,6 +82,7 @@ describe('RootLayout', () => {
     mockPathname = '/';
     mockRecordedStackScreenOptions = undefined;
     mockRecordedScreens = [];
+    mockPush.mockReset();
   });
 
   it('configures the root stack for native headers and keeps tabs as the headerless shell', () => {
@@ -129,6 +132,26 @@ describe('RootLayout', () => {
         name: 'learning/[profileId]',
         options: expect.objectContaining({
           headerShown: false,
+        }),
+      })
+    );
+    expect(mockRecordedScreens).toContainEqual(
+      expect.objectContaining({
+        name: 'profile-sheet',
+        options: expect.objectContaining({
+          contentStyle: {
+            backgroundColor: 'transparent',
+          },
+          gestureEnabled: true,
+          headerShown: false,
+          headerTransparent: true,
+          presentation: 'formSheet',
+          sheetAllowedDetents: [0.78, 1],
+          sheetCornerRadius: 24,
+          sheetGrabberVisible: true,
+          sheetInitialDetentIndex: 0,
+          sheetLargestUndimmedDetentIndex: 0,
+          title: '',
         }),
       })
     );

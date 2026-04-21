@@ -131,11 +131,11 @@ function resolveNotebookMeta(
   }
 
   return {
-    previewText: session?.lastMessagePreview ?? profile.persona.greeting,
-    primaryMeta: session?.progressLabel ?? `${Math.max(profile.curriculum.length, 1)} 个学习步骤`,
-    secondaryMeta: session?.currentStepTitle ?? profile.curriculum[0]?.title ?? profile.persona.name,
+    previewText: session?.lastMessagePreview ?? '',
+    primaryMeta: '文档智能问答',
+    secondaryMeta: session ? '有新对话进展' : '已解析完成',
     sourceLabel,
-    statusLabel: session ? '最近继续' : '已就绪',
+    statusLabel: session ? '最近阅读' : '已就绪',
     tertiaryMeta: profile.persona.name,
   };
 }
@@ -199,8 +199,8 @@ function LearningPosterCard({
           style={{
             backgroundColor: palette.cardBackground,
             borderRadius: 32,
-            boxShadow: theme.shadows.card, // soft shadow, no hard borders
-            height: 380,
+            boxShadow: theme.shadows.card,
+            height: 290,
             overflow: 'hidden',
           }}
           testID="learning-notebook-poster-card">
@@ -209,7 +209,7 @@ function LearningPosterCard({
             style={{
               alignItems: 'center',
               backgroundColor: palette.coverBackground,
-              height: 190,
+              height: 160,
               justifyContent: 'center',
               position: 'relative',
               width: '100%',
@@ -232,10 +232,10 @@ function LearningPosterCard({
             <View
               style={{
                 backgroundColor: palette.coverAccent,
-                borderRadius: 30,
-                height: 110,
+                borderRadius: 24,
+                height: 96,
                 position: 'absolute',
-                width: 140,
+                width: 120,
                 opacity: 0.6,
                 transform: [{ rotate: '-12deg' }],
               }}
@@ -244,44 +244,46 @@ function LearningPosterCard({
               style={{
                 backgroundColor: palette.coverGlow,
                 borderRadius: 999,
-                height: 160,
+                height: 140,
                 position: 'absolute',
-                width: 160,
+                width: 140,
               }}
             />
             <BookCover
-              borderRadius={theme.radii.lg}
-              height={120}
+              borderRadius={theme.radii.md}
+              height={108}
               seed={profile.title}
               shellTestID="learning-notebook-poster-cover"
               tone={palette.coverTone}
-              width={90}
+              width={81}
             />
           </View>
 
-          <View style={{ flex: 1, padding: 20, justifyContent: 'space-between' }}>
+          <View style={{ flex: 1, paddingHorizontal: 20, paddingVertical: 16, justifyContent: 'space-between' }}>
             <View style={{ gap: 8 }}>
               <Text
                 numberOfLines={2}
                 style={{
                   color: theme.colors.text,
                   ...theme.typography.bold,
-                  fontSize: 24,
-                  lineHeight: 30,
+                  fontSize: 22,
+                  lineHeight: 28,
                   letterSpacing: -0.3,
                 }}>
                 {profile.title}
               </Text>
-              <Text
-                numberOfLines={2}
-                style={{
-                  color: theme.colors.textMuted,
-                  ...theme.typography.body,
-                  fontSize: 14,
-                  lineHeight: 20,
-                }}>
-                {meta.previewText}
-              </Text>
+              {meta.previewText ? (
+                <Text
+                  numberOfLines={2}
+                  style={{
+                    color: theme.colors.textMuted,
+                    ...theme.typography.body,
+                    fontSize: 14,
+                    lineHeight: 20,
+                  }}>
+                  {meta.previewText}
+                </Text>
+              ) : null}
             </View>
 
             <View style={{ gap: 4 }}>
@@ -400,16 +402,18 @@ function LearningListCard({
                 }}>
                 {profile.title}
               </Text>
-              <Text
-                numberOfLines={1}
-                style={{
-                  color: theme.colors.textMuted,
-                  ...theme.typography.body,
-                  fontSize: 13,
-                  lineHeight: 18,
-                }}>
-                {meta.previewText}
-              </Text>
+              {meta.previewText ? (
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: theme.colors.textMuted,
+                    ...theme.typography.body,
+                    fontSize: 13,
+                    lineHeight: 18,
+                  }}>
+                  {meta.previewText}
+                </Text>
+              ) : null}
             </View>
 
             <View style={{ gap: 2 }}>

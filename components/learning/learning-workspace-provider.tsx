@@ -50,6 +50,7 @@ type LearningWorkspaceContextValue = {
   latestStatus: LearningWorkspaceStatusSignal | null;
   navigateToStudyMode: (mode: LearningStudyMode) => void;
   navigateToTab: (tab: LearningWorkspaceTab) => void;
+  openDocumentViewer: () => void;
   openInfoSheet: (panel?: LearningWorkspaceInfoPanel) => void;
   openOverview: () => void;
   profile: ReturnType<typeof useLearningWorkspace>['profile'];
@@ -697,6 +698,13 @@ export function LearningWorkspaceProvider({
 
     router.push(`/learning/${profileId}/overview`);
   }, [profileId, router]);
+  const openDocumentViewer = React.useCallback(() => {
+    if (!Number.isFinite(profileId) || profileId <= 0) {
+      return;
+    }
+
+    router.push(`/learning/${profileId}/document`);
+  }, [profileId, router]);
   const openInfoSheet = React.useCallback(
     (panel: LearningWorkspaceInfoPanel = 'highlights') => {
       if (!Number.isFinite(profileId) || profileId <= 0) {
@@ -721,6 +729,7 @@ export function LearningWorkspaceProvider({
       latestStatus,
       navigateToStudyMode,
       navigateToTab,
+      openDocumentViewer,
       openInfoSheet,
       openOverview,
       profile,
@@ -749,6 +758,7 @@ export function LearningWorkspaceProvider({
       latestStatus,
       navigateToStudyMode,
       navigateToTab,
+      openDocumentViewer,
       openInfoSheet,
       openOverview,
       profile,

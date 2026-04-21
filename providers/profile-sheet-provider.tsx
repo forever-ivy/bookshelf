@@ -1,23 +1,5 @@
-import {
-  BottomSheet,
-  Group,
-  Host as SwiftHost,
-  RNHostView as SwiftRNHostView,
-} from '@expo/ui/swift-ui';
-import {
-  interactiveDismissDisabled,
-  presentationDetents,
-  presentationDragIndicator,
-} from '@expo/ui/swift-ui/modifiers';
-import {
-  Host as ComposeHost,
-  ModalBottomSheet,
-  RNHostView as ComposeRNHostView,
-} from '@expo/ui/jetpack-compose';
+import { usePathname, useRouter } from 'expo-router';
 import React from 'react';
-import { Platform, View } from 'react-native';
-
-import { ProfileSheetContent } from '@/components/profile/profile-sheet-content';
 
 type ProfileSheetContextValue = {
   closeProfileSheet: () => void;
@@ -25,82 +7,35 @@ type ProfileSheetContextValue = {
   openProfileSheet: () => void;
 };
 
+const PROFILE_SHEET_ROUTE = '/profile-sheet';
+
 const ProfileSheetContext = React.createContext<ProfileSheetContextValue | null>(null);
-
-function NativeProfileSheet({
-  isPresented,
-  onDismiss,
-}: {
-  isPresented: boolean;
-  onDismiss: () => void;
-}) {
-  if (Platform.OS === 'ios') {
-    return (
-      <SwiftHost style={{ position: 'absolute' }} testID="profile-sheet-swift-host">
-        <BottomSheet
-          isPresented={isPresented}
-          onIsPresentedChange={(nextValue) => {
-            if (!nextValue) {
-              onDismiss();
-            }
-          }}
-          testID="profile-sheet-swift-sheet">
-          <Group
-            modifiers={[
-              presentationDetents(['large']),
-              presentationDragIndicator('visible'),
-              interactiveDismissDisabled(false),
-            ]}>
-            {isPresented ? (
-              <SwiftRNHostView>
-                <ProfileSheetContent onDismiss={onDismiss} scrollMode="react-native" />
-              </SwiftRNHostView>
-            ) : (
-              <View />
-            )}
-          </Group>
-        </BottomSheet>
-      </SwiftHost>
-    );
-  }
-
-  if (Platform.OS === 'android') {
-    return (
-      <View testID="profile-sheet-compose-host">
-        <ComposeHost matchContents={{ vertical: true, horizontal: false }} style={{ position: 'absolute' }}>
-          {isPresented ? (
-            <View testID="profile-sheet-compose-sheet">
-              <ModalBottomSheet
-                onDismissRequest={onDismiss}
-                skipPartiallyExpanded>
-                <ComposeRNHostView>
-                  <ProfileSheetContent onDismiss={onDismiss} scrollMode="react-native" />
-                </ComposeRNHostView>
-              </ModalBottomSheet>
-            </View>
-          ) : null}
-        </ComposeHost>
-      </View>
-    );
-  }
-
-  return null;
-}
 
 export function ProfileSheetProvider({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const [isProfileSheetOpen, setIsProfileSheetOpen] = React.useState(false);
+  const pathname = usePathname();
+  const router = useRouter();
+  const isProfileSheetOpen = pathname === PROFILE_SHEET_ROUTE;
+
   const openProfileSheet = React.useCallback(() => {
-    if (Platform.OS === 'ios' || Platform.OS === 'android') {
-      setIsProfileSheetOpen(true);
+    if (isProfileSheetOpen) {
+      return;
     }
-  }, []);
+
+    router.push(PROFILE_SHEET_ROUTE);
+  }, [isProfileSheetOpen, router]);
+
   const closeProfileSheet = React.useCallback(() => {
-    setIsProfileSheetOpen(false);
-  }, []);
+    if (!isProfileSheetOpen) {
+      return;
+    }
+
+    router.back();
+  }, [isProfileSheetOpen, router]);
+
   const value = React.useMemo(
     () => ({
       closeProfileSheet,
@@ -110,12 +45,7 @@ export function ProfileSheetProvider({
     [closeProfileSheet, isProfileSheetOpen, openProfileSheet]
   );
 
-  return (
-    <ProfileSheetContext.Provider value={value}>
-      {children}
-      <NativeProfileSheet isPresented={isProfileSheetOpen} onDismiss={closeProfileSheet} />
-    </ProfileSheetContext.Provider>
-  );
+  return <ProfileSheetContext.Provider value={value}>{children}</ProfileSheetContext.Provider>;
 }
 
 export function useProfileSheet() {

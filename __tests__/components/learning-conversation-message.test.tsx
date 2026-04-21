@@ -235,6 +235,34 @@ describe('learning conversation message', () => {
     expect(screen.getByText('先识别问题在比较两个概念，再抓定义维度和调度维度。')).toBeTruthy();
   });
 
+  it('renders a plain Explore placeholder for empty streaming explore messages', () => {
+    render(
+      <LearningConversationMessage
+        message={{
+          cards: [],
+          id: 'message-thinking',
+          presentation: {
+            answer: {
+              content: '',
+            },
+            bridgeActions: [],
+            evidence: [],
+            followups: [],
+            kind: 'explore',
+            reasoningContent: null,
+            relatedConcepts: [],
+          },
+          role: 'assistant',
+          streaming: true,
+          text: '',
+        }}
+      />
+    );
+
+    expect(screen.getByText('Explore')).toBeTruthy();
+    expect(screen.queryByText('Thinking')).toBeNull();
+  });
+
   it('does not render raw markdown or latex in the explore primary answer body', () => {
     render(
       <LearningConversationMessage

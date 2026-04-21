@@ -9,13 +9,15 @@ import {
 import { ProfileSheetProvider, useProfileSheet } from '@/providers/profile-sheet-provider';
 
 let mockPathname = '/';
-let latestProfileSheetProps: { scrollMode?: 'external-native' | 'react-native' } | null = null;
+const mockPush = jest.fn();
+const mockBack = jest.fn();
 const originalPlatformOS = Platform.OS;
 
 jest.mock('expo-router', () => ({
   usePathname: () => mockPathname,
   useRouter: () => ({
-    push: jest.fn(),
+    back: mockBack,
+    push: mockPush,
   }),
 }));
 
@@ -26,16 +28,6 @@ jest.mock('react-native-safe-area-context', () => ({
     right: 0,
     top: 0,
   }),
-}));
-
-jest.mock('@/components/profile/profile-sheet-content', () => ({
-  ProfileSheetContent: (props: { scrollMode?: 'external-native' | 'react-native' }) => {
-    latestProfileSheetProps = props;
-    const React = require('react');
-    const { Text } = require('react-native');
-
-    return React.createElement(Text, null, '个人中心');
-  },
 }));
 
 function ProgrammaticOpenProbe() {
@@ -51,7 +43,8 @@ function ProgrammaticOpenProbe() {
 describe('GlobalProfileSheetLayer', () => {
   beforeEach(() => {
     mockPathname = '/';
-    latestProfileSheetProps = null;
+    mockPush.mockReset();
+    mockBack.mockReset();
     Object.defineProperty(Platform, 'OS', {
       configurable: true,
       value: 'ios',
@@ -65,7 +58,7 @@ describe('GlobalProfileSheetLayer', () => {
     });
   });
 
-  it('shows a floating trigger on primary routes and opens the iOS bottom sheet when pressed', () => {
+  it('shows a floating trigger on primary routes and opens the bottom sheet when pressed', () => {
     render(
       <ProfileSheetProvider>
         <GlobalProfileSheetLayer />
@@ -76,11 +69,7 @@ describe('GlobalProfileSheetLayer', () => {
 
     fireEvent.press(screen.getByTestId('profile-sheet-trigger'));
 
-    expect(screen.getByTestId('profile-sheet-swift-sheet')).toBeTruthy();
-    expect(screen.queryByTestId('profile-sheet-swift-scroll-view')).toBeNull();
-    expect(screen.getByTestId('swift-rn-host').props.matchContents).toBeUndefined();
-    expect(screen.getByText('个人中心')).toBeTruthy();
-    expect(latestProfileSheetProps?.scrollMode).toBe('react-native');
+    expect(mockPush).toHaveBeenCalledWith('/profile-sheet');
   });
 
   it('does not show the floating trigger on secondary routes', () => {
@@ -95,7 +84,7 @@ describe('GlobalProfileSheetLayer', () => {
     expect(screen.queryByTestId('profile-sheet-layer')).toBeNull();
   });
 
-  it('renders the Android compose bottom sheet when opened programmatically', () => {
+  it('renders the bottom sheet when opened programmatically on Android', () => {
     Object.defineProperty(Platform, 'OS', {
       configurable: true,
       value: 'android',
@@ -109,9 +98,7 @@ describe('GlobalProfileSheetLayer', () => {
 
     fireEvent.press(screen.getByTestId('programmatic-profile-open'));
 
-    expect(screen.getByTestId('profile-sheet-compose-sheet')).toBeTruthy();
-    expect(screen.getByText('个人中心')).toBeTruthy();
-    expect(latestProfileSheetProps?.scrollMode).toBe('react-native');
+    expect(mockPush).toHaveBeenCalledWith('/profile-sheet');
   });
 
   it('only enables the trigger on top-level app routes', () => {

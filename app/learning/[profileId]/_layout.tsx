@@ -34,6 +34,13 @@ export default function LearningWorkspaceStackLayout() {
         <Stack.Screen name="guide" options={{ headerShown: false, animation: 'slide_from_right' }} />
         <Stack.Screen name="explore" options={{ headerShown: false, animation: 'slide_from_right' }} />
         <Stack.Screen
+          name="document"
+          options={{
+            headerShown: false,
+            animation: 'slide_from_right',
+          }}
+        />
+        <Stack.Screen
           name="overview"
           options={{
             headerShown: false,

@@ -20,6 +20,7 @@ jest.mock('react-native-reanimated', () => {
     },
     FadeInDown: chain,
     FadeInUp: chain,
+    FadeOutUp: chain,
     Layout: chain,
     LinearTransition: chain,
     useAnimatedStyle: (updater: () => Record<string, unknown>) => updater(),
@@ -40,6 +41,13 @@ jest.mock('react-native-gesture-handler', () => {
 
   return {
     GestureHandlerRootView: ({
+      children,
+      ...props
+    }: {
+      children?: React.ReactNode;
+      [key: string]: unknown;
+    }) => React.createElement(View, props, children),
+    ScrollView: ({
       children,
       ...props
     }: {

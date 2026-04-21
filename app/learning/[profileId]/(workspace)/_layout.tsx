@@ -17,7 +17,7 @@ export default function LearningWorkspaceTabsLayout() {
   const insets = useSafeAreaInsets();
   const {
     closeWorkspace,
-    openOverview,
+    openDocumentViewer,
     workspaceGate,
   } = useLearningWorkspaceScreen();
   const floatingChromeTop = insets.top + LEARNING_WORKSPACE_TOP_CHROME_OFFSET;
@@ -54,9 +54,9 @@ export default function LearningWorkspaceTabsLayout() {
             testID="learning-workspace-close-glass"
           />
           <LiquidGlassIconButton
-            accessibilityLabel="打开导学概览"
+            accessibilityLabel="查看资料"
             fallbackIcon={<Ellipsis color={theme.colors.text} size={22} strokeWidth={2.2} />}
-            onPress={openOverview}
+            onPress={openDocumentViewer}
             swiftSystemImage="ellipsis"
             testID="learning-workspace-info-glass"
           />

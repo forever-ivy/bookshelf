@@ -66,6 +66,24 @@ export default function RootLayout() {
                 <Stack.Screen name="orders/[orderId]" options={createSecondaryHeaderOptions()} />
                 <Stack.Screen name="returns/[returnRequestId]" options={createSecondaryHeaderOptions()} />
                 <Stack.Screen name="profile" options={createSecondaryHeaderOptions()} />
+                <Stack.Screen
+                  name="profile-sheet"
+                  options={{
+                    contentStyle: {
+                      backgroundColor: 'transparent',
+                    },
+                    gestureEnabled: true,
+                    headerShown: false,
+                    headerTransparent: true,
+                    presentation: 'formSheet',
+                    sheetAllowedDetents: [0.78, 1],
+                    sheetCornerRadius: 24,
+                    sheetGrabberVisible: true,
+                    sheetInitialDetentIndex: 0,
+                    sheetLargestUndimmedDetentIndex: 0,
+                    title: '',
+                  }}
+                />
                 <Stack.Screen name="learning/[profileId]" options={{ headerShown: false }} />
                 <Stack.Screen name="marker-examples" options={createSecondaryHeaderOptions()} />
               </Stack>

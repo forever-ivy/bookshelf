@@ -6,6 +6,7 @@ import LearningWorkspaceDocumentRoute from '@/app/learning/[profileId]/document'
 const mockUseLearningWorkspaceScreen = jest.fn();
 const mockUseAppSession = jest.fn();
 const mockPdf = jest.fn();
+const mockSecondaryBackButton = jest.fn();
 
 jest.mock('react-native-pdf', () => {
   const React = jest.requireActual('react') as typeof import('react');
@@ -25,14 +26,36 @@ jest.mock('@/hooks/use-app-session', () => ({
   useAppSession: () => mockUseAppSession(),
 }));
 
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({
+    bottom: 0,
+    left: 0,
+    right: 0,
+    top: 0,
+  }),
+}));
+
 jest.mock('@/components/navigation/secondary-back-button', () => ({
-  SecondaryBackButton: ({ label }: { label: string }) => label,
+  SecondaryBackButton: ({
+    label,
+    testID,
+  }: {
+    label: string;
+    testID?: string;
+  }) => {
+    const React = jest.requireActual('react') as typeof import('react');
+    const { Text } = jest.requireActual('react-native') as typeof import('react-native');
+
+    mockSecondaryBackButton({ label, testID });
+    return React.createElement(Text, { testID }, label);
+  },
 }));
 
 describe('LearningWorkspaceDocumentRoute', () => {
   beforeEach(() => {
     process.env.EXPO_PUBLIC_LIBRARY_SERVICE_URL = 'http://127.0.0.1:8000';
     mockPdf.mockReset();
+    mockSecondaryBackButton.mockReset();
     mockUseAppSession.mockReturnValue({ token: 'reader-token' });
     mockUseLearningWorkspaceScreen.mockReturnValue({
       closeWorkspace: jest.fn(),
@@ -66,7 +89,14 @@ describe('LearningWorkspaceDocumentRoute', () => {
   it('renders the authenticated PDF viewer when the profile has a resolvable pdf source', () => {
     render(<LearningWorkspaceDocumentRoute />);
 
-    expect(screen.getByText('返回学习区')).toBeTruthy();
+    expect(screen.getByTestId('learning-workspace-document-floating-chrome')).toBeTruthy();
+    expect(screen.getByTestId('learning-workspace-document-back-glass')).toBeTruthy();
+    expect(mockSecondaryBackButton).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: '返回学习区',
+        testID: 'learning-workspace-document-back-glass',
+      })
+    );
     expect(screen.getByTestId('learning-workspace-pdf-viewer')).toBeTruthy();
     expect(mockPdf).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -76,6 +106,9 @@ describe('LearningWorkspaceDocumentRoute', () => {
             Authorization: 'Bearer reader-token',
           }),
           uri: 'http://127.0.0.1:8000/api/v2/learning/profiles/101/document',
+        }),
+        style: expect.objectContaining({
+          flex: 1,
         }),
       })
     );

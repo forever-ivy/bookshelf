@@ -123,6 +123,8 @@ const DOCUMENT_CLASSIFICATION_KEYWORDS = [
   'docx',
 ];
 
+const PDF_MIME_TYPES = new Set(['application/pdf', 'application/x-pdf']);
+
 export function shouldAutoRouteGuideDraftToExplore(draft: string) {
   const normalized = draft.trim();
   if (!normalized) {
@@ -160,6 +162,27 @@ export function resolveLearningWorkspaceSourceSummary(profile: LearningProfile) 
   return profile.sourceType === 'book'
     ? '来源于当前馆藏书。后续会逐步补充更细的章节级上下文。'
     : '来源于你上传的学习资料。解析完成后会围绕这份资料建立导学路径。';
+}
+
+function isPdfDocumentCandidate(mimeType?: string | null, fileName?: string | null) {
+  const normalizedMimeType = (mimeType ?? '').trim().toLowerCase();
+  const normalizedFileName = (fileName ?? '').trim().toLowerCase();
+
+  return PDF_MIME_TYPES.has(normalizedMimeType) || normalizedFileName.endsWith('.pdf');
+}
+
+export function resolveLearningWorkspaceHasViewableDocument(profile: LearningProfile) {
+  if (profile.bookSourceDocumentId != null) {
+    return true;
+  }
+
+  return (profile.sources ?? []).some((source) => {
+    if (source.originBookSourceDocumentId != null) {
+      return true;
+    }
+
+    return Boolean(source.storagePath) && isPdfDocumentCandidate(source.mimeType, source.fileName);
+  });
 }
 
 export function createLearningRenderedMessages(

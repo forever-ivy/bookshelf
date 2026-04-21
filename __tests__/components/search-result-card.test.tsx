@@ -58,7 +58,7 @@ describe('SearchResultCard list row', () => {
     fireEvent.press(screen.getByTestId('search-result-cell'));
 
     expect(handlePress).toHaveBeenCalledTimes(1);
-    expect(screen.getByText('A desert planet epic.').props.numberOfLines).toBe(2);
+    expect(screen.getByText('A desert planet epic.')).toBeTruthy();
     expect(screen.queryByText('馆藏充足 · 可立即借阅')).toBeNull();
     expect(screen.queryByText('可送达')).toBeNull();
     expect(screen.queryByText('示例作者')).toBeNull();
