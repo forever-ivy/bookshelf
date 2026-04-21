@@ -12,26 +12,23 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SearchBarCommands } from 'react-native-screens';
 import { toast } from 'sonner-native';
+import Animated from 'react-native-reanimated';
 
-
-import { LearningComposer } from '@/components/learning/learning-composer';
 import { LearningConversationMessage } from '@/components/learning/learning-conversation-message';
+import { LearningComposer } from '@/components/learning/learning-composer';
 import { LearningConversationScroll } from '@/components/learning/learning-conversation-scroll';
 import { LearningWorkspaceLoadingState } from '@/components/learning/learning-workspace-loading-state';
-import {
-  useLearningWorkspaceScreen,
-} from '@/components/learning/learning-workspace-provider';
 import {
   LEARNING_WORKSPACE_FLOATING_BUTTON_SIZE,
   LEARNING_WORKSPACE_TOP_CHROME_OFFSET,
 } from '@/components/learning/learning-workspace-scaffold';
+import { useLearningWorkspaceScreen } from '@/components/learning/learning-workspace-provider';
 import { useAppSession } from '@/hooks/use-app-session';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { useConversationFocusAnchor } from '@/hooks/use-conversation-focus-anchor';
 import { submitLearningBridgeAction } from '@/lib/api/learning';
 import type { LearningBridgeAction } from '@/lib/api/types';
 import { resolveLatestTurnFocusMessageId } from '@/lib/learning/conversation-focus';
-
 
 function supportsBottomToolbarSearch() {
   if (Platform.OS !== 'ios') {
@@ -184,10 +181,7 @@ function ConversationSection({
             <View
               key={message.id}
               onLayout={message.id === focusMessageId ? handleFocusMessageLayout : undefined}>
-              <LearningConversationMessage
-                message={message}
-                onAction={onAction}
-              />
+              <LearningConversationMessage message={message} onAction={onAction} />
             </View>
           ))
         ) : (
@@ -229,8 +223,10 @@ function ExplorePane({
   starterPrompts: string[];
   topPadding?: number;
 }) {
-  const { theme } = useAppTheme();
-  const focusMessageId = React.useMemo(() => resolveLatestTurnFocusMessageId(messages), [messages]);
+  const focusMessageId = React.useMemo(
+    () => resolveLatestTurnFocusMessageId(messages),
+    [messages]
+  );
   const { focusAnchorY, setFocusAnchorY } = useConversationFocusAnchor(focusMessageId);
 
   return (
@@ -259,6 +255,33 @@ function ExplorePane({
         />
       </View>
     </LearningConversationScroll>
+  );
+}
+
+function InlineStatus({
+  latestStatus,
+}: {
+  latestStatus: ReturnType<typeof useLearningWorkspaceScreen>['latestStatus'];
+}) {
+  const { theme } = useAppTheme();
+
+  if (!latestStatus?.label) {
+    return null;
+  }
+
+  return (
+    <View style={styles.inlineStatus} testID="learning-workspace-inline-status">
+      <Text
+        selectable
+        style={{
+          color: latestStatus.tone === 'warning' ? theme.colors.warning : theme.colors.textSoft,
+          ...theme.typography.medium,
+          fontSize: 12,
+          lineHeight: 18,
+        }}>
+        {latestStatus.label}
+      </Text>
+    </View>
   );
 }
 
@@ -353,6 +376,7 @@ export default function LearningWorkspaceStudyRoute() {
     },
     [setDraft]
   );
+
   const handleSearchSubmit = React.useCallback(
     (value: unknown) => {
       if (!workspaceSession || workspaceSession.sessionKind !== activeSessionKind) {
@@ -369,6 +393,7 @@ export default function LearningWorkspaceStudyRoute() {
     },
     [activeSessionKind, draft, handleSend, studyMode, workspaceSession]
   );
+
   const handleStarterPromptPress = React.useCallback(
     (prompt: string) => {
       if (!workspaceSession || workspaceSession.sessionKind !== activeSessionKind) {
@@ -383,6 +408,7 @@ export default function LearningWorkspaceStudyRoute() {
     },
     [activeSessionKind, handleSend, setDraft, studyMode, workspaceSession]
   );
+
   const handleConversationAction = React.useCallback(
     (action: LearningBridgeAction) => {
       if (!workspaceSession) {
@@ -406,23 +432,25 @@ export default function LearningWorkspaceStudyRoute() {
     },
     [token, workspaceSession]
   );
+
   const headerSearchBarOptions = React.useMemo(
     () =>
       usesHeaderSearchBar
         ? {
-          hideNavigationBar: false,
-          onCancelButtonPress: () => {
-            setDraft('');
-          },
-          onChangeText: handleSearchTextChange,
-          onSearchButtonPress: handleSearchSubmit,
-          placement: 'automatic' as const,
-          placeholder: inputPlaceholder,
-          ref: searchBarRef,
-        }
+            hideNavigationBar: false,
+            onCancelButtonPress: () => {
+              setDraft('');
+            },
+            onChangeText: handleSearchTextChange,
+            onSearchButtonPress: handleSearchSubmit,
+            placement: 'automatic' as const,
+            placeholder: inputPlaceholder,
+            ref: searchBarRef,
+          }
         : undefined,
     [handleSearchSubmit, handleSearchTextChange, inputPlaceholder, setDraft, usesHeaderSearchBar]
   );
+
   const plainHeaderOptions = React.useMemo(
     () => ({
       headerShadowVisible: false,
@@ -430,6 +458,7 @@ export default function LearningWorkspaceStudyRoute() {
     }),
     []
   );
+
   const sharedHeaderOptions = React.useMemo(
     () => ({
       ...plainHeaderOptions,
@@ -437,6 +466,7 @@ export default function LearningWorkspaceStudyRoute() {
     }),
     [headerSearchBarOptions, plainHeaderOptions]
   );
+
   const nativeSearchBar = usesBottomToolbarSearch ? (
     <Stack.SearchBar
       ref={searchBarRef}
@@ -462,11 +492,11 @@ export default function LearningWorkspaceStudyRoute() {
             primaryAction={
               workspaceGate.kind === 'failed'
                 ? {
-                  label: isRetryPending ? '重新生成中...' : '重新生成',
-                  onPress: () => {
-                    void retryGenerate(profile?.id);
-                  },
-                }
+                    label: isRetryPending ? '重新生成中...' : '重新生成',
+                    onPress: () => {
+                      void retryGenerate(profile?.id);
+                    },
+                  }
                 : undefined
             }
             secondaryAction={{
@@ -482,7 +512,10 @@ export default function LearningWorkspaceStudyRoute() {
     );
   }
 
-  if (workspaceGate.kind === 'ready' && (!workspaceSession || workspaceSession.sessionKind !== activeSessionKind)) {
+  if (
+    workspaceGate.kind === 'ready' &&
+    (!workspaceSession || workspaceSession.sessionKind !== activeSessionKind)
+  ) {
     return (
       <>
         <Stack.Screen options={plainHeaderOptions} />
@@ -519,6 +552,7 @@ export default function LearningWorkspaceStudyRoute() {
           starterPrompts={usesNativeSearchBar ? starterPrompts : []}
           topPadding={topChromePadding}
         />
+        <InlineStatus latestStatus={latestStatus} />
         {!usesNativeSearchBar ? (
           <View style={styles.composerDock}>
             <LearningComposer
@@ -549,6 +583,10 @@ const styles = StyleSheet.create({
   },
   routeContainer: {
     flex: 1,
+  },
+  inlineStatus: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
   },
   composerDock: {
     paddingBottom: 20,

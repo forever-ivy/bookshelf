@@ -35,7 +35,7 @@ describe('learning chat bubble', () => {
     render(<LearningChatBubble role="assistant" text="" thinking />);
 
     expect(screen.getByTestId('learning-assistant-thinking-indicator')).toBeTruthy();
-    expect(screen.getByText('Thinking')).toBeTruthy();
+    expect(screen.getByText('Explore')).toBeTruthy();
     expect(screen.queryByText('思考 5s')).toBeNull();
     expect(screen.queryByText('思考中')).toBeNull();
     expect(screen.queryByLabelText('复制回答')).toBeNull();

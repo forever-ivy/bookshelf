@@ -29,6 +29,7 @@ import {
   type LearningWorkspaceStatusSignal,
 } from '@/lib/learning/workspace';
 import { useLearningConversationStore } from '@/stores/learning-conversation-store';
+import { LearningWorkspaceContext } from '@/components/learning/learning-workspace-context';
 
 export type LearningWorkspaceTab = 'study' | 'graph' | 'review';
 export type LearningStudyMode = 'guide' | 'explore';
@@ -38,13 +39,14 @@ type LearningSendOptions = {
   session?: NonNullable<ReturnType<typeof useLearningWorkspace>['workspaceSession']>;
 };
 
-type LearningWorkspaceContextValue = {
+export type LearningWorkspaceContextValue = {
   activeTab: LearningWorkspaceTab;
   closeWorkspace: () => void;
   draft: string;
   footerInset: number;
   handleSend: (nextDraft?: string, options?: LearningSendOptions) => Promise<void>;
   highlightCards: LearningWorkspaceInsightCard[];
+  isSending: boolean;
   latestEvaluation: LearningStepEvaluation | null;
   latestSessionSignal: LearningWorkspaceSessionSignal | null;
   latestStatus: LearningWorkspaceStatusSignal | null;
@@ -67,8 +69,6 @@ type LearningWorkspaceContextValue = {
   workspaceSession: ReturnType<typeof useLearningWorkspace>['workspaceSession'];
   isRetryPending: boolean;
 };
-
-const LearningWorkspaceContext = React.createContext<LearningWorkspaceContextValue | null>(null);
 
 function getLearningReplyFailureFallback(mode: LearningStudyMode) {
   return '模型请求错误';
@@ -724,6 +724,7 @@ export function LearningWorkspaceProvider({
       footerInset: resolveLearningWorkspaceFooterInset(activeTab),
       handleSend,
       highlightCards,
+      isSending,
       latestEvaluation,
       latestSessionSignal,
       latestStatus,
@@ -751,6 +752,7 @@ export function LearningWorkspaceProvider({
       closeWorkspace,
       draft,
       handleSend,
+      isSending,
       isRetryPending,
       highlightCards,
       latestEvaluation,

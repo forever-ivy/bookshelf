@@ -2,6 +2,7 @@ import {
   buildLearningSessionTransitionLabel,
   buildLearningWorkspaceSources,
   createLearningRenderedMessages,
+  resolveLearningWorkspaceHasViewableDocument,
   shouldAutoRouteGuideDraftToExplore,
 } from '@/lib/learning/workspace';
 
@@ -162,6 +163,37 @@ describe('learning workspace helpers', () => {
         title: 'book-1.md',
       }),
     ]);
+  });
+
+  it('treats library book profiles as viewable even when the synthetic asset does not carry originBookSourceDocumentId', () => {
+    expect(
+      resolveLearningWorkspaceHasViewableDocument({
+        bookId: 1,
+        bookSourceDocumentId: null,
+        createdAt: '2026-04-08T08:00:00Z',
+        curriculum: [],
+        id: 101,
+        persona: {
+          greeting: '我们先把这本书真正学进去。',
+          name: '周老师',
+        },
+        sourceSummary: '从馆藏书摘要拆出的导学提要。',
+        sourceType: 'book',
+        sources: [
+          {
+            fileName: 'book-1.md',
+            id: 7,
+            kind: 'book_synthetic',
+            metadata: { bookId: 1, bookTitle: '机器学习从零到一' },
+            parseStatus: 'parsed',
+            profileId: 101,
+          },
+        ],
+        status: 'ready',
+        title: '机器学习从零到一',
+        updatedAt: '2026-04-08T08:30:00Z',
+      })
+    ).toBe(true);
   });
 
   it('describes step transitions after a streamed learning update', () => {

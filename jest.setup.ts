@@ -72,6 +72,119 @@ jest.mock('react-native-gesture-handler', () => {
   };
 });
 
+jest.mock('react-native-keyboard-controller', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+
+  return {
+    KeyboardAvoidingView: ({
+      children,
+      ...props
+    }: Record<string, unknown> & { children?: React.ReactNode }) =>
+      React.createElement(View, props, children),
+    KeyboardProvider: ({
+      children,
+      ...props
+    }: Record<string, unknown> & { children?: React.ReactNode }) =>
+      React.createElement(View, props, children),
+  };
+});
+
+jest.mock('@expo/react-native-action-sheet', () => {
+  const React = require('react');
+
+  return {
+    ActionSheetProvider: React.forwardRef(
+      (
+        { children }: { children?: React.ReactNode },
+        ref: React.ForwardedRef<unknown>
+      ) => {
+        React.useImperativeHandle(ref, () => ({
+          showActionSheetWithOptions: jest.fn(),
+        }));
+        return children;
+      }
+    ),
+  };
+});
+
+jest.mock('expo-clipboard', () => ({
+  setStringAsync: jest.fn(async () => {}),
+}));
+
+jest.mock('react-native-gifted-chat', () => {
+  const React = require('react');
+  const { Pressable, Text, TextInput, View } = require('react-native');
+
+  const GiftedChat = (props: any) => {
+    const messages = Array.isArray(props.messages) ? props.messages : [];
+    const renderChatEmpty = props.renderChatEmpty;
+    const renderMessage = props.renderMessage;
+    const renderAccessory = props.renderAccessory;
+    const onSend = props.onSend;
+    const textInputProps = props.textInputProps ?? {};
+
+    return React.createElement(
+      View,
+      { listProps: props.listProps, testID: 'learning-gifted-chat' },
+      React.createElement(View, {
+        contentContainerStyle: props.listProps?.contentContainerStyle,
+        testID: 'learning-workspace-screen',
+      }),
+      messages.length === 0 ? renderChatEmpty?.() : null,
+      messages.map((message: any) =>
+        React.createElement(
+          View,
+          { key: String(message._id) },
+          renderMessage?.({ currentMessage: message })
+        )
+      ),
+      renderAccessory?.(),
+      React.createElement(TextInput, {
+        editable: textInputProps.editable,
+        onChangeText: textInputProps.onChangeText,
+        placeholder: textInputProps.placeholder,
+        testID: textInputProps.testID ?? 'learning-workspace-composer-input',
+        value: props.text,
+      }),
+      React.createElement(
+        Pressable,
+        {
+          accessibilityRole: 'button',
+          disabled: textInputProps.editable === false,
+          onPress: () => onSend?.([{ text: String(props.text ?? '') }]),
+          testID: 'learning-workspace-composer-send',
+        },
+        React.createElement(Text, null, 'send')
+      )
+    );
+  };
+
+  return {
+    Composer: (props: any) =>
+      React.createElement(TextInput, {
+        onChangeText: props.textInputProps?.onChangeText,
+        placeholder: props.textInputProps?.placeholder,
+        testID:
+          props.textInputProps?.testID ?? 'learning-workspace-composer-input',
+        value: props.text,
+      }),
+    GiftedChat,
+    InputToolbar: ({ children }: any) =>
+      React.createElement(View, { testID: 'learning-gifted-input-toolbar' }, children),
+    Send: ({ children, onSend, text }: any) =>
+      React.createElement(
+        Pressable,
+        {
+          onPress: () =>
+            onSend?.({ text: String(text ?? '') }, true),
+          testID: 'learning-gifted-send',
+        },
+        children
+      ),
+  };
+});
+
 jest.mock('expo-image', () => {
   const React = require('react');
   const { Image } = require('react-native');

@@ -2,6 +2,7 @@ import {
   buildLearningDocumentGraphViewModel,
   buildLearningExploreGraphLens,
   buildLearningGlobalGraphLens,
+  buildLearningGraphSelectionPresentation,
   buildLearningGuideGraphLens,
   buildLearningGraphViewModel,
   getLearningGraphSelection,
@@ -296,5 +297,80 @@ describe('learning graph adapter', () => {
     expect(lens.guideStatusByNodeId['fragment:1']).toBe('completed');
     expect(lens.guideStatusByNodeId['concept:derivative']).toBe('current');
     expect(lens.guideStatusByNodeId['fragment:2']).toBe('current');
+  });
+
+  it('surfaces semantic node labels, confidence, and provenance metadata', () => {
+    const semanticGraph = buildLearningGraphViewModel({
+      edges: [
+        { source: 'asset:1', target: 'section:1:limits', type: 'CONTAINS' },
+        { source: 'section:1:limits', target: 'fragment:1', type: 'CONTAINS' },
+        { source: 'fragment:1', target: 'definition:limits', type: 'EVIDENCE_FOR' },
+        { source: 'definition:limits', target: 'concept:limits', type: 'DEFINES' },
+        { source: 'fragment:1', target: 'concept:limits', type: 'MENTIONS' },
+      ],
+      nodes: [
+        { id: 'asset:1', label: 'test.pdf', type: 'SourceAsset' },
+        {
+          confidence: 0.92,
+          extractor: 'structured-graph-v2',
+          id: 'section:1:limits',
+          label: '第一章 极限',
+          provenance: { assetId: 1, sectionId: 'section:1:limits' },
+          type: 'Section',
+        },
+        {
+          assetId: 1,
+          chapterLabel: '第一章 极限',
+          chunkIndex: 0,
+          fragmentId: 1001,
+          id: 'fragment:1',
+          label: '函数极限的定义',
+          provenance: {
+            assetId: 1,
+            fragmentId: 1001,
+            sectionId: 'section:1:limits',
+          },
+          semanticSummary: '函数极限的定义',
+          type: 'Fragment',
+        },
+        {
+          confidence: 0.92,
+          extractor: 'structured-graph-v2',
+          id: 'definition:limits',
+          label: '函数极限的定义',
+          provenance: {
+            assetId: 1,
+            fragmentId: 1001,
+            sectionId: 'section:1:limits',
+          },
+          type: 'Definition',
+        },
+        { concept: '极限', id: 'concept:limits', label: '极限', type: 'Concept' },
+      ],
+      provider: 'neo4j',
+    });
+
+    const selection = getLearningGraphSelection(semanticGraph, 'definition:limits');
+
+    expect(selection?.typeLabel).toBe('定义');
+    expect(selection?.metadata).toEqual(
+      expect.arrayContaining([
+        '置信度 92%',
+        '抽取器 structured-graph-v2',
+        '证据片段 #1001',
+      ])
+    );
+
+    const presentation = buildLearningGraphSelectionPresentation(
+      'global',
+      selection!,
+      buildLearningGlobalGraphLens(semanticGraph)
+    );
+
+    expect(presentation.sections[0]).toEqual(
+      expect.objectContaining({
+        title: '图谱位置',
+      })
+    );
   });
 });

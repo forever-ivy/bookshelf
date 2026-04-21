@@ -14,6 +14,15 @@ import type {
   LearningGraphEdge,
   LearningGraphNode,
   LearningPersona,
+  LearningPdfAnchor,
+  LearningPdfAnnotation,
+  LearningPdfAnnotationInput,
+  LearningPdfAnnotationUpdateInput,
+  LearningQuickExplainInput,
+  LearningQuickExplainResult,
+  LearningReaderProgress,
+  LearningReaderProgressInput,
+  LearningReaderState,
   LearningProfile,
   LearningSession,
   LearningSessionMessage,
@@ -143,6 +152,102 @@ function normalizeLearningGraph(raw: any): LearningGraph {
     edges,
     nodes,
     provider: String(raw?.provider ?? 'fallback'),
+  };
+}
+
+function buildDefaultReaderId(profileId: number) {
+  return `profile:${profileId}:document`;
+}
+
+function normalizeLearningPdfAnchor(raw: any, pageNumber = 1): LearningPdfAnchor {
+  const resolvedPageNumber = Number(raw?.pageNumber ?? raw?.page_number ?? pageNumber);
+  const rects = Array.isArray(raw?.rects)
+    ? raw.rects.map((rect: any) => ({
+        height: Number(rect?.height ?? 0),
+        width: Number(rect?.width ?? 0),
+        x: Number(rect?.x ?? 0),
+        y: Number(rect?.y ?? 0),
+      }))
+    : [];
+
+  return {
+    pageNumber: Number.isFinite(resolvedPageNumber) && resolvedPageNumber > 0 ? resolvedPageNumber : 1,
+    rects,
+    textAfter: raw?.textAfter ?? raw?.text_after ?? null,
+    textBefore: raw?.textBefore ?? raw?.text_before ?? null,
+    textQuote: raw?.textQuote ?? raw?.text_quote ?? null,
+  };
+}
+
+function normalizeLearningReaderProgress(
+  raw: any,
+  options: { profileId: number; readerId?: string | null }
+): LearningReaderProgress {
+  const fallbackReaderId = options.readerId ?? buildDefaultReaderId(options.profileId);
+  const pageNumber = Number(raw?.pageNumber ?? raw?.page_number ?? 1);
+  const scale = Number(raw?.scale ?? 1);
+
+  return {
+    layoutMode: raw?.layoutMode ?? raw?.layout_mode ?? 'horizontal',
+    metadata: raw?.metadata ?? raw?.metadata_json ?? {},
+    pageNumber: Number.isFinite(pageNumber) && pageNumber > 0 ? pageNumber : 1,
+    profileId: raw?.profileId ?? raw?.profile_id ?? options.profileId,
+    readerId: String(raw?.readerId ?? raw?.reader_id ?? fallbackReaderId),
+    scale: Number.isFinite(scale) && scale > 0 ? scale : 1,
+    updatedAt: raw?.updatedAt ?? raw?.updated_at ?? null,
+  };
+}
+
+function normalizeLearningPdfAnnotation(
+  raw: any,
+  options: { profileId: number; readerId?: string | null }
+): LearningPdfAnnotation {
+  const pageNumber = Number(raw?.pageNumber ?? raw?.page_number ?? 1);
+  const resolvedPageNumber = Number.isFinite(pageNumber) && pageNumber > 0 ? pageNumber : 1;
+  const fallbackReaderId = options.readerId ?? buildDefaultReaderId(options.profileId);
+
+  return {
+    anchor: normalizeLearningPdfAnchor(raw?.anchor ?? raw?.anchor_json ?? {}, resolvedPageNumber),
+    annotationType: raw?.annotationType ?? raw?.annotation_type ?? 'highlight',
+    color: raw?.color ?? null,
+    createdAt: raw?.createdAt ?? raw?.created_at ?? null,
+    id: Number(raw?.id ?? 0),
+    metadata: raw?.metadata ?? raw?.metadata_json ?? {},
+    noteText: raw?.noteText ?? raw?.note_text ?? null,
+    pageNumber: resolvedPageNumber,
+    profileId: raw?.profileId ?? raw?.profile_id ?? options.profileId,
+    readerId: String(raw?.readerId ?? raw?.reader_id ?? fallbackReaderId),
+    selectedText: String(raw?.selectedText ?? raw?.selected_text ?? ''),
+    updatedAt: raw?.updatedAt ?? raw?.updated_at ?? null,
+  };
+}
+
+function normalizeLearningReaderState(raw: any, profileId: number): LearningReaderState {
+  const readerId = String(raw?.readerId ?? raw?.reader_id ?? buildDefaultReaderId(profileId));
+  const annotations = Array.isArray(raw?.annotations)
+    ? raw.annotations.map((annotation: any) =>
+        normalizeLearningPdfAnnotation(annotation, { profileId, readerId })
+      )
+    : [];
+
+  return {
+    annotations,
+    progress: normalizeLearningReaderProgress(raw?.progress ?? {}, { profileId, readerId }),
+    readerId,
+  };
+}
+
+function serializeLearningPdfAnnotationInput(
+  input: LearningPdfAnnotationInput | LearningPdfAnnotationUpdateInput
+) {
+  return {
+    ...(input.annotationType !== undefined ? { annotationType: input.annotationType } : {}),
+    ...(input.anchor !== undefined ? { anchor: input.anchor } : {}),
+    ...(input.color !== undefined ? { color: input.color } : {}),
+    ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
+    ...(input.noteText !== undefined ? { noteText: input.noteText } : {}),
+    ...(input.pageNumber !== undefined ? { pageNumber: input.pageNumber } : {}),
+    ...(input.selectedText !== undefined ? { selectedText: input.selectedText } : {}),
   };
 }
 
@@ -1312,7 +1417,7 @@ export async function* resumeLearningSessionReply(
 
 export async function submitLearningBridgeAction(
   sessionId: number,
-  actionType: 'expand_step_to_explore' | 'attach_explore_turn_to_guide_step',
+  actionType: LearningBridgeAction['actionType'],
   options?: {
     turnId?: number;
     targetGuideSessionId?: number;
@@ -1345,6 +1450,113 @@ export async function getLearningGraph(
     method: 'GET',
     token,
   }).then((payload: any) => normalizeLearningGraph(payload?.graph ?? payload));
+}
+
+export async function getLearningReaderState(
+  profileId: number,
+  token?: string | null
+): Promise<LearningReaderState> {
+  return strictLibraryRequest(`/api/v2/learning/profiles/${profileId}/reader-state`, {
+    method: 'GET',
+    token,
+  }).then((payload: any) => normalizeLearningReaderState(payload, profileId));
+}
+
+export async function updateLearningReaderProgress(
+  profileId: number,
+  input: LearningReaderProgressInput,
+  token?: string | null
+): Promise<LearningReaderProgress> {
+  return strictLibraryRequest(`/api/v2/learning/profiles/${profileId}/reader-progress`, {
+    body: JSON.stringify({
+      layoutMode: input.layoutMode ?? 'horizontal',
+      metadata: input.metadata ?? {},
+      pageNumber: input.pageNumber,
+      scale: input.scale ?? 1,
+    }),
+    method: 'PATCH',
+    token,
+  }).then((payload: any) =>
+    normalizeLearningReaderProgress(payload?.progress ?? payload, {
+      profileId,
+      readerId: payload?.readerId ?? payload?.reader_id,
+    })
+  );
+}
+
+export async function createLearningPdfAnnotation(
+  profileId: number,
+  input: LearningPdfAnnotationInput,
+  token?: string | null
+): Promise<LearningPdfAnnotation> {
+  return strictLibraryRequest(`/api/v2/learning/profiles/${profileId}/annotations`, {
+    body: JSON.stringify(serializeLearningPdfAnnotationInput(input)),
+    method: 'POST',
+    token,
+  }).then((payload: any) =>
+    normalizeLearningPdfAnnotation(payload?.annotation ?? payload, {
+      profileId,
+      readerId: payload?.readerId ?? payload?.reader_id,
+    })
+  );
+}
+
+export async function updateLearningPdfAnnotation(
+  profileId: number,
+  annotationId: number,
+  input: LearningPdfAnnotationUpdateInput,
+  token?: string | null
+): Promise<LearningPdfAnnotation> {
+  return strictLibraryRequest(
+    `/api/v2/learning/profiles/${profileId}/annotations/${annotationId}`,
+    {
+      body: JSON.stringify(serializeLearningPdfAnnotationInput(input)),
+      method: 'PATCH',
+      token,
+    }
+  ).then((payload: any) =>
+    normalizeLearningPdfAnnotation(payload?.annotation ?? payload, {
+      profileId,
+      readerId: payload?.readerId ?? payload?.reader_id,
+    })
+  );
+}
+
+export async function deleteLearningPdfAnnotation(
+  profileId: number,
+  annotationId: number,
+  token?: string | null
+): Promise<void> {
+  await strictLibraryRequest(
+    `/api/v2/learning/profiles/${profileId}/annotations/${annotationId}`,
+    {
+      method: 'DELETE',
+      token,
+    }
+  );
+}
+
+export async function quickExplainLearningPdfSelection(
+  profileId: number,
+  input: LearningQuickExplainInput,
+  token?: string | null
+): Promise<LearningQuickExplainResult> {
+  return strictLibraryRequest(`/api/v2/learning/profiles/${profileId}/quick-explain`, {
+    body: JSON.stringify({
+      ...(input.anchor !== undefined ? { anchor: input.anchor } : {}),
+      ...(input.nearbyText !== undefined ? { nearbyText: input.nearbyText } : {}),
+      pageNumber: input.pageNumber,
+      ...(input.selectedText !== undefined ? { selectedText: input.selectedText } : {}),
+      ...(input.surroundingText !== undefined
+        ? { surroundingText: input.surroundingText }
+        : {}),
+    }),
+    method: 'POST',
+    token,
+  }).then((payload: any) => ({
+    answer: String(payload?.answer ?? ''),
+    modelName: payload?.modelName ?? payload?.model_name ?? null,
+  }));
 }
 
 export async function getLearningReport(sessionId: number, token?: string | null): Promise<any> {

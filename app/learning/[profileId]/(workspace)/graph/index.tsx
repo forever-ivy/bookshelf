@@ -66,32 +66,50 @@ import { buildLearningGraphRuntimeTheme } from '@/lib/learning/graph-theme';
 
 const GRAPH_RUNTIME_CONFIG = {
   cameraFocusDistanceByNodeType: {
-    Book: 220,
-    Concept: 140,
-    Default: 160,
-    Fragment: 110,
-    LessonStep: 150,
-    SourceAsset: 170,
+    Book: 380,
+    Claim: 220,
+    Concept: 250,
+    Default: 280,
+    Definition: 230,
+    Formula: 210,
+    Fragment: 200,
+    LessonStep: 260,
+    Method: 235,
+    Section: 310,
+    SourceAsset: 300,
+    Theorem: 240,
   },
   cameraFocusDurationMs: 1400,
-  controlType: 'trackball',
+  controlType: 'orbit',
   cooldownTicks: 90,
   linkDistances: {
+    ABOUT: 68,
+    CONTAINS: 92,
+    DEFINES: 72,
     DERIVED_FROM: 88,
     EVIDENCE_FOR: 76,
     MENTIONS: 64,
     NEXT_STEP: 112,
     PREREQUISITE_OF: 112,
+    PROVES: 78,
     RELATED_TO: 72,
+    SUPPORTS: 78,
     TEACHES: 96,
     TESTS: 90,
+    USES: 74,
   },
   nodeSizes: {
     Book: 14,
+    Claim: 5,
     Concept: 6,
+    Definition: 6,
+    Formula: 5,
     Fragment: 3,
     LessonStep: 9,
+    Method: 6,
+    Section: 8,
     SourceAsset: 10,
+    Theorem: 6,
   },
   velocityDecay: 0.32,
 } as const;
@@ -262,6 +280,13 @@ export default function LearningWorkspaceGraphScreen() {
             />
           </Animated.View>
 
+          {graphMode === 'explore' && exploreFocus ? (
+            <ExploreFocusStrip
+              focus={exploreFocus}
+              top={floatingTabsTop + GRAPH_MODE_SEGMENT_VISUAL_HEIGHT + 12}
+            />
+          ) : null}
+
           <LearningGraphSelectionSheet
             presentation={selectionPresentation}
             onDismiss={() => setSelectedNodeId(null)}
@@ -400,6 +425,79 @@ function GraphEmptyState({ body, title }: { body: string; title: string }) {
   );
 }
 
+function ExploreFocusStrip({
+  focus,
+  top,
+}: {
+  focus: ReturnType<typeof resolveLearningExploreGraphFocus>;
+  top: number;
+}) {
+  const { theme } = useAppTheme();
+  const contextLabel = focus?.question ? '当前问题' : '当前探索焦点';
+  const contextValue =
+    focus?.question?.trim() ||
+    (focus?.relatedConcepts?.length ? focus.relatedConcepts.slice(0, 3).join(' / ') : null);
+
+  if (!contextValue) {
+    return null;
+  }
+
+  return (
+    <Animated.View
+      entering={FadeInDown.duration(500).springify()}
+      pointerEvents="none"
+      style={[
+        styles.graphModeFocusStrip,
+        {
+          top,
+        },
+      ]}
+      testID="learning-graph-focus-strip">
+      <GlassSurface
+        intensity={54}
+        style={{
+          borderRadius: 22,
+          borderWidth: 1,
+          borderColor: theme.colors.borderSoft,
+          gap: 6,
+          paddingHorizontal: 16,
+          paddingVertical: 12,
+        }}>
+        <GraphSheetText
+          style={{
+            color: theme.colors.textSoft,
+            ...theme.typography.semiBold,
+            fontSize: 11,
+            letterSpacing: 0.6,
+            textTransform: 'uppercase',
+          }}>
+          {contextLabel}
+        </GraphSheetText>
+        <GraphSheetText
+          style={{
+            color: theme.colors.text,
+            ...theme.typography.medium,
+            fontSize: 14,
+            lineHeight: 20,
+          }}>
+          {contextValue}
+        </GraphSheetText>
+        {focus?.relatedConcepts?.length ? (
+          <GraphSheetText
+            style={{
+              color: theme.colors.textMuted,
+              ...theme.typography.medium,
+              fontSize: 12,
+              lineHeight: 18,
+            }}>
+            {`关联概念：${focus.relatedConcepts.slice(0, 4).join(' / ')}`}
+          </GraphSheetText>
+        ) : null}
+      </GlassSurface>
+    </Animated.View>
+  );
+}
+
 const styles = StyleSheet.create({
   detailsCard: {
     borderRadius: 28,
@@ -435,6 +533,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     position: 'absolute',
     zIndex: 10,
+  },
+  graphModeFocusStrip: {
+    left: 20,
+    position: 'absolute',
+    right: 20,
+    zIndex: 9,
   },
   graphModeTabsShell: {
     maxWidth: GRAPH_MODE_SEGMENT_MAX_WIDTH,
@@ -652,6 +756,33 @@ function SelectionContent({ presentation }: { presentation: any }) {
                   marginTop: 8,
                 }}
               />
+            ) : null}
+
+            {presentation.metadata?.length ? (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                {presentation.metadata.map((item: string) => (
+                  <View
+                    key={item}
+                    style={[
+                      styles.modeChip,
+                      {
+                        backgroundColor: theme.colors.surface,
+                        borderColor: theme.colors.borderSoft,
+                        borderWidth: 1,
+                      },
+                    ]}>
+                    <GraphSheetText
+                      style={{
+                        color: theme.colors.textMuted,
+                        ...theme.typography.medium,
+                        fontSize: 12,
+                        lineHeight: 16,
+                      }}>
+                      {item}
+                    </GraphSheetText>
+                  </View>
+                ))}
+              </View>
             ) : null}
           </View>
         </View>

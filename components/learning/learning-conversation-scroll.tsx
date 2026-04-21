@@ -26,6 +26,10 @@ export function LearningConversationScroll({
     return contentHeightRef.current > layoutHeightRef.current + 10;
   }, []);
 
+  const getMaxScrollY = React.useCallback(() => {
+    return Math.max(0, contentHeightRef.current - layoutHeightRef.current);
+  }, []);
+
   const scrollToEnd = React.useCallback((animated = true) => {
     requestAnimationFrame(() => {
       scrollViewRef.current?.scrollToEnd({ animated });
@@ -38,15 +42,21 @@ export function LearningConversationScroll({
   const scrollToLatestMessage = React.useCallback(() => {
     requestAnimationFrame(() => {
       if (typeof focusAnchorY === 'number') {
-        const targetY = Math.max(0, focusAnchorY - focusAnchorOffset);
-        if (lastAnchorTargetRef.current === targetY) {
+        if (layoutHeightRef.current <= 0 || contentHeightRef.current <= 0) {
           return;
         }
 
-        lastAnchorTargetRef.current = targetY;
+        const idealTargetY = Math.max(0, focusAnchorY - focusAnchorOffset);
+        const resolvedTargetY = Math.min(idealTargetY, getMaxScrollY());
+
+        if (lastAnchorTargetRef.current === resolvedTargetY) {
+          return;
+        }
+
+        lastAnchorTargetRef.current = resolvedTargetY;
         scrollViewRef.current?.scrollTo({
           animated: false,
-          y: targetY,
+          y: resolvedTargetY,
         });
         return;
       }
@@ -64,7 +74,7 @@ export function LearningConversationScroll({
         scrollViewRef.current?.scrollToEnd({ animated: false });
       }
     });
-  }, [focusAnchorOffset, focusAnchorY, isContentOverflowing, isKeyboardVisible]);
+  }, [focusAnchorOffset, focusAnchorY, getMaxScrollY, isContentOverflowing, isKeyboardVisible]);
 
   React.useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';

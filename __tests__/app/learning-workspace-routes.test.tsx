@@ -34,7 +34,14 @@ const mockUseLocalSearchParams = jest.fn<any, any>(() => ({ profileId: '101' }))
 const mockUsePathname = jest.fn(() => '/learning/101');
 const mockStartSessionMutateAsync = jest.fn();
 const mockGenerateProfileMutateAsync = jest.fn();
-const mockSubmitLearningBridgeAction = jest.fn(async () => ({ ok: true }));
+const mockSubmitLearningBridgeAction = jest.fn(async (..._args: unknown[]) => ({ ok: true }));
+
+type MockHeaderItem = {
+  element?: React.ReactNode;
+  label?: string;
+  onPress?: () => void;
+  type?: 'button' | string;
+};
 
 function createActiveSession(overrides: Record<string, unknown> = {}) {
   return {
@@ -70,7 +77,7 @@ function createLinkedExploreSession(overrides: Record<string, unknown> = {}) {
   });
 }
 
-let mockSessionMessagesData = [
+let mockSessionMessagesData: any[] = [
   {
     content: '我们先不急着背定义，先说说你眼里“监督学习”的目标是什么？',
     createdAt: '2026-04-08T08:00:00Z',
@@ -236,8 +243,8 @@ jest.mock('expo-router', () => {
     options?: {
       headerLeft?: (props?: Record<string, unknown>) => React.ReactNode;
       headerRight?: (props?: Record<string, unknown>) => React.ReactNode;
-      unstable_headerLeftItems?: () => Array<{ element?: React.ReactNode }>;
-      unstable_headerRightItems?: () => Array<{ element?: React.ReactNode }>;
+      unstable_headerLeftItems?: () => MockHeaderItem[];
+      unstable_headerRightItems?: () => MockHeaderItem[];
       headerSearchBarOptions?: {
         onChangeText?: (event: { nativeEvent: { text: string } }) => void;
         onSearchButtonPress?: (event: { nativeEvent: { text: string } }) => void;

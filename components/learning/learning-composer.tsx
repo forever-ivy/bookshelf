@@ -127,6 +127,7 @@ export function LearningComposer({
             paddingLeft: 12,
           }}>
           <TextInput
+            editable={!disabled}
             multiline
             onChangeText={onChangeText}
             placeholder={placeholder}

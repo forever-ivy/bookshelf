@@ -213,14 +213,14 @@ describe('LearningConversationScroll', () => {
       scrollView.props.onContentSizeChange?.(320, 1500);
     });
 
-    expect(scrollToSpy).toHaveBeenLastCalledWith({ animated: false, y: 1328 });
+    expect(scrollToSpy).toHaveBeenLastCalledWith({ animated: false, y: 860 });
 
     act(() => {
       scrollView.props.onContentSizeChange?.(320, 2200);
     });
 
-    // The anchor target hasn't changed so the dedup guard prevents re-scrolling.
-    expect(scrollToSpy).toHaveBeenCalledTimes(1);
+    expect(scrollToSpy).toHaveBeenCalledTimes(2);
+    expect(scrollToSpy).toHaveBeenLastCalledWith({ animated: false, y: 1328 });
     expect(scrollToEndSpy).not.toHaveBeenCalled();
   });
 

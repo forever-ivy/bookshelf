@@ -398,10 +398,16 @@ export type LearningSessionMessage = {
 
 export type LearningGraphNodeType =
   | 'Book'
+  | 'Claim'
   | 'Concept'
+  | 'Definition'
+  | 'Formula'
   | 'Fragment'
   | 'LessonStep'
+  | 'Method'
+  | 'Section'
   | 'SourceAsset'
+  | 'Theorem'
   | string;
 
 export type LearningGraphNode = {
@@ -421,6 +427,88 @@ export type LearningGraph = {
   edges: LearningGraphEdge[];
   nodes: LearningGraphNode[];
   provider: string;
+};
+
+export type LearningPdfAnchorRect = {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+};
+
+export type LearningPdfAnchor = {
+  pageNumber: number;
+  rects: LearningPdfAnchorRect[];
+  textAfter?: string | null;
+  textBefore?: string | null;
+  textQuote?: string | null;
+};
+
+export type LearningReaderLayoutMode = 'horizontal' | 'vertical' | string;
+
+export type LearningReaderProgress = {
+  layoutMode: LearningReaderLayoutMode;
+  metadata: Record<string, unknown>;
+  pageNumber: number;
+  profileId?: number | null;
+  readerId: string;
+  scale: number;
+  updatedAt?: string | null;
+};
+
+export type LearningPdfAnnotationType = 'highlight' | 'note' | string;
+
+export type LearningPdfAnnotation = {
+  anchor: LearningPdfAnchor;
+  annotationType: LearningPdfAnnotationType;
+  color: string | null;
+  createdAt?: string | null;
+  id: number;
+  metadata: Record<string, unknown>;
+  noteText: string | null;
+  pageNumber: number;
+  profileId?: number | null;
+  readerId: string;
+  selectedText: string;
+  updatedAt?: string | null;
+};
+
+export type LearningReaderState = {
+  annotations: LearningPdfAnnotation[];
+  progress: LearningReaderProgress;
+  readerId: string;
+};
+
+export type LearningReaderProgressInput = {
+  layoutMode?: LearningReaderLayoutMode;
+  metadata?: Record<string, unknown>;
+  pageNumber: number;
+  scale?: number;
+};
+
+export type LearningPdfAnnotationInput = {
+  anchor: LearningPdfAnchor;
+  annotationType: LearningPdfAnnotationType;
+  color?: string | null;
+  metadata?: Record<string, unknown>;
+  noteText?: string | null;
+  pageNumber: number;
+  selectedText: string;
+};
+
+export type LearningPdfAnnotationUpdateInput = Partial<LearningPdfAnnotationInput>;
+
+export type LearningQuickExplainInput = {
+  anchor?: LearningPdfAnchor | null;
+  nearbyText?: string | null;
+  pageNumber: number;
+  selectedText?: string | null;
+  surroundingText?: string | null;
+};
+
+export type LearningQuickExplainResult = {
+  answer: string;
+  modelName: string | null;
 };
 
 export type LearningSuggestion = {

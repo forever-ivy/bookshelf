@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
 
 import {
   LoadingSkeletonBlock,
@@ -44,35 +44,28 @@ export function LearningWorkspaceLoadingState({
         };
 
   return (
-    <PageShell mode="workspace">
-      <View
-        style={{
-          backgroundColor: palette.backgroundColor,
-          borderColor: theme.colors.borderSoft,
-          borderRadius: theme.radii.xl,
-          borderWidth: 1,
-          gap: theme.spacing.lg,
-          padding: theme.spacing.xl,
-        }}>
+    <PageShell mode="workspace" keyboardAware scrollEnabled={false}>
+      <View style={{ flex: 1, justifyContent: 'center', paddingBottom: theme.spacing.xxxl }}>
+        <View
+          style={{
+            backgroundColor: palette.backgroundColor,
+            borderColor: theme.colors.borderSoft,
+            borderRadius: theme.radii.xl,
+            borderWidth: 1,
+            gap: theme.spacing.lg,
+            padding: theme.spacing.xl,
+          }}>
         {visualState === 'skeleton' ? (
           <View style={{ gap: theme.spacing.lg }}>
-            <LoadingSkeletonBlock
-              height={12}
-              testID="learning-workspace-loading-skeleton-eyebrow"
-              width={76}
-            />
-            <LoadingSkeletonText
-              gap={10}
-              lineHeight={24}
-              testIDPrefix="learning-workspace-loading-skeleton-title"
-              widths={['78%', '52%']}
-            />
-            <LoadingSkeletonText
-              gap={8}
-              lineHeight={14}
-              testIDPrefix="learning-workspace-loading-skeleton-description"
-              widths={['94%', '68%']}
-            />
+            <LoadingSkeletonBlock height={12} width="25%" />
+            <View gap={8}>
+              <LoadingSkeletonBlock height={26} width="80%" />
+              <LoadingSkeletonBlock height={26} width="45%" />
+            </View>
+            <View gap={10}>
+              <LoadingSkeletonBlock height={16} width="95%" />
+              <LoadingSkeletonBlock height={16} width="60%" />
+            </View>
           </View>
         ) : (
           <>
@@ -129,6 +122,7 @@ export function LearningWorkspaceLoadingState({
             ) : null}
           </View>
         ) : null}
+        </View>
       </View>
     </PageShell>
   );

@@ -1,14 +1,20 @@
 import {
+  createLearningPdfAnnotation,
   createLearningProfile,
+  deleteLearningPdfAnnotation,
   getLearningGraph,
   getLearningProfile,
+  getLearningReaderState,
   listLearningProfiles,
   listLearningSessionMessages,
   listLearningSessions,
+  quickExplainLearningPdfSelection,
   retryGenerateLearningProfile,
   resumeLearningSessionReply,
   startLearningSession,
   streamLearningSessionReply,
+  updateLearningPdfAnnotation,
+  updateLearningReaderProgress,
   uploadLearningProfile,
 } from '@/lib/api/learning';
 
@@ -1042,6 +1048,242 @@ describe('learning contract', () => {
           Authorization: 'Bearer reader-token',
         }),
         method: 'GET',
+      })
+    );
+  });
+
+  it('normalizes reader state and synced pdf annotations from v2 learning endpoints', async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      json: async () => ({
+        annotations: [
+          {
+            anchor: {
+              pageNumber: 4,
+              rects: [{ height: 0.04, width: 0.32, x: 0.18, y: 0.42 }],
+              textBefore: '前文',
+              textQuote: '梯度下降',
+            },
+            annotationType: 'highlight',
+            color: '#f2c94c',
+            createdAt: '2026-04-21T09:00:00Z',
+            id: 55,
+            noteText: null,
+            pageNumber: 4,
+            profileId: 101,
+            readerId: 'profile:101:document',
+            selectedText: '梯度下降',
+            updatedAt: '2026-04-21T09:00:00Z',
+          },
+        ],
+        ok: true,
+        progress: {
+          layoutMode: 'horizontal',
+          metadata: { viewportWidth: 390 },
+          pageNumber: 4,
+          profileId: 101,
+          readerId: 'profile:101:document',
+          scale: 1.25,
+          updatedAt: '2026-04-21T09:01:00Z',
+        },
+        readerId: 'profile:101:document',
+      }),
+      ok: true,
+    });
+
+    const state = await getLearningReaderState(101, 'reader-token');
+
+    expect(state).toEqual({
+      annotations: [
+        expect.objectContaining({
+          anchor: expect.objectContaining({
+            pageNumber: 4,
+            rects: [{ height: 0.04, width: 0.32, x: 0.18, y: 0.42 }],
+            textQuote: '梯度下降',
+          }),
+          annotationType: 'highlight',
+          color: '#f2c94c',
+          id: 55,
+          pageNumber: 4,
+          profileId: 101,
+          readerId: 'profile:101:document',
+          selectedText: '梯度下降',
+        }),
+      ],
+      progress: expect.objectContaining({
+        layoutMode: 'horizontal',
+        pageNumber: 4,
+        profileId: 101,
+        readerId: 'profile:101:document',
+        scale: 1.25,
+      }),
+      readerId: 'profile:101:document',
+    });
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://library.example/api/v2/learning/profiles/101/reader-state',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Accept: 'application/json',
+          Authorization: 'Bearer reader-token',
+        }),
+        method: 'GET',
+      })
+    );
+  });
+
+  it('writes reader progress and annotation mutations through the v2 learning sync endpoints', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        json: async () => ({
+          ok: true,
+          progress: {
+            layoutMode: 'horizontal',
+            metadata: {},
+            pageNumber: 8,
+            profileId: 101,
+            readerId: 'profile:101:document',
+            scale: 1.4,
+            updatedAt: '2026-04-21T09:02:00Z',
+          },
+        }),
+        ok: true,
+      })
+      .mockResolvedValueOnce({
+        json: async () => ({
+          annotation: {
+            anchor: {
+              pageNumber: 8,
+              rects: [{ height: 0.05, width: 0.4, x: 0.1, y: 0.2 }],
+              textQuote: '反向传播',
+            },
+            annotationType: 'note',
+            color: '#76a9fa',
+            createdAt: '2026-04-21T09:02:00Z',
+            id: 77,
+            noteText: '这段要复习',
+            pageNumber: 8,
+            profileId: 101,
+            readerId: 'profile:101:document',
+            selectedText: '反向传播',
+            updatedAt: '2026-04-21T09:02:00Z',
+          },
+          ok: true,
+        }),
+        ok: true,
+      })
+      .mockResolvedValueOnce({
+        json: async () => ({
+          annotation: {
+            annotationType: 'note',
+            color: '#f2994a',
+            id: 77,
+            noteText: '改成考试重点',
+            pageNumber: 8,
+            profileId: 101,
+            readerId: 'profile:101:document',
+            selectedText: '反向传播',
+          },
+          ok: true,
+        }),
+        ok: true,
+      })
+      .mockResolvedValueOnce({
+        json: async () => ({ ok: true }),
+        ok: true,
+      });
+
+    const progress = await updateLearningReaderProgress(
+      101,
+      {
+        layoutMode: 'horizontal',
+        pageNumber: 8,
+        scale: 1.4,
+      },
+      'reader-token'
+    );
+    const annotation = await createLearningPdfAnnotation(
+      101,
+      {
+        anchor: {
+          pageNumber: 8,
+          rects: [{ height: 0.05, width: 0.4, x: 0.1, y: 0.2 }],
+          textQuote: '反向传播',
+        },
+        annotationType: 'note',
+        color: '#76a9fa',
+        noteText: '这段要复习',
+        pageNumber: 8,
+        selectedText: '反向传播',
+      },
+      'reader-token'
+    );
+    const updated = await updateLearningPdfAnnotation(
+      101,
+      77,
+      {
+        color: '#f2994a',
+        noteText: '改成考试重点',
+      },
+      'reader-token'
+    );
+    await deleteLearningPdfAnnotation(101, 77, 'reader-token');
+
+    expect(progress).toMatchObject({
+      layoutMode: 'horizontal',
+      pageNumber: 8,
+      scale: 1.4,
+    });
+    expect(annotation).toMatchObject({
+      annotationType: 'note',
+      id: 77,
+      noteText: '这段要复习',
+    });
+    expect(updated).toMatchObject({
+      color: '#f2994a',
+      id: 77,
+      noteText: '改成考试重点',
+    });
+    expect((global.fetch as jest.Mock).mock.calls.map((call) => [call[0], call[1]?.method])).toEqual([
+      ['https://library.example/api/v2/learning/profiles/101/reader-progress', 'PATCH'],
+      ['https://library.example/api/v2/learning/profiles/101/annotations', 'POST'],
+      ['https://library.example/api/v2/learning/profiles/101/annotations/77', 'PATCH'],
+      ['https://library.example/api/v2/learning/profiles/101/annotations/77', 'DELETE'],
+    ]);
+  });
+
+  it('runs quick explain without creating an explore session from the app contract', async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      json: async () => ({
+        answer: '梯度下降可以理解为沿着损失函数下降最快的方向逐步更新参数。',
+        modelName: 'deepseek-chat',
+        ok: true,
+      }),
+      ok: true,
+    });
+
+    const result = await quickExplainLearningPdfSelection(
+      101,
+      {
+        anchor: {
+          pageNumber: 4,
+          rects: [{ height: 0.04, width: 0.32, x: 0.18, y: 0.42 }],
+          textQuote: '梯度下降',
+        },
+        pageNumber: 4,
+        selectedText: '梯度下降',
+        surroundingText: '梯度下降是训练模型时常用的优化方法。',
+      },
+      'reader-token'
+    );
+
+    expect(result).toEqual({
+      answer: '梯度下降可以理解为沿着损失函数下降最快的方向逐步更新参数。',
+      modelName: 'deepseek-chat',
+    });
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://library.example/api/v2/learning/profiles/101/quick-explain',
+      expect.objectContaining({
+        body: expect.stringContaining('"selectedText":"梯度下降"'),
+        method: 'POST',
       })
     );
   });

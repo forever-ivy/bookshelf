@@ -176,6 +176,10 @@ export function resolveLearningWorkspaceHasViewableDocument(profile: LearningPro
     return true;
   }
 
+  if (profile.sourceType === 'book' && profile.bookId != null) {
+    return true;
+  }
+
   return (profile.sources ?? []).some((source) => {
     if (source.originBookSourceDocumentId != null) {
       return true;

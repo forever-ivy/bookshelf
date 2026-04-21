@@ -1,19 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import ForceGraph3D from 'react-force-graph-3d';
-import SpriteText from 'three-spritetext';
-import {
-  AdditiveBlending,
-  DodecahedronGeometry,
-  FogExp2,
-  Group,
-  IcosahedronGeometry,
-  Mesh,
-  MeshBasicMaterial,
-  MeshStandardMaterial,
-  OctahedronGeometry,
-  SphereGeometry,
-} from 'three';
+import ForceGraph2D from 'react-force-graph-2d';
 
 import type {
   LearningGraphHydratePayload,
@@ -21,11 +8,11 @@ import type {
   LearningGraphRuntimeOutputMessage,
 } from '../../lib/learning/graph-bridge';
 import {
-  resolveLearningGraph3DLabelVisibility,
-  resolveLearningGraph3DNodeVisualState,
-} from '../../lib/learning/graph-runtime-3d';
+  resolveLearningGraph2DLabelVisibility,
+  resolveLearningGraph2DNodeVisualState,
+  resolveLearningGraph2DViewportAction,
+} from '../../lib/learning/graph-runtime-2d';
 import { readLearningGraphBootstrapPayload } from '../../lib/learning/graph-runtime';
-import { syncLearningGraphViewportSelection } from '../../lib/learning/graph-runtime-focus';
 
 type RuntimeLink = {
   __key: string;
@@ -40,17 +27,17 @@ type RuntimeNode = {
   type: string;
   x?: number;
   y?: number;
-  z?: number;
 };
 
 type RuntimeGraphRef = {
-  cameraPosition: (
-    position: { x: number; y: number; z: number },
-    lookAt?: { x: number; y: number; z: number },
-    durationMs?: number
-  ) => unknown;
-  controls?: () => Record<string, unknown>;
-  d3Force: (forceName: string) => { distance?: (value: (link: RuntimeLink) => number) => void; strength?: (value: (node: RuntimeNode) => number) => void } | undefined;
+  d3Force: (
+    forceName: string
+  ) =>
+    | {
+        distance?: (value: (link: RuntimeLink) => number) => void;
+        strength?: (value: (node: RuntimeNode) => number) => void;
+      }
+    | undefined;
   d3VelocityDecay: (value: number) => void;
   refresh?: () => unknown;
   zoomToFit: (durationMs?: number, padding?: number) => unknown;
@@ -69,8 +56,9 @@ function buildEdgeKey(edge: { source: string; target: string; type: string }) {
 }
 
 function postToNative(message: LearningGraphRuntimeOutputMessage) {
-  const bridge = (window as Window & { ReactNativeWebView?: { postMessage: (value: string) => void } })
-    .ReactNativeWebView;
+  const bridge = (window as Window & {
+    ReactNativeWebView?: { postMessage: (value: string) => void };
+  }).ReactNativeWebView;
 
   if (!bridge?.postMessage) {
     return;
@@ -147,43 +135,192 @@ function buildNodeRadius(
   return baseRadius;
 }
 
-function buildLabelTextHeight(node: RuntimeNode) {
-  switch (node.type) {
-    case 'Book':
-      return 24;
-    case 'SourceAsset':
-      return 18;
-    case 'Fragment':
-      return 13;
-    default:
-      return 16;
+function drawPolygonPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+  sides: number,
+  rotation = -Math.PI / 2
+) {
+  ctx.beginPath();
+  for (let index = 0; index < sides; index += 1) {
+    const angle = rotation + (Math.PI * 2 * index) / sides;
+    const pointX = x + Math.cos(angle) * radius;
+    const pointY = y + Math.sin(angle) * radius;
+    if (index === 0) {
+      ctx.moveTo(pointX, pointY);
+    } else {
+      ctx.lineTo(pointX, pointY);
+    }
   }
+  ctx.closePath();
 }
 
-function buildNodeGeometry(type: string, radius: number) {
-  switch (type) {
-    case 'Book':
-      return new IcosahedronGeometry(radius, 1);
-    case 'Concept':
-      return new OctahedronGeometry(radius);
-    case 'LessonStep':
-      return new DodecahedronGeometry(radius);
-    case 'SourceAsset':
-      return new IcosahedronGeometry(radius, 0);
-    case 'Fragment':
-    default:
-      return new SphereGeometry(radius, 20, 20);
-  }
+function drawRoundedRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+) {
+  const halfWidth = width / 2;
+  const halfHeight = height / 2;
+  const safeRadius = Math.min(radius, halfWidth, halfHeight);
+
+  ctx.beginPath();
+  ctx.moveTo(x - halfWidth + safeRadius, y - halfHeight);
+  ctx.lineTo(x + halfWidth - safeRadius, y - halfHeight);
+  ctx.quadraticCurveTo(x + halfWidth, y - halfHeight, x + halfWidth, y - halfHeight + safeRadius);
+  ctx.lineTo(x + halfWidth, y + halfHeight - safeRadius);
+  ctx.quadraticCurveTo(x + halfWidth, y + halfHeight, x + halfWidth - safeRadius, y + halfHeight);
+  ctx.lineTo(x - halfWidth + safeRadius, y + halfHeight);
+  ctx.quadraticCurveTo(x - halfWidth, y + halfHeight, x - halfWidth, y + halfHeight - safeRadius);
+  ctx.lineTo(x - halfWidth, y - halfHeight + safeRadius);
+  ctx.quadraticCurveTo(x - halfWidth, y - halfHeight, x - halfWidth + safeRadius, y - halfHeight);
+  ctx.closePath();
 }
 
-function buildNodeObject(
+function drawCapsulePath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number
+) {
+  drawRoundedRectPath(ctx, x, y, width, height, height / 2);
+}
+
+function drawNodeShapePath(
+  ctx: CanvasRenderingContext2D,
   node: RuntimeNode,
+  x: number,
+  y: number,
+  radius: number
+) {
+  switch (node.type) {
+    case 'SourceAsset':
+      drawRoundedRectPath(ctx, x, y, radius * 3.2, radius * 2.05, radius * 0.55);
+      return;
+    case 'Section':
+      drawCapsulePath(ctx, x, y, radius * 3.8, radius * 1.75);
+      return;
+    case 'LessonStep':
+    case 'Definition':
+      drawPolygonPath(ctx, x, y, radius * 1.2, 4, Math.PI / 4);
+      return;
+    case 'Formula':
+      drawPolygonPath(ctx, x, y, radius * 1.12, 4);
+      return;
+    case 'Method':
+      drawPolygonPath(ctx, x, y, radius * 1.16, 6);
+      return;
+    case 'Theorem':
+      drawPolygonPath(ctx, x, y, radius * 1.22, 3);
+      return;
+    case 'Claim':
+      drawPolygonPath(ctx, x, y, radius * 1.14, 8);
+      return;
+    case 'Fragment':
+    case 'Book':
+    case 'Concept':
+    default:
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.closePath();
+      return;
+  }
+}
+
+function fillAndStrokeCurrentPath(
+  ctx: CanvasRenderingContext2D,
+  options: {
+    fillColor: string;
+    fillOpacity: number;
+    strokeColor: string;
+    strokeOpacity?: number;
+    strokeWidth: number;
+  }
+) {
+  ctx.save();
+  ctx.globalAlpha = options.fillOpacity;
+  ctx.fillStyle = options.fillColor;
+  ctx.fill();
+  if (options.strokeWidth > 0) {
+    ctx.globalAlpha = options.strokeOpacity ?? 1;
+    ctx.lineWidth = options.strokeWidth;
+    ctx.strokeStyle = options.strokeColor;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawNodeLabel(
+  ctx: CanvasRenderingContext2D,
+  node: RuntimeNode,
+  x: number,
+  y: number,
+  radius: number,
+  active: boolean,
+  accentColor: string,
+  globalScale: number
+) {
+  const fontSize = Math.max(9, Math.min(13, 13 / Math.max(globalScale, 0.75)));
+  const paddingX = 7;
+  const paddingY = 4;
+
+  ctx.save();
+  ctx.font = `${active ? '700' : '500'} ${fontSize}px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif`;
+  const labelWidth = ctx.measureText(node.label).width;
+  const boxWidth = labelWidth + paddingX * 2;
+  const boxHeight = fontSize + paddingY * 2;
+  const labelCenterX = x;
+  const labelCenterY = y - radius - boxHeight * 0.95;
+
+  drawRoundedRectPath(ctx, labelCenterX, labelCenterY, boxWidth, boxHeight, 8);
+  fillAndStrokeCurrentPath(ctx, {
+    fillColor: '#0f141a',
+    fillOpacity: active ? 0.82 : 0.66,
+    strokeColor: active ? accentColor : 'rgba(255, 255, 255, 0.14)',
+    strokeOpacity: 1,
+    strokeWidth: active ? 1.8 : 0.8,
+  });
+
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(node.label, labelCenterX, labelCenterY + 0.5);
+  ctx.restore();
+}
+
+function paintPointerArea(
+  ctx: CanvasRenderingContext2D,
+  node: RuntimeNode,
+  color: string,
+  radius: number
+) {
+  const x = typeof node.x === 'number' ? node.x : 0;
+  const y = typeof node.y === 'number' ? node.y : 0;
+
+  ctx.save();
+  drawNodeShapePath(ctx, node, x, y, radius + 6);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawNodeObject(
+  node: RuntimeNode,
+  ctx: CanvasRenderingContext2D,
+  globalScale: number,
   hydratePayload: LearningGraphHydratePayload,
+  nodeDegree: number,
   selectedNodeId: string | null,
   selectedNeighborhoodNodeIds: Set<string> | null
 ) {
   const radius = buildNodeRadius(node, hydratePayload, selectedNeighborhoodNodeIds, selectedNodeId);
-  const visualState = resolveLearningGraph3DNodeVisualState(node, {
+  const visualState = resolveLearningGraph2DNodeVisualState(node, {
     generatedNodeIds: hydratePayload.generatedNodeIds,
     guideStatusByNodeId: hydratePayload.guideStatusByNodeId,
     highlightedNodeIds: hydratePayload.highlightedNodeIds,
@@ -192,135 +329,57 @@ function buildNodeObject(
     selectedNodeId,
     theme: hydratePayload.theme,
   });
-  const group = new Group();
-  const glowColor = visualState.generated ? hydratePayload.theme.explore : visualState.color;
+  const x = typeof node.x === 'number' ? node.x : 0;
+  const y = typeof node.y === 'number' ? node.y : 0;
 
-  // 1. Inner bright core — energy orb center
-  const coreRadius = radius * 0.35;
-  const core = new Mesh(
-    new SphereGeometry(coreRadius, 12, 12),
-    new MeshBasicMaterial({
-      color: visualState.color,
-      fog: false,
-      opacity: visualState.active ? 0.95 : 0.8,
-      transparent: true,
-    })
-  );
-  group.add(core);
+  ctx.save();
 
-  // 2. Main body — type-specific crystal geometry
-  const body = new Mesh(
-    buildNodeGeometry(node.type, radius),
-    new MeshStandardMaterial({
-      color: visualState.color,
-      emissive: visualState.color,
-      emissiveIntensity: visualState.active ? 0.6 : visualState.emphasis !== 'normal' ? 0.3 : 0.12,
-      metalness: 0.35,
-      opacity: visualState.opacity,
-      roughness: visualState.active ? 0.18 : 0.32,
-      transparent: visualState.opacity < 1,
-    })
-  );
-  group.add(body);
-
-  // 3. Inner glow shell — close aura
-  const innerGlowScale = visualState.active
-    ? 1.4
-    : visualState.generated
-      ? 1.35
-      : visualState.emphasis !== 'normal'
-        ? 1.25
-        : 1.15;
-  const innerGlowOpacity = visualState.active
-    ? 0.32
-    : visualState.generated
-      ? 0.24
-      : visualState.emphasis !== 'normal'
-        ? 0.18
-        : 0.06;
-  const innerGlow = new Mesh(
-    new SphereGeometry(radius * innerGlowScale, 16, 16),
-    new MeshBasicMaterial({
-      blending: AdditiveBlending,
-      color: glowColor,
-      depthWrite: false,
-      fog: false,
-      opacity: innerGlowOpacity,
-      transparent: true,
-    })
-  );
-  group.add(innerGlow);
-
-  // 4. Outer glow shell — far aura for volumetric presence
-  const outerGlowScale = visualState.active
-    ? 2.0
-    : visualState.generated
-      ? 1.8
-      : visualState.emphasis !== 'normal'
-        ? 1.6
-        : 1.45;
-  const outerGlowOpacity = visualState.active
-    ? 0.14
-    : visualState.generated
-      ? 0.1
-      : visualState.emphasis !== 'normal'
-        ? 0.07
-        : 0.025;
-  const outerGlow = new Mesh(
-    new SphereGeometry(radius * outerGlowScale, 12, 12),
-    new MeshBasicMaterial({
-      blending: AdditiveBlending,
-      color: glowColor,
-      depthWrite: false,
-      fog: false,
-      opacity: outerGlowOpacity,
-      transparent: true,
-    })
-  );
-  group.add(outerGlow);
-
-  // 5. Wireframe cage for selected/emphasized nodes
-  if (visualState.generated || visualState.emphasis !== 'normal' || visualState.active) {
-    const wireScale = visualState.active ? 1.9 : visualState.generated ? 1.75 : 1.5;
-    const wireShell = new Mesh(
-      buildNodeGeometry(node.type, radius * wireScale),
-      new MeshBasicMaterial({
-        color: glowColor,
-        opacity: visualState.active ? 0.55 : 0.28,
-        transparent: true,
-        wireframe: true,
-      })
-    );
-    group.add(wireShell);
+  if (visualState.active || visualState.generated || visualState.emphasis !== 'normal') {
+    drawNodeShapePath(ctx, node, x, y, radius * (visualState.active ? 1.65 : 1.45));
+    fillAndStrokeCurrentPath(ctx, {
+      fillColor: visualState.color,
+      fillOpacity: visualState.active ? 0.18 : 0.1,
+      strokeColor: visualState.color,
+      strokeOpacity: 0.42,
+      strokeWidth: visualState.active ? 3 : 2,
+    });
   }
 
-  // 6. Label
-  const showLabel = resolveLearningGraph3DLabelVisibility(node, {
+  drawNodeShapePath(ctx, node, x, y, radius);
+  fillAndStrokeCurrentPath(ctx, {
+    fillColor: visualState.color,
+    fillOpacity: visualState.opacity,
+    strokeColor: visualState.active ? '#ffffff' : visualState.color,
+    strokeOpacity: visualState.active ? 0.95 : 0.78,
+    strokeWidth: visualState.active ? 2.4 : 1.2,
+  });
+
+  if (node.type === 'Book') {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, radius * 1.38, 0, Math.PI * 2);
+    ctx.strokeStyle = visualState.color;
+    ctx.globalAlpha = 0.42;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  const showLabel = resolveLearningGraph2DLabelVisibility(node, {
     generatedNodeIds: hydratePayload.generatedNodeIds,
     guideStatusByNodeId: hydratePayload.guideStatusByNodeId,
     highlightedNodeIds: hydratePayload.highlightedNodeIds,
     mode: hydratePayload.mode,
+    nodeDegree,
     selectedNeighborhoodNodeIds,
     selectedNodeId,
   });
 
   if (showLabel) {
-    const textHeight = buildLabelTextHeight(node);
-    const sprite = new SpriteText(node.label, textHeight, '#ffffff');
-    sprite.material.depthWrite = false;
-    sprite.backgroundColor = visualState.active
-      ? 'rgba(0, 0, 0, 0.65)'
-      : 'rgba(0, 0, 0, 0.4)';
-    sprite.borderRadius = 8;
-    sprite.borderWidth = visualState.active ? 2 : 0.5;
-    sprite.borderColor = visualState.active ? visualState.color : 'rgba(255, 255, 255, 0.12)';
-    sprite.fontWeight = visualState.active ? '700' : '500';
-    sprite.padding = 4;
-    sprite.position.set(0, radius + textHeight * 1.2, 0);
-    group.add(sprite);
+    drawNodeLabel(ctx, node, x, y, radius, visualState.active, visualState.color, globalScale);
   }
 
-  return group;
+  ctx.restore();
 }
 
 function App() {
@@ -340,7 +399,6 @@ function App() {
     bootstrapPayload?.selectedNodeId ?? null
   );
   const [hydrateToken, setHydrateToken] = React.useState(bootstrapPayload ? 1 : 0);
-  const autoRotateTimerRef = React.useRef<number | null>(null);
 
   React.useEffect(() => {
     if (!bootstrapPayload) {
@@ -486,69 +544,15 @@ function App() {
     [hydratePayload]
   );
 
-  const runtimeNodeById = React.useMemo(
-    () => Object.fromEntries(graphData.nodes.map((node) => [node.id, node])),
-    [graphData.nodes]
-  );
-
-  const getCurrentCameraPosition = React.useCallback(() => {
-    const graph = graphRef.current;
-    if (!graph) return null;
-    try {
-      const pos = (graph as any).camera?.()?.position;
-      if (pos && typeof pos.x === 'number') {
-        return { x: pos.x, y: pos.y, z: pos.z };
-      }
-    } catch {
-      // camera access may not be available
-    }
-    return null;
-  }, []);
-
-  const syncViewportToSelection = React.useCallback(
-    (targetNodeId: string | null, retryCount = 0) => {
-      const graph = graphRef.current;
-      if (!graph || !hydratePayload) {
-        postStatus('viewport:missingGraphRef');
-        return;
-      }
-
-      const targetNode = targetNodeId ? runtimeNodeById[targetNodeId] ?? null : null;
-      if (
-        targetNodeId &&
-        (!targetNode ||
-          typeof targetNode.x !== 'number' ||
-          typeof targetNode.y !== 'number' ||
-          typeof targetNode.z !== 'number')
-      ) {
-        if (retryCount < 6) {
-          window.setTimeout(() => {
-            syncViewportToSelection(targetNodeId, retryCount + 1);
-          }, 90);
-          return;
-        }
-      }
-
-      const status = syncLearningGraphViewportSelection(graph, targetNode, {
-        cameraFocusDistanceByNodeType: hydratePayload.config.cameraFocusDistanceByNodeType,
-        cameraFocusDurationMs: hydratePayload.config.cameraFocusDurationMs,
-        currentCameraPosition: getCurrentCameraPosition(),
-        resetWhenMissing: !targetNodeId,
-      });
-
-      if (status === 'focused' && targetNodeId) {
-        postStatus('viewport:focusNode', targetNodeId);
-        return;
-      }
-
-      if (status === 'reset') {
-        postStatus(targetNodeId ? 'viewport:resetAfterMiss' : 'viewport:zoomToFit');
-        return;
-      }
-
-      postStatus('viewport:preserve');
-    },
-    [getCurrentCameraPosition, hydratePayload, runtimeNodeById]
+  const degreeByNodeId = React.useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(hydratePayload?.linkedNodeIdsByNodeId ?? {}).map(([nodeId, linkedIds]) => [
+          nodeId,
+          linkedIds.length,
+        ])
+      ),
+    [hydratePayload]
   );
 
   React.useEffect(() => {
@@ -572,16 +576,23 @@ function App() {
         chargeForce.strength((node: RuntimeNode) => {
           switch (node.type) {
             case 'Book':
-              return -220;
+              return -300;
+            case 'Section':
             case 'SourceAsset':
+              return -240;
             case 'LessonStep':
-              return -180;
+            case 'Definition':
+            case 'Theorem':
+            case 'Method':
+              return -190;
+            case 'Claim':
             case 'Concept':
-              return -110;
+            case 'Formula':
+              return -130;
             case 'Fragment':
-              return -45;
+              return -50;
             default:
-              return -90;
+              return -95;
           }
         });
       }
@@ -593,49 +604,23 @@ function App() {
       }
       postStatus('effect:linkForce');
 
-      const controls = graph.controls?.();
-      if (controls && typeof controls === 'object') {
-        (controls as any).enableDamping = true;
-        (controls as any).dampingFactor = 0.22;
-        (controls as any).rotateSpeed = 1.4;
-        (controls as any).zoomSpeed = 0.85;
-        (controls as any).autoRotate = true;
-        (controls as any).autoRotateSpeed = 0.3;
-        (controls as any).minDistance = 40;
-        (controls as any).maxDistance = 800;
-      }
-
-      // Add fog for depth perception
-      try {
-        const scene = (graph as any).scene?.();
-        if (scene) {
-          scene.fog = new FogExp2(hydratePayload.theme.background, 0.0018);
-        }
-      } catch {
-        // Scene access may not be available
-      }
-
       graph.refresh?.();
 
-      window.requestAnimationFrame(() => {
-        window.setTimeout(() => {
-          try {
-            syncViewportToSelection(hydratePayload.selectedNodeId);
-          } catch (error) {
-            postToNative({
-              message: formatRuntimeError(error),
-              type: 'runtimeError',
-            });
-          }
-        }, 60);
-      });
+      if (resolveLearningGraph2DViewportAction('hydrate') === 'fit') {
+        window.requestAnimationFrame(() => {
+          window.setTimeout(() => {
+            graph.zoomToFit(800, 72);
+            postStatus('viewport:zoomToFit');
+          }, 60);
+        });
+      }
     } catch (error) {
       postToNative({
         message: formatRuntimeError(error),
         type: 'runtimeError',
       });
     }
-  }, [hydratePayload, hydrateToken, syncViewportToSelection]);
+  }, [hydratePayload, hydrateToken]);
 
   React.useEffect(() => {
     if (!hydratePayload) {
@@ -644,43 +629,14 @@ function App() {
 
     try {
       graphRef.current?.refresh?.();
-      syncViewportToSelection(selectedNodeId);
+      postStatus('viewport:preserve', selectedNodeId ?? undefined);
     } catch (error) {
       postToNative({
         message: formatRuntimeError(error),
         type: 'runtimeError',
       });
     }
-  }, [hydratePayload, selectedNeighborhoodNodeIds, selectedNodeId, syncViewportToSelection]);
-
-  // Auto-rotation management: pause when a node is selected, resume when idle
-  React.useEffect(() => {
-    if (autoRotateTimerRef.current) {
-      clearTimeout(autoRotateTimerRef.current);
-      autoRotateTimerRef.current = null;
-    }
-
-    if (selectedNodeId) {
-      const controls = graphRef.current?.controls?.() as any;
-      if (controls) {
-        controls.autoRotate = false;
-      }
-    } else {
-      autoRotateTimerRef.current = window.setTimeout(() => {
-        const controls = graphRef.current?.controls?.() as any;
-        if (controls) {
-          controls.autoRotate = true;
-        }
-      }, 3000);
-    }
-
-    return () => {
-      if (autoRotateTimerRef.current) {
-        clearTimeout(autoRotateTimerRef.current);
-        autoRotateTimerRef.current = null;
-      }
-    };
-  }, [selectedNodeId]);
+  }, [hydratePayload, selectedNeighborhoodNodeIds, selectedNodeId]);
 
   if (!hydratePayload) {
     return null;
@@ -688,11 +644,11 @@ function App() {
 
   return (
     <RuntimeErrorBoundary>
-      <ForceGraph3D
+      <ForceGraph2D
+        autoPauseRedraw={false}
         backgroundColor={hydratePayload.theme.background}
-        controlType={hydratePayload.config.controlType}
         cooldownTicks={hydratePayload.config.cooldownTicks}
-        d3AlphaDecay={0.025}
+        d3AlphaDecay={0.03}
         enableNodeDrag
         graphData={graphData}
         height={viewport.height}
@@ -702,7 +658,7 @@ function App() {
             const sourceId = resolveRuntimeLinkEndpointId(current.source);
             const targetId = resolveRuntimeLinkEndpointId(current.target);
             if (hydratePayload.mode === 'global') {
-              return 'rgba(83, 113, 145, 0.46)';
+              return 'rgba(83, 113, 145, 0.42)';
             }
             if (
               modeHighlightedNodeIds.has(String(sourceId)) ||
@@ -715,14 +671,14 @@ function App() {
 
           return highlightedEdgeKeys.has(current.__key)
             ? hydratePayload.theme.edge
-            : 'rgba(78, 99, 121, 0.06)';
+            : 'rgba(78, 99, 121, 0.08)';
         }}
         linkCurvature={(link) => {
           const current = link as RuntimeLink;
           return current.source === current.target ? 0.25 : 0;
         }}
-        linkOpacity={1}
-        linkResolution={10}
+        linkDirectionalArrowLength={0}
+        linkDirectionalArrowRelPos={1}
         linkWidth={(link) => {
           const current = link as RuntimeLink;
           const emphasized =
@@ -734,40 +690,52 @@ function App() {
             const sourceId = resolveRuntimeLinkEndpointId(current.source);
             const targetId = resolveRuntimeLinkEndpointId(current.target);
             if (hydratePayload.mode === 'global') {
-              return emphasized ? 1.3 : 0.72;
+              return emphasized ? 1.8 : 0.9;
             }
             if (
               modeHighlightedNodeIds.has(String(sourceId)) ||
               modeHighlightedNodeIds.has(String(targetId))
             ) {
-              return emphasized ? 2.1 : 1.35;
+              return emphasized ? 2.6 : 1.6;
             }
-            return emphasized ? 1.1 : 0.48;
+            return emphasized ? 1.2 : 0.56;
           }
 
-          return highlightedEdgeKeys.has(current.__key) ? (emphasized ? 3.0 : 2.0) : 0.3;
+          return highlightedEdgeKeys.has(current.__key) ? (emphasized ? 3.2 : 2.2) : 0.35;
         }}
-        linkDirectionalParticleColor={hydratePayload.theme.primary}
-        linkDirectionalParticles={2}
-        linkDirectionalParticleSpeed={0.004}
-        linkDirectionalParticleWidth={1.2}
-        nodeLabel={() => ''}
-        nodeThreeObject={(node) =>
-          buildNodeObject(
+        nodeCanvasObject={(node, ctx, globalScale) =>
+          drawNodeObject(
             node as RuntimeNode,
+            ctx,
+            globalScale,
             hydratePayload,
+            degreeByNodeId[(node as RuntimeNode).id] ?? 0,
             selectedNodeId,
             selectedNeighborhoodNodeIds
           )
         }
+        nodeCanvasObjectMode={() => 'replace'}
+        nodeLabel={() => ''}
+        nodePointerAreaPaint={(node, color, ctx) =>
+          paintPointerArea(
+            ctx,
+            node as RuntimeNode,
+            color,
+            buildNodeRadius(
+              node as RuntimeNode,
+              hydratePayload,
+              selectedNeighborhoodNodeIds,
+              selectedNodeId
+            )
+          )
+        }
         onBackgroundClick={() => {
           const now = Date.now();
-          const lastTap = (window as any).__lastBgTap ?? 0;
-          (window as any).__lastBgTap = now;
+          const lastTap = (window as Window & { __lastBgTap?: number }).__lastBgTap ?? 0;
+          (window as Window & { __lastBgTap?: number }).__lastBgTap = now;
           if (now - lastTap < 350) {
-            // Double-tap: zoom to fit
             graphRef.current?.zoomToFit(800, 72);
-            (window as any).__lastBgTap = 0;
+            (window as Window & { __lastBgTap?: number }).__lastBgTap = 0;
           }
           setSelectedNodeId(null);
           postToNative({ type: 'backgroundTap' });
@@ -778,8 +746,6 @@ function App() {
           postToNative({ nodeId: current.id, type: 'nodeTap' });
         }}
         ref={graphRef as React.MutableRefObject<any>}
-        showNavInfo={false}
-        warmupTicks={30}
         width={viewport.width}
       />
     </RuntimeErrorBoundary>

@@ -15,6 +15,7 @@ type LearningRichTextProps = {
   maxFontSizeMultiplier?: number;
   numberOfLines?: number;
   style?: any;
+  webViewTestID?: string;
 };
 
 type LearningRichTextTypography = {
@@ -282,6 +283,7 @@ export function LearningRichText({
   maxFontSizeMultiplier,
   numberOfLines,
   style,
+  webViewTestID,
 }: LearningRichTextProps) {
   const { theme } = useAppTheme();
   const hasFormatting = learningTextNeedsRichRendering(content);
@@ -317,6 +319,7 @@ export function LearningRichText({
         scrollEnabled={false}
         source={{ html }}
         style={styles.webview}
+        testID={webViewTestID}
         onMessage={(event) => {
           const nextHeight = Number.parseInt(event.nativeEvent.data, 10);
           if (!Number.isNaN(nextHeight) && nextHeight > 0) {

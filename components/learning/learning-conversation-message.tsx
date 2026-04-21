@@ -1,10 +1,10 @@
 import React from 'react';
-import { Platform, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import Animated, { FadeInDown, FadeOutUp } from 'react-native-reanimated';
 
 import { AppIcon } from '@/components/base/app-icon';
 import { LearningChatBubble } from '@/components/learning/learning-chat-bubble';
-import { LearningRichText } from '@/components/learning/learning-rich-text';
+import { LearningMarkdownBody } from '@/components/learning/learning-markdown-body';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import type { LearningBridgeAction, LearningCitation } from '@/lib/api/types';
 import type {
@@ -12,26 +12,56 @@ import type {
   LearningWorkspaceRenderedMessage,
 } from '@/lib/learning/workspace';
 
+type LearningContentCard = Extract<LearningWorkspaceMessageCard, { content: string }>;
+type LearningActionCard = Extract<LearningWorkspaceMessageCard, { actions: LearningBridgeAction[] }>;
+type LearningStringListCard = Extract<LearningWorkspaceMessageCard, { items: string[] }>;
+type LearningEvidenceCard = Extract<LearningWorkspaceMessageCard, { items: LearningCitation[] }>;
+type LearningExaminerCard = Extract<LearningWorkspaceMessageCard, { kind: 'examiner' }>;
+
+function isContentCardKind<TKind extends LearningContentCard['kind']>(
+  card: LearningWorkspaceMessageCard,
+  kind: TKind
+): card is LearningContentCard & { kind: TKind } {
+  return card.kind === kind && 'content' in card;
+}
+
+function isStringListCardKind<TKind extends LearningStringListCard['kind']>(
+  card: LearningWorkspaceMessageCard,
+  kind: TKind
+): card is LearningStringListCard & { kind: TKind } {
+  return card.kind === kind && 'items' in card;
+}
+
+function isActionCardKind<TKind extends LearningActionCard['kind']>(
+  card: LearningWorkspaceMessageCard,
+  kind: TKind
+): card is LearningActionCard & { kind: TKind } {
+  return card.kind === kind && 'actions' in card;
+}
+
+function isEvidenceCard(card: LearningWorkspaceMessageCard): card is LearningEvidenceCard {
+  return card.kind === 'evidence' && 'items' in card;
+}
+
+function isExaminerCard(card: LearningWorkspaceMessageCard): card is LearningExaminerCard {
+  return card.kind === 'examiner' && 'evaluation' in card;
+}
+
 function TextSection({
   content,
+  streaming = false,
   tone = 'primary',
 }: {
   content: string;
+  streaming?: boolean;
   tone?: 'muted' | 'primary';
 }) {
-  const { theme } = useAppTheme();
-  const isPrimary = tone === 'primary';
-
   return (
     <View style={{ gap: 10 }}>
-      <LearningRichText
+      <LearningMarkdownBody
         content={content}
-        style={{
-          color: theme.colors.text,
-          fontFamily: Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' }),
-          fontSize: isPrimary ? 17 : 16,
-          lineHeight: isPrimary ? 28 : 26,
-        }}
+        streaming={streaming}
+        tone={tone}
       />
     </View>
   );
@@ -99,14 +129,9 @@ function EvidenceSection({
               </Text>
             ) : null}
             {item.excerpt ? (
-              <LearningRichText
+              <LearningMarkdownBody
                 content={item.excerpt}
-                style={{
-                  color: theme.colors.textMuted,
-                  ...theme.typography.body,
-                  fontSize: 14,
-                  lineHeight: 22,
-                }}
+                tone="muted"
               />
             ) : null}
           </View>
@@ -149,15 +174,9 @@ function ListSection({
                 width: 6,
               }}
             />
-            <LearningRichText
+            <LearningMarkdownBody
               content={item}
-              style={{
-                color: theme.colors.text,
-                flex: 1,
-                ...theme.typography.body,
-                fontSize: 14,
-                lineHeight: 22,
-              }}
+              tone="muted"
             />
           </View>
         ))}
@@ -186,14 +205,9 @@ function EvaluationSection({
           {evaluation.passed ? '这一轮已经达到当前步骤要求。' : '这一轮还需要继续打磨。'}
         </Text>
         {evaluation.reasoning ? (
-          <LearningRichText
+          <LearningMarkdownBody
             content={evaluation.reasoning}
-            style={{
-              color: theme.colors.textMuted,
-              ...theme.typography.body,
-              fontSize: 14,
-              lineHeight: 22,
-            }}
+            tone="muted"
           />
         ) : null}
         {evaluation.missingConcepts.length > 0 ? (
@@ -423,7 +437,9 @@ function ExploreMessage({
         ) : null}
       </View>
 
-      {answerContent || message.streaming ? <TextSection content={answerContent} /> : null}
+      {answerContent || message.streaming ? (
+        <TextSection content={answerContent} streaming={message.streaming} />
+      ) : null}
     </View>
   );
 }
@@ -437,40 +453,19 @@ function GuideMessage({
 }) {
   const { theme } = useAppTheme();
   const primaryCard =
-    message.cards.find((card) => card.kind === 'coach') ??
-    message.cards.find((card) => card.kind === 'teacher') ??
+    message.cards.find((card) => isContentCardKind(card, 'coach')) ??
+    message.cards.find((card) => isContentCardKind(card, 'teacher')) ??
     null;
-  const teacherCard = message.cards.find(
-    (card): card is Extract<LearningWorkspaceMessageCard, { kind: 'teacher' }> =>
-      card.kind === 'teacher'
+  const teacherCard = message.cards.find((card) => isContentCardKind(card, 'teacher'));
+  const peerCard = message.cards.find((card) => isContentCardKind(card, 'peer'));
+  const examinerCard = message.cards.find(isExaminerCard);
+  const evidenceCard = message.cards.find(isEvidenceCard);
+  const remediationCard = message.cards.find((card) => isStringListCardKind(card, 'remediation'));
+  const followupsCard = message.cards.find((card) => isStringListCardKind(card, 'followups'));
+  const relatedConceptsCard = message.cards.find((card) =>
+    isStringListCardKind(card, 'related_concepts')
   );
-  const peerCard = message.cards.find(
-    (card): card is Extract<LearningWorkspaceMessageCard, { kind: 'peer' }> => card.kind === 'peer'
-  );
-  const examinerCard = message.cards.find(
-    (card): card is Extract<LearningWorkspaceMessageCard, { kind: 'examiner' }> =>
-      card.kind === 'examiner'
-  );
-  const evidenceCard = message.cards.find(
-    (card): card is Extract<LearningWorkspaceMessageCard, { kind: 'evidence' }> =>
-      card.kind === 'evidence'
-  );
-  const remediationCard = message.cards.find(
-    (card): card is Extract<LearningWorkspaceMessageCard, { kind: 'remediation' }> =>
-      card.kind === 'remediation'
-  );
-  const followupsCard = message.cards.find(
-    (card): card is Extract<LearningWorkspaceMessageCard, { kind: 'followups' }> =>
-      card.kind === 'followups'
-  );
-  const relatedConceptsCard = message.cards.find(
-    (card): card is Extract<LearningWorkspaceMessageCard, { kind: 'related_concepts' }> =>
-      card.kind === 'related_concepts'
-  );
-  const redirectCard = message.cards.find(
-    (card): card is Extract<LearningWorkspaceMessageCard, { kind: 'redirect' }> =>
-      card.kind === 'redirect'
-  );
+  const redirectCard = message.cards.find((card) => isActionCardKind(card, 'redirect'));
   const primaryContent = primaryCard?.content ?? message.text.trim();
 
   if (message.streaming && !primaryContent) {

@@ -6,17 +6,17 @@ describe('learning graph runtime theme', () => {
     expect(buildLearningGraphRuntimeTheme(appTheme)).toEqual({
       background: appTheme.colors.backgroundWorkspace,
       borderSoft: appTheme.colors.borderSoft,
-      edge: 'rgba(37, 99, 235, 0.22)',
-      explore: appTheme.colors.markerHighlightOrange,
-      fragment: appTheme.colors.markerHighlightRed,
-      primary: appTheme.colors.availabilityPickup,
-      source: appTheme.colors.markerHighlightGreen,
-      step: appTheme.colors.markerHighlightYellow,
-      success: appTheme.colors.availabilityReady,
+      edge: 'rgba(37, 99, 235, 0.3)',
+      explore: '#ffc37b',
+      fragment: '#ff9ea7',
+      primary: '#2066ff',
+      source: '#b9f09e',
+      step: '#fdba03',
+      success: '#0f9a3e',
       surface: appTheme.colors.surface,
       text: appTheme.colors.text,
       textSoft: appTheme.colors.textSoft,
-      warning: appTheme.colors.markerHighlightYellow,
+      warning: '#f3b302',
     });
   });
 });

@@ -61,7 +61,7 @@ export function ProfileSheetContent({
         contentInsetAdjustmentBehavior="automatic"
         keyboardDismissMode="on-drag"
         style={{
-          backgroundColor: theme.colors.backgroundStrong,
+          backgroundColor: theme.colors.surface,
           flex: 1,
         }}
         testID="profile-sheet-surface"
@@ -76,7 +76,7 @@ export function ProfileSheetContent({
       testID="profile-sheet-surface"
       style={{
         alignSelf: 'stretch',
-        backgroundColor: theme.colors.backgroundStrong,
+        backgroundColor: theme.colors.surface,
         paddingBottom: insets.bottom,
       }}>
       <View

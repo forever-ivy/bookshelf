@@ -12,6 +12,15 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "react-native-gifted-chat": [
+        "./types/react-native-gifted-chat"
+      ],
+      "react-native-syntax-highlighter": [
+        "./types/react-native-syntax-highlighter"
+      ],
+      "react-syntax-highlighter/styles/hljs": [
+        "./types/react-syntax-highlighter-hljs"
       ]
     }
   },

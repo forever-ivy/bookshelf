@@ -238,6 +238,14 @@ function buildNodeMetadata(
   neighborCount: number
 ) {
   const metadata: string[] = [];
+  const confidence =
+    typeof node.confidence === 'number' && Number.isFinite(node.confidence)
+      ? Math.round(node.confidence * 100)
+      : null;
+  const provenance =
+    node.provenance && typeof node.provenance === 'object'
+      ? (node.provenance as Record<string, unknown>)
+      : null;
 
   if (node.type === 'Fragment') {
     if (typeof node.chapterLabel === 'string' && node.chapterLabel.trim()) {
@@ -266,8 +274,40 @@ function buildNodeMetadata(
     }
   }
 
+  if (node.type === 'Section') {
+    if (typeof node.sectionLevel === 'number') {
+      metadata.push(`章节层级 L${node.sectionLevel}`);
+    }
+  }
+
   if (node.type === 'Book') {
     metadata.push(`图谱来源 ${provider}`);
+  }
+
+  if (confidence != null) {
+    metadata.push(`置信度 ${confidence}%`);
+  }
+
+  if (typeof node.extractor === 'string' && node.extractor.trim()) {
+    metadata.push(`抽取器 ${node.extractor.trim()}`);
+  }
+
+  const fragmentId =
+    typeof provenance?.fragmentId === 'number'
+      ? provenance.fragmentId
+      : typeof node.fragmentId === 'number'
+        ? node.fragmentId
+        : null;
+  if (fragmentId != null && node.type !== 'Fragment') {
+    metadata.push(`证据片段 #${fragmentId}`);
+  }
+
+  if (
+    typeof provenance?.sectionId === 'string' &&
+    provenance.sectionId.trim() &&
+    node.type !== 'Section'
+  ) {
+    metadata.push(`章节 ${provenance.sectionId.trim()}`);
   }
 
   metadata.push(`关联节点 ${neighborCount} 个`);
@@ -276,6 +316,10 @@ function buildNodeMetadata(
 }
 
 function buildNodeDescription(node: LearningGraphNode) {
+  if (typeof node.description === 'string' && node.description.trim()) {
+    return node.description.trim();
+  }
+
   if (node.type === 'Fragment') {
     return sanitizeGraphPreviewText(
       typeof node.semanticSummary === 'string' ? node.semanticSummary : String(node.label ?? '')
@@ -296,14 +340,26 @@ function resolveNodeTypeLabel(type: string) {
   switch (type) {
     case 'Book':
       return '资料';
+    case 'Claim':
+      return '结论';
     case 'Concept':
       return '概念';
+    case 'Definition':
+      return '定义';
+    case 'Formula':
+      return '公式';
     case 'Fragment':
       return '来源片段';
     case 'LessonStep':
       return '导学步骤';
+    case 'Method':
+      return '方法';
+    case 'Section':
+      return '章节';
     case 'SourceAsset':
       return '来源文件';
+    case 'Theorem':
+      return '定理';
     default:
       return type;
   }
@@ -423,6 +479,30 @@ function buildRelatedStepTitlesByNodeId(
   }
 
   return titlesByNodeId;
+}
+
+function collectExploreTraceNodeIds(
+  viewModel: LearningGraphViewModel,
+  seedNodeIds: string[]
+) {
+  const highlighted = new Set<string>();
+
+  for (const seedNodeId of seedNodeIds) {
+    if (!seedNodeId) {
+      continue;
+    }
+    highlighted.add(seedNodeId);
+
+    for (const linkedNodeId of viewModel.linkedNodeIdsByNodeId[seedNodeId] ?? []) {
+      const linkedNode = viewModel.nodeById[linkedNodeId];
+      if (!linkedNode || linkedNode.type === 'Book') {
+        continue;
+      }
+      highlighted.add(linkedNodeId);
+    }
+  }
+
+  return [...highlighted];
 }
 
 function buildEmptyGuideStatusByNodeId(viewModel: LearningGraphViewModel) {
@@ -633,11 +713,11 @@ export function buildLearningExploreGraphLens(
   };
   const lensViewModel = buildLearningGraphViewModel(graph);
   const generatedNodeIds = generatedNodes.map((node) => node.id);
-  const highlightedNodeIds = [
+  const highlightedNodeIds = collectExploreTraceNodeIds(lensViewModel, [
     ...matchedEvidenceNodeIds,
     ...matchedConceptNodeIds,
     ...generatedNodeIds,
-  ];
+  ]);
 
   return {
     evidence,

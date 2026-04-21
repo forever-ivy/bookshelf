@@ -15,7 +15,8 @@ import {
   RNHostView as ComposeRNHostView,
 } from '@expo/ui/jetpack-compose';
 import React from 'react';
-import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Platform, Pressable, Text, View, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { toast } from 'sonner-native';
 
 import { AppIcon } from '@/components/base/app-icon';
@@ -48,6 +49,8 @@ function LearningCreateSheetContent({
   onDocumentPicked: (doc: PickedDocument) => void | Promise<void>;
 }) {
   const { theme } = useAppTheme();
+  const insets = useSafeAreaInsets();
+  const dimensions = useWindowDimensions();
   const [pickedDoc, setPickedDoc] = React.useState<PickedDocument | null>(null);
 
   const handlePickDocument = async () => {
@@ -92,122 +95,183 @@ function LearningCreateSheetContent({
         alignSelf: 'stretch',
         backgroundColor: theme.colors.surface,
         flex: 1,
-        gap: theme.spacing.lg,
-        paddingBottom: theme.spacing.xxl,
-        paddingHorizontal: theme.spacing.xl,
-        paddingTop: theme.spacing.xl,
+        minHeight: dimensions.height * 0.6,
+        width: '100%',
       }}>
-      <View style={{ gap: 6 }}>
+      <View
+        style={{
+          gap: theme.spacing.sm,
+          paddingHorizontal: theme.spacing.xl,
+          paddingTop: theme.spacing.xxl,
+          paddingBottom: theme.spacing.md, // changed from lg to md since subtitle is gone
+        }}>
         <Text
           style={{
             color: theme.colors.text,
-            ...theme.typography.heading,
-            fontSize: 24,
+            ...theme.typography.bold,
+            fontSize: 28,
+            letterSpacing: -0.6,
           }}>
           创建学习导师
         </Text>
-        <Text
-          style={{
-            color: theme.colors.textMuted,
-            ...theme.typography.body,
-            fontSize: 14,
-            lineHeight: 21,
-          }}>
-          上传一份学习资料，我们会在后台完成解析、建立导学路径，并为你准备好工作区。
-        </Text>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={{ gap: theme.spacing.xl }}>
-          <View style={{ gap: theme.spacing.md }}>
-            <Text
-              style={{
-                color: theme.colors.text,
-                ...theme.typography.semiBold,
-                fontSize: 15,
-              }}>
-              上传资料
-            </Text>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => {
-                void handlePickDocument();
-              }}
-              style={({ pressed }) => ({ opacity: pressed ? 0.96 : 1 })}>
-              <View
-                style={{
-                  alignItems: 'center',
-                  backgroundColor: theme.colors.surfaceKnowledge,
-                  borderColor: theme.colors.borderStrong,
-                  borderRadius: theme.radii.lg,
-                  borderStyle: 'dashed',
-                  borderWidth: 1,
-                  gap: theme.spacing.sm,
-                  justifyContent: 'center',
-                  paddingHorizontal: theme.spacing.lg,
-                  paddingVertical: theme.spacing.xl,
-                }}>
-                <AppIcon color={theme.colors.primaryStrong} name="plus" size={24} />
-                <Text
-                  style={{
-                    color: theme.colors.text,
-                    ...theme.typography.semiBold,
-                    fontSize: 14,
-                  }}>
-                  选择文件
-                </Text>
-                <Text
-                  style={{
-                    color: theme.colors.textMuted,
-                    ...theme.typography.body,
-                    fontSize: 12,
-                  }}>
-                  支持 PDF、Markdown、TXT
-                </Text>
-              </View>
-            </Pressable>
-            {pickedDoc ? (
-              <View
-                style={{
-                  alignItems: 'center',
-                  backgroundColor: theme.colors.primarySoft,
-                  borderColor: theme.colors.primaryStrong,
-                  borderRadius: theme.radii.lg,
-                  borderWidth: 1,
-                  flexDirection: 'row',
-                  gap: theme.spacing.md,
-                  padding: theme.spacing.md,
-                }}>
-                <AppIcon color={theme.colors.primaryStrong} name="bookmark" size={16} />
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text
-                    numberOfLines={1}
-                    style={{
-                      color: theme.colors.text,
-                      ...theme.typography.medium,
-                      fontSize: 13,
-                    }}>
-                    {pickedDoc.name}
-                  </Text>
-                  <Text
-                    style={{
-                      color: theme.colors.textSoft,
-                      ...theme.typography.medium,
-                      fontSize: 11,
-                    }}>
-                    {pickedDoc.mimeType ?? '待识别文件类型'}
-                  </Text>
-                </View>
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'space-between',
+        }}>
+        <View
+          style={{
+            flex: 1,
+            paddingHorizontal: theme.spacing.xl,
+            paddingTop: theme.spacing.md,
+          }}>
+          <View style={{ gap: theme.spacing.xxxl }}>
+            <View style={{ gap: theme.spacing.lg }}>
+              {!pickedDoc ? (
                 <Pressable
-                  accessibilityLabel="移除文件"
                   accessibilityRole="button"
-                  onPress={() => setPickedDoc(null)}>
-                  <AppIcon color={theme.colors.textMuted} name="x" size={16} />
+                  onPress={() => {
+                    void handlePickDocument();
+                  }}
+                  style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}>
+                  <View
+                    style={{
+                      alignItems: 'center',
+                      backgroundColor: theme.colors.surfaceKnowledge,
+                      borderColor: theme.colors.knowledgeStrong,
+                      borderRadius: theme.radii.xl,
+                      borderStyle: 'dashed',
+                      borderWidth: 1.5,
+                      gap: theme.spacing.lg,
+                      justifyContent: 'center',
+                      paddingHorizontal: theme.spacing.lg,
+                      paddingVertical: 56,
+                    }}>
+                    <View
+                      style={{
+                        alignItems: 'center',
+                        backgroundColor: theme.colors.surface,
+                        borderRadius: theme.radii.pill,
+                        height: 64,
+                        justifyContent: 'center',
+                        shadowColor: theme.colors.text,
+                        shadowOffset: { height: 4, width: 0 },
+                        shadowOpacity: 0.05,
+                        shadowRadius: 16,
+                        width: 64,
+                      }}>
+                      <AppIcon
+                        color={theme.colors.knowledgeStrong}
+                        name="plus"
+                        size={26}
+                        strokeWidth={2}
+                      />
+                    </View>
+                    <View style={{ alignItems: 'center', gap: 6 }}>
+                      <Text
+                        style={{
+                          color: theme.colors.text,
+                          ...theme.typography.bold,
+                          fontSize: 16,
+                        }}>
+                        选择文件
+                      </Text>
+                      <Text
+                        style={{
+                          color: theme.colors.textSoft,
+                          ...theme.typography.medium,
+                          fontSize: 13,
+                        }}>
+                        支持 PDF、Markdown、TXT
+                      </Text>
+                    </View>
+                  </View>
                 </Pressable>
-              </View>
-            ) : null}
+              ) : (
+                <View
+                  style={{
+                    alignItems: 'center',
+                    backgroundColor: theme.colors.surface,
+                    borderColor: theme.colors.borderSoft,
+                    borderRadius: theme.radii.xl,
+                    borderWidth: 1,
+                    flexDirection: 'row',
+                    gap: theme.spacing.md,
+                    padding: theme.spacing.lg,
+                    shadowColor: theme.colors.text,
+                    shadowOffset: { height: 2, width: 0 },
+                    shadowOpacity: 0.04,
+                    shadowRadius: 8,
+                  }}>
+                  <View
+                    style={{
+                      alignItems: 'center',
+                      backgroundColor: theme.colors.knowledgeSoft,
+                      borderRadius: theme.radii.md,
+                      height: 48,
+                      justifyContent: 'center',
+                      width: 48,
+                    }}>
+                    <AppIcon
+                      color={theme.colors.knowledgeStrong}
+                      name="bookmark"
+                      size={22}
+                      strokeWidth={2}
+                    />
+                  </View>
+                  <View style={{ flex: 1, gap: 4 }}>
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        color: theme.colors.text,
+                        ...theme.typography.semiBold,
+                        fontSize: 16,
+                        letterSpacing: -0.2,
+                      }}>
+                      {pickedDoc.name}
+                    </Text>
+                    <Text
+                      style={{
+                        color: theme.colors.textMuted,
+                        ...theme.typography.medium,
+                        fontSize: 13,
+                      }}>
+                      {pickedDoc.mimeType?.replace('application/', '').replace('text/', '').toUpperCase() ??
+                        '待识别文件类型'}
+                      {pickedDoc.size ? ` • ${(pickedDoc.size / 1024 / 1024).toFixed(1)} MB` : ''}
+                    </Text>
+                  </View>
+                  <Pressable
+                    accessibilityLabel="移除文件"
+                    accessibilityRole="button"
+                    onPress={() => setPickedDoc(null)}
+                    style={({ pressed }) => ({
+                      alignItems: 'center',
+                      backgroundColor: theme.colors.surfaceMuted,
+                      borderRadius: theme.radii.pill,
+                      height: 36,
+                      justifyContent: 'center',
+                      opacity: pressed ? 0.7 : 1,
+                      width: 36,
+                    })}>
+                    <AppIcon color={theme.colors.textMuted} name="x" size={18} strokeWidth={2} />
+                  </Pressable>
+                </View>
+              )}
+            </View>
           </View>
+        </View>
 
+        <View
+          testID="learning-create-sheet-footer"
+          style={{
+            backgroundColor: theme.colors.surface,
+            paddingBottom: Math.max(insets.bottom, theme.spacing.lg),
+            paddingHorizontal: theme.spacing.xl,
+            paddingTop: theme.spacing.md,
+          }}>
           <PillButton
             fullWidth
             href={undefined}
@@ -220,7 +284,7 @@ function LearningCreateSheetContent({
             variant="accent"
           />
         </View>
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -253,7 +317,7 @@ export function LearningCreateSheet({
           testID="learning-create-sheet">
           <Group
             modifiers={[
-              presentationDetents(['large']),
+              presentationDetents(['medium']),
               presentationDragIndicator('visible'),
               interactiveDismissDisabled(false),
             ]}>

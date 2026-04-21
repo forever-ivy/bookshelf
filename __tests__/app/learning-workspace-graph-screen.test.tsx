@@ -138,8 +138,12 @@ describe('LearningWorkspaceGraphScreen', () => {
     mockGetLearningGraph.mockResolvedValue({
       edges: [
         { source: 'asset:1', target: 'book:profile', type: 'DERIVED_FROM' },
+        { source: 'asset:1', target: 'section:1:limits', type: 'CONTAINS' },
+        { source: 'section:1:limits', target: 'fragment:1', type: 'CONTAINS' },
         { source: 'fragment:1', target: 'asset:1', type: 'DERIVED_FROM' },
         { source: 'fragment:1', target: 'concept:limits', type: 'MENTIONS' },
+        { source: 'fragment:1', target: 'definition:limits', type: 'EVIDENCE_FOR' },
+        { source: 'definition:limits', target: 'concept:limits', type: 'DEFINES' },
         { source: 'fragment:2', target: 'asset:1', type: 'DERIVED_FROM' },
         { source: 'fragment:2', target: 'concept:derivative', type: 'MENTIONS' },
         { source: 'step:0', target: 'concept:limits', type: 'TESTS' },
@@ -151,11 +155,28 @@ describe('LearningWorkspaceGraphScreen', () => {
         { id: 'book:profile', label: 'test.pdf', type: 'Book' },
         { assetKind: 'upload', fileName: 'test.pdf', id: 'asset:1', label: 'test.pdf', type: 'SourceAsset' },
         {
+          confidence: 0.93,
+          extractor: 'structured-graph-v2',
+          id: 'section:1:limits',
+          label: '第一章 极限',
+          provenance: {
+            assetId: 1,
+            sectionId: 'section:1:limits',
+          },
+          type: 'Section',
+        },
+        {
           assetId: 1,
           chapterLabel: 'Section 1',
           chunkIndex: 0,
+          fragmentId: 1,
           id: 'fragment:1',
           label: '函数极限的定义',
+          provenance: {
+            assetId: 1,
+            fragmentId: 1,
+            sectionId: 'section:1:limits',
+          },
           semanticSummary: '函数极限的定义',
           type: 'Fragment',
         },
@@ -171,6 +192,18 @@ describe('LearningWorkspaceGraphScreen', () => {
         },
         { id: 'concept:limits', label: '极限', type: 'Concept' },
         { id: 'concept:derivative', label: '导数', type: 'Concept' },
+        {
+          confidence: 0.93,
+          extractor: 'structured-graph-v2',
+          id: 'definition:limits',
+          label: '函数极限的定义',
+          provenance: {
+            assetId: 1,
+            fragmentId: 1,
+            sectionId: 'section:1:limits',
+          },
+          type: 'Definition',
+        },
         {
           guidingQuestion: '极限最先该怎么理解？',
           id: 'step:0',
@@ -310,6 +343,12 @@ describe('LearningWorkspaceGraphScreen', () => {
 
     fireEvent.press(screen.getByText('Explore'));
 
+    await waitFor(() => {
+      expect(screen.getByTestId('learning-graph-focus-strip')).toBeTruthy();
+      expect(screen.getByText('当前问题')).toBeTruthy();
+      expect(screen.getByText('极限和无穷小有什么关系？')).toBeTruthy();
+    });
+
     fireEvent(screen.getByTestId('learning-graph-webview'), 'message', {
       nativeEvent: {
         data: JSON.stringify({
@@ -322,7 +361,24 @@ describe('LearningWorkspaceGraphScreen', () => {
     await waitFor(() => {
       expect(screen.getByText('无穷小')).toBeTruthy();
       expect(screen.getByText('探索关系')).toBeTruthy();
-      expect(screen.getByText('来自最近一轮 Explore 发散出的概念')).toBeTruthy();
+      expect(screen.getAllByText('来自最近一轮 Explore 发散出的概念').length).toBeGreaterThan(0);
+    });
+
+    fireEvent.press(screen.getByText('Global'));
+
+    fireEvent(screen.getByTestId('learning-graph-webview'), 'message', {
+      nativeEvent: {
+        data: JSON.stringify({
+          nodeId: 'definition:limits',
+          type: 'nodeTap',
+        }),
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('定义')).toBeTruthy();
+      expect(screen.getByText('置信度 93%')).toBeTruthy();
+      expect(screen.getByText('抽取器 structured-graph-v2')).toBeTruthy();
     });
   });
 
