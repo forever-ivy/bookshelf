@@ -57,6 +57,15 @@ def get_primary_book_source_document(session: Session, *, book_id: int) -> BookS
     return session.execute(statement).scalars().first()
 
 
+def list_book_source_documents(session: Session, *, book_id: int) -> Sequence[BookSourceDocument]:
+    statement = (
+        select(BookSourceDocument)
+        .where(BookSourceDocument.book_id == book_id)
+        .order_by(BookSourceDocument.is_primary.desc(), BookSourceDocument.id.asc())
+    )
+    return session.execute(statement).scalars().all()
+
+
 def create_source_bundle(
     session: Session,
     *,

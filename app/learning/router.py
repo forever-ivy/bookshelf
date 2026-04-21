@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+from urllib.parse import quote
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, Request, UploadFile
 from fastapi import Response
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.auth_context import require_reader
@@ -36,10 +38,12 @@ from app.learning.schemas import (
     serialize_upload,
 )
 from app.learning.service import LearningBridgeService, LearningService
+from app.learning.storage import LearningBlobStore
 
 
 router = APIRouter(prefix="/api/v2/learning", tags=["learning"])
 internal_router = APIRouter(prefix="/internal/learning", tags=["learning-internal"])
+PDF_MIME_TYPES = {"application/pdf", "application/x-pdf"}
 
 
 def _encode_ai_sdk_sse(payload: dict | str) -> str:
@@ -84,6 +88,69 @@ def _dispatch_generation_task(profile_id: int, reader_id: int) -> None:
     from app.learning.tasks import generate_learning_profile_task
 
     generate_learning_profile_task(profile_id, reader_id)
+
+
+def _is_pdf_source(*, mime_type: str | None, file_name: str | None) -> bool:
+    normalized_mime = (mime_type or "").strip().lower()
+    normalized_name = (file_name or "").strip().lower()
+    return normalized_mime in PDF_MIME_TYPES or normalized_name.endswith(".pdf")
+
+
+def _resolve_learning_profile_document(
+    db: Session,
+    *,
+    profile_id: int,
+    reader_id: int,
+) -> tuple[str, str]:
+    profile = repository.require_owned_profile(db, profile_id=profile_id, reader_id=reader_id)
+    assets = list(repository.list_bundle_assets(db, bundle_id=profile.source_bundle_id))
+
+    seen_document_ids: set[int] = set()
+    candidate_documents: list[tuple[str | None, str | None, str | None]] = []
+
+    for asset in assets:
+        if asset.book_source_document_id is not None and asset.book_source_document_id not in seen_document_ids:
+            seen_document_ids.add(asset.book_source_document_id)
+            source_document = repository.get_book_source_document(
+                db,
+                document_id=asset.book_source_document_id,
+            )
+            if source_document is not None:
+                candidate_documents.append(
+                    (
+                        source_document.file_name,
+                        source_document.mime_type,
+                        source_document.storage_path,
+                    )
+                )
+
+        if asset.book_id is not None:
+            for source_document in repository.list_book_source_documents(db, book_id=asset.book_id):
+                if source_document.id in seen_document_ids:
+                    continue
+                seen_document_ids.add(source_document.id)
+                candidate_documents.append(
+                    (
+                        source_document.file_name,
+                        source_document.mime_type,
+                        source_document.storage_path,
+                    )
+                )
+
+        candidate_documents.append((asset.file_name, asset.mime_type, asset.storage_path))
+
+    for file_name, mime_type, storage_path in candidate_documents:
+        if storage_path and _is_pdf_source(mime_type=mime_type, file_name=file_name):
+            resolved_name = (file_name or Path(storage_path).name or "document.pdf").strip() or "document.pdf"
+            return storage_path, resolved_name
+
+    raise ApiError(404, "learning_pdf_not_available", "PDF document is not available for this profile")
+
+
+def _build_inline_pdf_headers(file_name: str) -> dict[str, str]:
+    return {
+        "Content-Disposition": f'inline; filename="{file_name}"; filename*=UTF-8\'\'{quote(file_name)}'
+    }
 
 
 @router.post("/uploads", status_code=201)
@@ -180,6 +247,40 @@ def get_learning_profile(
         "activePathVersion": None if active_path_version is None else serialize_path_version(active_path_version, step_count=len(steps)),
         "steps": [serialize_path_step(step) for step in steps],
     }
+
+
+@router.get("/profiles/{profile_id}/document")
+def get_learning_profile_document(
+    profile_id: int,
+    identity: AuthIdentity = Depends(require_reader),
+    db: Session = Depends(get_db),
+):
+    storage_path, file_name = _resolve_learning_profile_document(
+        db,
+        profile_id=profile_id,
+        reader_id=identity.profile_id,
+    )
+    headers = _build_inline_pdf_headers(file_name)
+
+    if storage_path.startswith("s3://"):
+        blob_store = LearningBlobStore()
+        try:
+            raw_bytes = blob_store.read_bytes(storage_path)
+        except FileNotFoundError as exc:
+            raise ApiError(404, "learning_pdf_not_available", "PDF document is not available for this profile") from exc
+
+        return Response(content=raw_bytes, media_type="application/pdf", headers=headers)
+
+    local_path = Path(storage_path)
+    if not local_path.exists():
+        raise ApiError(404, "learning_pdf_not_available", "PDF document is not available for this profile")
+
+    return FileResponse(
+        path=local_path,
+        media_type="application/pdf",
+        filename=file_name,
+        headers=headers,
+    )
 
 
 @router.get("/profiles/{profile_id}/graph")

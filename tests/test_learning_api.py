@@ -175,7 +175,7 @@ def test_learning_profile_document_returns_404_when_pdf_is_unavailable(client):
     response = client.get(f"/api/v2/learning/profiles/{profile_id}/document", headers=headers)
 
     assert response.status_code == 404
-    assert response.json()["code"] == "learning_pdf_not_available"
+    assert response.json()["error"]["code"] == "learning_pdf_not_available"
 
 
 @pytest.mark.parametrize(
