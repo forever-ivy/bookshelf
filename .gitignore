@@ -22,3 +22,32 @@ tmp_*.db
 # generated runtime artifacts
 artifacts/learning/
 output/
+
+# tests
+tests/
+**/__tests__/
+test_*.py
+*_test.py
+*.spec.*
+*.test.*
+
+# AI coding assistants and local agent artifacts
+.codex/
+.claude/
+.cursor/
+.continue/
+.windsurf/
+.aider/
+.aider*
+.specstory/
+.roo/
+.roo-code/
+.copilot/
+.github/copilot-instructions.md
+.github/instructions/
+AGENTS.md
+CLAUDE.md
+CURSOR.md
+COPILOT.md
+GEMINI.md
+PROMPT.md
