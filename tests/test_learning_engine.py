@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import sys
 import time
 import zipfile
@@ -7,6 +8,7 @@ from io import BytesIO
 from types import SimpleNamespace
 
 import httpx
+import pytest
 from openai import APITimeoutError
 
 from app.core.config import Settings
@@ -19,6 +21,7 @@ from app.learning.orchestrator import (
     GuideOrchestrator,
     _chunk_text_for_streaming,
 )
+from app.learning.schemas import sse_event
 from app.learning.retrieval import LearningRetrievalService
 from app.learning.service import LearningService
 
@@ -197,7 +200,7 @@ def test_learning_llm_workflow_explore_answer_returns_reasoning_content(monkeypa
     }
 
 
-def test_learning_llm_workflow_explore_answer_returns_none_when_provider_exceeds_timeout(monkeypatch):
+def test_learning_llm_workflow_explore_answer_returns_fallback_when_provider_exceeds_timeout(monkeypatch):
     provider = SlowLLMProvider(
         """
         {
@@ -218,8 +221,78 @@ def test_learning_llm_workflow_explore_answer_returns_none_when_provider_exceeds
     )
     elapsed = time.perf_counter() - started_at
 
-    assert result is None
+    assert result == {
+        "answer": "模型响应超时了。我先给你一个保守结论：先围绕你当前的问题，回到资料里的核心定义、关键例子和直接证据继续看。",
+        "relatedConcepts": [],
+        "reasoningContent": None,
+    }
     assert elapsed < 0.15
+
+
+@pytest.mark.parametrize("use_runtime", [False, True])
+def test_explore_orchestrator_streams_first_status_before_slow_answer(monkeypatch, use_runtime):
+    orchestrator = ExploreOrchestrator()
+
+    def fake_load_session(state):
+        state["focus_context"] = {}
+        state.setdefault("events", []).append(
+            sse_event("status", {"phase": "retrieving", "sessionId": 99, "mode": "explore"})
+        )
+        return state
+
+    def fake_retrieve_evidence(state):
+        time.sleep(0.2)
+        state["citations"] = []
+        state["related_concepts"] = []
+        return state
+
+    def fake_answer_node(state):
+        state["answer_text"] = "先抓住这一页里的核心定义。"
+        return state
+
+    def fake_related_concepts_node(state):
+        state["followups"] = []
+        state["bridge_actions"] = []
+        return state
+
+    def fake_persist_turn_and_report(state):
+        state["final_payload"] = {"turn": {"assistantContent": state["answer_text"]}}
+        return state
+
+    def fake_finalize(state):
+        state.setdefault("events", []).append(
+            sse_event("assistant.final", {"turn": {"assistantContent": state["answer_text"]}})
+        )
+        return state
+
+    monkeypatch.setattr(orchestrator, "_load_session", fake_load_session)
+    monkeypatch.setattr(orchestrator, "_retrieve_evidence", fake_retrieve_evidence)
+    monkeypatch.setattr(orchestrator, "_answer_node", fake_answer_node)
+    monkeypatch.setattr(orchestrator, "_related_concepts_node", fake_related_concepts_node)
+    monkeypatch.setattr(orchestrator, "_persist_turn_and_report", fake_persist_turn_and_report)
+    monkeypatch.setattr(orchestrator, "_finalize", fake_finalize)
+    orchestrator.runtime = orchestrator._build_runtime() if use_runtime else None
+
+    async def read_first_event():
+        stream = orchestrator.stream_session_reply(
+            session=None,
+            reader_id=1,
+            learning_session=SimpleNamespace(id=99, focus_context_json={}, source_session_id=None, focus_step_index=None),
+            profile=SimpleNamespace(id=7),
+            user_content="解释一下这一步",
+        )
+        try:
+            return await stream.__anext__()
+        finally:
+            await stream.aclose()
+
+    started_at = time.perf_counter()
+    first_event = asyncio.run(read_first_event())
+    elapsed = time.perf_counter() - started_at
+
+    assert first_event["event"] == "status"
+    assert first_event["data"]["phase"] == "retrieving"
+    assert elapsed < 0.1
 
 
 def test_learning_service_prefers_mineru_for_pdf_when_enabled(tmp_path, monkeypatch):

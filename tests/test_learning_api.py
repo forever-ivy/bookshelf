@@ -1739,7 +1739,7 @@ def test_explore_session_resume_stream_proxies_active_run(client, monkeypatch):
     assert [event["type"] for event in events] == ["data-user-message", "text-delta"]
 
 
-def test_explore_session_stream_returns_model_request_error_when_llm_answer_times_out(client, monkeypatch):
+def test_explore_session_stream_returns_fallback_answer_when_llm_answer_times_out(client, monkeypatch):
     state = seed_reader_with_book()
     headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
 
@@ -1787,15 +1787,20 @@ def test_explore_session_stream_returns_model_request_error_when_llm_answer_time
         assert response.status_code == 200
         events = parse_sse_lines(list(response.iter_lines()))
 
-    assert events[-1]["event"] == "error"
-    assert events[-1]["data"] == {
-        "code": "learning_model_request_error",
-        "message": "模型请求错误",
-    }
+    assert events[-1]["event"] == "assistant.final"
+    assert events[-1]["data"]["turn"]["assistantContent"] == (
+        "模型响应超时了。我先给你一个保守结论：先围绕你当前的问题，回到资料里的核心定义、关键例子和直接证据继续看。"
+    )
+    assert events[-1]["data"]["turn"]["presentation"]["reasoningContent"] is None
 
     turns_response = client.get(f"/api/v2/learning/sessions/{explore_session_id}/turns", headers=headers)
     assert turns_response.status_code == 200
-    assert turns_response.json()["items"] == []
+    turns = turns_response.json()["items"]
+    assert len(turns) == 1
+    assert turns[0]["turnKind"] == "explore"
+    assert turns[0]["assistantContent"] == (
+        "模型响应超时了。我先给你一个保守结论：先围绕你当前的问题，回到资料里的核心定义、关键例子和直接证据继续看。"
+    )
 
 
 def test_explore_session_stream_returns_model_request_error_when_llm_disabled(client):

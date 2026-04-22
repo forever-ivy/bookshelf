@@ -17,6 +17,9 @@ except Exception:  # pragma: no cover - optional dependency during tests
 
 
 logger = logging.getLogger(__name__)
+EXPLORE_TIMEOUT_FALLBACK_ANSWER = (
+    "模型响应超时了。我先给你一个保守结论：先围绕你当前的问题，回到资料里的核心定义、关键例子和直接证据继续看。"
+)
 
 
 def _clean_json_payload(text: str) -> str:
@@ -112,6 +115,14 @@ def _run_with_timeout(
     if "value" in error:
         raise error["value"]
     return result.get("value"), False
+
+
+def _build_explore_timeout_fallback() -> dict[str, Any]:
+    return {
+        "answer": EXPLORE_TIMEOUT_FALLBACK_ANSWER,
+        "relatedConcepts": [],
+        "reasoningContent": None,
+    }
 
 
 class LearningLLMWorkflow:
@@ -275,12 +286,15 @@ class LearningLLMWorkflow:
         except Exception as exc:
             if not _is_timeout_error(exc):
                 raise
-            logger.warning("LLM explore answer timed out; returning no answer")
-            return None
+            logger.warning("LLM explore answer timed out; returning fallback answer")
+            return _build_explore_timeout_fallback()
 
         if did_timeout:
-            logger.warning("LLM explore answer exceeded %.2fs; returning no answer", self.settings.llm_timeout_seconds)
-            return None
+            logger.warning(
+                "LLM explore answer exceeded %.2fs; returning fallback answer",
+                self.settings.llm_timeout_seconds,
+            )
+            return _build_explore_timeout_fallback()
 
         reply, reasoning_content = response
         parsed = _parse_json_payload(reply)

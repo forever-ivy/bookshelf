@@ -143,6 +143,11 @@ def _append_event(state: dict[str, Any], event_name: str, data: dict[str, Any]) 
     return state
 
 
+def _collect_new_events(state: dict[str, Any], emitted_count: int) -> tuple[list[dict[str, Any]], int]:
+    events = state.get("events", [])
+    return events[emitted_count:], len(events)
+
+
 STREAM_BREAK_CHARS = set("。！？!?；;：:,，、")
 
 
@@ -1351,9 +1356,29 @@ class ExploreOrchestrator:
             "started_at": time.perf_counter(),
             "events": [],
         }
-        final_state = self.runtime.invoke(initial_state) if self.runtime is not None else self._run_without_langgraph(initial_state)
-        for event in final_state["events"]:
-            yield event
+        emitted_count = 0
+
+        if self.runtime is not None:
+            for chunk in self.runtime.stream(initial_state):
+                for state in (chunk.values() if isinstance(chunk, dict) else [chunk]):
+                    new_events, emitted_count = _collect_new_events(state, emitted_count)
+                    for event in new_events:
+                        yield event
+            return
+
+        state = initial_state
+        for node in (
+            self._load_session,
+            self._retrieve_evidence,
+            self._answer_node,
+            self._related_concepts_node,
+            self._persist_turn_and_report,
+            self._finalize,
+        ):
+            state = node(state)
+            new_events, emitted_count = _collect_new_events(state, emitted_count)
+            for event in new_events:
+                yield event
 
 
 class LearningOrchestrator:
