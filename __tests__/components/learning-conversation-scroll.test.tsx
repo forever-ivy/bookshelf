@@ -27,6 +27,38 @@ describe('LearningConversationScroll', () => {
   let scrollToEndSpy: jest.SpyInstance;
   let scrollToSpy: jest.SpyInstance;
 
+  const emitScrollLayout = (scrollView: ReturnType<typeof screen.getByTestId>, height: number) => {
+    act(() => {
+      scrollView.props.onLayout?.({
+        nativeEvent: {
+          layout: {
+            height,
+            width: 320,
+            x: 0,
+            y: 0,
+          },
+        },
+      });
+    });
+  };
+
+  const emitContentLayout = (height: number) => {
+    const content = screen.getByTestId('learning-conversation-scroll-content');
+
+    act(() => {
+      content.props.onLayout?.({
+        nativeEvent: {
+          layout: {
+            height,
+            width: 320,
+            x: 0,
+            y: 0,
+          },
+        },
+      });
+    });
+  };
+
   beforeEach(() => {
     jest.useFakeTimers();
     global.requestAnimationFrame = ((callback: FrameRequestCallback) => {
@@ -95,22 +127,8 @@ describe('LearningConversationScroll', () => {
 
     const scrollView = screen.getByTestId('learning-conversation-scroll');
 
-    act(() => {
-      scrollView.props.onLayout?.({
-        nativeEvent: {
-          layout: {
-            height: 640,
-            width: 320,
-            x: 0,
-            y: 0,
-          },
-        },
-      });
-    });
-
-    act(() => {
-      scrollView.props.onContentSizeChange?.(320, 360);
-    });
+    emitScrollLayout(scrollView, 640);
+    emitContentLayout(360);
 
     expect(scrollToEndSpy).not.toHaveBeenCalled();
     expect(scrollToSpy).not.toHaveBeenCalled();
@@ -126,22 +144,8 @@ describe('LearningConversationScroll', () => {
 
     const scrollView = screen.getByTestId('learning-conversation-scroll');
 
-    act(() => {
-      scrollView.props.onLayout?.({
-        nativeEvent: {
-          layout: {
-            height: 640,
-            width: 320,
-            x: 0,
-            y: 0,
-          },
-        },
-      });
-    });
-
-    act(() => {
-      scrollView.props.onContentSizeChange?.(320, 960);
-    });
+    emitScrollLayout(scrollView, 640);
+    emitContentLayout(960);
 
     expect(scrollToEndSpy).toHaveBeenCalledWith({ animated: false });
     expect(scrollToEndSpy).toHaveBeenCalledTimes(1);
@@ -162,28 +166,37 @@ describe('LearningConversationScroll', () => {
 
     const scrollView = screen.getByTestId('learning-conversation-scroll');
 
-    act(() => {
-      scrollView.props.onLayout?.({
-        nativeEvent: {
-          layout: {
-            height: 640,
-            width: 320,
-            x: 0,
-            y: 0,
-          },
-        },
-      });
-    });
-
-    act(() => {
-      scrollView.props.onContentSizeChange?.(320, 960);
-    });
+    emitScrollLayout(scrollView, 640);
+    emitContentLayout(960);
 
     expect(scrollToSpy).toHaveBeenCalledWith({ animated: false, y: 208 });
     expect(scrollToEndSpy).not.toHaveBeenCalled();
   });
 
-  it('keeps advancing the focus anchor upward as more content becomes scrollable', () => {
+  it('lifts the content when the anchor needs more room than scrolling alone can provide', () => {
+    render(
+      <LearningConversationScroll
+        focusAnchorOffset={72}
+        focusAnchorY={280}
+        testID="learning-conversation-scroll">
+        <Text>更早的消息</Text>
+        <Text>最新一轮</Text>
+      </LearningConversationScroll>
+    );
+
+    const scrollView = screen.getByTestId('learning-conversation-scroll');
+
+    emitScrollLayout(scrollView, 640);
+    emitContentLayout(720);
+
+    expect(scrollToSpy).toHaveBeenLastCalledWith({ animated: false, y: 80 });
+    expect(scrollView.props.bounces).toBe(false);
+    expect(screen.getByTestId('learning-conversation-scroll-content').props.style).toEqual({
+      transform: [{ translateY: -128 }],
+    });
+  });
+
+  it('keeps the focus anchor pinned while the lift shrinks away as content grows', () => {
     render(
       <LearningConversationScroll
         focusAnchorOffset={72}
@@ -196,31 +209,19 @@ describe('LearningConversationScroll', () => {
 
     const scrollView = screen.getByTestId('learning-conversation-scroll');
 
-    act(() => {
-      scrollView.props.onLayout?.({
-        nativeEvent: {
-          layout: {
-            height: 640,
-            width: 320,
-            x: 0,
-            y: 0,
-          },
-        },
-      });
-    });
-
-    act(() => {
-      scrollView.props.onContentSizeChange?.(320, 1500);
-    });
+    emitScrollLayout(scrollView, 640);
+    emitContentLayout(1500);
 
     expect(scrollToSpy).toHaveBeenLastCalledWith({ animated: false, y: 860 });
-
-    act(() => {
-      scrollView.props.onContentSizeChange?.(320, 2200);
+    expect(screen.getByTestId('learning-conversation-scroll-content').props.style).toEqual({
+      transform: [{ translateY: -468 }],
     });
+
+    emitContentLayout(2200);
 
     expect(scrollToSpy).toHaveBeenCalledTimes(2);
     expect(scrollToSpy).toHaveBeenLastCalledWith({ animated: false, y: 1328 });
+    expect(screen.getByTestId('learning-conversation-scroll-content').props.style).toBeUndefined();
     expect(scrollToEndSpy).not.toHaveBeenCalled();
   });
 
@@ -237,22 +238,8 @@ describe('LearningConversationScroll', () => {
 
     const scrollView = screen.getByTestId('learning-conversation-scroll');
 
-    act(() => {
-      scrollView.props.onLayout?.({
-        nativeEvent: {
-          layout: {
-            height: 640,
-            width: 320,
-            x: 0,
-            y: 0,
-          },
-        },
-      });
-    });
-
-    act(() => {
-      scrollView.props.onContentSizeChange?.(320, 960);
-    });
+    emitScrollLayout(scrollView, 640);
+    emitContentLayout(960);
 
     expect(scrollToSpy).toHaveBeenCalledWith({ animated: false, y: 208 });
 
@@ -267,9 +254,7 @@ describe('LearningConversationScroll', () => {
     expect(scrollToSpy).not.toHaveBeenCalled();
     expect(scrollToEndSpy).not.toHaveBeenCalled();
 
-    act(() => {
-      scrollView.props.onContentSizeChange?.(320, 1200);
-    });
+    emitContentLayout(1200);
 
     expect(scrollToEndSpy).not.toHaveBeenCalled();
   });
@@ -284,22 +269,8 @@ describe('LearningConversationScroll', () => {
 
     const scrollView = screen.getByTestId('learning-conversation-scroll');
 
-    act(() => {
-      scrollView.props.onLayout?.({
-        nativeEvent: {
-          layout: {
-            height: 640,
-            width: 320,
-            x: 0,
-            y: 0,
-          },
-        },
-      });
-    });
-
-    act(() => {
-      scrollView.props.onContentSizeChange?.(320, 960);
-    });
+    emitScrollLayout(scrollView, 640);
+    emitContentLayout(960);
 
     scrollToEndSpy.mockClear();
 
@@ -312,9 +283,7 @@ describe('LearningConversationScroll', () => {
 
     scrollToEndSpy.mockClear();
 
-    act(() => {
-      scrollView.props.onContentSizeChange?.(320, 1200);
-    });
+    emitContentLayout(1200);
 
     expect(scrollToEndSpy).toHaveBeenCalledWith({ animated: false });
     expect(scrollToSpy).not.toHaveBeenCalled();

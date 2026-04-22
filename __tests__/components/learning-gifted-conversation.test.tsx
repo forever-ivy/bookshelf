@@ -29,7 +29,7 @@ function createMessage(
 }
 
 describe('LearningGiftedConversation', () => {
-  it('renders the conversation surface with existing learning messages', () => {
+  it('renders the conversation surface with existing learning messages', async () => {
     render(
       <LearningGiftedConversation
         draft=""
@@ -41,9 +41,25 @@ describe('LearningGiftedConversation', () => {
       />
     );
 
-    expect(screen.getByTestId('learning-gifted-chat')).toBeTruthy();
-    expect(screen.getByTestId('learning-workspace-screen')).toBeTruthy();
-    expect(screen.getByText('先建立整体框架。')).toBeTruthy();
+    expect(await screen.findByTestId('learning-gifted-chat')).toBeTruthy();
+    expect(await screen.findByTestId('learning-workspace-screen')).toBeTruthy();
+    expect(await screen.findByText('先建立整体框架。')).toBeTruthy();
+  });
+
+  it('renders the message list through the assistant-ui conversation layer', async () => {
+    render(
+      <LearningGiftedConversation
+        draft=""
+        emptyLabel="还没有消息"
+        messages={[createMessage()]}
+        onDraftChange={jest.fn()}
+        onSend={jest.fn()}
+        starterPrompts={[]}
+      />
+    );
+
+    expect(await screen.findByTestId('learning-assistant-ui-thread')).toBeTruthy();
+    expect(await screen.findByTestId('learning-assistant-ui-message-m-1')).toBeTruthy();
   });
 
   it('keeps the composer controlled and sends the current draft', () => {
@@ -104,7 +120,7 @@ describe('LearningGiftedConversation', () => {
     expect(screen.getByTestId('learning-workspace-composer-input').props.editable).toBe(false);
   });
 
-  it('renders inline status above the composer', () => {
+  it('does not render the inline status copy beneath the composer', () => {
     render(
       <LearningGiftedConversation
         draft=""
@@ -117,7 +133,7 @@ describe('LearningGiftedConversation', () => {
       />
     );
 
-    expect(screen.getByTestId('learning-workspace-inline-status')).toBeTruthy();
-    expect(screen.getByText('模型请求错误')).toBeTruthy();
+    expect(screen.queryByTestId('learning-workspace-inline-status')).toBeNull();
+    expect(screen.queryByText('模型请求错误')).toBeNull();
   });
 });

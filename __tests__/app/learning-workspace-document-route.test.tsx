@@ -1,79 +1,26 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import React from 'react';
 
 import LearningWorkspaceDocumentRoute from '@/app/learning/[profileId]/document';
-import { getLearningReaderState } from '@/lib/api/learning';
 
 const mockUseLearningWorkspaceScreen = jest.fn();
 const mockUseAppSession = jest.fn();
-const mockPdfReader = jest.fn();
+const mockPdf = jest.fn();
+const mockPdfSetPage = jest.fn();
 const mockSecondaryBackButton = jest.fn();
-let mockPdfReaderMode: 'missing' | 'ok' = 'ok';
 
-const readerState = {
-  annotations: [
-    {
-      anchor: {
-        pageNumber: 4,
-        rects: [{ height: 0.04, width: 0.32, x: 0.18, y: 0.42 }],
-        textQuote: '梯度下降',
-      },
-      annotationType: 'highlight',
-      color: '#f2c94c',
-      createdAt: '2026-04-21T09:00:00Z',
-      id: 55,
-      noteText: null,
-      pageNumber: 4,
-      profileId: 101,
-      readerId: 'profile:101:document',
-      selectedText: '梯度下降',
-      updatedAt: '2026-04-21T09:00:00Z',
-    },
-  ],
-  progress: {
-    layoutMode: 'horizontal',
-    metadata: {},
-    pageNumber: 4,
-    profileId: 101,
-    readerId: 'profile:101:document',
-    scale: 1.25,
-    updatedAt: '2026-04-21T09:01:00Z',
-  },
-  readerId: 'profile:101:document',
-};
-
-jest.mock('@/components/learning/learning-pdf-reader-webview', () => {
+jest.mock('react-native-pdf', () => {
   const React = jest.requireActual('react') as typeof import('react');
   const { View } = jest.requireActual('react-native') as typeof import('react-native');
 
-  return {
-    LearningPdfReaderWebView: (props: Record<string, unknown>) => {
-      mockPdfReader(props);
-      React.useEffect(() => {
-        if (mockPdfReaderMode === 'missing') {
-          const onRuntimeError = props.onRuntimeError;
-          if (typeof onRuntimeError === 'function') {
-            onRuntimeError('PDF request failed with 404');
-          }
-        }
-      }, [props]);
-      return React.createElement(View, { testID: 'learning-workspace-pdfjs-reader' });
-    },
-  };
+  return React.forwardRef(function MockPdf(props: Record<string, unknown>, ref) {
+    React.useImperativeHandle(ref, () => ({
+      setPage: mockPdfSetPage,
+    }));
+    mockPdf(props);
+    return React.createElement(View, { testID: 'learning-workspace-pdf-viewer' });
+  });
 });
-
-jest.mock('@/lib/api/learning', () => ({
-  createLearningPdfAnnotation: jest.fn(async () => readerState.annotations[0]),
-  deleteLearningPdfAnnotation: jest.fn(async () => undefined),
-  getLearningReaderState: jest.fn(),
-  quickExplainLearningPdfSelection: jest.fn(async () => ({
-    answer: '快速解释结果',
-    modelName: 'deepseek-chat',
-  })),
-  updateLearningPdfAnnotation: jest.fn(async () => readerState.annotations[0]),
-  updateLearningReaderProgress: jest.fn(async () => readerState.progress),
-}));
 
 jest.mock('@/components/learning/learning-workspace-provider', () => ({
   useLearningWorkspaceScreen: () => mockUseLearningWorkspaceScreen(),
@@ -108,38 +55,12 @@ jest.mock('@/components/navigation/secondary-back-button', () => ({
   },
 }));
 
-function renderDocumentRoute() {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      mutations: {
-        retry: false,
-      },
-      queries: {
-        gcTime: Infinity,
-        retry: false,
-      },
-    },
-  });
-
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <LearningWorkspaceDocumentRoute />
-    </QueryClientProvider>
-  );
-}
-
 describe('LearningWorkspaceDocumentRoute', () => {
-  const mockGetLearningReaderState = getLearningReaderState as jest.MockedFunction<
-    typeof getLearningReaderState
-  >;
-
   beforeEach(() => {
     process.env.EXPO_PUBLIC_LIBRARY_SERVICE_URL = 'http://127.0.0.1:8000';
-    mockPdfReaderMode = 'ok';
-    mockPdfReader.mockReset();
+    mockPdf.mockReset();
+    mockPdfSetPage.mockReset();
     mockSecondaryBackButton.mockReset();
-    mockGetLearningReaderState.mockReset();
-    mockGetLearningReaderState.mockResolvedValue(readerState as any);
     mockUseAppSession.mockReturnValue({ token: 'reader-token' });
     mockUseLearningWorkspaceScreen.mockReturnValue({
       closeWorkspace: jest.fn(),
@@ -170,8 +91,8 @@ describe('LearningWorkspaceDocumentRoute', () => {
     });
   });
 
-  it('renders the authenticated PDF.js reader when the profile has a resolvable pdf source', async () => {
-    renderDocumentRoute();
+  it('renders the authenticated PDF viewer when the profile has a resolvable pdf source', () => {
+    render(<LearningWorkspaceDocumentRoute />);
 
     expect(screen.getByTestId('learning-workspace-document-floating-chrome')).toBeTruthy();
     expect(screen.getByTestId('learning-workspace-document-back-glass')).toBeTruthy();
@@ -181,69 +102,101 @@ describe('LearningWorkspaceDocumentRoute', () => {
         testID: 'learning-workspace-document-back-glass',
       })
     );
-
-    await waitFor(() => {
-      expect(screen.getByTestId('learning-workspace-pdfjs-reader')).toBeTruthy();
-    });
-    expect(mockGetLearningReaderState).toHaveBeenCalledWith(101, 'reader-token');
-    expect(screen.queryByTestId('learning-workspace-pdf-viewer')).toBeNull();
-    expect(mockPdfReader).toHaveBeenCalledWith(
+    expect(screen.getByTestId('learning-workspace-pdf-viewer')).toBeTruthy();
+    expect(mockPdf).toHaveBeenCalledWith(
       expect.objectContaining({
-        documentUrl: 'http://127.0.0.1:8000/api/v2/learning/profiles/101/document',
-        readerState,
-        token: 'reader-token',
+        source: expect.objectContaining({
+          cache: true,
+          headers: expect.objectContaining({
+            Authorization: 'Bearer reader-token',
+          }),
+          uri: 'http://127.0.0.1:8000/api/v2/learning/profiles/101/document',
+        }),
+        style: expect.objectContaining({
+          flex: 1,
+        }),
       })
     );
   });
 
-  it('still opens the reader for book profiles that only expose a bookId-backed synthetic source', async () => {
-    mockUseLearningWorkspaceScreen.mockReturnValue({
-      closeWorkspace: jest.fn(),
-      profile: {
-        bookId: 1,
-        bookSourceDocumentId: null,
-        id: 101,
-        sourceType: 'book',
-        sources: [
-          {
-            fileName: 'book-1.md',
-            id: 7,
-            kind: 'book_synthetic',
-            mimeType: 'text/markdown',
-            profileId: 101,
-          },
-        ],
-        title: '机器学习从零到一',
-      },
-      workspaceGate: {
-        description: 'ready',
-        kind: 'ready',
-        title: '导学本已准备好',
-      },
-      workspaceSession: {
-        id: 88,
-      },
+  it('updates reading status from pdf callbacks', () => {
+    render(<LearningWorkspaceDocumentRoute />);
+
+    const pdfProps = mockPdf.mock.calls.at(-1)?.[0] as Record<string, any>;
+    act(() => {
+      pdfProps.onLoadProgress(0.42);
+      pdfProps.onLoadComplete(12, '/cache/course.pdf', { height: 1000, width: 720 });
+      pdfProps.onPageChanged(3, 12);
+      pdfProps.onScaleChanged(1.5);
     });
 
-    renderDocumentRoute();
-
-    await waitFor(() => {
-      expect(screen.getByTestId('learning-workspace-pdfjs-reader')).toBeTruthy();
-    });
-    expect(mockGetLearningReaderState).toHaveBeenCalledWith(101, 'reader-token');
+    expect(screen.getByText('第 3 / 12 页')).toBeTruthy();
+    expect(screen.getByText('缩放 150%')).toBeTruthy();
+    expect(screen.getByText('已加载 42%')).toBeTruthy();
   });
 
-  it('shows a missing-file state when the reader runtime reports a 404 document fetch', async () => {
-    mockPdfReaderMode = 'missing';
+  it('jumps pages through the native pdf ref', () => {
+    render(<LearningWorkspaceDocumentRoute />);
 
-    renderDocumentRoute();
-
-    await waitFor(() => {
-      expect(screen.getByText('资料 PDF 缺失')).toBeTruthy();
+    const pdfProps = mockPdf.mock.calls.at(-1)?.[0] as Record<string, any>;
+    act(() => {
+      pdfProps.onLoadComplete(12, '/cache/course.pdf', { height: 1000, width: 720 });
     });
-    expect(
-      screen.getByText('这个导学本记录了 PDF，但后端当前找不到对应文件。请重新生成资料或补齐服务端 artifacts。')
-    ).toBeTruthy();
+
+    fireEvent.changeText(screen.getByTestId('learning-workspace-document-page-input'), '5');
+    fireEvent.press(screen.getByTestId('learning-workspace-document-jump'));
+
+    expect(mockPdfSetPage).toHaveBeenCalledWith(5);
+    expect(screen.getByText('第 5 / 12 页')).toBeTruthy();
+
+    fireEvent.press(screen.getByTestId('learning-workspace-document-next'));
+    expect(mockPdfSetPage).toHaveBeenCalledWith(6);
+  });
+
+  it('switches reading display and zoom controls through pdf props', () => {
+    render(<LearningWorkspaceDocumentRoute />);
+
+    expect(mockPdf.mock.calls.at(-1)?.[0]).toEqual(
+      expect.objectContaining({
+        enablePaging: false,
+        horizontal: false,
+        scale: 1,
+      })
+    );
+
+    fireEvent.press(screen.getByTestId('learning-workspace-document-horizontal-mode'));
+    expect(mockPdf.mock.calls.at(-1)?.[0]).toEqual(
+      expect.objectContaining({
+        enablePaging: true,
+        horizontal: true,
+      })
+    );
+
+    fireEvent.press(screen.getByTestId('learning-workspace-document-zoom-in'));
+    expect(mockPdf.mock.calls.at(-1)?.[0]).toEqual(
+      expect.objectContaining({
+        scale: 1.25,
+      })
+    );
+
+    fireEvent.press(screen.getByTestId('learning-workspace-document-zoom-reset'));
+    expect(mockPdf.mock.calls.at(-1)?.[0]).toEqual(
+      expect.objectContaining({
+        scale: 1,
+      })
+    );
+  });
+
+  it('uses the pdf error callback to return to the unsupported state', () => {
+    render(<LearningWorkspaceDocumentRoute />);
+
+    const pdfProps = mockPdf.mock.calls.at(-1)?.[0] as Record<string, any>;
+    act(() => {
+      pdfProps.onError(new Error('load failed'));
+    });
+
+    expect(screen.getByText('暂不支持查看资料')).toBeTruthy();
+    expect(screen.queryByTestId('learning-workspace-pdf-viewer')).toBeNull();
   });
 
   it('shows the unsupported empty state when the profile has no pdf source', () => {
@@ -275,10 +228,9 @@ describe('LearningWorkspaceDocumentRoute', () => {
       },
     });
 
-    renderDocumentRoute();
+    render(<LearningWorkspaceDocumentRoute />);
 
     expect(screen.getByText('暂不支持查看资料')).toBeTruthy();
-    expect(screen.queryByTestId('learning-workspace-pdfjs-reader')).toBeNull();
-    expect(mockGetLearningReaderState).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('learning-workspace-pdf-viewer')).toBeNull();
   });
 });

@@ -187,6 +187,35 @@ function buildStarterPrompts(
   ];
 }
 
+export function resolveScopedLearningWorkspaceState(input: {
+  expectedSessionKind: LearningStudyMode;
+  latestEvaluation: LearningStepEvaluation | null;
+  latestSessionSignal: LearningWorkspaceSessionSignal | null;
+  latestStatus: LearningWorkspaceStatusSignal | null;
+  messages: LearningWorkspaceRenderedMessage[];
+  profileId: number;
+  storeSessionId: number | null;
+  workspaceSession: ReturnType<typeof useLearningWorkspace>['workspaceSession'];
+}) {
+  const scopedWorkspaceSession =
+    input.workspaceSession &&
+    input.workspaceSession.learningProfileId === input.profileId &&
+    input.workspaceSession.sessionKind === input.expectedSessionKind &&
+    input.workspaceSession.status !== 'completed'
+      ? input.workspaceSession
+      : null;
+  const hasCurrentConversationState =
+    typeof scopedWorkspaceSession?.id === 'number' && input.storeSessionId === scopedWorkspaceSession.id;
+
+  return {
+    latestEvaluation: hasCurrentConversationState ? input.latestEvaluation : null,
+    latestSessionSignal: hasCurrentConversationState ? input.latestSessionSignal : null,
+    latestStatus: hasCurrentConversationState ? input.latestStatus : null,
+    renderedMessages: hasCurrentConversationState ? input.messages : [],
+    workspaceSession: scopedWorkspaceSession,
+  };
+}
+
 export function LearningWorkspaceProvider({
   children,
   profileId,
@@ -212,13 +241,13 @@ export function LearningWorkspaceProvider({
     workspaceGate,
     workspaceSession,
   } = useLearningWorkspace(profileId, studyMode);
-  const sessionMessagesQuery = useLearningSessionMessagesQuery(workspaceSession?.id ?? Number.NaN);
   const [draft, setDraft] = React.useState('');
   const [isSending, setIsSending] = React.useState(false);
-  const renderedMessages = useLearningConversationStore((state) => state.messages);
-  const latestEvaluation = useLearningConversationStore((state) => state.latestEvaluation);
-  const latestStatus = useLearningConversationStore((state) => state.latestStatus);
-  const latestSessionSignal = useLearningConversationStore((state) => state.latestSessionSignal);
+  const conversationSessionId = useLearningConversationStore((state) => state.sessionId);
+  const rawRenderedMessages = useLearningConversationStore((state) => state.messages);
+  const rawLatestEvaluation = useLearningConversationStore((state) => state.latestEvaluation);
+  const rawLatestStatus = useLearningConversationStore((state) => state.latestStatus);
+  const rawLatestSessionSignal = useLearningConversationStore((state) => state.latestSessionSignal);
   const hydrateConversationHistory = useLearningConversationStore((state) => state.hydrateHistory);
   const startConversationDraft = useLearningConversationStore((state) => state.startDraft);
   const applyConversationEvent = useLearningConversationStore((state) => state.applyEvent);
@@ -233,6 +262,38 @@ export function LearningWorkspaceProvider({
   const setConversationLatestEvaluation = useLearningConversationStore(
     (state) => state.setLatestEvaluation
   );
+  const {
+    latestEvaluation,
+    latestSessionSignal,
+    latestStatus,
+    renderedMessages,
+    workspaceSession: activeWorkspaceSession,
+  } = React.useMemo(
+    () =>
+      resolveScopedLearningWorkspaceState({
+        expectedSessionKind: studyMode,
+        latestEvaluation: rawLatestEvaluation,
+        latestSessionSignal: rawLatestSessionSignal,
+        latestStatus: rawLatestStatus,
+        messages: rawRenderedMessages,
+        profileId,
+        storeSessionId: conversationSessionId,
+        workspaceSession,
+      }),
+    [
+      conversationSessionId,
+      profileId,
+      rawLatestEvaluation,
+      rawLatestSessionSignal,
+      rawLatestStatus,
+      rawRenderedMessages,
+      studyMode,
+      workspaceSession,
+    ]
+  );
+  const sessionMessagesQuery = useLearningSessionMessagesQuery(
+    activeWorkspaceSession?.id ?? Number.NaN
+  );
   const pendingRedirectReplayRef = React.useRef<{
     content: string;
     session: NonNullable<ReturnType<typeof useLearningWorkspace>['workspaceSession']>;
@@ -245,20 +306,23 @@ export function LearningWorkspaceProvider({
   );
 
   React.useEffect(() => {
-    if (!workspaceSession?.id) {
+    if (!activeWorkspaceSession?.id) {
       return;
     }
 
-    hydrateConversationHistory(baseRenderedMessages, workspaceSession.id);
-  }, [baseRenderedMessages, hydrateConversationHistory, workspaceSession?.id]);
+    hydrateConversationHistory(baseRenderedMessages, activeWorkspaceSession.id);
+  }, [activeWorkspaceSession?.id, baseRenderedMessages, hydrateConversationHistory]);
 
   const sourceCards = React.useMemo(
     () => (profile ? buildLearningWorkspaceSources(profile) : []),
     [profile]
   );
   const highlightCards = React.useMemo(
-    () => (profile && workspaceSession ? buildLearningWorkspaceHighlights(profile, workspaceSession) : []),
-    [profile, workspaceSession]
+    () =>
+      profile && activeWorkspaceSession
+        ? buildLearningWorkspaceHighlights(profile, activeWorkspaceSession)
+        : [],
+    [activeWorkspaceSession, profile]
   );
 
   const starterPrompts = React.useMemo(() => {
@@ -266,12 +330,12 @@ export function LearningWorkspaceProvider({
       return [];
     }
 
-    if (!profile || !workspaceSession) {
+    if (!profile || !activeWorkspaceSession) {
       return [];
     }
 
-    return buildStarterPrompts(profile, workspaceSession);
-  }, [profile, renderedMessages.length, sessionMessagesQuery.data, workspaceSession]);
+    return buildStarterPrompts(profile, activeWorkspaceSession);
+  }, [activeWorkspaceSession, profile, renderedMessages.length, sessionMessagesQuery.data]);
 
   const updateMessagesCache = React.useCallback(
     (
@@ -334,7 +398,7 @@ export function LearningWorkspaceProvider({
 
   const handleSend = React.useCallback(async (nextDraft?: string, options?: LearningSendOptions) => {
     const normalized = (nextDraft ?? draft).trim();
-    const activeSession = options?.session ?? workspaceSession;
+    const activeSession = options?.session ?? activeWorkspaceSession;
     const activeMode = options?.mode ?? studyMode;
     if (!normalized || !profile || !activeSession || !token || isSending) {
       return;
@@ -501,7 +565,7 @@ export function LearningWorkspaceProvider({
     token,
     updateMessagesCache,
     updateSessionCaches,
-    workspaceSession,
+    activeWorkspaceSession,
   ]);
 
   React.useEffect(() => {
@@ -510,7 +574,7 @@ export function LearningWorkspaceProvider({
       !pendingReplay ||
       isSending ||
       studyMode !== 'explore' ||
-      workspaceSession?.id !== pendingReplay.session.id
+      activeWorkspaceSession?.id !== pendingReplay.session.id
     ) {
       return;
     }
@@ -520,14 +584,14 @@ export function LearningWorkspaceProvider({
       mode: 'explore',
       session: pendingReplay.session,
     });
-  }, [handleSend, isSending, studyMode, workspaceSession]);
+  }, [activeWorkspaceSession, handleSend, isSending, studyMode]);
 
   React.useEffect(() => {
-    if (studyMode !== 'explore' || !workspaceSession?.id || !token || isSending) {
+    if (studyMode !== 'explore' || !activeWorkspaceSession?.id || !token || isSending) {
       return;
     }
 
-    const resumeAttemptKey = `${studyMode}:${workspaceSession.id}`;
+    const resumeAttemptKey = `${studyMode}:${activeWorkspaceSession.id}`;
     if (lastResumeAttemptKeyRef.current === resumeAttemptKey) {
       return;
     }
@@ -541,7 +605,7 @@ export function LearningWorkspaceProvider({
 
       setIsSending(true);
       try {
-        for await (const event of resumeLearningSessionReply(workspaceSession.id, token)) {
+        for await (const event of resumeLearningSessionReply(activeWorkspaceSession.id, token)) {
           if (cancelled) {
             return;
           }
@@ -549,10 +613,10 @@ export function LearningWorkspaceProvider({
           if (event.type === 'resume.user_message') {
             resumeUserText = event.text;
             ensureResumeConversationDraft({
-              assistantMessageId: `resume-assistant-${workspaceSession.id}`,
+              assistantMessageId: `resume-assistant-${activeWorkspaceSession.id}`,
               mode: 'explore',
-              sessionId: workspaceSession.id,
-              userMessageId: event.messageId ?? `resume-user-${workspaceSession.id}`,
+              sessionId: activeWorkspaceSession.id,
+              userMessageId: event.messageId ?? `resume-user-${activeWorkspaceSession.id}`,
               userText: event.text,
             });
             continue;
@@ -581,10 +645,10 @@ export function LearningWorkspaceProvider({
               finalAssistantMessage = event.message;
               if (resumeUserText) {
                 updateMessagesCache(
-                  workspaceSession.id,
+                  activeWorkspaceSession.id,
                   {
                     cards: [],
-                    id: `resume-user-${workspaceSession.id}`,
+                    id: `resume-user-${activeWorkspaceSession.id}`,
                     presentation: null,
                     role: 'user',
                     streaming: false,
@@ -641,13 +705,13 @@ export function LearningWorkspaceProvider({
     };
   }, [
     applyConversationEvent,
+    activeWorkspaceSession,
     commitConversationDraft,
     discardAssistantDraft,
     ensureResumeConversationDraft,
     setConversationLatestStatus,
     token,
     updateMessagesCache,
-    workspaceSession,
     studyMode,
   ]);
 
@@ -744,7 +808,7 @@ export function LearningWorkspaceProvider({
       starterPrompts,
       studyMode,
       workspaceGate,
-      workspaceSession,
+      workspaceSession: activeWorkspaceSession,
       isRetryPending,
     }),
     [
@@ -771,7 +835,7 @@ export function LearningWorkspaceProvider({
       starterPrompts,
       studyMode,
       workspaceGate,
-      workspaceSession,
+      activeWorkspaceSession,
     ]
   );
 

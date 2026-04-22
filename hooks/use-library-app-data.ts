@@ -8,6 +8,7 @@ import {
   createReturnRequest,
   createLearningProfile,
   deleteBooklist,
+  deleteLearningProfile,
   dismissNotification,
   getAchievements,
   getBook,
@@ -40,6 +41,7 @@ import {
   listLearningSessions,
   login,
   retryGenerateLearningProfile,
+  renameLearningProfile,
   searchBooksExplicit,
   registerReader,
   removeBookFromBooklist,
@@ -53,6 +55,7 @@ import {
   type LoginInput,
   type ProfileUpdateInput,
   type RegisterInput,
+  type RenameLearningProfileInput,
 } from '@/lib/api';
 import { useAppSession } from '@/hooks/use-app-session';
 
@@ -574,6 +577,32 @@ export function useUploadLearningProfileMutation() {
     mutationFn: (formData: FormData) => uploadLearningProfile(formData, token),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['learning'] });
+    },
+  });
+}
+
+export function useRenameLearningProfileMutation() {
+  const queryClient = useQueryClient();
+  const { token } = useAppSession();
+
+  return useMutation({
+    mutationFn: (input: RenameLearningProfileInput) => renameLearningProfile(input, token),
+    onSuccess: (_profile, input) => {
+      queryClient.invalidateQueries({ queryKey: ['learning'] });
+      queryClient.invalidateQueries({ queryKey: ['learning', 'profiles', 'detail', input.profileId] });
+    },
+  });
+}
+
+export function useDeleteLearningProfileMutation() {
+  const queryClient = useQueryClient();
+  const { token } = useAppSession();
+
+  return useMutation({
+    mutationFn: (profileId: number) => deleteLearningProfile(profileId, token),
+    onSuccess: (_result, profileId) => {
+      queryClient.invalidateQueries({ queryKey: ['learning'] });
+      queryClient.removeQueries({ queryKey: ['learning', 'profiles', 'detail', profileId] });
     },
   });
 }

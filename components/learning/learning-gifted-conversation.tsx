@@ -1,17 +1,14 @@
 import React from 'react';
-import { Platform, Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 
+import { LearningAssistantConversationSection } from '@/components/learning/learning-assistant-conversation';
 import { LearningComposer } from '@/components/learning/learning-composer';
-import { LearningConversationMessage } from '@/components/learning/learning-conversation-message';
 import { LearningConversationScroll } from '@/components/learning/learning-conversation-scroll';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { useConversationFocusAnchor } from '@/hooks/use-conversation-focus-anchor';
 import type { LearningBridgeAction } from '@/lib/api/types';
 import { resolveLatestTurnFocusMessageId } from '@/lib/learning/conversation-focus';
-import type {
-  LearningWorkspaceRenderedMessage,
-  LearningWorkspaceStatusSignal,
-} from '@/lib/learning/workspace';
+import type { LearningWorkspaceRenderedMessage, LearningWorkspaceStatusSignal } from '@/lib/learning/workspace';
 
 type LearningGiftedConversationProps = {
   draft: string;
@@ -89,135 +86,11 @@ function StarterPromptStrip({
   );
 }
 
-function EmptyState({
-  emptyLabel,
-}: {
-  emptyLabel: string;
-}) {
-  const { theme } = useAppTheme();
-
-  return (
-    <View
-      style={{
-        backgroundColor: theme.colors.surface,
-        borderRadius: 24,
-        padding: 16,
-      }}>
-      <Text
-        selectable
-        style={{
-          color: theme.colors.textMuted,
-          ...theme.typography.body,
-          fontSize: 14,
-          lineHeight: 21,
-        }}>
-        {emptyLabel}
-      </Text>
-    </View>
-  );
-}
-
-function StatusAccessory({ latestStatus }: { latestStatus?: LearningWorkspaceStatusSignal | null }) {
-  const { theme } = useAppTheme();
-
-  if (!latestStatus?.label) {
-    return null;
-  }
-
-  return (
-    <View testID="learning-workspace-inline-status">
-      <Text
-        selectable
-        style={{
-          color: latestStatus.tone === 'warning' ? theme.colors.warning : theme.colors.textSoft,
-          ...theme.typography.medium,
-          fontSize: 12,
-          lineHeight: 18,
-        }}>
-        {latestStatus.label}
-      </Text>
-    </View>
-  );
-}
-
-function ConversationSection({
-  emptyLabel,
-  focusMessageId,
-  messages,
-  onAction,
-  onFocusAnchorYChange,
-}: {
-  emptyLabel: string;
-  focusMessageId?: string | null;
-  messages: LearningWorkspaceRenderedMessage[];
-  onAction?: (action: LearningBridgeAction) => void;
-  onFocusAnchorYChange?: (y: number | null) => void;
-}) {
-  const { theme } = useAppTheme();
-  const sectionYRef = React.useRef(0);
-  const focusLocalYRef = React.useRef<number | null>(null);
-
-  const commitFocusAnchor = React.useCallback(() => {
-    if (!onFocusAnchorYChange) {
-      return;
-    }
-
-    if (!focusMessageId || focusLocalYRef.current === null) {
-      onFocusAnchorYChange(null);
-      return;
-    }
-
-    onFocusAnchorYChange(sectionYRef.current + focusLocalYRef.current);
-  }, [focusMessageId, onFocusAnchorYChange]);
-
-  const handleSectionLayout = React.useCallback(
-    (event: LayoutChangeEvent) => {
-      sectionYRef.current = event.nativeEvent.layout.y;
-      commitFocusAnchor();
-    },
-    [commitFocusAnchor]
-  );
-
-  const handleFocusMessageLayout = React.useCallback(
-    (event: LayoutChangeEvent) => {
-      focusLocalYRef.current = event.nativeEvent.layout.y;
-      commitFocusAnchor();
-    },
-    [commitFocusAnchor]
-  );
-
-  React.useEffect(() => {
-    focusLocalYRef.current = null;
-    if (!focusMessageId) {
-      onFocusAnchorYChange?.(null);
-    }
-  }, [focusMessageId, onFocusAnchorYChange]);
-
-  return (
-    <View onLayout={handleSectionLayout} style={{ gap: theme.spacing.lg }}>
-      <View style={{ gap: 14 }}>
-        {messages.length > 0 ? (
-          messages.map((message) => (
-            <View
-              key={message.id}
-              onLayout={message.id === focusMessageId ? handleFocusMessageLayout : undefined}>
-              <LearningConversationMessage message={message} onAction={onAction} />
-            </View>
-          ))
-        ) : (
-          <EmptyState emptyLabel={emptyLabel} />
-        )}
-      </View>
-    </View>
-  );
-}
-
 export function LearningGiftedConversation({
   draft,
   emptyLabel,
   inputTestID = 'learning-workspace-composer-input',
   isSending = false,
-  latestStatus = null,
   messages,
   onAction,
   onDraftChange,
@@ -260,7 +133,7 @@ export function LearningGiftedConversation({
           },
         ]}
         contentInsetAdjustmentBehavior="never"
-        focusAnchorOffset={(topPadding ?? 0) + 24}
+        focusAnchorOffset={Math.max(0, (topPadding ?? 0) - 16)}
         focusAnchorY={focusAnchorY}
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
@@ -274,7 +147,7 @@ export function LearningGiftedConversation({
               prompts={starterPrompts}
             />
           ) : null}
-          <ConversationSection
+          <LearningAssistantConversationSection
             emptyLabel={emptyLabel}
             focusMessageId={focusMessageId}
             messages={messages}
@@ -287,12 +160,10 @@ export function LearningGiftedConversation({
       <View
         style={{
           backgroundColor: theme.colors.background,
-          gap: 10,
           paddingBottom: Platform.OS === 'ios' ? 20 : 16,
           paddingHorizontal: 20,
           paddingTop: 12,
         }}>
-        <StatusAccessory latestStatus={latestStatus} />
         <LearningComposer
           disabled={isSending}
           draft={draft}

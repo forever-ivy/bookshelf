@@ -30,6 +30,7 @@ import type {
   LearningSourceType,
   LearningStepEvaluation,
   LearningStreamEvent,
+  RenameLearningProfileInput,
   StartLearningSessionResult,
 } from '@/lib/api/types';
 import {
@@ -1226,6 +1227,34 @@ export async function getLearningProfile(
       steps: Array.isArray(payload?.steps) ? payload.steps : [],
     })
   );
+}
+
+export async function renameLearningProfile(
+  input: RenameLearningProfileInput,
+  token?: string | null
+): Promise<LearningProfile> {
+  const payload = await strictLibraryRequest(`/api/v2/learning/profiles/${input.profileId}`, {
+    body: JSON.stringify({ title: input.title.trim() }),
+    method: 'PATCH',
+    token,
+  });
+
+  return normalizeLearningProfile((payload as any)?.profile ?? {}, {
+    assets: Array.isArray((payload as any)?.assets) ? (payload as any).assets : [],
+    jobs: Array.isArray((payload as any)?.jobs) ? (payload as any).jobs : [],
+  });
+}
+
+export async function deleteLearningProfile(
+  profileId: number,
+  token?: string | null
+): Promise<{ ok: true }> {
+  await strictLibraryRequest(`/api/v2/learning/profiles/${profileId}`, {
+    method: 'DELETE',
+    token,
+  });
+
+  return { ok: true };
 }
 
 export async function retryGenerateLearningProfile(

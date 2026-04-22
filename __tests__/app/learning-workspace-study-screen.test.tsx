@@ -149,10 +149,10 @@ describe('LearningWorkspaceStudyRoute', () => {
     };
   });
 
-  it('renders the inline warning status without relying on Animated.Layout', () => {
+  it('does not render the inline warning status at the bottom of the screen', () => {
     render(<LearningWorkspaceStudyRoute />);
 
-    expect(screen.getByTestId('learning-workspace-inline-status')).toBeTruthy();
-    expect(screen.getByText('当前导学状态异常')).toBeTruthy();
+    expect(screen.queryByTestId('learning-workspace-inline-status')).toBeNull();
+    expect(screen.queryByText('当前导学状态异常')).toBeNull();
   });
 });

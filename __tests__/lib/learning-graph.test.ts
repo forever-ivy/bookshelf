@@ -5,6 +5,7 @@ import {
   buildLearningGraphSelectionPresentation,
   buildLearningGuideGraphLens,
   buildLearningGraphViewModel,
+  buildLearningMindMapGraphLens,
   getLearningGraphSelection,
   resolveLearningExploreGraphFocus,
   type LearningGraph,
@@ -372,5 +373,115 @@ describe('learning graph adapter', () => {
         title: '图谱位置',
       })
     );
+  });
+
+  it('projects a stable section-first mind map while keeping fragments as evidence only', () => {
+    const lens = buildLearningMindMapGraphLens(
+      buildLearningGraphViewModel({
+        edges: [
+          { source: 'asset:1', target: 'book:profile', type: 'DERIVED_FROM' },
+          { source: 'asset:1', target: 'section:1:limits', type: 'CONTAINS' },
+          { source: 'section:1:limits', target: 'fragment:1', type: 'CONTAINS' },
+          { source: 'fragment:1', target: 'concept:limits', type: 'MENTIONS' },
+          { source: 'fragment:1', target: 'definition:limits', type: 'EVIDENCE_FOR' },
+          { source: 'definition:limits', target: 'concept:limits', type: 'DEFINES' },
+          { source: 'fragment:1', target: 'step:0', type: 'EVIDENCE_FOR' },
+        ],
+        nodes: [
+          { id: 'book:profile', label: '微积分期中复习', type: 'Book' },
+          { assetKind: 'upload', fileName: 'test.pdf', id: 'asset:1', label: 'test.pdf', type: 'SourceAsset' },
+          { id: 'section:1:limits', label: '第一章 极限', sectionLevel: 1, type: 'Section' },
+          {
+            assetId: 1,
+            chapterLabel: '第一章 极限',
+            chunkIndex: 0,
+            fragmentId: 1001,
+            id: 'fragment:1',
+            label: '函数极限的定义',
+            provenance: { assetId: 1, fragmentId: 1001, sectionId: 'section:1:limits' },
+            semanticSummary: '函数极限的定义',
+            type: 'Fragment',
+          },
+          { id: 'concept:limits', label: '极限', type: 'Concept' },
+          {
+            confidence: 0.92,
+            extractor: 'structured-graph-v2',
+            id: 'definition:limits',
+            label: '函数极限的定义',
+            provenance: { assetId: 1, fragmentId: 1001, sectionId: 'section:1:limits' },
+            type: 'Definition',
+          },
+          { id: 'step:0', label: '建立整体认知', stepIndex: 0, type: 'LessonStep' },
+        ],
+        provider: 'neo4j',
+      })
+    );
+
+    expect(lens.mode).toBe('mindmap');
+    expect(lens.graph.nodes.map((node) => node.id)).toEqual([
+      'book:profile',
+      'asset:1',
+      'section:1:limits',
+      'concept:limits',
+      'definition:limits',
+    ]);
+    expect(lens.graph.edges).toEqual([
+      { source: 'book:profile', target: 'asset:1', type: 'MINDMAP_CHILD' },
+      { source: 'asset:1', target: 'section:1:limits', type: 'MINDMAP_CHILD' },
+      { source: 'section:1:limits', target: 'concept:limits', type: 'MINDMAP_CHILD' },
+      { source: 'concept:limits', target: 'definition:limits', type: 'MINDMAP_CHILD' },
+    ]);
+
+    const selection = getLearningGraphSelection(lens.viewModel, 'concept:limits');
+    expect(selection?.relatedFragments.map((fragment) => fragment.id)).toEqual(['fragment:1']);
+
+    const presentation = buildLearningGraphSelectionPresentation(
+      'mindmap',
+      selection!,
+      lens
+    );
+    expect(presentation.eyebrow).toBe('思维导图');
+    expect(presentation.sections.map((section) => section.title)).toEqual([
+      '导图位置',
+      '相关知识点',
+    ]);
+  });
+
+  it('falls back to asset-level concept branches when sections are missing', () => {
+    const lens = buildLearningMindMapGraphLens(
+      buildLearningGraphViewModel({
+        edges: [
+          { source: 'asset:1', target: 'book:profile', type: 'DERIVED_FROM' },
+          { source: 'fragment:1', target: 'asset:1', type: 'DERIVED_FROM' },
+          { source: 'fragment:1', target: 'concept:limits', type: 'MENTIONS' },
+        ],
+        nodes: [
+          { id: 'book:profile', label: '微积分期中复习', type: 'Book' },
+          { assetKind: 'upload', fileName: 'test.pdf', id: 'asset:1', label: 'test.pdf', type: 'SourceAsset' },
+          {
+            assetId: 1,
+            chapterLabel: 'Section 1',
+            chunkIndex: 0,
+            fragmentId: 1001,
+            id: 'fragment:1',
+            label: '函数极限的定义',
+            semanticSummary: '函数极限的定义',
+            type: 'Fragment',
+          },
+          { id: 'concept:limits', label: '极限', type: 'Concept' },
+        ],
+        provider: 'fallback',
+      })
+    );
+
+    expect(lens.graph.nodes.map((node) => node.id)).toEqual([
+      'book:profile',
+      'asset:1',
+      'concept:limits',
+    ]);
+    expect(lens.graph.edges).toEqual([
+      { source: 'book:profile', target: 'asset:1', type: 'MINDMAP_CHILD' },
+      { source: 'asset:1', target: 'concept:limits', type: 'MINDMAP_CHILD' },
+    ]);
   });
 });

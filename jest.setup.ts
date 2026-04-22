@@ -1,5 +1,13 @@
 import type { ForwardedRef } from 'react';
 
+(globalThis as { MessageChannel?: typeof MessageChannel }).MessageChannel = undefined;
+(globalThis as { cancelAnimationFrame?: (handle: number) => void }).cancelAnimationFrame = jest.fn();
+(globalThis as { requestAnimationFrame?: (callback: (time: number) => void) => number }).requestAnimationFrame =
+  (callback: (time: number) => void) => {
+    callback(Date.now());
+    return 0;
+  };
+
 jest.mock('react-native-reanimated', () => {
   const React = require('react');
   const { View } = require('react-native');
@@ -20,9 +28,12 @@ jest.mock('react-native-reanimated', () => {
     },
     FadeInDown: chain,
     FadeInUp: chain,
+    FadeOutDown: chain,
     FadeOutUp: chain,
     Layout: chain,
     LinearTransition: chain,
+    SlideInRight: chain,
+    SlideOutRight: chain,
     useAnimatedStyle: (updater: () => Record<string, unknown>) => updater(),
     useSharedValue: (value: unknown) => ({ value }),
     withRepeat: (value: unknown) => value,

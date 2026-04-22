@@ -1,5 +1,5 @@
 import React from 'react';
-import { Keyboard, Platform, ScrollView } from 'react-native';
+import { Keyboard, Platform, ScrollView, View } from 'react-native';
 
 type LearningConversationScrollProps = React.ComponentProps<typeof ScrollView> & {
   focusAnchorOffset?: number;
@@ -7,6 +7,9 @@ type LearningConversationScrollProps = React.ComponentProps<typeof ScrollView> &
 };
 
 export function LearningConversationScroll({
+  alwaysBounceVertical,
+  bounces,
+  children,
   focusAnchorOffset = 72,
   focusAnchorY = null,
   onContentSizeChange,
@@ -14,20 +17,34 @@ export function LearningConversationScroll({
   ...props
 }: LearningConversationScrollProps) {
   const scrollViewRef = React.useRef<ScrollView | null>(null);
+  const baseContentHeightRef = React.useRef(0);
   const layoutHeightRef = React.useRef(0);
-  const contentHeightRef = React.useRef(0);
   const keyboardFollowTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastAnchorTargetRef = React.useRef<number | null>(null);
   const [isKeyboardVisible, setIsKeyboardVisible] = React.useState(false);
+  const [baseContentHeight, setBaseContentHeight] = React.useState(0);
+  const [layoutHeight, setLayoutHeight] = React.useState(0);
+  const isFocusAnchorActive = typeof focusAnchorY === 'number';
+
+  const focusAnchorLift = React.useMemo(() => {
+    if (typeof focusAnchorY !== 'number' || layoutHeight <= 0 || baseContentHeight <= 0) {
+      return 0;
+    }
+
+    const idealTargetY = Math.max(0, focusAnchorY - focusAnchorOffset);
+    const maxScrollYWithoutSpacer = Math.max(0, baseContentHeight - layoutHeight);
+
+    return Math.max(0, idealTargetY - maxScrollYWithoutSpacer);
+  }, [baseContentHeight, focusAnchorOffset, focusAnchorY, layoutHeight]);
 
   // Returns true when the content is taller than the visible scroll area,
   // i.e. there is content below the fold that the user cannot see.
   const isContentOverflowing = React.useCallback(() => {
-    return contentHeightRef.current > layoutHeightRef.current + 10;
+    return baseContentHeightRef.current > layoutHeightRef.current + 10;
   }, []);
 
   const getMaxScrollY = React.useCallback(() => {
-    return Math.max(0, contentHeightRef.current - layoutHeightRef.current);
+    return Math.max(0, baseContentHeightRef.current - layoutHeightRef.current);
   }, []);
 
   const scrollToEnd = React.useCallback((animated = true) => {
@@ -42,7 +59,7 @@ export function LearningConversationScroll({
   const scrollToLatestMessage = React.useCallback(() => {
     requestAnimationFrame(() => {
       if (typeof focusAnchorY === 'number') {
-        if (layoutHeightRef.current <= 0 || contentHeightRef.current <= 0) {
+        if (layoutHeightRef.current <= 0 || baseContentHeightRef.current <= 0) {
           return;
         }
 
@@ -116,17 +133,38 @@ export function LearningConversationScroll({
     <ScrollView
       {...props}
       automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+      alwaysBounceVertical={isFocusAnchorActive ? false : alwaysBounceVertical}
+      bounces={isFocusAnchorActive ? false : bounces}
       onContentSizeChange={(width, height) => {
-        contentHeightRef.current = height;
         onContentSizeChange?.(width, height);
         scrollToLatestMessage();
       }}
       onLayout={(event) => {
         layoutHeightRef.current = event.nativeEvent.layout.height;
+        setLayoutHeight(event.nativeEvent.layout.height);
         onLayout?.(event);
         scrollToLatestMessage();
       }}
       ref={scrollViewRef}
-    />
+    >
+      <View
+        collapsable={false}
+        onLayout={(event) => {
+          const nextHeight = event.nativeEvent.layout.height;
+          baseContentHeightRef.current = nextHeight;
+          setBaseContentHeight(nextHeight);
+          scrollToLatestMessage();
+        }}
+        style={
+          focusAnchorLift > 0
+            ? {
+                transform: [{ translateY: -focusAnchorLift }],
+              }
+            : undefined
+        }
+        testID="learning-conversation-scroll-content">
+        {children}
+      </View>
+    </ScrollView>
   );
 }

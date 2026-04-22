@@ -1,65 +1,49 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import Pdf, { type PdfRef } from 'react-native-pdf';
 import React from 'react';
-import {
-  ActivityIndicator,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import Animated, {
+  FadeInDown,
+  FadeOutDown,
+  Layout,
+  SlideInRight,
+  SlideOutRight,
+} from 'react-native-reanimated';
+import { 
+  Settings2, 
+  ChevronUp, 
+  ChevronDown, 
+  Maximize, 
+  Minimize, 
+  Columns as HorizontalIcon,
+  Rows as VerticalIcon
+} from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { LearningPdfReaderWebView } from '@/components/learning/learning-pdf-reader-webview';
+import { GlassSurface } from '@/components/base/glass-surface';
 import { LearningWorkspaceLoadingState } from '@/components/learning/learning-workspace-loading-state';
-import { useLearningWorkspaceScreen } from '@/components/learning/learning-workspace-provider';
 import { LEARNING_WORKSPACE_TOP_CHROME_OFFSET } from '@/components/learning/learning-workspace-scaffold';
+import { useLearningWorkspaceScreen } from '@/components/learning/learning-workspace-provider';
 import { SecondaryBackButton } from '@/components/navigation/secondary-back-button';
 import { useAppSession } from '@/hooks/use-app-session';
 import { useAppTheme } from '@/hooks/use-app-theme';
-import {
-  createLearningPdfAnnotation,
-  getLearningReaderState,
-  quickExplainLearningPdfSelection,
-  updateLearningReaderProgress,
-} from '@/lib/api/learning';
-import { getLibraryErrorMessage } from '@/lib/api/client';
-import type {
-  LearningPdfAnnotation,
-  LearningPdfAnnotationType,
-  LearningQuickExplainInput,
-  LearningQuickExplainResult,
-  LearningReaderState,
-} from '@/lib/api/types';
 import { getLibraryServiceBaseUrl } from '@/lib/api/client';
-import type {
-  LearningPdfReaderOutlineItem,
-  LearningPdfReaderPageTapPayload,
-  LearningPdfReaderRuntimeInputMessage,
-  LearningPdfReaderSearchResultPayload,
-  LearningPdfReaderSelectionPayload,
-} from '@/lib/learning/pdf-reader-bridge';
 import { resolveLearningWorkspaceHasViewableDocument } from '@/lib/learning/workspace';
 
-type ExplainTarget =
-  | {
-      kind: 'selection';
-      payload: LearningPdfReaderSelectionPayload;
-    }
-  | {
-      kind: 'tap';
-      payload: LearningPdfReaderPageTapPayload;
-    };
+const MIN_SCALE = 0.75;
+const MAX_SCALE = 3;
+const SCALE_STEP = 0.25;
 
-function DocumentState({
-  body,
-  title,
-}: {
-  body: string;
-  title: string;
-}) {
+type ReadingDisplayMode = 'vertical' | 'horizontal';
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function formatScale(scale: number) {
+  return `${Math.round(scale * 100)}%`;
+}
+
+function UnsupportedDocumentState() {
   const { theme } = useAppTheme();
 
   return (
@@ -72,7 +56,7 @@ function DocumentState({
             fontFamily: theme.typography.bold.fontFamily,
           },
         ]}>
-        {title}
+        暂不支持查看资料
       </Text>
       <Text
         style={[
@@ -82,90 +66,10 @@ function DocumentState({
             fontFamily: theme.typography.body.fontFamily,
           },
         ]}>
-        {body}
+        当前导学本还没有可直接打开的 PDF 原件，后续补齐后会在这里展示。
       </Text>
     </View>
   );
-}
-
-function ReaderBusyState({ label }: { label: string }) {
-  const { theme } = useAppTheme();
-
-  return (
-    <View style={styles.readerBusyState}>
-      <ActivityIndicator color={theme.colors.primaryStrong} />
-      <Text
-        style={{
-          color: theme.colors.textMuted,
-          ...theme.typography.body,
-          fontSize: 14,
-          lineHeight: 20,
-        }}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
-function flattenOutline(
-  items: LearningPdfReaderOutlineItem[],
-  depth = 0
-): Array<LearningPdfReaderOutlineItem & { depth: number }> {
-  return items.flatMap((item) => [
-    { ...item, depth },
-    ...flattenOutline(item.items ?? [], depth + 1),
-  ]);
-}
-
-function getExplainInputFromTarget(target: ExplainTarget): LearningQuickExplainInput {
-  if (target.kind === 'selection') {
-    return {
-      anchor: target.payload.anchor,
-      pageNumber: target.payload.pageNumber,
-      selectedText: target.payload.selectedText,
-      surroundingText: target.payload.surroundingText,
-    };
-  }
-
-  return {
-    anchor: target.payload.anchor,
-    nearbyText: target.payload.nearbyText,
-    pageNumber: target.payload.pageNumber,
-  };
-}
-
-function getSelectedTextFromTarget(target: ExplainTarget | null) {
-  if (!target) {
-    return '';
-  }
-
-  return target.kind === 'selection'
-    ? target.payload.selectedText
-    : target.payload.nearbyText ?? target.payload.anchor.textQuote ?? '';
-}
-
-function getAnchorFromTarget(target: ExplainTarget | null) {
-  if (!target) {
-    return null;
-  }
-
-  return target.payload.anchor;
-}
-
-function getPageNumberFromTarget(target: ExplainTarget | null) {
-  return target?.payload.pageNumber ?? 1;
-}
-
-function resolveDocumentUrl(baseUrl: string | null, documentPath: string | null) {
-  if (!baseUrl || !documentPath) {
-    return null;
-  }
-
-  try {
-    return new URL(documentPath, baseUrl).toString();
-  } catch {
-    return null;
-  }
 }
 
 export default function LearningWorkspaceDocumentRoute() {
@@ -173,314 +77,50 @@ export default function LearningWorkspaceDocumentRoute() {
   const insets = useSafeAreaInsets();
   const { token } = useAppSession();
   const { closeWorkspace, profile, workspaceGate } = useLearningWorkspaceScreen();
-  const queryClient = useQueryClient();
-  const [documentErrorState, setDocumentErrorState] = React.useState<
-    'document_missing' | 'generic' | null
-  >(null);
-  const [documentErrorMessage, setDocumentErrorMessage] = React.useState<string | null>(null);
-  const [outline, setOutline] = React.useState<LearningPdfReaderOutlineItem[]>([]);
-  const [drawerMode, setDrawerMode] = React.useState<'annotations' | 'outline'>('outline');
-  const [drawerOpen, setDrawerOpen] = React.useState(false);
-  const [searchOpen, setSearchOpen] = React.useState(false);
-  const [searchQuery, setSearchQuery] = React.useState('');
-  const [searchResult, setSearchResult] =
-    React.useState<LearningPdfReaderSearchResultPayload | null>(null);
-  const [readerCommand, setReaderCommand] =
-    React.useState<LearningPdfReaderRuntimeInputMessage | null>(null);
-  const [selection, setSelection] = React.useState<LearningPdfReaderSelectionPayload | null>(
-    null
-  );
-  const [tapTarget, setTapTarget] = React.useState<LearningPdfReaderPageTapPayload | null>(null);
-  const [explainTarget, setExplainTarget] = React.useState<ExplainTarget | null>(null);
-  const [quickExplain, setQuickExplain] = React.useState<LearningQuickExplainResult | null>(null);
-  const [noteModalOpen, setNoteModalOpen] = React.useState(false);
-  const [noteDraft, setNoteDraft] = React.useState('');
-  const [documentTitle, setDocumentTitle] = React.useState<string | null>(null);
-  const [pageSummary, setPageSummary] = React.useState({ pageCount: 0, pageNumber: 1, scale: 1 });
-
-  const baseUrl = getLibraryServiceBaseUrl();
-  const profileId = profile?.id ?? 0;
-  const hasViewableDocument = profile ? resolveLearningWorkspaceHasViewableDocument(profile) : false;
-  const documentPath =
-    profile && hasViewableDocument ? `/api/v2/learning/profiles/${profile.id}/document` : null;
-  const documentUrl = resolveDocumentUrl(baseUrl, documentPath);
-  const readerStateQueryKey = ['learning-reader-state', profileId] as const;
-  const readerStateQuery = useQuery({
-    enabled:
-      workspaceGate.kind === 'ready' && Boolean(profile && documentUrl && hasViewableDocument),
-    queryFn: () => getLearningReaderState(profileId, token),
-    queryKey: readerStateQueryKey,
-  });
-
-  const progressMutation = useMutation({
-    mutationFn: (input: { pageNumber: number; scale: number }) =>
-      updateLearningReaderProgress(
-        profileId,
-        {
-          layoutMode: 'horizontal',
-          pageNumber: input.pageNumber,
-          scale: input.scale,
-        },
-        token
-      ),
-  });
-
-  const annotationMutation = useMutation({
-    mutationFn: (input: {
-      annotationType: LearningPdfAnnotationType;
-      color?: string | null;
-      noteText?: string | null;
-      target: ExplainTarget;
-    }) => {
-      const anchor = getAnchorFromTarget(input.target);
-      const selectedText = getSelectedTextFromTarget(input.target);
-      if (!anchor || !selectedText.trim()) {
-        throw new Error('annotation target is empty');
-      }
-
-      return createLearningPdfAnnotation(
-        profileId,
-        {
-          anchor,
-          annotationType: input.annotationType,
-          color: input.color ?? (input.annotationType === 'note' ? '#8ecae6' : '#f7d56e'),
-          noteText: input.noteText ?? null,
-          pageNumber: getPageNumberFromTarget(input.target),
-          selectedText,
-        },
-        token
-      );
-    },
-    onSuccess: (annotation) => {
-      queryClient.setQueryData<LearningReaderState | undefined>(
-        readerStateQueryKey,
-        (current) =>
-          current
-            ? {
-                ...current,
-                annotations: [
-                  ...current.annotations.filter((item) => item.id !== annotation.id),
-                  annotation,
-                ],
-              }
-            : current
-      );
-      setReaderCommand({
-        annotation,
-        type: 'applySelectionHighlight',
-      });
-    },
-  });
-
-  const quickExplainMutation = useMutation({
-    mutationFn: (input: LearningQuickExplainInput) =>
-      quickExplainLearningPdfSelection(profileId, input, token),
-    onSuccess: (result) => setQuickExplain(result),
-  });
+  const pdfRef = React.useRef<PdfRef>(null);
+  const [loadFailed, setLoadFailed] = React.useState(false);
+  const [displayMode, setDisplayMode] = React.useState<ReadingDisplayMode>('vertical');
+  const [loadProgress, setLoadProgress] = React.useState(0);
+  const [pageCount, setPageCount] = React.useState(0);
+  const [pageNumber, setPageNumber] = React.useState(1);
+  const [pageInput, setPageInput] = React.useState('1');
+  const [scale, setScale] = React.useState(1);
+  const [isControlsExpanded, setIsControlsExpanded] = React.useState(true);
 
   React.useEffect(() => {
-    setDocumentErrorState(null);
-    setDocumentErrorMessage(null);
-    setOutline([]);
-    setSelection(null);
-    setTapTarget(null);
-    setQuickExplain(null);
-    setPageSummary({ pageCount: 0, pageNumber: 1, scale: 1 });
+    setLoadFailed(false);
+    setLoadProgress(0);
+    setPageCount(0);
+    setPageNumber(1);
+    setPageInput('1');
+    setScale(1);
   }, [profile?.id]);
 
-  const openOutlineDrawer = React.useCallback(() => {
-    setDrawerMode('outline');
-    setDrawerOpen(true);
-  }, []);
-
-  const openAnnotationsDrawer = React.useCallback(() => {
-    setDrawerMode('annotations');
-    setDrawerOpen(true);
-  }, []);
-
-  const runSearch = React.useCallback(() => {
-    const query = searchQuery.trim();
-    if (!query) {
-      setReaderCommand({ type: 'clearSearch' });
-      setSearchResult(null);
-      return;
-    }
-
-    setReaderCommand({
-      query,
-      type: 'runSearch',
-    });
-  }, [searchQuery]);
-
-  const handleSelectionChanged = React.useCallback(
-    (payload: LearningPdfReaderSelectionPayload) => {
-      setSelection(payload);
-      setTapTarget(null);
-      setExplainTarget({ kind: 'selection', payload });
-      setQuickExplain(null);
+  const clampPage = React.useCallback(
+    (value: number) => {
+      const normalized = Number.isFinite(value) ? Math.trunc(value) : 1;
+      return clampNumber(normalized, 1, pageCount || normalized || 1);
     },
-    []
+    [pageCount]
   );
 
-  const handlePageTap = React.useCallback((payload: LearningPdfReaderPageTapPayload) => {
-    setTapTarget(payload);
-    setSelection(null);
-    setExplainTarget({ kind: 'tap', payload });
-    setQuickExplain(null);
+  const goToPage = React.useCallback(
+    (value: number) => {
+      const targetPage = clampPage(value);
+      pdfRef.current?.setPage(targetPage);
+      setPageNumber(targetPage);
+      setPageInput(String(targetPage));
+    },
+    [clampPage]
+  );
+
+  const submitPageInput = React.useCallback(() => {
+    goToPage(Number.parseInt(pageInput, 10));
+  }, [goToPage, pageInput]);
+
+  const updateScale = React.useCallback((nextScale: number) => {
+    setScale(Number(clampNumber(nextScale, MIN_SCALE, MAX_SCALE).toFixed(2)));
   }, []);
-
-  const handlePageChanged = React.useCallback(
-    (payload: { pageNumber: number; scale: number }) => {
-      setPageSummary((current) => ({
-        ...current,
-        pageNumber: payload.pageNumber,
-        scale: payload.scale,
-      }));
-      if (profileId > 0) {
-        progressMutation.mutate(payload);
-      }
-    },
-    [profileId, progressMutation]
-  );
-
-  const createAnnotationForTarget = React.useCallback(
-    (
-      target: ExplainTarget | null,
-      annotationType: LearningPdfAnnotationType,
-      noteText?: string | null
-    ) => {
-      if (!target) {
-        return;
-      }
-
-      annotationMutation.mutate({
-        annotationType,
-        noteText,
-        target,
-      });
-      if (annotationType === 'highlight') {
-        setSelection(null);
-      }
-    },
-    [annotationMutation]
-  );
-
-  const explainCurrentTarget = React.useCallback(
-    (target: ExplainTarget | null) => {
-      if (!target) {
-        return;
-      }
-
-      setExplainTarget(target);
-      setQuickExplain(null);
-      quickExplainMutation.mutate(getExplainInputFromTarget(target));
-    },
-    [quickExplainMutation]
-  );
-
-  const saveQuickExplainAsNote = React.useCallback(() => {
-    if (!explainTarget || !quickExplain?.answer) {
-      return;
-    }
-
-    createAnnotationForTarget(explainTarget, 'note', quickExplain.answer);
-  }, [createAnnotationForTarget, explainTarget, quickExplain?.answer]);
-
-  const openNoteModal = React.useCallback((target: ExplainTarget | null) => {
-    if (!target) {
-      return;
-    }
-
-    setExplainTarget(target);
-    setNoteDraft('');
-    setNoteModalOpen(true);
-  }, []);
-
-  const saveNoteDraft = React.useCallback(() => {
-    const noteText = noteDraft.trim();
-    if (!noteText || !explainTarget) {
-      return;
-    }
-
-    createAnnotationForTarget(explainTarget, 'note', noteText);
-    setNoteModalOpen(false);
-    setNoteDraft('');
-  }, [createAnnotationForTarget, explainTarget, noteDraft]);
-
-  const renderOutlineRow = React.useCallback(
-    (item: LearningPdfReaderOutlineItem & { depth: number }, index: number) => (
-      <Pressable
-        key={`${item.title}-${index}`}
-        onPress={() => {
-          if (item.pageNumber) {
-            setReaderCommand({
-              pageNumber: item.pageNumber,
-              type: 'goToPage',
-            });
-            setDrawerOpen(false);
-          }
-        }}
-        style={({ pressed }) => [
-          styles.drawerRow,
-          {
-            backgroundColor: pressed ? theme.colors.surfaceTint : 'transparent',
-            paddingLeft: 14 + item.depth * 14,
-          },
-        ]}>
-        <Text
-          numberOfLines={2}
-          style={{
-            color: theme.colors.text,
-            ...theme.typography.medium,
-            fontSize: 14,
-            lineHeight: 20,
-          }}>
-          {item.title}
-        </Text>
-        {item.pageNumber ? (
-          <Text style={[styles.drawerMeta, { color: theme.colors.textMuted }]}>
-            第 {item.pageNumber} 页
-          </Text>
-        ) : null}
-      </Pressable>
-    ),
-    [theme]
-  );
-
-  const renderAnnotationRow = React.useCallback(
-    (annotation: LearningPdfAnnotation) => (
-      <Pressable
-        key={annotation.id}
-        onPress={() => {
-          setReaderCommand({
-            annotationId: annotation.id,
-            type: 'focusAnnotation',
-          });
-          setDrawerOpen(false);
-        }}
-        style={({ pressed }) => [
-          styles.drawerRow,
-          {
-            backgroundColor: pressed ? theme.colors.surfaceTint : 'transparent',
-          },
-        ]}>
-        <Text
-          numberOfLines={3}
-          style={{
-            color: theme.colors.text,
-            ...theme.typography.medium,
-            fontSize: 14,
-            lineHeight: 20,
-          }}>
-          {annotation.noteText || annotation.selectedText}
-        </Text>
-        <Text style={[styles.drawerMeta, { color: theme.colors.textMuted }]}>
-          {annotation.annotationType === 'note' ? '笔记' : '高亮'} · 第 {annotation.pageNumber} 页
-        </Text>
-      </Pressable>
-    ),
-    [theme]
-  );
 
   if (workspaceGate.kind !== 'ready' || !profile) {
     return (
@@ -496,14 +136,18 @@ export default function LearningWorkspaceDocumentRoute() {
     );
   }
 
-  const readerState = readerStateQuery.data;
-  const shouldShowReader = Boolean(documentUrl && readerState && !documentErrorState);
-  const floatingChromeTop = insets.top + LEARNING_WORKSPACE_TOP_CHROME_OFFSET;
-  const actionTarget: ExplainTarget | null = selection
-    ? { kind: 'selection', payload: selection }
-    : tapTarget
-      ? { kind: 'tap', payload: tapTarget }
+  const baseUrl = getLibraryServiceBaseUrl();
+  const hasViewableDocument = resolveLearningWorkspaceHasViewableDocument(profile);
+  const documentSource =
+    baseUrl && hasViewableDocument
+      ? {
+          cache: true,
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          uri: `${baseUrl}/api/v2/learning/profiles/${profile.id}/document`,
+        }
       : null;
+  const floatingChromeTop = insets.top + LEARNING_WORKSPACE_TOP_CHROME_OFFSET;
+  const isHorizontalMode = displayMode === 'horizontal';
 
   return (
     <View
@@ -513,62 +157,42 @@ export default function LearningWorkspaceDocumentRoute() {
           backgroundColor: theme.colors.backgroundWorkspace,
         },
       ]}>
-      {shouldShowReader ? (
-        <LearningPdfReaderWebView
-          command={readerCommand}
-          documentUrl={documentUrl!}
-          onDocumentLoadFailed={(message) => {
-            setDocumentErrorState('generic');
-            setDocumentErrorMessage(message);
+      {documentSource && !loadFailed ? (
+        <Pdf
+          enableDoubleTapZoom
+          enablePaging={isHorizontalMode}
+          fitPolicy={2}
+          horizontal={isHorizontalMode}
+          maxScale={MAX_SCALE}
+          minScale={MIN_SCALE}
+          onError={() => setLoadFailed(true)}
+          onLoadComplete={(numberOfPages) => {
+            const safePageCount = Math.max(numberOfPages, 1);
+            const nextPage = clampNumber(pageNumber, 1, safePageCount);
+            setPageCount(safePageCount);
+            setPageNumber(nextPage);
+            setPageInput(String(nextPage));
           }}
-          onDocumentLoaded={(payload) => {
-            setDocumentTitle(payload.title?.trim() || profile.title);
-            setPageSummary((current) => ({
-              ...current,
-              pageCount: payload.pageCount,
-            }));
+          onLoadProgress={(percent) => setLoadProgress(clampNumber(percent, 0, 1))}
+          onPageChanged={(page, numberOfPages) => {
+            setPageCount(numberOfPages);
+            setPageNumber(page);
+            setPageInput(String(page));
           }}
-          onOutlineLoaded={setOutline}
-          onPageChanged={handlePageChanged}
-          onPageTap={handlePageTap}
-          onRuntimeError={(message) => {
-            setDocumentErrorMessage(message);
-            setDocumentErrorState(message.includes('404') ? 'document_missing' : 'generic');
+          onPageSingleTap={(page) => {
+            setPageNumber(page);
+            setPageInput(String(page));
           }}
-          onSearchResultChanged={setSearchResult}
-          onSelectionChanged={handleSelectionChanged}
-          readerState={readerState}
-          token={token}
-        />
-      ) : documentUrl && readerStateQuery.isLoading ? (
-        <ReaderBusyState label="正在同步阅读进度与批注..." />
-      ) : readerStateQuery.error ? (
-        <DocumentState
-          body={getLibraryErrorMessage(
-            readerStateQuery.error,
-            '阅读器状态同步失败，请确认后端服务与登录状态。'
-          )}
-          title="阅读器初始化失败"
-        />
-      ) : documentErrorState === 'document_missing' ? (
-        <DocumentState
-          body="这个导学本记录了 PDF，但后端当前找不到对应文件。请重新生成资料或补齐服务端 artifacts。"
-          title="资料 PDF 缺失"
-        />
-      ) : documentErrorState === 'generic' ? (
-        <DocumentState
-          body={
-            documentErrorMessage
-              ? `PDF 阅读器初始化失败：${documentErrorMessage}`
-              : 'PDF 阅读器初始化失败。请重试；如果持续失败，再检查当前开发包是否已重新构建并包含 WebView 模块。'
-          }
-          title="PDF 打开失败"
+          onScaleChanged={updateScale}
+          page={pageNumber}
+          ref={pdfRef}
+          scale={scale}
+          source={documentSource}
+          style={styles.viewer}
+          trustAllCerts={false}
         />
       ) : (
-        <DocumentState
-          body="当前导学本还没有可直接打开的 PDF 原件，后续补齐后会在这里展示。"
-          title="暂不支持查看资料"
-        />
+        <UnsupportedDocumentState />
       )}
 
       <View
@@ -582,270 +206,163 @@ export default function LearningWorkspaceDocumentRoute() {
         />
       </View>
 
-      {shouldShowReader ? (
-        <View
-          style={[
-            styles.readerToolbar,
-            {
-              backgroundColor: theme.colors.surfaceTint,
-              borderColor: theme.colors.borderSoft,
-              top: floatingChromeTop,
-            },
-          ]}>
-          <Pressable onPress={openOutlineDrawer} style={styles.toolbarButton}>
-            <Text style={[styles.toolbarButtonText, { color: theme.colors.text }]}>目录</Text>
-          </Pressable>
-          <Pressable onPress={() => setSearchOpen((value) => !value)} style={styles.toolbarButton}>
-            <Text style={[styles.toolbarButtonText, { color: theme.colors.text }]}>搜索</Text>
-          </Pressable>
-          <Pressable onPress={openAnnotationsDrawer} style={styles.toolbarButton}>
-            <Text style={[styles.toolbarButtonText, { color: theme.colors.text }]}>笔记</Text>
-          </Pressable>
-        </View>
+      {documentSource && !loadFailed ? (
+        <FloatingReaderControls
+          displayMode={displayMode}
+          isExpanded={isControlsExpanded}
+          loadProgress={loadProgress}
+          onGoToPage={goToPage}
+          onSetDisplayMode={setDisplayMode}
+          onSetExpanded={setIsControlsExpanded}
+          onSetPageInput={setPageInput}
+          onSubmitPageInput={submitPageInput}
+          onUpdateScale={updateScale}
+          pageCount={pageCount}
+          pageInput={pageInput}
+          pageNumber={pageNumber}
+          scale={scale}
+        />
       ) : null}
+    </View>
+  );
+}
 
-      {shouldShowReader ? (
-        <View
-          pointerEvents="none"
-          style={[styles.pagePill, { bottom: insets.bottom + 18 }]}>
-          <Text
-            style={{
-              color: theme.colors.text,
-              ...theme.typography.medium,
-              fontSize: 12,
-            }}>
-            {documentTitle || profile.title} · {pageSummary.pageNumber}
-            {pageSummary.pageCount ? ` / ${pageSummary.pageCount}` : ''} 页
-          </Text>
-        </View>
-      ) : null}
+function FloatingReaderControls({
+  displayMode,
+  isExpanded,
+  onSetDisplayMode,
+  onSetExpanded,
+  pageCount,
+  pageInput,
+  pageNumber,
+  scale,
+  onGoToPage,
+  onSetPageInput,
+  onSubmitPageInput,
+  onUpdateScale,
+  loadProgress,
+}: {
+  displayMode: ReadingDisplayMode;
+  isExpanded: boolean;
+  onSetDisplayMode: (mode: ReadingDisplayMode) => void;
+  onSetExpanded: (expanded: boolean) => void;
+  pageCount: number;
+  pageInput: string;
+  pageNumber: number;
+  scale: number;
+  onGoToPage: (page: number) => void;
+  onSetPageInput: (input: string) => void;
+  onSubmitPageInput: () => void;
+  onUpdateScale: (scale: number) => void;
+  loadProgress: number;
+}) {
+  const { theme } = useAppTheme();
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 20);
 
-      {searchOpen && shouldShowReader ? (
-        <View
-          style={[
-            styles.searchPanel,
-            {
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.borderSoft,
-              top: floatingChromeTop + 58,
-            },
-          ]}>
-          <TextInput
-            onChangeText={setSearchQuery}
-            onSubmitEditing={runSearch}
-            placeholder="搜索当前 PDF"
-            placeholderTextColor={theme.colors.textSoft}
-            returnKeyType="search"
-            style={[
-              styles.searchInput,
-              {
-                borderColor: theme.colors.borderSoft,
-                color: theme.colors.text,
-              },
-            ]}
-            value={searchQuery}
+  // Scrubber variables
+  const TRACK_HEIGHT = 220;
+  const progress = pageCount > 1 ? (pageNumber - 1) / (pageCount - 1) : 0;
+  const bubblePosition = progress * (TRACK_HEIGHT - 32);
+
+  return (
+    <View
+      pointerEvents="box-none"
+      style={[styles.floatingControlsWrapper, { bottom: bottomInset }]}>
+      
+      {/* Vertical Page Track (Upwards) */}
+      {isExpanded && (
+        <Animated.View
+          entering={FadeInDown.springify().damping(22).stiffness(240).delay(50)}
+          exiting={FadeOutDown.duration(200)}
+          style={[styles.trackWrapper, { height: TRACK_HEIGHT, bottom: 72 }]}>
+          <GlassSurface intensity={95} style={styles.scrubberTrack}>
+            <View style={[styles.trackLine, { backgroundColor: theme.colors.borderSoft }]} />
+            <Animated.View 
+              layout={Layout.springify().damping(25).stiffness(200)}
+              style={[
+                styles.pageBubble, 
+                { 
+                  transform: [{ translateY: bubblePosition }],
+                  backgroundColor: theme.colors.surfaceStrong,
+                  boxShadow: theme.shadows.medium,
+                }
+              ]}>
+              <Text style={[styles.bubbleText, { color: theme.colors.text }]}>{pageNumber}</Text>
+            </Animated.View>
+          </GlassSurface>
+        </Animated.View>
+      )}
+
+      {/* Horizontal Settings Tray (Leftwards) */}
+      {isExpanded && (
+        <Animated.View
+          entering={SlideInRight.springify().damping(22).stiffness(240)}
+          exiting={SlideOutRight.duration(200)}
+          style={[styles.trayWrapper, { right: 72 }]}>
+          <GlassSurface intensity={95} style={styles.settingsTray}>
+            <View style={styles.traySection}>
+              <Pressable
+                onPress={() => onUpdateScale(scale - SCALE_STEP)}
+                style={({ pressed }) => [styles.trayIconBtn, pressed && { opacity: 0.6 }]}>
+                <Minimize color={theme.colors.text} size={18} />
+              </Pressable>
+              
+              <View style={styles.scaleBox}>
+                <Text style={[styles.scaleLabelMini, { color: theme.colors.primaryStrong }]}>{formatScale(scale)}</Text>
+              </View>
+
+              <Pressable
+                onPress={() => onUpdateScale(scale + SCALE_STEP)}
+                style={({ pressed }) => [styles.trayIconBtn, pressed && { opacity: 0.6 }]}>
+                <Maximize color={theme.colors.text} size={18} />
+              </Pressable>
+            </View>
+
+            <View style={[styles.verticalDivider, { backgroundColor: theme.colors.borderSoft }]} />
+
+            <View style={styles.traySection}>
+              {(['vertical', 'horizontal'] as const).map((mode) => {
+                const active = displayMode === mode;
+                const Icon = mode === 'vertical' ? VerticalIcon : HorizontalIcon;
+                return (
+                  <Pressable
+                    key={mode}
+                    onPress={() => onSetDisplayMode(mode)}
+                    style={[
+                      styles.modeIconBtn, 
+                      active && { backgroundColor: theme.colors.surfaceAccent, boxShadow: theme.shadows.small }
+                    ]}>
+                    <Icon color={active ? theme.colors.primaryStrong : theme.colors.textMuted} size={18} />
+                  </Pressable>
+                );
+              })}
+            </View>
+          </GlassSurface>
+        </Animated.View>
+      )}
+
+      {/* Floating Action Button (Main Trigger) */}
+      <Pressable
+        onPress={() => onSetExpanded(!isExpanded)}
+        style={({ pressed }) => [
+          styles.fabCrystal,
+          { 
+            backgroundColor: isExpanded ? theme.colors.primaryStrong : theme.colors.surface,
+            borderColor: 'rgba(255,255,255,0.2)',
+            opacity: pressed ? 0.85 : 1,
+            boxShadow: theme.shadows.card,
+            transform: [{ scale: pressed ? 0.94 : 1 }]
+          }
+        ]}>
+        <Animated.View style={{ transform: [{ rotate: isExpanded ? '135deg' : '0deg' }] }}>
+          <Settings2 
+            color={isExpanded ? '#fff' : theme.colors.text} 
+            size={28} 
+            strokeWidth={2.5} 
           />
-          <Pressable onPress={runSearch} style={styles.primaryActionButton}>
-            <Text style={styles.primaryActionText}>查找</Text>
-          </Pressable>
-          {searchResult ? (
-            <Text style={[styles.searchResultText, { color: theme.colors.textMuted }]}>
-              {searchResult.total > 0
-                ? `找到 ${searchResult.total} 处，当前第 ${searchResult.activeIndex + 1} 处`
-                : '未找到匹配内容'}
-            </Text>
-          ) : null}
-        </View>
-      ) : null}
-
-      {actionTarget ? (
-        <View
-          style={[
-            styles.selectionBar,
-            {
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.borderSoft,
-              bottom: insets.bottom + 62,
-            },
-          ]}>
-          <Text
-            numberOfLines={2}
-            style={{
-              color: theme.colors.text,
-              ...theme.typography.medium,
-              flex: 1,
-              fontSize: 13,
-              lineHeight: 18,
-            }}>
-            {getSelectedTextFromTarget(actionTarget)}
-          </Text>
-          <Pressable
-            onPress={() => explainCurrentTarget(actionTarget)}
-            style={styles.secondaryActionButton}>
-            <Text style={[styles.secondaryActionText, { color: theme.colors.primaryStrong }]}>
-              快速解释
-            </Text>
-          </Pressable>
-          {actionTarget.kind === 'selection' ? (
-            <Pressable
-              onPress={() => createAnnotationForTarget(actionTarget, 'highlight')}
-              style={styles.secondaryActionButton}>
-              <Text style={[styles.secondaryActionText, { color: theme.colors.primaryStrong }]}>
-                高亮
-              </Text>
-            </Pressable>
-          ) : null}
-          <Pressable
-            onPress={() => openNoteModal(actionTarget)}
-            style={styles.secondaryActionButton}>
-            <Text style={[styles.secondaryActionText, { color: theme.colors.primaryStrong }]}>
-              笔记
-            </Text>
-          </Pressable>
-        </View>
-      ) : null}
-
-      {(quickExplain || quickExplainMutation.isPending) && explainTarget ? (
-        <View
-          style={[
-            styles.explainPanel,
-            {
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.borderSoft,
-              bottom: insets.bottom + 128,
-            },
-          ]}>
-          <Text
-            style={{
-              color: theme.colors.text,
-              ...theme.typography.bold,
-              fontSize: 15,
-              lineHeight: 20,
-            }}>
-            快速解释
-          </Text>
-          <Text
-            selectable
-            style={{
-              color: theme.colors.textMuted,
-              ...theme.typography.body,
-              fontSize: 14,
-              lineHeight: 21,
-            }}>
-            {quickExplainMutation.isPending ? '正在生成解释...' : quickExplain?.answer}
-          </Text>
-          {quickExplain?.modelName ? (
-            <Text style={[styles.drawerMeta, { color: theme.colors.textSoft }]}>
-              模型：{quickExplain.modelName}
-            </Text>
-          ) : null}
-          <View style={styles.inlineActions}>
-            <Pressable
-              disabled={!quickExplain?.answer}
-              onPress={saveQuickExplainAsNote}
-              style={styles.primaryActionButton}>
-              <Text style={styles.primaryActionText}>存为笔记</Text>
-            </Pressable>
-            <Pressable onPress={() => setQuickExplain(null)} style={styles.secondaryActionButton}>
-              <Text style={[styles.secondaryActionText, { color: theme.colors.textMuted }]}>
-                关闭
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      ) : null}
-
-      <Modal
-        animationType="fade"
-        onRequestClose={() => setDrawerOpen(false)}
-        transparent
-        visible={drawerOpen}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setDrawerOpen(false)} />
-        <View
-          style={[
-            styles.drawerPanel,
-            {
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.borderSoft,
-              paddingTop: insets.top + 18,
-            },
-          ]}>
-          <Text
-            style={{
-              color: theme.colors.text,
-              ...theme.typography.bold,
-              fontSize: 20,
-              lineHeight: 26,
-            }}>
-            {drawerMode === 'outline' ? '文档目录' : '高亮与笔记'}
-          </Text>
-          <ScrollView contentContainerStyle={styles.drawerList}>
-            {drawerMode === 'outline'
-              ? flattenOutline(outline).map(renderOutlineRow)
-              : readerState?.annotations.map(renderAnnotationRow)}
-            {drawerMode === 'outline' && outline.length === 0 ? (
-              <Text style={[styles.emptyDrawerText, { color: theme.colors.textMuted }]}>
-                这份 PDF 暂未解析出目录。
-              </Text>
-            ) : null}
-            {drawerMode === 'annotations' && readerState?.annotations.length === 0 ? (
-              <Text style={[styles.emptyDrawerText, { color: theme.colors.textMuted }]}>
-                还没有高亮或笔记。
-              </Text>
-            ) : null}
-          </ScrollView>
-        </View>
-      </Modal>
-
-      <Modal
-        animationType="fade"
-        onRequestClose={() => setNoteModalOpen(false)}
-        transparent
-        visible={noteModalOpen}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setNoteModalOpen(false)} />
-        <View
-          style={[
-            styles.noteModal,
-            {
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.borderSoft,
-            },
-          ]}>
-          <Text
-            style={{
-              color: theme.colors.text,
-              ...theme.typography.bold,
-              fontSize: 18,
-              lineHeight: 24,
-            }}>
-            添加笔记
-          </Text>
-          <TextInput
-            multiline
-            onChangeText={setNoteDraft}
-            placeholder="写下这段的理解、疑问或复习提示"
-            placeholderTextColor={theme.colors.textSoft}
-            style={[
-              styles.noteInput,
-              {
-                borderColor: theme.colors.borderSoft,
-                color: theme.colors.text,
-              },
-            ]}
-            value={noteDraft}
-          />
-          <View style={styles.inlineActions}>
-            <Pressable onPress={saveNoteDraft} style={styles.primaryActionButton}>
-              <Text style={styles.primaryActionText}>保存</Text>
-            </Pressable>
-            <Pressable onPress={() => setNoteModalOpen(false)} style={styles.secondaryActionButton}>
-              <Text style={[styles.secondaryActionText, { color: theme.colors.textMuted }]}>
-                取消
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+        </Animated.View>
+      </Pressable>
     </View>
   );
 }
@@ -854,39 +371,41 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  drawerList: {
-    gap: 8,
-    paddingBottom: 32,
-    paddingTop: 16,
+  controlButton: {
+    alignItems: 'center',
+    borderRadius: 14,
+    justifyContent: 'center',
+    minHeight: 36,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
-  drawerMeta: {
-    fontSize: 12,
+  controlButtonDisabled: {
+    opacity: 0.36,
+  },
+  controlButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
     lineHeight: 17,
   },
-  drawerPanel: {
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    bottom: 0,
-    paddingHorizontal: 16,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    width: '82%',
+  controlRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
   },
-  drawerRow: {
-    borderRadius: 14,
+  displayModeControl: {
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
     gap: 4,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    padding: 4,
+    position: 'absolute',
+    right: 16,
+    zIndex: 120,
   },
   emptyBody: {
     fontSize: 14,
     lineHeight: 21,
     textAlign: 'center',
-  },
-  emptyDrawerText: {
-    fontSize: 14,
-    lineHeight: 20,
-    padding: 14,
   },
   emptyState: {
     alignItems: 'center',
@@ -901,138 +420,188 @@ const styles = StyleSheet.create({
     lineHeight: 28,
     textAlign: 'center',
   },
-  explainPanel: {
-    borderRadius: 22,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: 10,
-    left: 14,
-    padding: 14,
-    position: 'absolute',
-    right: 14,
-    zIndex: 160,
-  },
   floatingChrome: {
     left: 16,
     position: 'absolute',
     zIndex: 120,
   },
-  inlineActions: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(22, 18, 14, 0.32)',
-  },
-  noteInput: {
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    minHeight: 120,
-    padding: 12,
-    textAlignVertical: 'top',
-  },
-  noteModal: {
-    borderRadius: 24,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: 14,
-    left: 18,
-    padding: 16,
-    position: 'absolute',
-    right: 18,
-    top: '26%',
-  },
-  pagePill: {
-    alignSelf: 'center',
-    backgroundColor: 'rgba(255, 253, 248, 0.84)',
-    borderRadius: 999,
-    paddingHorizontal: 13,
-    paddingVertical: 8,
-    position: 'absolute',
-    zIndex: 80,
-  },
-  primaryActionButton: {
-    backgroundColor: '#2d4c3c',
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  primaryActionText: {
-    color: '#fffdf8',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  readerBusyState: {
-    alignItems: 'center',
-    flex: 1,
-    gap: 10,
-    justifyContent: 'center',
-  },
-  readerToolbar: {
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    gap: 4,
-    padding: 5,
-    position: 'absolute',
-    right: 16,
-    zIndex: 120,
-  },
-  searchInput: {
+  pageInput: {
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    flex: 1,
     fontSize: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  searchPanel: {
-    alignItems: 'center',
-    borderRadius: 20,
-    borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    gap: 8,
-    left: 16,
-    padding: 10,
-    position: 'absolute',
-    right: 16,
-    zIndex: 130,
-  },
-  searchResultText: {
-    bottom: -22,
-    fontSize: 12,
-    left: 12,
-    position: 'absolute',
-  },
-  secondaryActionButton: {
-    alignItems: 'center',
-    borderRadius: 999,
-    justifyContent: 'center',
+    lineHeight: 18,
+    minHeight: 38,
+    minWidth: 58,
     paddingHorizontal: 10,
     paddingVertical: 8,
+    textAlign: 'center',
   },
-  secondaryActionText: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  selectionBar: {
-    alignItems: 'center',
+  readerControls: {
     borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    gap: 8,
+    gap: 10,
     left: 14,
-    padding: 10,
+    padding: 12,
     position: 'absolute',
     right: 14,
-    zIndex: 150,
+    zIndex: 130,
   },
-  toolbarButton: {
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+  segmentButton: {
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    minWidth: 48,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
   },
-  toolbarButtonText: {
+  segmentText: {
     fontSize: 13,
+    lineHeight: 17,
+    textAlign: 'center',
+  },
+  statusRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  statusText: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  viewer: {
+    flex: 1,
+  },
+  floatingControlsWrapper: {
+    paddingHorizontal: 16,
+    position: 'absolute',
+    right: 0,
+    zIndex: 1000,
+    alignItems: 'flex-end',
+    justifyContent: 'flex-end',
+    width: 260,
+    height: 400,
+  },
+  fabCrystal: {
+    borderRadius: 30,
+    height: 60,
+    width: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+  },
+  trackWrapper: {
+    position: 'absolute',
+    right: 16,
+  },
+  scrubberTrack: {
+    width: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    padding: 6,
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  expandedSection: {
+    gap: 8,
+  },
+  sectionTitle: {
+    fontSize: 10,
     fontWeight: '700',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    width: '100%',
+  },
+  paginationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  iconButtonSmall: {
+    borderRadius: 12,
+    height: 36,
+    width: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pageIndicatorBox: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  pageInputCompact: {
+    fontSize: 16,
+    textAlign: 'center',
+    minWidth: 24,
+    padding: 0,
+  },
+  pageTotalText: {
+    fontSize: 14,
+  },
+  jumpButton: {
+    alignItems: 'center',
+    borderRadius: 12,
+    justifyContent: 'center',
+    minHeight: 36,
+    paddingHorizontal: 10,
+  },
+  jumpButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  modeSegmentContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0,0,0,0.04)',
+    borderRadius: 16,
+    padding: 3,
+    gap: 2,
+  },
+  modeSegmentButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 13,
+  },
+  modeSegmentText: {
+    fontSize: 12,
+  },
+  scaleHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  scaleValueText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  scaleControlRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  scaleActionBtn: {
+    flex: 1,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.04)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scaleResetBtn: {
+    flex: 1.5,
+    flexDirection: 'row',
+  },
+  resetText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
 });

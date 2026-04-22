@@ -13,6 +13,7 @@ import LearningWorkspaceStudyRoute from '@/app/learning/[profileId]/(workspace)/
 import {
   buildOptimisticUserHistoryMessage,
   LearningWorkspaceProvider,
+  resolveScopedLearningWorkspaceState,
   useLearningWorkspaceScreen,
 } from '@/components/learning/learning-workspace-provider';
 import {
@@ -524,6 +525,50 @@ describe('learning workspace routes', () => {
     expect(userMessage.role).toBe('user');
     expect(userMessage.learningSessionId).toBe(301);
     expect(userMessage.content).toBe('帮我总结这一节的核心线索');
+  });
+
+  it('drops stale conversation state when the workspace session no longer matches the current notebook', () => {
+    const scopedState = resolveScopedLearningWorkspaceState({
+      expectedSessionKind: 'explore',
+      latestEvaluation: {
+        masteryScore: 0.82,
+        missingConcepts: [],
+        passed: true,
+        reasoning: '旧导学本的评估',
+        stepIndex: 0,
+      },
+      latestSessionSignal: {
+        completedStepsCount: 1,
+        currentStepIndex: 1,
+        currentStepTitle: '旧步骤',
+        progressLabel: '1 / 2 步',
+        status: 'active',
+        transitionLabel: '推进到旧步骤',
+      },
+      latestStatus: {
+        label: '旧导学本状态',
+        tone: 'warning',
+      },
+      messages: [
+        {
+          cards: [],
+          id: 'history-assistant-1',
+          presentation: null,
+          role: 'assistant',
+          streaming: false,
+          text: '这是另一个导学本里的回答',
+        },
+      ],
+      profileId: 202,
+      storeSessionId: 301,
+      workspaceSession: createActiveSession(),
+    });
+
+    expect(scopedState.workspaceSession).toBeNull();
+    expect(scopedState.renderedMessages).toEqual([]);
+    expect(scopedState.latestEvaluation).toBeNull();
+    expect(scopedState.latestSessionSignal).toBeNull();
+    expect(scopedState.latestStatus).toBeNull();
   });
 
   it('redirects the entry route to explore by default', () => {

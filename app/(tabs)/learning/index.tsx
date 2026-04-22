@@ -1,7 +1,16 @@
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
-import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { toast } from 'sonner-native';
 
 import { EditorialIllustration } from '@/components/base/editorial-illustration';
@@ -16,11 +25,14 @@ import { ToolbarHeaderRow } from '@/components/navigation/toolbar-header-row';
 import { ToolbarProfileAction } from '@/components/navigation/toolbar-profile-action';
 import { useHeaderChromeVisibility } from '@/hooks/use-header-chrome-visibility';
 import {
+  useDeleteLearningProfileMutation,
   useLearningProfilesQuery,
   useLearningSessionsQuery,
+  useRenameLearningProfileMutation,
   useUploadLearningProfileMutation,
 } from '@/hooks/use-library-app-data';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import type { LearningProfile } from '@/lib/api';
 import { getLibraryErrorMessage } from '@/lib/api/client';
 import { appArtwork } from '@/lib/app/artwork';
 import { useProfileSheet } from '@/providers/profile-sheet-provider';
@@ -77,9 +89,14 @@ export default function LearningIndexRoute() {
   const profilesQuery = useLearningProfilesQuery();
   const sessionsQuery = useLearningSessionsQuery();
   const uploadProfileMutation = useUploadLearningProfileMutation();
+  const renameProfileMutation = useRenameLearningProfileMutation();
+  const deleteProfileMutation = useDeleteLearningProfileMutation();
   const [activeFilter, setActiveFilter] =
     React.useState<(typeof notebookFilters)[number]>('全部');
   const [isCreateSheetOpen, setIsCreateSheetOpen] = React.useState(false);
+  const [profileToRename, setProfileToRename] = React.useState<LearningProfile | null>(null);
+  const [renameDraftTitle, setRenameDraftTitle] = React.useState('');
+  const [profileToDelete, setProfileToDelete] = React.useState<LearningProfile | null>(null);
   const { onScroll, showHeaderChrome } = useHeaderChromeVisibility();
   const isIos = Platform.OS === 'ios';
 
@@ -156,6 +173,56 @@ export default function LearningIndexRoute() {
       router.push(`/learning/${profile.id}/explore`);
     } catch (error) {
       toast.error(getLibraryErrorMessage(error, '创建导学本失败，请稍后再试。'));
+    }
+  };
+
+  const openRenameProfile = (profile: LearningProfile) => {
+    setProfileToRename(profile);
+    setRenameDraftTitle(profile.title);
+  };
+
+  const closeRenameProfile = () => {
+    setProfileToRename(null);
+    setRenameDraftTitle('');
+  };
+
+  const handleRenameProfile = async () => {
+    const title = renameDraftTitle.trim();
+    if (!profileToRename || !title || renameProfileMutation.isPending) {
+      return;
+    }
+
+    try {
+      await renameProfileMutation.mutateAsync({
+        profileId: profileToRename.id,
+        title,
+      });
+      closeRenameProfile();
+      toast.success('导学本已改名');
+    } catch (error) {
+      toast.error(getLibraryErrorMessage(error, '改名失败，请稍后再试。'));
+    }
+  };
+
+  const openDeleteProfile = (profile: LearningProfile) => {
+    setProfileToDelete(profile);
+  };
+
+  const closeDeleteProfile = () => {
+    setProfileToDelete(null);
+  };
+
+  const handleDeleteProfile = async () => {
+    if (!profileToDelete || deleteProfileMutation.isPending) {
+      return;
+    }
+
+    try {
+      await deleteProfileMutation.mutateAsync(profileToDelete.id);
+      closeDeleteProfile();
+      toast.success('导学本已删除');
+    } catch (error) {
+      toast.error(getLibraryErrorMessage(error, '删除导学本失败，请稍后再试。'));
     }
   };
 
@@ -327,6 +394,8 @@ export default function LearningIndexRoute() {
                 <LearningNotebookCard
                   key={`recent-${profile.id}`}
                   href={`/learning/${profile.id}/explore`}
+                  onDelete={openDeleteProfile}
+                  onRename={openRenameProfile}
                   profile={profile}
                   session={sessionByProfileId.get(profile.id) ?? null}
                   variant="list"
@@ -360,6 +429,231 @@ export default function LearningIndexRoute() {
         }
         visible={isCreateSheetOpen}
       />
+
+      <Modal
+        animationType="fade"
+        onRequestClose={closeRenameProfile}
+        transparent
+        visible={profileToRename !== null}>
+        <Pressable
+          onPress={closeRenameProfile}
+          style={{
+            backgroundColor: 'rgba(26, 24, 21, 0.48)',
+            flex: 1,
+            padding: theme.spacing.lg,
+          }}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{
+              flex: 1,
+              justifyContent: 'center',
+            }}>
+            <Pressable>
+              <View
+                style={{
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.borderSoft,
+                  borderRadius: theme.radii.xl,
+                  borderWidth: 1,
+                  gap: theme.spacing.lg,
+                  padding: theme.spacing.xl,
+                }}
+                testID="learning-profile-rename-modal">
+                <View style={{ gap: theme.spacing.xs }}>
+                  <Text
+                    style={{
+                      color: theme.colors.text,
+                      ...theme.typography.heading,
+                      fontSize: 22,
+                      letterSpacing: -0.4,
+                    }}>
+                    改名导学本
+                  </Text>
+                  <Text
+                    style={{
+                      color: theme.colors.textMuted,
+                      ...theme.typography.body,
+                      fontSize: 13,
+                      lineHeight: 19,
+                    }}>
+                    只会改列表里的导学本名称，不会影响原始资料。
+                  </Text>
+                </View>
+
+                <TextInput
+                  autoFocus
+                  onChangeText={setRenameDraftTitle}
+                  placeholder="输入新的导学本名称"
+                  placeholderTextColor={theme.colors.textSoft}
+                  selectTextOnFocus
+                  style={{
+                    backgroundColor: theme.colors.surfaceMuted,
+                    borderColor: theme.colors.borderSoft,
+                    borderRadius: theme.radii.lg,
+                    borderWidth: 1,
+                    color: theme.colors.text,
+                    ...theme.typography.semiBold,
+                    fontSize: 16,
+                    paddingHorizontal: theme.spacing.lg,
+                    paddingVertical: 14,
+                  }}
+                  testID="learning-profile-rename-input"
+                  value={renameDraftTitle}
+                />
+
+                <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={closeRenameProfile}
+                    style={({ pressed }) => ({
+                      flex: 1,
+                      opacity: pressed ? 0.9 : 1,
+                    })}
+                    testID="learning-profile-rename-cancel">
+                    <View
+                      style={{
+                        alignItems: 'center',
+                        backgroundColor: theme.colors.surface,
+                        borderColor: theme.colors.borderStrong,
+                        borderRadius: theme.radii.pill,
+                        borderWidth: 1,
+                        paddingVertical: 13,
+                      }}>
+                      <Text style={{ color: theme.colors.text, ...theme.typography.semiBold, fontSize: 14 }}>
+                        取消
+                      </Text>
+                    </View>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={!renameDraftTitle.trim() || renameProfileMutation.isPending}
+                    onPress={handleRenameProfile}
+                    style={({ pressed }) => ({
+                      flex: 1,
+                      opacity: !renameDraftTitle.trim() || renameProfileMutation.isPending ? 0.48 : pressed ? 0.9 : 1,
+                    })}
+                    testID="learning-profile-rename-submit">
+                    <View
+                      style={{
+                        alignItems: 'center',
+                        backgroundColor: theme.colors.primaryStrong,
+                        borderRadius: theme.radii.pill,
+                        paddingVertical: 13,
+                      }}>
+                      <Text style={{ color: '#FFFFFF', ...theme.typography.semiBold, fontSize: 14 }}>
+                        {renameProfileMutation.isPending ? '保存中…' : '保存'}
+                      </Text>
+                    </View>
+                  </Pressable>
+                </View>
+              </View>
+            </Pressable>
+          </KeyboardAvoidingView>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={closeDeleteProfile}
+        transparent
+        visible={profileToDelete !== null}>
+        <Pressable
+          onPress={closeDeleteProfile}
+          style={{
+            backgroundColor: 'rgba(26, 24, 21, 0.48)',
+            flex: 1,
+            padding: theme.spacing.lg,
+          }}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{
+              flex: 1,
+              justifyContent: 'center',
+            }}>
+            <Pressable>
+              <View
+                style={{
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.borderSoft,
+                  borderRadius: theme.radii.xl,
+                  borderWidth: 1,
+                  gap: theme.spacing.lg,
+                  padding: theme.spacing.xl,
+                }}
+                testID="learning-profile-delete-modal">
+                <View style={{ gap: theme.spacing.xs }}>
+                  <Text
+                    style={{
+                      color: theme.colors.text,
+                      ...theme.typography.heading,
+                      fontSize: 22,
+                      letterSpacing: -0.4,
+                    }}>
+                    删除导学本
+                  </Text>
+                  <Text
+                    style={{
+                      color: theme.colors.textMuted,
+                      ...theme.typography.body,
+                      fontSize: 13,
+                      lineHeight: 19,
+                    }}>
+                    {profileToDelete
+                      ? `“${profileToDelete.title}” 会从最近打开和导学工作区里移除。`
+                      : '这个导学本会从最近打开和导学工作区里移除。'}
+                  </Text>
+                </View>
+
+                <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={closeDeleteProfile}
+                    style={({ pressed }) => ({
+                      flex: 1,
+                      opacity: pressed ? 0.9 : 1,
+                    })}
+                    testID="learning-profile-delete-cancel">
+                    <View
+                      style={{
+                        alignItems: 'center',
+                        backgroundColor: theme.colors.surface,
+                        borderColor: theme.colors.borderStrong,
+                        borderRadius: theme.radii.pill,
+                        borderWidth: 1,
+                        paddingVertical: 13,
+                      }}>
+                      <Text style={{ color: theme.colors.text, ...theme.typography.semiBold, fontSize: 14 }}>
+                        取消
+                      </Text>
+                    </View>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={deleteProfileMutation.isPending}
+                    onPress={handleDeleteProfile}
+                    style={({ pressed }) => ({
+                      flex: 1,
+                      opacity: deleteProfileMutation.isPending ? 0.48 : pressed ? 0.9 : 1,
+                    })}
+                    testID="learning-profile-delete-confirm">
+                    <View
+                      style={{
+                        alignItems: 'center',
+                        backgroundColor: theme.colors.destructive,
+                        borderRadius: theme.radii.pill,
+                        paddingVertical: 13,
+                      }}>
+                      <Text style={{ color: '#FFFFFF', ...theme.typography.semiBold, fontSize: 14 }}>
+                        {deleteProfileMutation.isPending ? '删除中…' : '确认删除'}
+                      </Text>
+                    </View>
+                  </Pressable>
+                </View>
+              </View>
+            </Pressable>
+          </KeyboardAvoidingView>
+        </Pressable>
+      </Modal>
     </>
   );
 }

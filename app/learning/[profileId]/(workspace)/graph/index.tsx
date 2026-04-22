@@ -2,13 +2,11 @@ import { Stack } from 'expo-router';
 import React from 'react';
 import {
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   Host as ComposeHost,
@@ -20,7 +18,6 @@ import {
   Group,
   Host as SwiftHost,
   RNHostView as SwiftRNHostView,
-  ScrollView as SwiftScrollView,
 } from '@expo/ui/swift-ui';
 import {
   interactiveDismissDisabled,
@@ -28,37 +25,30 @@ import {
   presentationDragIndicator,
 } from '@expo/ui/swift-ui/modifiers';
 import { useQuery } from '@tanstack/react-query';
-import Animated, { FadeInDown, FadeInUp, Layout, useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import Animated, { FadeInUp, Layout } from 'react-native-reanimated';
 
 import { GlassSurface } from '@/components/base/glass-surface';
 import { LearningGraphWebView } from '@/components/learning/learning-graph-webview';
 import { LearningRichText } from '@/components/learning/learning-rich-text';
 import { useLearningWorkspaceScreen } from '@/components/learning/learning-workspace-provider';
 import {
-  LEARNING_WORKSPACE_FLOATING_BUTTON_SIZE,
-  LEARNING_WORKSPACE_TOP_CHROME_OFFSET,
   LearningWorkspaceScaffold,
 } from '@/components/learning/learning-workspace-scaffold';
 import { useAppSession } from '@/hooks/use-app-session';
 import { useAppTheme } from '@/hooks/use-app-theme';
-import { useLearningSessionsQuery } from '@/hooks/use-library-app-data';
 import { getLearningGraph } from '@/lib/api/learning';
 import {
-  learningTextHasMalformedMath,
+  sanitizeLearningRichTextForDisplay,
   sanitizeLearningTextForDisplay,
 } from '@/lib/learning/text-formatting';
+import { summarizeLearningMindMapText } from '@/lib/learning/graph-runtime-2d';
 import {
-  buildLearningDocumentGraphViewModel,
-  buildLearningExploreGraphLens,
-  buildLearningGlobalGraphLens,
   buildLearningGraphSelectionPresentation,
   buildLearningGraphViewModel,
-  buildLearningGuideGraphLens,
+  buildLearningMindMapGraphLens,
   getLearningGraphSelection,
-  resolveLearningExploreGraphFocus,
   type LearningGraph,
   type LearningGraphLens,
-  type LearningGraphMode,
   type LearningGraphNode,
 } from '@/lib/learning/graph';
 import type { LearningGraphHydratePayload } from '@/lib/learning/graph-bridge';
@@ -89,6 +79,7 @@ const GRAPH_RUNTIME_CONFIG = {
     DERIVED_FROM: 88,
     EVIDENCE_FOR: 76,
     MENTIONS: 64,
+    MINDMAP_CHILD: 118,
     NEXT_STEP: 112,
     PREREQUISITE_OF: 112,
     PROVES: 78,
@@ -114,26 +105,10 @@ const GRAPH_RUNTIME_CONFIG = {
   velocityDecay: 0.32,
 } as const;
 
-const GRAPH_MODE_LABELS: Record<LearningGraphMode, string> = {
-  explore: 'Explore',
-  global: 'Global',
-  guide: 'Guide',
-};
-const GRAPH_MODE_SEGMENT_HORIZONTAL_PADDING = 6;
-const GRAPH_MODE_SEGMENT_MAX_WIDTH = 280;
-const GRAPH_MODE_SEGMENT_MIN_HEIGHT = 38;
-const GRAPH_MODE_SEGMENT_VISUAL_HEIGHT =
-  GRAPH_MODE_SEGMENT_MIN_HEIGHT + GRAPH_MODE_SEGMENT_HORIZONTAL_PADDING * 2;
-const GRAPH_MODE_VALUES: LearningGraphMode[] = ['global', 'explore'];
-const GRAPH_MODE_OVERLAY_SIDE_INSET = 20 + LEARNING_WORKSPACE_FLOATING_BUTTON_SIZE + 12;
-
 export default function LearningWorkspaceGraphScreen() {
   const { theme } = useAppTheme();
-  const insets = useSafeAreaInsets();
   const { token } = useAppSession();
-  const { profile, renderedMessages, sourceSummary } = useLearningWorkspaceScreen();
-  const sessionsQuery = useLearningSessionsQuery();
-  const [graphMode, setGraphMode] = React.useState<LearningGraphMode>('global');
+  const { profile, sourceSummary } = useLearningWorkspaceScreen();
   const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
   const hydrateToken = 0;
 
@@ -143,47 +118,17 @@ export default function LearningWorkspaceGraphScreen() {
     enabled: !!profile?.id && !!token,
   });
 
-  const exploreFocus = React.useMemo(
-    () => resolveLearningExploreGraphFocus(renderedMessages),
-    [renderedMessages]
-  );
   const fullGraphViewModel = React.useMemo(
     () => (graph ? buildLearningGraphViewModel(graph) : null),
     [graph]
   );
-  const documentViewModel = React.useMemo(
-    () => (graph ? buildLearningDocumentGraphViewModel(graph) : null),
-    [graph]
-  );
-  const latestGuideSession = React.useMemo(() => {
-    return (sessionsQuery.data ?? [])
-      .filter(
-        (session) =>
-          session.learningProfileId === profile?.id && session.sessionKind === 'guide'
-      )
-      .sort(
-        (left, right) =>
-          new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
-      )[0] ?? null;
-  }, [profile?.id, sessionsQuery.data]);
   const graphLens = React.useMemo<LearningGraphLens | null>(() => {
-    if (!documentViewModel) {
+    if (!fullGraphViewModel) {
       return null;
     }
 
-    if (graphMode === 'explore') {
-      return buildLearningExploreGraphLens(documentViewModel, exploreFocus);
-    }
-
-    if (graphMode === 'guide') {
-      return buildLearningGuideGraphLens(documentViewModel, fullGraphViewModel ?? documentViewModel, {
-        completedSteps: latestGuideSession?.completedSteps ?? [],
-        currentStepIndex: latestGuideSession?.currentStepIndex ?? null,
-      });
-    }
-
-    return buildLearningGlobalGraphLens(documentViewModel);
-  }, [documentViewModel, exploreFocus, fullGraphViewModel, graphMode, latestGuideSession]);
+    return buildLearningMindMapGraphLens(fullGraphViewModel);
+  }, [fullGraphViewModel]);
   const graphViewModel = graphLens?.viewModel ?? null;
   const nodeCount = graphViewModel?.graph.nodes.length ?? 0;
   const showWebFallback = Platform.OS === 'web';
@@ -195,9 +140,9 @@ export default function LearningWorkspaceGraphScreen() {
   const selectionPresentation = React.useMemo(
     () =>
       selection && graphLens
-        ? buildLearningGraphSelectionPresentation(graphMode, selection, graphLens)
+        ? buildLearningGraphSelectionPresentation('mindmap', selection, graphLens)
         : null,
-    [graphLens, graphMode, selection]
+    [graphLens, selection]
   );
   const runtimeTheme = React.useMemo(() => buildLearningGraphRuntimeTheme(theme), [theme]);
 
@@ -226,15 +171,11 @@ export default function LearningWorkspaceGraphScreen() {
       guideStatusByNodeId: graphLens.guideStatusByNodeId,
       highlightedNodeIds: graphLens.highlightedNodeIds,
       linkedNodeIdsByNodeId: graphViewModel.linkedNodeIdsByNodeId,
-      mode: graphMode,
+      mode: 'mindmap',
       selectedNodeId: null,
       theme: runtimeTheme,
     };
-  }, [graph, graphLens, graphMode, graphViewModel, runtimeTheme]);
-  const floatingTabsTop =
-    insets.top +
-    LEARNING_WORKSPACE_TOP_CHROME_OFFSET +
-    (LEARNING_WORKSPACE_FLOATING_BUTTON_SIZE - GRAPH_MODE_SEGMENT_VISUAL_HEIGHT) / 2;
+  }, [graph, graphLens, graphViewModel, runtimeTheme]);
 
   return (
     <>
@@ -261,32 +202,6 @@ export default function LearningWorkspaceGraphScreen() {
             )}
           </View>
 
-          {/* Top Floating Segmented Control */}
-          <Animated.View
-            entering={FadeInDown.duration(600).springify()}
-            pointerEvents="box-none"
-            style={[
-              styles.graphModeTabsOverlay,
-              {
-                left: GRAPH_MODE_OVERLAY_SIDE_INSET,
-                right: GRAPH_MODE_OVERLAY_SIDE_INSET,
-                top: floatingTabsTop,
-              },
-            ]}
-            testID="learning-graph-mode-tabs-overlay">
-            <GraphModeTabs
-              graphMode={graphMode}
-              onSelect={setGraphMode}
-            />
-          </Animated.View>
-
-          {graphMode === 'explore' && exploreFocus ? (
-            <ExploreFocusStrip
-              focus={exploreFocus}
-              top={floatingTabsTop + GRAPH_MODE_SEGMENT_VISUAL_HEIGHT + 12}
-            />
-          ) : null}
-
           <LearningGraphSelectionSheet
             presentation={selectionPresentation}
             onDismiss={() => setSelectedNodeId(null)}
@@ -305,94 +220,21 @@ function buildRuntimeGraph(graph: LearningGraph): LearningGraph {
 }
 
 function sanitizeRuntimeGraphNode(node: LearningGraphNode): LearningGraphNode {
+  const sanitizedLabel = sanitizeLearningTextForDisplay(node.label ?? node.id) || String(node.id);
+  const rawSummaryCandidate =
+    typeof node.semanticSummary === 'string'
+      ? sanitizeLearningTextForDisplay(node.semanticSummary)
+      : sanitizedLabel;
+
   return {
     ...node,
-    label: sanitizeLearningTextForDisplay(node.label ?? node.id) || String(node.id),
+    label: sanitizedLabel,
     semanticSummary:
       typeof node.semanticSummary === 'string'
         ? sanitizeLearningTextForDisplay(node.semanticSummary)
         : node.semanticSummary,
+    summaryLabel: summarizeLearningMindMapText(rawSummaryCandidate || sanitizedLabel),
   };
-}
-
-function GraphModeTabs({
-  graphMode,
-  onSelect,
-}: {
-  graphMode: LearningGraphMode;
-  onSelect: React.Dispatch<React.SetStateAction<LearningGraphMode>>;
-}) {
-  const { theme } = useAppTheme();
-  const [trackWidth, setTrackWidth] = React.useState(GRAPH_MODE_SEGMENT_MAX_WIDTH);
-  const indicatorWidth = Math.max(
-    (trackWidth - GRAPH_MODE_SEGMENT_HORIZONTAL_PADDING * 2) / GRAPH_MODE_VALUES.length,
-    0
-  );
-  const indicatorStyle = useAnimatedStyle(
-    () => ({
-      transform: [
-        {
-          translateX: withSpring(
-            GRAPH_MODE_VALUES.indexOf(graphMode) * indicatorWidth,
-            { damping: 24, stiffness: 280 }
-          ),
-        },
-      ],
-    }),
-    [graphMode, indicatorWidth]
-  );
-
-  return (
-    <View
-      onLayout={(event) => {
-        const nextWidth = event.nativeEvent.layout.width;
-        if (nextWidth > 0 && Math.abs(nextWidth - trackWidth) > 1) {
-          setTrackWidth(nextWidth);
-        }
-      }}
-      style={styles.graphModeTabsShell}
-      testID="learning-graph-mode-tabs">
-      <View
-        style={[
-          styles.graphModeTabsTrack,
-          {
-            backgroundColor: theme.colors.surface,
-            boxShadow: theme.shadows.card,
-          },
-        ]}>
-        <Animated.View
-          style={[
-            styles.graphModeTabsIndicator,
-            {
-              backgroundColor: theme.colors.primarySoft,
-              width: indicatorWidth,
-            },
-            indicatorStyle,
-          ]}
-        />
-        {GRAPH_MODE_VALUES.map((mode) => {
-          const active = graphMode === mode;
-
-          return (
-            <Pressable
-              accessibilityRole="button"
-              key={mode}
-              onPress={() => onSelect(mode)}
-              style={styles.graphModeTabButton}>
-              <Text
-                style={{
-                  color: active ? theme.colors.primaryStrong : theme.colors.textMuted,
-                  ...(active ? theme.typography.semiBold : theme.typography.medium),
-                  fontSize: 14,
-                }}>
-                {GRAPH_MODE_LABELS[mode]}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
-  );
 }
 
 function GraphEmptyState({ body, title }: { body: string; title: string }) {
@@ -425,79 +267,6 @@ function GraphEmptyState({ body, title }: { body: string; title: string }) {
   );
 }
 
-function ExploreFocusStrip({
-  focus,
-  top,
-}: {
-  focus: ReturnType<typeof resolveLearningExploreGraphFocus>;
-  top: number;
-}) {
-  const { theme } = useAppTheme();
-  const contextLabel = focus?.question ? '当前问题' : '当前探索焦点';
-  const contextValue =
-    focus?.question?.trim() ||
-    (focus?.relatedConcepts?.length ? focus.relatedConcepts.slice(0, 3).join(' / ') : null);
-
-  if (!contextValue) {
-    return null;
-  }
-
-  return (
-    <Animated.View
-      entering={FadeInDown.duration(500).springify()}
-      pointerEvents="none"
-      style={[
-        styles.graphModeFocusStrip,
-        {
-          top,
-        },
-      ]}
-      testID="learning-graph-focus-strip">
-      <GlassSurface
-        intensity={54}
-        style={{
-          borderRadius: 22,
-          borderWidth: 1,
-          borderColor: theme.colors.borderSoft,
-          gap: 6,
-          paddingHorizontal: 16,
-          paddingVertical: 12,
-        }}>
-        <GraphSheetText
-          style={{
-            color: theme.colors.textSoft,
-            ...theme.typography.semiBold,
-            fontSize: 11,
-            letterSpacing: 0.6,
-            textTransform: 'uppercase',
-          }}>
-          {contextLabel}
-        </GraphSheetText>
-        <GraphSheetText
-          style={{
-            color: theme.colors.text,
-            ...theme.typography.medium,
-            fontSize: 14,
-            lineHeight: 20,
-          }}>
-          {contextValue}
-        </GraphSheetText>
-        {focus?.relatedConcepts?.length ? (
-          <GraphSheetText
-            style={{
-              color: theme.colors.textMuted,
-              ...theme.typography.medium,
-              fontSize: 12,
-              lineHeight: 18,
-            }}>
-            {`关联概念：${focus.relatedConcepts.slice(0, 4).join(' / ')}`}
-          </GraphSheetText>
-        ) : null}
-      </GlassSurface>
-    </Animated.View>
-  );
-}
-
 const styles = StyleSheet.create({
   detailsCard: {
     borderRadius: 28,
@@ -513,43 +282,6 @@ const styles = StyleSheet.create({
     gap: 8,
     justifyContent: 'center',
     paddingHorizontal: 24,
-  },
-  graphModeTabButton: {
-    alignItems: 'center',
-    flex: 1,
-    height: GRAPH_MODE_SEGMENT_MIN_HEIGHT,
-    justifyContent: 'center',
-    minWidth: 0,
-    zIndex: 1,
-  },
-  graphModeTabsIndicator: {
-    borderRadius: 18,
-    bottom: GRAPH_MODE_SEGMENT_HORIZONTAL_PADDING,
-    left: GRAPH_MODE_SEGMENT_HORIZONTAL_PADDING,
-    position: 'absolute',
-    top: GRAPH_MODE_SEGMENT_HORIZONTAL_PADDING,
-  },
-  graphModeTabsOverlay: {
-    alignItems: 'center',
-    position: 'absolute',
-    zIndex: 10,
-  },
-  graphModeFocusStrip: {
-    left: 20,
-    position: 'absolute',
-    right: 20,
-    zIndex: 9,
-  },
-  graphModeTabsShell: {
-    maxWidth: GRAPH_MODE_SEGMENT_MAX_WIDTH,
-    minWidth: 0,
-    width: '100%',
-  },
-  graphModeTabsTrack: {
-    borderRadius: 24,
-    flexDirection: 'row',
-    padding: GRAPH_MODE_SEGMENT_HORIZONTAL_PADDING,
-    position: 'relative',
   },
   graphCardHeader: {
     alignItems: 'center',
@@ -621,11 +353,9 @@ function LearningGraphSelectionSheet({
               interactiveDismissDisabled(false),
             ]}>
             {!!presentation ? (
-              <SwiftScrollView showsIndicators={false}>
-                <SwiftRNHostView>
-                  <SelectionContent presentation={presentation} />
-                </SwiftRNHostView>
-              </SwiftScrollView>
+              <SwiftRNHostView>
+                <SelectionContent presentation={presentation} />
+              </SwiftRNHostView>
             ) : (
               <View />
             )}
@@ -755,6 +485,7 @@ function SelectionContent({ presentation }: { presentation: any }) {
                   lineHeight: 22,
                   marginTop: 8,
                 }}
+                webViewTestID="learning-graph-detail-rich-text"
               />
             ) : null}
 
@@ -804,7 +535,7 @@ function SelectionContent({ presentation }: { presentation: any }) {
               {section.lines.map((line: string, idx: number) => (
                 <View
                   key={`${line}-${idx}`}
-                  style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+                  style={{ alignItems: 'flex-start', flexDirection: 'row', gap: 10 }}>
                   <View
                     style={{
                       width: 4,
@@ -813,16 +544,16 @@ function SelectionContent({ presentation }: { presentation: any }) {
                       backgroundColor: theme.colors.borderStrong,
                     }}
                   />
-                  <GraphSheetText
+                  <GraphDetailBody
+                    content={line}
                     style={{
                       color: theme.colors.text,
                       ...theme.typography.body,
+                      flex: 1,
                       fontSize: 15,
                       lineHeight: 21,
-                      flex: 1,
                     }}>
-                    {line}
-                  </GraphSheetText>
+                  </GraphDetailBody>
                 </View>
               ))}
             </View>
@@ -840,7 +571,7 @@ function SelectionContent({ presentation }: { presentation: any }) {
                 marginBottom: 12,
                 textTransform: 'uppercase',
               }}>
-              有关资料切片
+              证据来源
             </GraphSheetText>
             <View style={styles.relatedList}>
               {presentation.relatedFragments.slice(0, 3).map((fragment: any) => (
@@ -926,21 +657,19 @@ function GraphSheetText({
 }
 
 function sanitizeGraphDetailText(value: unknown) {
-  return sanitizeLearningTextForDisplay(value);
+  return sanitizeLearningRichTextForDisplay(value);
 }
 
 function GraphDetailBody({
   content,
   style,
+  webViewTestID,
 }: {
   content: string;
   style?: any;
+  webViewTestID?: string;
 }) {
   const sanitizedContent = sanitizeGraphDetailText(content);
-
-  if (learningTextHasMalformedMath(String(content ?? ''))) {
-    return <GraphSheetText style={style}>{sanitizedContent}</GraphSheetText>;
-  }
 
   return (
     <LearningRichText
@@ -948,6 +677,7 @@ function GraphDetailBody({
       content={sanitizedContent}
       maxFontSizeMultiplier={1}
       style={style}
+      webViewTestID={webViewTestID}
     />
   );
 }

@@ -1,13 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
-import { StyleSheet } from 'react-native';
 
 import LearningWorkspaceGraphScreen from '@/app/learning/[profileId]/(workspace)/graph';
-import {
-  LEARNING_WORKSPACE_FLOATING_BUTTON_SIZE,
-  LEARNING_WORKSPACE_TOP_CHROME_OFFSET,
-} from '@/components/learning/learning-workspace-scaffold';
 import { getLearningGraph } from '@/lib/api/learning';
 
 let mockWorkspaceScreen: any;
@@ -99,7 +94,6 @@ jest.mock('@/lib/api/learning', () => ({
 }));
 
 describe('LearningWorkspaceGraphScreen', () => {
-  const graphModeTabsVisualHeight = 50;
   const mockGetLearningGraph = getLearningGraph as jest.MockedFunction<typeof getLearningGraph>;
 
   beforeEach(() => {
@@ -134,7 +128,7 @@ describe('LearningWorkspaceGraphScreen', () => {
     };
   });
 
-  it('renders global, explore, and guide graph tabs over the same base map', async () => {
+  it('renders a stable mind map without global or explore tabs', async () => {
     mockGetLearningGraph.mockResolvedValue({
       edges: [
         { source: 'asset:1', target: 'book:profile', type: 'DERIVED_FROM' },
@@ -196,7 +190,7 @@ describe('LearningWorkspaceGraphScreen', () => {
           confidence: 0.93,
           extractor: 'structured-graph-v2',
           id: 'definition:limits',
-          label: '函数极限的定义',
+          label: '函数极限的定义与性质总结',
           provenance: {
             assetId: 1,
             fragmentId: 1,
@@ -291,23 +285,22 @@ describe('LearningWorkspaceGraphScreen', () => {
     );
 
     await waitFor(() => {
-      const overlayStyle = StyleSheet.flatten(
-        screen.getByTestId('learning-graph-mode-tabs-overlay').props.style
-      );
-
       expect(screen.getByTestId('learning-graph-scaffold')).toBeTruthy();
-      expect(overlayStyle.top).toBe(
-        LEARNING_WORKSPACE_TOP_CHROME_OFFSET +
-          (LEARNING_WORKSPACE_FLOATING_BUTTON_SIZE - graphModeTabsVisualHeight) / 2
-      );
-      expect(overlayStyle.left).toBe(90);
-      expect(overlayStyle.right).toBe(90);
-      expect(screen.getByTestId('learning-graph-mode-tabs')).toBeTruthy();
-      expect(screen.getByText('Global')).toBeTruthy();
-      expect(screen.getByText('Explore')).toBeTruthy();
-      expect(screen.queryByText('Guide')).toBeNull();
+      expect(screen.queryByTestId('learning-graph-mode-tabs-overlay')).toBeNull();
+      expect(screen.queryByTestId('learning-graph-mode-tabs')).toBeNull();
+      expect(screen.queryByTestId('learning-graph-focus-strip')).toBeNull();
+      expect(screen.queryByText('Global')).toBeNull();
+      expect(screen.queryByText('Explore')).toBeNull();
       expect(screen.getByTestId('learning-graph-webview')).toBeTruthy();
     });
+
+    const runtimeHtml = screen.getByTestId('learning-graph-webview').props.source?.html;
+    expect(runtimeHtml).toContain('"mode":"mindmap"');
+    expect(runtimeHtml).toContain('section:1:limits');
+    expect(runtimeHtml).not.toContain('fragment:1');
+    expect(runtimeHtml).not.toContain('explore:concept:无穷小');
+    expect(runtimeHtml).toContain('函数极限的定义与…');
+
     fireEvent(screen.getByTestId('learning-graph-webview'), 'message', {
       nativeEvent: {
         data: JSON.stringify({
@@ -319,18 +312,19 @@ describe('LearningWorkspaceGraphScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('极限')).toBeTruthy();
-      expect(screen.getByText('图谱位置')).toBeTruthy();
-      expect(screen.getByText('函数极限的定义')).toBeTruthy();
+      expect(screen.getByText('思维导图')).toBeTruthy();
+      expect(screen.getByText('导图位置')).toBeTruthy();
+      expect(screen.getByText('相关知识点')).toBeTruthy();
+      expect(screen.getAllByText('函数极限的定义').length).toBeGreaterThan(0);
     });
     expect(screen.queryByTestId('learning-graph-selection-swift-scroll-view')).toBeNull();
-    expect(
-      StyleSheet.flatten(screen.getByTestId('learning-graph-selection-scroll').props.contentContainerStyle)
-    ).toEqual(
+    expect(screen.queryByTestId('swift-scroll-view')).toBeNull();
+    expect(screen.getByTestId('learning-graph-selection-scroll').props.contentContainerStyle).toEqual(
       expect.objectContaining({
         flexGrow: 1,
       })
     );
-    expect(StyleSheet.flatten(screen.getByTestId('learning-graph-selection-content').props.style)).toEqual(
+    expect(screen.getByTestId('learning-graph-selection-content').props.style).toEqual(
       expect.objectContaining({
         alignSelf: 'stretch',
       })
@@ -338,33 +332,10 @@ describe('LearningWorkspaceGraphScreen', () => {
     expect(screen.getByTestId('swift-rn-host').props.style).toBeUndefined();
     expect(screen.getByTestId('swift-rn-host').props.matchContents).toBeUndefined();
     expect(screen.getByText('极限').props.allowFontScaling).toBe(false);
-    expect(screen.getByText('图谱位置').props.allowFontScaling).toBe(false);
-    expect(screen.getByText('函数极限的定义').props.allowFontScaling).toBe(false);
-
-    fireEvent.press(screen.getByText('Explore'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('learning-graph-focus-strip')).toBeTruthy();
-      expect(screen.getByText('当前问题')).toBeTruthy();
-      expect(screen.getByText('极限和无穷小有什么关系？')).toBeTruthy();
-    });
-
-    fireEvent(screen.getByTestId('learning-graph-webview'), 'message', {
-      nativeEvent: {
-        data: JSON.stringify({
-          nodeId: 'explore:concept:无穷小',
-          type: 'nodeTap',
-        }),
-      },
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('无穷小')).toBeTruthy();
-      expect(screen.getByText('探索关系')).toBeTruthy();
-      expect(screen.getAllByText('来自最近一轮 Explore 发散出的概念').length).toBeGreaterThan(0);
-    });
-
-    fireEvent.press(screen.getByText('Global'));
+    expect(screen.getByText('导图位置').props.allowFontScaling).toBe(false);
+    expect(
+      screen.getAllByText('函数极限的定义').every((node) => node.props.allowFontScaling === false)
+    ).toBe(true);
 
     fireEvent(screen.getByTestId('learning-graph-webview'), 'message', {
       nativeEvent: {
@@ -417,10 +388,12 @@ describe('LearningWorkspaceGraphScreen', () => {
       edges: [
         { source: 'asset:1', target: 'book:profile', type: 'DERIVED_FROM' },
         { source: 'fragment:1', target: 'asset:1', type: 'DERIVED_FROM' },
+        { source: 'fragment:1', target: 'concept:limits', type: 'MENTIONS' },
       ],
       nodes: [
         { id: 'book:profile', label: 'test.pdf', type: 'Book' },
         { assetKind: 'upload', fileName: 'test.pdf', id: 'asset:1', label: 'test.pdf', type: 'SourceAsset' },
+        { id: 'concept:limits', label: '极限', type: 'Concept' },
         {
           assetId: 1,
           chapterLabel: 'Section 1',
@@ -456,7 +429,8 @@ describe('LearningWorkspaceGraphScreen', () => {
 
     const runtimeHtml = screen.getByTestId('learning-graph-webview').props.source?.html;
 
-    expect(runtimeHtml).toContain('Section 1');
+    expect(runtimeHtml).toContain('concept:limits');
+    expect(runtimeHtml).not.toContain('fragment:1');
     expect(runtimeHtml).not.toContain(rawFragmentText);
     expect(runtimeHtml).not.toContain('\\left');
 
@@ -469,9 +443,21 @@ describe('LearningWorkspaceGraphScreen', () => {
       },
     });
 
+    expect(screen.queryByText('来源片段')).toBeNull();
+
+    fireEvent(screen.getByTestId('learning-graph-webview'), 'message', {
+      nativeEvent: {
+        data: JSON.stringify({
+          nodeId: 'concept:limits',
+          type: 'nodeTap',
+        }),
+      },
+    });
+
     await waitFor(() => {
+      expect(screen.getByText('极限')).toBeTruthy();
       expect(screen.getAllByText('Section 1').length).toBeGreaterThan(0);
-      expect(screen.getByText('来源片段')).toBeTruthy();
+      expect(screen.getByText('证据来源')).toBeTruthy();
     });
 
     expect(
@@ -484,10 +470,12 @@ describe('LearningWorkspaceGraphScreen', () => {
       edges: [
         { source: 'asset:1', target: 'book:profile', type: 'DERIVED_FROM' },
         { source: 'fragment:1', target: 'asset:1', type: 'DERIVED_FROM' },
+        { source: 'fragment:1', target: 'concept:limits', type: 'MENTIONS' },
       ],
       nodes: [
         { id: 'book:profile', label: 'test.pdf', type: 'Book' },
         { assetKind: 'upload', fileName: 'test.pdf', id: 'asset:1', label: 'test.pdf', type: 'SourceAsset' },
+        { id: 'concept:limits', label: '极限', type: 'Concept' },
         {
           assetId: 1,
           chapterLabel: 'Section 2',
@@ -524,7 +512,7 @@ describe('LearningWorkspaceGraphScreen', () => {
     fireEvent(screen.getByTestId('learning-graph-webview'), 'message', {
       nativeEvent: {
         data: JSON.stringify({
-          nodeId: 'fragment:1',
+          nodeId: 'concept:limits',
           type: 'nodeTap',
         }),
       },
@@ -538,5 +526,65 @@ describe('LearningWorkspaceGraphScreen', () => {
     expect(screen.queryByText(/\*\*/)).toBeNull();
     expect(screen.queryByText(/\$/)).toBeNull();
     expect(screen.queryByText(/\\/)).toBeNull();
+  });
+
+  it('renders graph detail markdown and formulas through the rich html sheet body', async () => {
+    mockGetLearningGraph.mockResolvedValue({
+      edges: [
+        { source: 'asset:1', target: 'book:profile', type: 'DERIVED_FROM' },
+        { source: 'concept:series', target: 'asset:1', type: 'DERIVED_FROM' },
+      ],
+      nodes: [
+        { id: 'book:profile', label: 'test.pdf', type: 'Book' },
+        { assetKind: 'upload', fileName: 'test.pdf', id: 'asset:1', label: 'test.pdf', type: 'SourceAsset' },
+        {
+          description: ['## 收敛条件', '', '- 先判断定义域', '- 迭代式：$x_{n+1}=x_n-\\frac{f(x_n)}{f\'(x_n)}$'].join(
+            '\n'
+          ),
+          id: 'concept:series',
+          label: '牛顿法',
+          type: 'Concept',
+        },
+      ],
+      provider: 'fallback',
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          gcTime: Infinity,
+          retry: false,
+        },
+      },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <LearningWorkspaceGraphScreen />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('learning-graph-webview')).toBeTruthy();
+    });
+
+    fireEvent(screen.getByTestId('learning-graph-webview'), 'message', {
+      nativeEvent: {
+        data: JSON.stringify({
+          nodeId: 'concept:series',
+          type: 'nodeTap',
+        }),
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('牛顿法')).toBeTruthy();
+    });
+
+    const detailBody = screen.getByTestId('learning-graph-detail-rich-text');
+    expect(detailBody.props.source.html).toContain('<h2>收敛条件</h2>');
+    expect(detailBody.props.source.html).toContain('<ul>');
+    expect(detailBody.props.source.html).toContain('<math');
+    expect(detailBody.props.source.html).not.toContain('## 收敛条件');
   });
 });

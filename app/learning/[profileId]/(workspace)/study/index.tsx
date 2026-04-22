@@ -2,7 +2,6 @@ import { Stack } from 'expo-router';
 import React from 'react';
 import {
   Keyboard,
-  type LayoutChangeEvent,
   Platform,
   Pressable,
   StyleSheet,
@@ -12,9 +11,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SearchBarCommands } from 'react-native-screens';
 import { toast } from 'sonner-native';
-import Animated from 'react-native-reanimated';
 
-import { LearningConversationMessage } from '@/components/learning/learning-conversation-message';
+import { LearningAssistantConversationSection } from '@/components/learning/learning-assistant-conversation';
 import { LearningComposer } from '@/components/learning/learning-composer';
 import { LearningConversationScroll } from '@/components/learning/learning-conversation-scroll';
 import { LearningWorkspaceLoadingState } from '@/components/learning/learning-workspace-loading-state';
@@ -120,94 +118,6 @@ function StarterPromptStrip({
   );
 }
 
-function ConversationSection({
-  emptyLabel,
-  focusMessageId,
-  messages,
-  onAction,
-  onFocusAnchorYChange,
-}: {
-  emptyLabel: string;
-  focusMessageId?: string | null;
-  messages: ReturnType<typeof useLearningWorkspaceScreen>['renderedMessages'];
-  onAction?: (action: LearningBridgeAction) => void;
-  onFocusAnchorYChange?: (y: number | null) => void;
-}) {
-  const { theme } = useAppTheme();
-  const sectionYRef = React.useRef(0);
-  const focusLocalYRef = React.useRef<number | null>(null);
-
-  const commitFocusAnchor = React.useCallback(() => {
-    if (!onFocusAnchorYChange) {
-      return;
-    }
-
-    if (!focusMessageId || focusLocalYRef.current === null) {
-      onFocusAnchorYChange(null);
-      return;
-    }
-
-    onFocusAnchorYChange(sectionYRef.current + focusLocalYRef.current);
-  }, [focusMessageId, onFocusAnchorYChange]);
-
-  const handleSectionLayout = React.useCallback(
-    (event: LayoutChangeEvent) => {
-      sectionYRef.current = event.nativeEvent.layout.y;
-      commitFocusAnchor();
-    },
-    [commitFocusAnchor]
-  );
-
-  const handleFocusMessageLayout = React.useCallback(
-    (event: LayoutChangeEvent) => {
-      focusLocalYRef.current = event.nativeEvent.layout.y;
-      commitFocusAnchor();
-    },
-    [commitFocusAnchor]
-  );
-
-  React.useEffect(() => {
-    focusLocalYRef.current = null;
-    if (!focusMessageId) {
-      onFocusAnchorYChange?.(null);
-    }
-  }, [focusMessageId, onFocusAnchorYChange]);
-
-  return (
-    <View onLayout={handleSectionLayout} style={{ gap: theme.spacing.lg }}>
-      <View style={{ gap: 14 }}>
-        {messages.length > 0 ? (
-          messages.map((message) => (
-            <View
-              key={message.id}
-              onLayout={message.id === focusMessageId ? handleFocusMessageLayout : undefined}>
-              <LearningConversationMessage message={message} onAction={onAction} />
-            </View>
-          ))
-        ) : (
-          <View
-            style={{
-              backgroundColor: theme.colors.surface,
-              borderRadius: 24,
-              padding: 16,
-            }}>
-            <Text
-              selectable
-              style={{
-                color: theme.colors.textMuted,
-                ...theme.typography.body,
-                fontSize: 14,
-                lineHeight: 21,
-              }}>
-              {emptyLabel}
-            </Text>
-          </View>
-        )}
-      </View>
-    </View>
-  );
-}
-
 function ExplorePane({
   emptyLabel,
   messages,
@@ -236,7 +146,7 @@ function ExplorePane({
         topPadding ? { paddingTop: topPadding } : null,
       ]}
       contentInsetAdjustmentBehavior="never"
-      focusAnchorOffset={(topPadding ?? 0) + 24}
+      focusAnchorOffset={Math.max(0, (topPadding ?? 0) - 16)}
       focusAnchorY={focusAnchorY}
       keyboardDismissMode="interactive"
       keyboardShouldPersistTaps="handled"
@@ -246,7 +156,7 @@ function ExplorePane({
         {messages.length === 0 ? (
           <StarterPromptStrip onPromptPress={onPromptPress} prompts={starterPrompts} />
         ) : null}
-        <ConversationSection
+        <LearningAssistantConversationSection
           emptyLabel={emptyLabel}
           focusMessageId={focusMessageId}
           messages={messages}
@@ -255,33 +165,6 @@ function ExplorePane({
         />
       </View>
     </LearningConversationScroll>
-  );
-}
-
-function InlineStatus({
-  latestStatus,
-}: {
-  latestStatus: ReturnType<typeof useLearningWorkspaceScreen>['latestStatus'];
-}) {
-  const { theme } = useAppTheme();
-
-  if (!latestStatus?.label) {
-    return null;
-  }
-
-  return (
-    <View style={styles.inlineStatus} testID="learning-workspace-inline-status">
-      <Text
-        selectable
-        style={{
-          color: latestStatus.tone === 'warning' ? theme.colors.warning : theme.colors.textSoft,
-          ...theme.typography.medium,
-          fontSize: 12,
-          lineHeight: 18,
-        }}>
-        {latestStatus.label}
-      </Text>
-    </View>
   );
 }
 
@@ -294,8 +177,6 @@ export default function LearningWorkspaceStudyRoute() {
     draft,
     handleSend,
     isRetryPending,
-    latestStatus,
-    navigateToStudyMode,
     profile,
     renderedMessages,
     replaceWorkspaceSession,
@@ -306,7 +187,6 @@ export default function LearningWorkspaceStudyRoute() {
     workspaceSession,
     workspaceGate,
   } = useLearningWorkspaceScreen();
-  const [isActivatingExplore, setIsActivatingExplore] = React.useState(false);
   const isActivatingExploreRef = React.useRef(false);
   const isMountedRef = React.useRef(true);
   const searchBarRef = React.useRef<SearchBarCommands>(null);
@@ -341,7 +221,6 @@ export default function LearningWorkspaceStudyRoute() {
 
     let ignoreResult = false;
     isActivatingExploreRef.current = true;
-    setIsActivatingExplore(true);
 
     void submitLearningBridgeAction(workspaceSession.id, 'expand_step_to_explore', {}, token)
       .then((payload) => {
@@ -361,7 +240,6 @@ export default function LearningWorkspaceStudyRoute() {
       .finally(() => {
         if (isMountedRef.current) {
           isActivatingExploreRef.current = false;
-          setIsActivatingExplore(false);
         }
       });
 
@@ -552,7 +430,6 @@ export default function LearningWorkspaceStudyRoute() {
           starterPrompts={usesNativeSearchBar ? starterPrompts : []}
           topPadding={topChromePadding}
         />
-        <InlineStatus latestStatus={latestStatus} />
         {!usesNativeSearchBar ? (
           <View style={styles.composerDock}>
             <LearningComposer
@@ -583,10 +460,6 @@ const styles = StyleSheet.create({
   },
   routeContainer: {
     flex: 1,
-  },
-  inlineStatus: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
   },
   composerDock: {
     paddingBottom: 20,

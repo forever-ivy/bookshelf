@@ -69,6 +69,20 @@ export function sanitizeLearningPlainText(value: unknown) {
     .trim();
 }
 
+export function sanitizeLearningRichTextForDisplay(value: unknown) {
+  const normalized = String(value ?? '').replace(/\r\n?/g, '\n').trim();
+
+  if (!normalized) {
+    return '';
+  }
+
+  if (!learningTextHasMalformedMath(normalized)) {
+    return normalized;
+  }
+
+  return sanitizeMalformedLearningText(normalized);
+}
+
 export function sanitizeMalformedLearningText(value: unknown) {
   const normalized = sanitizeLearningPlainText(value);
 

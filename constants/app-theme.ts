@@ -56,6 +56,8 @@ export const appTheme = {
     textSoft: '#8C877D',
     warning: '#8B6442',
     warningSoft: '#F3EEE7',
+    destructive: '#E11D48',
+    destructiveSoft: '#FFF1F2',
   },
   radii: {
     lg: 18,

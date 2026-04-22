@@ -546,6 +546,11 @@ export type CreateLearningProfileInput = {
   title?: string;
 };
 
+export type RenameLearningProfileInput = {
+  profileId: number;
+  title: string;
+};
+
 export type StartLearningSessionResult = {
   firstStep: LearningCurriculumStep | null;
   session: LearningSession;

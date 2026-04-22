@@ -1,3 +1,4 @@
+import { ChainOfThoughtPrimitive } from '@assistant-ui/react-native';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Animated, { FadeInDown, FadeOutUp } from 'react-native-reanimated';
@@ -425,14 +426,14 @@ function ExploreMessage({
           <Animated.View
             entering={FadeInDown.duration(320).springify().damping(20).stiffness(140)}
             exiting={FadeOutUp.duration(200)}>
-            <View
+            <ChainOfThoughtPrimitive.Root
               style={{
                 borderBottomColor: theme.colors.borderSoft,
                 borderBottomWidth: 1,
                 paddingBottom: 14,
               }}>
               <ReasoningSection content={exploreReasoning} />
-            </View>
+            </ChainOfThoughtPrimitive.Root>
           </Animated.View>
         ) : null}
       </View>

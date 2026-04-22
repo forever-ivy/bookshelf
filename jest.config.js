@@ -13,7 +13,7 @@ module.exports = {
     '\\.css$': '<rootDir>/__tests__/style-mock.js',
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(?:.pnpm/)?((jest-)?react-native|@react-native|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|expo-router|@react-navigation/.*|react-native-svg|@shopify/react-native-skia|heroui-native|uniwind|tailwind-variants|tailwind-merge))',
+    'node_modules/(?!(?:.pnpm/)?((jest-)?react-native|@react-native|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|expo-router|@react-navigation/.*|react-native-svg|@shopify/react-native-skia|@assistant-ui/.*|assistant-cloud|assistant-stream|nanoid|heroui-native|uniwind|tailwind-variants|tailwind-merge))',
   ],
   watchPathIgnorePatterns: ['<rootDir>/.worktrees/'],
 };

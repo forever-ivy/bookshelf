@@ -1,6 +1,7 @@
 import { Link, type Href } from 'expo-router';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 
 import { BookCover, type BookCoverTone } from '@/components/base/book-cover';
 import { useAppTheme } from '@/hooks/use-app-theme';
@@ -296,15 +297,26 @@ function LearningPosterCard({
                 }}>
                 {meta.primaryMeta}
               </Text>
-              <Text
-                numberOfLines={1}
-                style={{
-                  color: palette.mutedColor,
-                  ...theme.typography.medium,
-                  fontSize: 12,
-                }}>
-                {meta.secondaryMeta} · {meta.tertiaryMeta}
-              </Text>
+              <View style={{ flexDirection: 'row', minWidth: 0 }}>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: palette.mutedColor,
+                    ...theme.typography.medium,
+                    fontSize: 12,
+                  }}>
+                  {meta.secondaryMeta}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: palette.mutedColor,
+                    ...theme.typography.medium,
+                    fontSize: 12,
+                  }}>
+                  {` · ${meta.tertiaryMeta}`}
+                </Text>
+              </View>
             </View>
           </View>
         </View>
@@ -315,19 +327,96 @@ function LearningPosterCard({
 
 function LearningListCard({
   href,
+  onDelete,
+  onRename,
   palette,
   profile,
   session,
 }: {
   href: Href;
+  onDelete?: (profile: LearningProfile) => void;
+  onRename?: (profile: LearningProfile) => void;
   palette: LearningNotebookPalette;
   profile: LearningProfile;
   session?: LearningSession | null;
 }) {
   const { theme } = useAppTheme();
   const meta = resolveNotebookMeta(profile, session);
+  const renderRightActions =
+    onDelete || onRename
+      ? () => (
+          <View
+            style={{
+              flexDirection: 'row',
+              gap: 8,
+              justifyContent: 'center',
+              paddingLeft: theme.spacing.sm,
+            }}>
+            {onRename ? (
+              <Pressable
+                accessibilityLabel={`改名 ${profile.title}`}
+                accessibilityRole="button"
+                onPress={() => onRename(profile)}
+                style={({ pressed }) => ({
+                  opacity: pressed ? 0.9 : 1,
+                })}
+                testID={`learning-profile-rename-action-${profile.id}`}>
+                <View
+                  style={{
+                    alignItems: 'center',
+                    backgroundColor: theme.colors.primarySoft,
+                    borderRadius: theme.radii.lg,
+                    justifyContent: 'center',
+                    minHeight: 148,
+                    minWidth: 76,
+                    paddingHorizontal: theme.spacing.md,
+                  }}>
+                  <Text
+                    style={{
+                      color: theme.colors.primaryStrong,
+                      ...theme.typography.semiBold,
+                      fontSize: 13,
+                    }}>
+                    改名
+                  </Text>
+                </View>
+              </Pressable>
+            ) : null}
+            {onDelete ? (
+              <Pressable
+                accessibilityLabel={`删除 ${profile.title}`}
+                accessibilityRole="button"
+                onPress={() => onDelete(profile)}
+                style={({ pressed }) => ({
+                  opacity: pressed ? 0.9 : 1,
+                })}
+                testID={`learning-profile-delete-action-${profile.id}`}>
+                <View
+                  style={{
+                    alignItems: 'center',
+                    backgroundColor: theme.colors.warningSoft,
+                    borderRadius: theme.radii.lg,
+                    justifyContent: 'center',
+                    minHeight: 148,
+                    minWidth: 76,
+                    paddingHorizontal: theme.spacing.md,
+                  }}>
+                  <Text
+                    style={{
+                      color: theme.colors.warning,
+                      ...theme.typography.semiBold,
+                      fontSize: 13,
+                    }}>
+                    删除
+                  </Text>
+                </View>
+              </Pressable>
+            ) : null}
+          </View>
+        )
+      : undefined;
 
-  return (
+  const card = (
     <Link asChild href={href}>
       <Pressable
         accessibilityRole="button"
@@ -426,30 +515,55 @@ function LearningListCard({
                 }}>
                 {meta.primaryMeta}
               </Text>
-              <Text
-                numberOfLines={1}
-                style={{
-                  color: palette.mutedColor,
-                  ...theme.typography.medium,
-                  fontSize: 12,
-                }}>
-                {meta.secondaryMeta} · {meta.tertiaryMeta}
-              </Text>
+              <View style={{ flexDirection: 'row', minWidth: 0 }}>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: palette.mutedColor,
+                    ...theme.typography.medium,
+                    fontSize: 12,
+                  }}>
+                  {meta.secondaryMeta}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: palette.mutedColor,
+                    ...theme.typography.medium,
+                    fontSize: 12,
+                  }}>
+                  {` · ${meta.tertiaryMeta}`}
+                </Text>
+              </View>
             </View>
           </View>
         </View>
       </Pressable>
     </Link>
   );
+
+  if (!renderRightActions) {
+    return card;
+  }
+
+  return (
+    <Swipeable overshootRight={false} renderRightActions={renderRightActions}>
+      {card}
+    </Swipeable>
+  );
 }
 
 export function LearningNotebookCard({
   href,
+  onDelete,
+  onRename,
   profile,
   session,
   variant = 'poster',
 }: {
   href: Href;
+  onDelete?: (profile: LearningProfile) => void;
+  onRename?: (profile: LearningProfile) => void;
   profile: LearningProfile;
   session?: LearningSession | null;
   variant?: 'list' | 'poster';
@@ -457,7 +571,16 @@ export function LearningNotebookCard({
   const palette = resolveNotebookPalette(profile);
 
   if (variant === 'list') {
-    return <LearningListCard href={href} palette={palette} profile={profile} session={session} />;
+    return (
+      <LearningListCard
+        href={href}
+        onDelete={onDelete}
+        onRename={onRename}
+        palette={palette}
+        profile={profile}
+        session={session}
+      />
+    );
   }
 
   return <LearningPosterCard href={href} palette={palette} profile={profile} session={session} />;

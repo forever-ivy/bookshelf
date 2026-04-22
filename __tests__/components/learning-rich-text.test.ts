@@ -13,6 +13,23 @@ describe('learning rich text helpers', () => {
     expect(html).not.toContain('renderMathInElement');
   });
 
+  it('renders mixed markdown structure and formulas into html together', () => {
+    const html = buildLearningRichTextHtml(
+      ['## 收敛条件', '', '- 先判断定义域', '- 再计算：$f(x)=x^2+1$', '', '> 注意边界项'].join(
+        '\n'
+      ),
+      '#111111'
+    );
+
+    expect(html).toContain('<h2>收敛条件</h2>');
+    expect(html).toContain('<ul>');
+    expect(html).toContain('<blockquote>');
+    expect(html).toContain('<math');
+    expect(html).not.toContain('## 收敛条件');
+    expect(html).not.toContain('- 先判断定义域');
+    expect(html).not.toContain('> 注意边界项');
+  });
+
   it('renders standalone raw latex lines even when the model omits explicit math delimiters', () => {
     const html = buildLearningRichTextHtml(
       '公式的常见形式为：\n(uv)^{(n)} = \\sum_{k=0}^{n} C_n^k u^{(n-k)}v^{(k)}',

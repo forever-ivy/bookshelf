@@ -6,8 +6,223 @@ import type {
 type RuntimeNodeLike = {
   id: string;
   label: string;
+  summaryLabel?: string;
   type: string;
 };
+
+type MindMapGraphInput = {
+  edges: Array<{ source: string; target: string; type: string }>;
+  nodes: RuntimeNodeLike[];
+};
+
+const MINDMAP_COLUMN_GAP = 228;
+const MINDMAP_ROW_GAP = 108;
+
+function collectMindMapChildren(graph: MindMapGraphInput) {
+  const childrenById: Record<string, string[]> = Object.fromEntries(
+    graph.nodes.map((node) => [node.id, [] as string[]])
+  );
+
+  for (const edge of graph.edges) {
+    if (
+      edge.type !== 'MINDMAP_CHILD' ||
+      !childrenById[edge.source] ||
+      !childrenById[edge.target]
+    ) {
+      continue;
+    }
+    childrenById[edge.source].push(edge.target);
+  }
+
+  return childrenById;
+}
+
+function collectMindMapRoots(graph: MindMapGraphInput) {
+  const parentById = new Map<string, string>();
+
+  for (const edge of graph.edges) {
+    if (edge.type !== 'MINDMAP_CHILD') {
+      continue;
+    }
+    if (!parentById.has(edge.target)) {
+      parentById.set(edge.target, edge.source);
+    }
+  }
+
+  return graph.nodes
+    .map((node) => node.id)
+    .filter((nodeId) => !parentById.has(nodeId));
+}
+
+function collapseNodeText(value: string) {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+export function summarizeLearningMindMapText(value: string, maxLength = 8) {
+  const collapsed = collapseNodeText(value);
+  if (collapsed.length <= maxLength) {
+    return collapsed;
+  }
+
+  return `${collapsed.slice(0, maxLength)}…`;
+}
+
+export function resolveLearningGraph2DNodeText(
+  node: RuntimeNodeLike,
+  mode: LearningGraphHydratePayload['mode']
+) {
+  if (mode === 'mindmap') {
+    const preferredText =
+      typeof node.summaryLabel === 'string' && node.summaryLabel.trim()
+        ? node.summaryLabel
+        : node.label;
+    return summarizeLearningMindMapText(preferredText);
+  }
+
+  return collapseNodeText(node.label);
+}
+
+export function buildLearningGraphMindMapLayout(graph: MindMapGraphInput) {
+  const visibleNodeIds = new Set(graph.nodes.map((node) => node.id));
+  const childrenIndex = collectMindMapChildren(graph);
+  const positions: Record<string, { x: number; y: number }> = {};
+  const roots = collectMindMapRoots(graph);
+  let cursor = 0;
+
+  function assign(nodeId: string, depth: number): number {
+    const childIds = (childrenIndex[nodeId] ?? []).filter((childId) => visibleNodeIds.has(childId));
+    const x = depth * MINDMAP_COLUMN_GAP;
+
+    if (childIds.length === 0) {
+      const y = cursor * MINDMAP_ROW_GAP;
+      positions[nodeId] = { x, y };
+      cursor += 1;
+      return y;
+    }
+
+    const childCenters = childIds.map((childId) => assign(childId, depth + 1));
+    const centerY = (childCenters[0] + childCenters[childCenters.length - 1]) / 2;
+    positions[nodeId] = { x, y: centerY };
+    return centerY;
+  }
+
+  for (const rootId of roots) {
+    assign(rootId, 0);
+    cursor += 1;
+  }
+
+  const rootAnchorY = roots.length > 0 ? positions[roots[0]]?.y ?? 0 : 0;
+  for (const nodeId of Object.keys(positions)) {
+    positions[nodeId] = {
+      x: positions[nodeId].x,
+      y: positions[nodeId].y - rootAnchorY,
+    };
+  }
+
+  return positions;
+}
+
+export function createLearningGraphMindMapCollapsedState(graph: MindMapGraphInput) {
+  const roots = collectMindMapRoots(graph);
+  const childrenById = collectMindMapChildren(graph);
+  const collapsedById: Record<string, boolean> = {};
+
+  function traverse(nodeId: string, depth: number) {
+    const childIds = childrenById[nodeId] ?? [];
+    collapsedById[nodeId] = childIds.length > 0 ? depth >= 2 : false;
+    childIds.forEach((childId) => traverse(childId, depth + 1));
+  }
+
+  roots.forEach((rootId) => traverse(rootId, 0));
+  return collapsedById;
+}
+
+export function expandLearningGraphMindMapPath(
+  graph: MindMapGraphInput,
+  collapsedById: Record<string, boolean>,
+  targetNodeId: string | null
+) {
+  if (!targetNodeId) {
+    return collapsedById;
+  }
+
+  const parentById = new Map<string, string>();
+  for (const edge of graph.edges) {
+    if (edge.type !== 'MINDMAP_CHILD' || parentById.has(edge.target)) {
+      continue;
+    }
+    parentById.set(edge.target, edge.source);
+  }
+
+  let currentNodeId = targetNodeId;
+  let changed = false;
+  const nextState = { ...collapsedById };
+
+  while (parentById.has(currentNodeId)) {
+    const parentNodeId = parentById.get(currentNodeId);
+    if (!parentNodeId) {
+      break;
+    }
+
+    if (nextState[parentNodeId]) {
+      nextState[parentNodeId] = false;
+      changed = true;
+    }
+
+    currentNodeId = parentNodeId;
+  }
+
+  return changed ? nextState : collapsedById;
+}
+
+export function isLearningGraphMindMapToggleHit(args: {
+  boxWidth: number;
+  graphPoint: { x: number; y: number };
+  nodeCenter: { x: number; y: number };
+}) {
+  const badgeCenterX = args.nodeCenter.x + args.boxWidth / 2 + 14;
+  const badgeCenterY = args.nodeCenter.y;
+  const deltaX = args.graphPoint.x - badgeCenterX;
+  const deltaY = args.graphPoint.y - badgeCenterY;
+
+  return deltaX * deltaX + deltaY * deltaY <= 11 * 11;
+}
+
+export function buildLearningGraphMindMapVisibility(
+  graph: MindMapGraphInput,
+  collapsedById: Record<string, boolean>
+) {
+  const visibleNodeIds = new Set<string>();
+  const visibleEdgeKeys = new Set<string>();
+  const childrenById = collectMindMapChildren(graph);
+  const nodeById = Object.fromEntries(graph.nodes.map((node) => [node.id, node]));
+  const roots = collectMindMapRoots(graph);
+
+  function traverse(nodeId: string) {
+    if (visibleNodeIds.has(nodeId)) {
+      return;
+    }
+
+    visibleNodeIds.add(nodeId);
+    if (collapsedById[nodeId]) {
+      return;
+    }
+
+    for (const childId of childrenById[nodeId] ?? []) {
+      visibleEdgeKeys.add(`${nodeId}::${childId}::MINDMAP_CHILD`);
+      traverse(childId);
+    }
+  }
+
+  roots.forEach((rootId) => traverse(rootId));
+
+  return {
+    edges: graph.edges.filter((edge) =>
+      visibleEdgeKeys.has(`${edge.source}::${edge.target}::${edge.type}`)
+    ),
+    nodes: graph.nodes.filter((node) => visibleNodeIds.has(node.id) && nodeById[node.id]),
+  };
+}
 
 type LabelVisibilityArgs = {
   generatedNodeIds: string[];
@@ -59,6 +274,10 @@ export function resolveLearningGraph2DLabelVisibility(
   node: RuntimeNodeLike,
   args: LabelVisibilityArgs
 ) {
+  if (args.mode === 'mindmap') {
+    return node.type !== 'Fragment';
+  }
+
   if (args.selectedNeighborhoodNodeIds?.has(node.id)) {
     return true;
   }
@@ -102,6 +321,23 @@ export function resolveLearningGraph2DNodeVisualState(
   let color = resolveNodeColor(node.type, args.theme);
   let emphasis: 'completed' | 'current' | 'generated' | 'normal' = 'normal';
   let opacity = 0.88;
+
+  if (args.mode === 'mindmap') {
+    if (args.selectedNeighborhoodNodeIds) {
+      opacity = args.selectedNeighborhoodNodeIds.has(node.id)
+        ? Math.max(opacity, active ? 1 : 0.94)
+        : 0.22;
+    }
+
+    return {
+      active,
+      color,
+      emphasis,
+      generated: false,
+      highlighted: false,
+      opacity,
+    };
+  }
 
   if (args.mode === 'explore') {
     opacity = highlighted ? 0.96 : 0.56;

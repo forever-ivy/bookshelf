@@ -33,8 +33,16 @@ type MathChunk = {
   expression: string;
 };
 
+const MarkdownIt = require('markdown-it');
+const markdownRenderer = new MarkdownIt({
+  breaks: true,
+  html: false,
+  linkify: true,
+});
+
 const MATH_MARKER = /\$|\\\(|\\\[/;
-const MD_MARKER = /\*\*|__|\*|_|#|^- /m;
+const MD_MARKER =
+  /(^|\n)\s{0,3}(?:#{1,6}\s|>\s|[-*+]\s|\d+\.\s|```|~~~|\|.+\|)|\*\*|__|`[^`]+`/m;
 const MATH_TOKEN_PREFIX = '@@LEARNING_MATH_';
 const MATH_PATTERN =
   /\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|(?<!\\)\$([^$\n]+?)(?<!\\)\$/g;
@@ -145,14 +153,8 @@ function replaceMathWithTokens(content: string) {
   };
 }
 
-function applyBasicMarkdown(content: string) {
-  return content
-    .replace(/^### (.*?)$/gm, '<h3>$1</h3>')
-    .replace(/^## (.*?)$/gm, '<h2>$1</h2>')
-    .replace(/^# (.*?)$/gm, '<h1>$1</h1>')
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/^- (.*?)$/gm, '• $1');
+function renderMarkdown(content: string) {
+  return markdownRenderer.render(content);
 }
 
 function restoreMathTokens(content: string, chunks: MathChunk[]) {
@@ -182,8 +184,7 @@ export function buildLearningRichTextHtml(
     : content;
   const normalizedContent = normalizeLearningRichTextContent(safeContent);
   const { chunks, tokenizedContent } = replaceMathWithTokens(normalizedContent);
-  const escapedContent = escapeHtml(tokenizedContent);
-  const markdownContent = applyBasicMarkdown(escapedContent);
+  const markdownContent = renderMarkdown(tokenizedContent);
   const richContent = restoreMathTokens(markdownContent, chunks);
   const cssFontFamily = resolvedTypography.fontFamily
     ? `"${resolvedTypography.fontFamily.replace(/"/g, '\\"')}"`
@@ -210,10 +211,55 @@ export function buildLearningRichTextHtml(
       font-style: ${resolvedTypography.fontStyle ?? 'normal'};
       letter-spacing: ${resolvedTypography.letterSpacing ?? 0}px;
       overflow: hidden;
+      word-break: break-word;
     }
     #content {
-      white-space: pre-wrap;
       word-break: break-word;
+    }
+    p, ul, ol, blockquote, pre, table {
+      margin: 0 0 0.75em;
+    }
+    ul, ol {
+      padding-left: 1.4em;
+    }
+    li + li {
+      margin-top: 0.35em;
+    }
+    blockquote {
+      border-left: 3px solid rgba(95, 122, 255, 0.32);
+      margin-left: 0;
+      padding-left: 0.9em;
+    }
+    pre {
+      background: rgba(16, 20, 24, 0.96);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      overflow-x: auto;
+      padding: 0.9em 1em;
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    pre code {
+      color: #f5f7ff;
+      white-space: pre;
+    }
+    :not(pre) > code {
+      background: rgba(0,0,0,0.05);
+      border-radius: 6px;
+      padding: 0.12em 0.35em;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    th, td {
+      border: 1px solid rgba(0,0,0,0.1);
+      padding: 0.45em 0.6em;
+      text-align: left;
+    }
+    a {
+      color: inherit;
     }
     .math-inline math {
       display: inline-block;
@@ -230,7 +276,7 @@ export function buildLearningRichTextHtml(
       font-size: 1.05em;
     }
     h1, h2, h3 {
-      margin: 0.5em 0;
+      margin: 0.5em 0 0.35em;
       font-weight: 600;
     }
     h1 { font-size: 1.5em; }

@@ -1,8 +1,11 @@
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import React from 'react';
 
 import LearningRoute from '@/app/(tabs)/learning';
 import { LearningNotebookCard } from '@/components/learning/learning-notebook-card';
+
+const mockDeleteLearningProfile = jest.fn();
+const mockRenameLearningProfile = jest.fn();
 
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaProvider: ({ children }: { children: React.ReactNode }) => children,
@@ -78,9 +81,17 @@ jest.mock('@/hooks/use-library-app-data', () => ({
     isPending: false,
     mutateAsync: jest.fn(),
   }),
+  useDeleteLearningProfileMutation: () => ({
+    isPending: false,
+    mutateAsync: mockDeleteLearningProfile,
+  }),
   useUploadLearningProfileMutation: () => ({
     isPending: false,
     mutateAsync: jest.fn(),
+  }),
+  useRenameLearningProfileMutation: () => ({
+    isPending: false,
+    mutateAsync: mockRenameLearningProfile,
   }),
   useLearningProfilesQuery: () => ({
     data: [
@@ -173,6 +184,16 @@ jest.mock('@/hooks/use-library-app-data', () => ({
 }));
 
 describe('learning library route', () => {
+  beforeEach(() => {
+    mockDeleteLearningProfile.mockReset();
+    mockDeleteLearningProfile.mockResolvedValue({ ok: true });
+    mockRenameLearningProfile.mockReset();
+    mockRenameLearningProfile.mockResolvedValue({
+      id: 101,
+      title: '重命名后的导学本',
+    });
+  });
+
   it('renders a notebook-style library from profiles and sessions without a dashboard query', () => {
     render(<LearningRoute />);
 
@@ -193,6 +214,34 @@ describe('learning library route', () => {
     expect(hrefs).toContain('/learning/101/explore');
     expect(hrefs).toContain('/learning/102/explore');
     expect(hrefs).toContain('/learning/103/explore');
+  });
+
+  it('opens a rename modal from the list-card swipe action', async () => {
+    render(<LearningRoute />);
+
+    fireEvent.press(screen.getByTestId('learning-profile-rename-action-101'));
+    fireEvent.changeText(screen.getByTestId('learning-profile-rename-input'), '  重命名后的导学本  ');
+    fireEvent.press(screen.getByTestId('learning-profile-rename-submit'));
+
+    await waitFor(() => {
+      expect(mockRenameLearningProfile).toHaveBeenCalledWith({
+        profileId: 101,
+        title: '重命名后的导学本',
+      });
+    });
+  });
+
+  it('requires confirmation before deleting a list-card profile from the swipe action', async () => {
+    render(<LearningRoute />);
+
+    fireEvent.press(screen.getByTestId('learning-profile-delete-action-101'));
+    expect(screen.getByTestId('learning-profile-delete-modal')).toBeTruthy();
+
+    fireEvent.press(screen.getByTestId('learning-profile-delete-confirm'));
+
+    await waitFor(() => {
+      expect(mockDeleteLearningProfile).toHaveBeenCalledWith(101);
+    });
   });
 
   it('links notebook cards to the standalone learning workspace route so the root tabs can disappear', () => {
