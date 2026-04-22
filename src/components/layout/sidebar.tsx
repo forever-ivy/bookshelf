@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   BookCopy,
   Bot,
@@ -60,25 +60,19 @@ export function Sidebar() {
     ? { duration: 0 }
     : { type: 'spring' as const, stiffness: 560, damping: 54, mass: 0.6 }
 
-  useEffect(() => {
-    if (!collapsed) {
-      setIsCollapsedHeaderHovered(false)
-    }
-  }, [collapsed])
-
   return (
-    <motion.aside
+    <aside
       data-sidebar="sidebar"
-      initial={false}
-      animate={{ width: collapsed ? 96 : 288 }}
-      transition={prefersReducedMotion ? { duration: 0 } : { type: 'spring', bounce: 0, duration: 0.5 }}
-      className="hidden h-screen shrink-0 overflow-hidden border-r border-[var(--line-subtle)] bg-[rgba(252,249,243,0.9)] py-6 lg:flex lg:flex-col [contain:layout_paint]"
+      className={cn(
+        'hidden h-screen shrink-0 overflow-hidden border-r border-[var(--line-subtle)] bg-[rgba(252,249,243,0.9)] py-6 lg:flex lg:flex-col [contain:layout_paint]',
+        collapsed ? 'w-24' : 'w-72',
+      )}
     >
       <div className="relative mb-8 flex h-14 items-center px-5">
         {collapsed ? (
           <motion.button
             type="button"
-            className="relative flex size-12 shrink-0 cursor-pointer items-center justify-center rounded-2xl"
+            className="relative flex size-12 shrink-0 cursor-pointer items-center justify-center rounded-2xl [will-change:transform]"
             aria-label="展开菜单"
             onClick={() => {
               setIsCollapsedHeaderHovered(false)
@@ -93,7 +87,7 @@ export function Sidebar() {
               src="/logo.svg"
               alt="知序"
               className={cn(
-                'size-12 transition-opacity duration-150',
+                'size-12 transition-opacity duration-150 [will-change:transform,opacity]',
                 isCollapsedHeaderHovered ? 'opacity-0' : 'opacity-100',
               )}
               initial={false}
@@ -106,7 +100,7 @@ export function Sidebar() {
             <motion.span
               data-testid="collapsed-sidebar-open-icon"
               className={cn(
-                'absolute inset-0 flex items-center justify-center text-[var(--primary)] transition-opacity duration-150',
+                'absolute inset-0 flex items-center justify-center text-[var(--primary)] transition-opacity duration-150 [will-change:transform,opacity]',
                 isCollapsedHeaderHovered ? 'opacity-100' : 'opacity-0',
               )}
               initial={false}
@@ -129,12 +123,12 @@ export function Sidebar() {
           initial={false}
           animate={{
             opacity: collapsed ? 0 : 1,
-            x: collapsed ? -10 : 0,
-            width: collapsed ? 0 : 160,
+            x: collapsed ? -8 : 0,
+            scaleX: collapsed ? 0.96 : 1,
           }}
           transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.22, ease: 'easeOut' }}
           className={cn(
-            'ml-3 flex flex-col overflow-hidden whitespace-nowrap',
+            'ml-3 flex min-w-0 flex-1 flex-col overflow-hidden whitespace-nowrap [transform-origin:left_center] [will-change:transform,opacity]',
             collapsed ? 'pointer-events-none' : 'pointer-events-auto',
           )}
         >
@@ -222,7 +216,7 @@ export function Sidebar() {
                             animate={{ opacity: 1, x: 0 }}
                             exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, x: -8 }}
                             transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.18, ease: 'easeOut' }}
-                            className="relative z-10 ml-3 overflow-hidden whitespace-nowrap"
+                            className="relative z-10 ml-3 overflow-hidden whitespace-nowrap [will-change:transform,opacity]"
                           >
                             {item.label}
                           </motion.span>
@@ -236,6 +230,6 @@ export function Sidebar() {
           })}
         </nav>
       </LayoutGroup>
-    </motion.aside>
+    </aside>
   )
 }

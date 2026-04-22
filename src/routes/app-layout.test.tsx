@@ -178,6 +178,23 @@ describe('AppLayout sidebar', () => {
     expect(sidebar).not.toHaveClass('transition-[width]')
   })
 
+  it('uses static width classes instead of runtime width styles when toggling the sidebar', async () => {
+    const user = userEvent.setup()
+    const { container } = renderLayout()
+
+    const sidebar = container.querySelector('[data-sidebar="sidebar"]')
+
+    expect(sidebar).toHaveClass('w-72')
+    expect(sidebar).not.toHaveStyle({ width: '288px' })
+
+    await user.click(screen.getByRole('button', { name: '收起菜单' }))
+
+    await waitFor(() => {
+      expect(sidebar).toHaveClass('w-24')
+    })
+    expect(sidebar).not.toHaveStyle({ width: '96px' })
+  })
+
   it('only shows routes that the current admin can access', () => {
     renderLayout({
       id: 2,
