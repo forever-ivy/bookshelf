@@ -1,5 +1,15 @@
+# Dependencies and build output
+node_modules/
+dist/
+dist-ssr/
+
+# Environment and local runtime files
+.env.local
+.env.*.local
+*.local
+
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -7,17 +17,37 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
-playwright-report
-test-results
+# Test files and test output
+tests/
+src/test/
+__tests__/
+__mocks__/
+playwright-report/
+test-results/
+coverage/
+playwright.config.*
+vitest.config.*
+vite.config.test.*
+**/*.test.*
+**/*.spec.*
+
+# AI coding tools and agent config
+.claude/
+.codex/
+.cursor/
+.windsurf/
+.roo/
+.continue/
+.aider*
+.clinerules
+.superpowers/
+.github/copilot-instructions.md
+AGENTS.md
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
 *.suo
 *.ntvs*
