@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -437,3 +438,58 @@ def test_build_large_dataset_report_summarizes_noise_and_thresholds(app, tmp_pat
     assert report["noise"]["search_logs"]["empty_query_ratio"] > 0
     assert report["noise"]["recommendation_logs"]["low_score_ratio"] > 0
     assert report["noise"]["borrow_orders"]["cancelled_ratio"] > 0
+
+
+def test_large_dataset_config_scales_full_profile_from_snapshot_size(tmp_path: Path) -> None:
+    config = LargeDatasetConfig.for_scale_profile(
+        snapshot_path=tmp_path / "snapshot.jsonl",
+        snapshot_book_count=40,
+        scale_profile="full",
+    )
+
+    assert config.target_books == 40
+    assert config.target_readers == 10
+    assert config.target_borrow_orders == 100
+    assert config.target_search_logs == 100
+    assert config.target_learning_profiles == 100
+
+
+def test_seed_large_dataset_respects_borrow_cutoff_and_reports_noise_thresholds(app, tmp_path: Path) -> None:
+    snapshot_path = _write_snapshot(tmp_path / "snapshot.jsonl", count=120)
+    cutoff = datetime(2026, 4, 22, 15, 59, 59, tzinfo=timezone.utc)
+    config = LargeDatasetConfig(
+        snapshot_path=snapshot_path,
+        random_seed=41,
+        target_books=80,
+        target_readers=20,
+        target_book_source_documents=16,
+        target_book_copies=120,
+        target_borrow_orders=180,
+        target_search_logs=260,
+        target_recommendation_logs=320,
+        target_conversation_sessions=40,
+        target_conversation_messages=180,
+        target_learning_profiles=30,
+        target_learning_fragments=120,
+        target_learning_sessions=60,
+        target_learning_turns=240,
+        anchor_time=cutoff,
+        cutoff_at=cutoff,
+    )
+
+    with get_session_factory()() as session:
+        seed_large_dataset(session, config)
+        report = build_large_dataset_report(session, config)
+        active_orders = session.scalar(
+            select(func.count()).select_from(BorrowOrder).where(
+                BorrowOrder.status.in_(["created", "awaiting_pick", "picked_from_cabinet", "delivering", "delivered"])
+            )
+        )
+
+    assert active_orders is not None and active_orders > 0
+    assert report["timelines"]["borrow_related"]["future_timestamp_count"] == 0
+    assert report["thresholds"]["future_timestamps"]["ok"] is True
+    assert report["thresholds"]["cancelled_ratio"]["ok"] is True
+    assert report["thresholds"]["active_ratio"]["ok"] is True
+    assert report["thresholds"]["blocked_watch_ratio"]["ok"] is True
+    assert report["thresholds"]["damaged_ratio"]["ok"] is True

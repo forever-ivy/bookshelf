@@ -4,7 +4,7 @@ from collections.abc import Iterable
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.analytics.models import ReadingEvent, SearchLog
@@ -34,6 +34,9 @@ from app.recommendation.models import RecommendationLog
 from app.robot_sim.models import RobotStatusEvent, RobotTask
 
 
+ACTIVE_BORROW_ORDER_STATUSES = ("created", "awaiting_pick", "picked_from_cabinet", "delivering", "delivered")
+
+
 def _resolve_config(config: Any) -> dict[str, Any]:
     if is_dataclass(config):
         return asdict(config)
@@ -50,6 +53,22 @@ def _ratio(numerator: int, denominator: int) -> float:
     if denominator <= 0:
         return 0.0
     return round(numerator / denominator, 4)
+
+
+def _future_timestamp_count(session: Session, model, cutoff_at, columns: Iterable[str]) -> int:
+    conditions = [
+        getattr(model, column_name) > cutoff_at
+        for column_name in columns
+    ]
+    return int(session.execute(select(func.count()).select_from(model).where(or_(*conditions))).scalar_one())
+
+
+def _weight_map(cfg: dict[str, Any], key: str) -> dict[str, float]:
+    return {name: float(weight) for name, weight in cfg.get(key, ())}
+
+
+def _minimum_ratio(expected_ratio: float, *, fallback: float) -> float:
+    return round(max(fallback, expected_ratio * 0.5), 4)
 
 
 def build_large_dataset_report(session: Session, config: Any) -> dict[str, Any]:
@@ -102,6 +121,56 @@ def build_large_dataset_report(session: Session, config: Any) -> dict[str, Any]:
             select(func.count()).select_from(BorrowOrder).where(BorrowOrder.fulfillment_mode == "robot_delivery")
         ).scalar_one()
     )
+    active_orders = int(
+        session.execute(
+            select(func.count()).select_from(BorrowOrder).where(BorrowOrder.status.in_(ACTIVE_BORROW_ORDER_STATUSES))
+        ).scalar_one()
+    )
+    blocked_watch_readers = int(
+        session.execute(
+            select(func.count()).select_from(ReaderProfile).where(ReaderProfile.restriction_status.in_(["watch", "blocked"]))
+        ).scalar_one()
+    )
+    damaged_returns = int(
+        session.execute(
+            select(func.count()).select_from(ReturnRequest).where(ReturnRequest.condition_code == "damaged")
+        ).scalar_one()
+    )
+
+    cutoff_at = cfg.get("cutoff_at")
+    borrow_related_future_timestamps = 0
+    if cutoff_at is not None:
+        borrow_related_future_timestamps = sum(
+            [
+                _future_timestamp_count(
+                    session,
+                    BorrowOrder,
+                    cutoff_at,
+                    ["created_at", "updated_at", "picked_at", "delivered_at", "completed_at", "due_at"],
+                ),
+                _future_timestamp_count(
+                    session,
+                    OrderFulfillment,
+                    cutoff_at,
+                    ["created_at", "updated_at", "picked_at", "delivered_at", "completed_at"],
+                ),
+                _future_timestamp_count(
+                    session,
+                    ReturnRequest,
+                    cutoff_at,
+                    ["created_at", "updated_at", "received_at", "processed_at"],
+                ),
+            ]
+        )
+
+    borrow_weights = _weight_map(cfg, "borrow_status_weights")
+    reader_restriction_weights = _weight_map(cfg, "reader_restriction_status_weights")
+    return_condition_weights = _weight_map(cfg, "return_condition_weights")
+
+    cancelled_ratio = _ratio(cancelled_orders, counts["borrow_orders"])
+    active_ratio = _ratio(active_orders, counts["borrow_orders"])
+    blocked_watch_ratio = _ratio(blocked_watch_readers, counts["reader_profiles"])
+    damaged_ratio = _ratio(damaged_returns, counts["return_requests"])
 
     thresholds = {
         "books": {
@@ -154,11 +223,54 @@ def build_large_dataset_report(session: Session, config: Any) -> dict[str, Any]:
             "target": cfg["target_learning_sessions"],
             "ok": counts["learning_sessions"] >= cfg["target_learning_sessions"],
         },
+        "future_timestamps": {
+            "actual": borrow_related_future_timestamps,
+            "target": 0,
+            "ok": borrow_related_future_timestamps == 0,
+        },
+        "cancelled_ratio": {
+            "actual": cancelled_ratio,
+            "target": _minimum_ratio(borrow_weights.get("cancelled", 0.0), fallback=0.02),
+            "ok": cancelled_ratio >= _minimum_ratio(borrow_weights.get("cancelled", 0.0), fallback=0.02),
+        },
+        "active_ratio": {
+            "actual": active_ratio,
+            "target": _minimum_ratio(
+                sum(weight for status, weight in borrow_weights.items() if status in ACTIVE_BORROW_ORDER_STATUSES),
+                fallback=0.1,
+            ),
+            "ok": active_ratio >= _minimum_ratio(
+                sum(weight for status, weight in borrow_weights.items() if status in ACTIVE_BORROW_ORDER_STATUSES),
+                fallback=0.1,
+            ),
+        },
+        "blocked_watch_ratio": {
+            "actual": blocked_watch_ratio,
+            "target": _minimum_ratio(
+                reader_restriction_weights.get("watch", 0.0) + reader_restriction_weights.get("blocked", 0.0),
+                fallback=0.03,
+            ),
+            "ok": blocked_watch_ratio >= _minimum_ratio(
+                reader_restriction_weights.get("watch", 0.0) + reader_restriction_weights.get("blocked", 0.0),
+                fallback=0.03,
+            ),
+        },
+        "damaged_ratio": {
+            "actual": damaged_ratio,
+            "target": _minimum_ratio(return_condition_weights.get("damaged", 0.0), fallback=0.03),
+            "ok": damaged_ratio >= _minimum_ratio(return_condition_weights.get("damaged", 0.0), fallback=0.03),
+        },
     }
 
     return {
         "counts": counts,
         "thresholds": thresholds,
+        "timelines": {
+            "borrow_related": {
+                "cutoff_at": cutoff_at.isoformat() if cutoff_at is not None else None,
+                "future_timestamp_count": borrow_related_future_timestamps,
+            }
+        },
         "noise": {
             "search_logs": {
                 "empty_query_ratio": _ratio(empty_queries, counts["search_logs"]),
@@ -167,8 +279,15 @@ def build_large_dataset_report(session: Session, config: Any) -> dict[str, Any]:
                 "low_score_ratio": _ratio(low_score_recommendations, counts["recommendation_logs"]),
             },
             "borrow_orders": {
-                "cancelled_ratio": _ratio(cancelled_orders, counts["borrow_orders"]),
+                "cancelled_ratio": cancelled_ratio,
+                "active_ratio": active_ratio,
                 "robot_delivery_ratio": _ratio(robot_delivery_orders, counts["borrow_orders"]),
+            },
+            "reader_profiles": {
+                "blocked_watch_ratio": blocked_watch_ratio,
+            },
+            "return_requests": {
+                "damaged_ratio": damaged_ratio,
             },
         },
     }

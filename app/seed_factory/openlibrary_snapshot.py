@@ -9,6 +9,8 @@ from pathlib import Path
 import re
 from typing import Any
 
+from app.seed_factory.tabular_sources import load_tabular_source_data
+
 
 MAX_TAGS_PER_BOOK = 12
 OPENLIBRARY_COVER_TEMPLATE = "https://covers.openlibrary.org/b/id/{cover_id}-L.jpg"
@@ -390,15 +392,24 @@ def _merge_snapshot_record(existing: dict[str, Any], candidate: dict[str, Any]) 
 
 
 def build_snapshot_records_from_source_dir(*, source_dir: Path, limit: int | None = None) -> list[dict[str, Any]]:
-    import pandas as pd
-
     if not source_dir.exists():
         raise FileNotFoundError(f"source dir not found: {source_dir}")
 
-    csv_path = source_dir / "books_openlibrary_sample.csv"
-    chinese_path = source_dir / "中文图书数据集关键词分词.xlsx"
-    foreign_path = source_dir / "外文图书分类数据集.xlsx"
-    douban_path = source_dir / "豆瓣书籍汇总.xlsx"
+    default_files = [
+        source_dir / "books_openlibrary_sample.csv",
+        source_dir / "中文图书数据集关键词分词.xlsx",
+        source_dir / "外文图书分类数据集.xlsx",
+        source_dir / "豆瓣书籍汇总.xlsx",
+    ]
+    return build_snapshot_records_from_source_files(
+        source_files=[path for path in default_files if path.exists()],
+        limit=limit,
+    )
+
+
+def build_snapshot_records_from_source_files(*, source_files: list[Path], limit: int | None = None) -> list[dict[str, Any]]:
+    if not source_files:
+        return []
 
     records_by_key: dict[str, dict[str, Any]] = {}
 
@@ -409,9 +420,9 @@ def build_snapshot_records_from_source_dir(*, source_dir: Path, limit: int | Non
         current = records_by_key.get(key)
         records_by_key[key] = candidate if current is None else _merge_snapshot_record(current, candidate)
 
-    if csv_path.exists():
-        df = pd.read_csv(csv_path)
-        for row in df.to_dict(orient="records"):
+    for source_file in source_files:
+        normalized = load_tabular_source_data(source_file, max_rows=None)
+        for row in normalized.to_dict(orient="records"):
             upsert(
                 _normalize_source_record(
                     title=row.get("title"),
@@ -419,52 +430,8 @@ def build_snapshot_records_from_source_dir(*, source_dir: Path, limit: int | Non
                     category=row.get("category"),
                     keywords=row.get("keywords"),
                     summary=row.get("summary"),
-                )
-            )
-
-    if chinese_path.exists():
-        df = pd.read_excel(chinese_path, sheet_name=0)
-        for row in df.to_dict(orient="records"):
-            upsert(
-                _normalize_source_record(
-                    title=row.get("书名"),
-                    author=row.get("作者"),
-                    category=row.get("中国图书分类号"),
-                    keywords=row.get("关键词"),
-                    summary=row.get("摘要"),
-                    first_publish_year=row.get("出版年月"),
-                )
-            )
-
-    if foreign_path.exists():
-        xls = pd.ExcelFile(foreign_path)
-        for sheet_name in xls.sheet_names:
-            df = pd.read_excel(foreign_path, sheet_name=sheet_name)
-            if df.empty:
-                continue
-            for row in df.to_dict(orient="records"):
-                upsert(
-                    _normalize_source_record(
-                        title=row.get("书名"),
-                        author=row.get("作者"),
-                        category=row.get("分类号"),
-                        summary=row.get("出版社"),
-                        first_publish_year=row.get("出版年"),
-                    )
-                )
-
-    if douban_path.exists():
-        df = pd.read_excel(douban_path, sheet_name=0)
-        for row in df.to_dict(orient="records"):
-            keyword_parts = [row.get("豆瓣成员常用的标签"), row.get("标签")]
-            upsert(
-                _normalize_source_record(
-                    title=row.get("书名"),
-                    author=row.get("作者"),
-                    keywords=" ".join(_normalize_text(part) for part in keyword_parts if _normalize_text(part)),
-                    summary=row.get("内容简介"),
-                    isbn=row.get("ISBN号"),
-                    first_publish_year=row.get("出版时间"),
+                    isbn=row.get("isbn"),
+                    first_publish_year=row.get("first_publish_year"),
                 )
             )
 
@@ -567,14 +534,31 @@ def build_snapshot_file(
     authors_dump_path: Path | None,
     editions_dump_path: Path | None,
     source_dir: Path | None,
+    source_files: list[Path] | None,
     output_path: Path,
     limit: int | None = 100_000,
 ) -> SnapshotBuildStats:
-    if source_dir is not None:
-        records = build_snapshot_records_from_source_dir(source_dir=source_dir, limit=limit)
+    explicit_source_files = [path.expanduser().resolve() for path in (source_files or [])]
+    if source_dir is not None or explicit_source_files:
+        source_records: list[dict[str, Any]] = []
+        if source_dir is not None:
+            source_records.extend(build_snapshot_records_from_source_dir(source_dir=source_dir, limit=None))
+        if explicit_source_files:
+            source_records.extend(build_snapshot_records_from_source_files(source_files=explicit_source_files, limit=None))
+        deduped_records: dict[str, dict[str, Any]] = {}
+        for record in source_records:
+            key = f"{_normalize_key(record['title'])}|{_normalize_key(record.get('author') or '')}"
+            current = deduped_records.get(key)
+            deduped_records[key] = record if current is None else _merge_snapshot_record(current, record)
+        records = sorted(
+            deduped_records.values(),
+            key=lambda item: (_normalize_key(item["title"]), _normalize_key(item.get("author") or "")),
+        )
+        if limit is not None:
+            records = records[:limit]
     else:
         if works_dump_path is None:
-            raise ValueError("works_dump_path is required when source_dir is not provided")
+            raise ValueError("works_dump_path is required when source_dir and source_files are not provided")
         records = build_snapshot_records(
             works_dump_path=works_dump_path,
             authors_dump_path=authors_dump_path,

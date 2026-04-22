@@ -202,6 +202,28 @@ SEARCH_MODE_WEIGHTS = (
     ("voice", 0.03),
 )
 SEEDED_READER_PASSWORD = "reader123"
+ACTIVE_BORROW_ORDER_STATUSES = ("created", "awaiting_pick", "picked_from_cabinet", "delivering", "delivered")
+FINAL_BORROW_ORDER_STATUSES = ("completed", "cancelled", "returned")
+DEFAULT_BORROW_STATUS_WEIGHTS = (
+    ("created", 0.10),
+    ("awaiting_pick", 0.14),
+    ("picked_from_cabinet", 0.08),
+    ("delivering", 0.08),
+    ("delivered", 0.08),
+    ("completed", 0.22),
+    ("cancelled", 0.17),
+    ("returned", 0.13),
+)
+DEFAULT_READER_RESTRICTION_STATUS_WEIGHTS = (
+    ("active", 0.85),
+    ("watch", 0.08),
+    ("blocked", 0.07),
+)
+DEFAULT_RETURN_CONDITION_WEIGHTS = (
+    ("good", 0.62),
+    ("worn", 0.23),
+    ("damaged", 0.15),
+)
 NULL_LIKE_TEXTS = frozenset({"nan", "null", "none", "n/a", "na", "nat", "<na>", "undefined", "unknown"})
 AUTHOR_PATH_PATTERN = re.compile(r"^/authors/OL[\w-]+A?$", re.IGNORECASE)
 CLASSIFICATION_CODE_PATTERN = re.compile(r"^[A-Z]{1,3}(?:[\-./=:()]?\d[\dA-Z.\-()/=:]*|)$", re.IGNORECASE)
@@ -263,7 +285,14 @@ class LargeDatasetConfig:
     max_unique_categories: int = 320
     max_unique_tags: int = 6_000
     anchor_time: datetime = field(default_factory=lambda: datetime(2026, 4, 15, 12, 0, tzinfo=timezone.utc))
+    cutoff_at: datetime = field(default_factory=lambda: datetime(2026, 4, 22, 15, 59, 59, tzinfo=timezone.utc))
     history_days: int = 540
+    borrow_status_weights: tuple[tuple[str, float], ...] = DEFAULT_BORROW_STATUS_WEIGHTS
+    reader_restriction_status_weights: tuple[tuple[str, float], ...] = DEFAULT_READER_RESTRICTION_STATUS_WEIGHTS
+    return_condition_weights: tuple[tuple[str, float], ...] = DEFAULT_RETURN_CONDITION_WEIGHTS
+    cancelled_manual_review_probability: float = 0.5
+    overdue_or_due_today_active_order_ratio: float = 0.35
+    interest_drift_ratio: float = 0.25
     robot_unit_count: int | None = None
     reading_event_count: int | None = None
     inventory_event_count: int | None = None
@@ -273,6 +302,54 @@ class LargeDatasetConfig:
 
     def __post_init__(self) -> None:
         self.snapshot_path = Path(self.snapshot_path)
+        self.cutoff_at = self.cutoff_at.astimezone(timezone.utc)
+        self.anchor_time = min(self.anchor_time.astimezone(timezone.utc), self.cutoff_at)
+        self.borrow_status_weights = tuple(self.borrow_status_weights)
+        self.reader_restriction_status_weights = tuple(self.reader_restriction_status_weights)
+        self.return_condition_weights = tuple(self.return_condition_weights)
+
+    @classmethod
+    def for_scale_profile(
+        cls,
+        *,
+        snapshot_path: Path,
+        snapshot_book_count: int,
+        scale_profile: str = "full",
+        anchor_time: datetime | None = None,
+        cutoff_at: datetime | None = None,
+        **overrides: Any,
+    ) -> "LargeDatasetConfig":
+        if scale_profile != "full":
+            raise ValueError(f"Unsupported scale profile: {scale_profile}")
+        if snapshot_book_count <= 0:
+            raise ValueError("snapshot_book_count must be greater than 0")
+
+        base = cls(snapshot_path=snapshot_path)
+        scale = snapshot_book_count / 100_000
+        scaled_targets = {
+            "target_books": snapshot_book_count,
+            "target_readers": _round_up_to_step(base.target_readers * scale, 10),
+            "target_book_source_documents": _round_up_to_step(base.target_book_source_documents * scale, 100),
+            "target_book_copies": _round_up_to_step(base.target_book_copies * scale, 100),
+            "target_borrow_orders": _round_up_to_step(base.target_borrow_orders * scale, 100),
+            "target_search_logs": _round_up_to_step(base.target_search_logs * scale, 100),
+            "target_recommendation_logs": _round_up_to_step(base.target_recommendation_logs * scale, 100),
+            "target_conversation_sessions": _round_up_to_step(base.target_conversation_sessions * scale, 100),
+            "target_conversation_messages": _round_up_to_step(base.target_conversation_messages * scale, 100),
+            "target_learning_profiles": _round_up_to_step(base.target_learning_profiles * scale, 100),
+            "target_learning_fragments": _round_up_to_step(base.target_learning_fragments * scale, 100),
+            "target_learning_sessions": _round_up_to_step(base.target_learning_sessions * scale, 100),
+            "target_learning_turns": _round_up_to_step(base.target_learning_turns * scale, 100),
+        }
+        effective_cutoff = cutoff_at or anchor_time or base.cutoff_at
+        effective_anchor = anchor_time or effective_cutoff
+        return cls(
+            snapshot_path=snapshot_path,
+            anchor_time=effective_anchor,
+            cutoff_at=effective_cutoff,
+            **scaled_targets,
+            **overrides,
+        )
 
     @property
     def target_robot_units(self) -> int:
@@ -951,7 +1028,7 @@ def _build_reader_records(
         display_name = real_names[reader_id - 1]
         interest_count = rng.randint(2, 5)
         interest_tags = rng.sample(top_tags, k=min(interest_count, len(top_tags))) if top_tags else []
-        restriction_status = _pick_weighted(rng, [("active", 0.93), ("watch", 0.04), ("blocked", 0.03)])
+        restriction_status = _pick_weighted(rng, list(config.reader_restriction_status_weights))
         restriction_until = None
         if restriction_status == "blocked":
             restriction_until = now + timedelta(days=rng.randint(7, 45))
@@ -1312,40 +1389,46 @@ def _build_order_records(
 ) -> tuple[list[tuple[type[Any], list[dict[str, Any]], str]], list[dict[str, Any]]]:
     reader_sampler = WeightedSampler.from_weight_map([(reader["id"], reader["activity_weight"]) for reader in reader_state])
     book_sampler = WeightedSampler.from_weight_map([(book["id"], book["popularity"]) for book in book_state])
+    reader_by_id = {reader["id"]: reader for reader in reader_state}
     copies_by_book: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    books_by_tag: dict[str, list[int]] = defaultdict(list)
+    book_by_id = {book["id"]: book for book in book_state}
     for copy in copy_state:
         copies_by_book[copy["book_id"]].append(copy)
+    for book in book_state:
+        for tag in book.get("tags") or []:
+            books_by_tag[tag].append(book["id"])
 
     borrow_rows: list[dict[str, Any]] = []
     fulfillment_rows: list[dict[str, Any]] = []
     return_rows: list[dict[str, Any]] = []
     fulfillment_state: list[dict[str, Any]] = []
 
-    order_status_weights = [
-        ("created", 0.08),
-        ("awaiting_pick", 0.12),
-        ("picked_from_cabinet", 0.08),
-        ("delivering", 0.07),
-        ("delivered", 0.07),
-        ("completed", 0.32),
-        ("cancelled", 0.13),
-        ("returned", 0.13),
-    ]
-
     admin_ids = [1, 2, 3, 4]
     fulfillment_id = 1
     return_id = 1
     for order_id in range(1, config.target_borrow_orders + 1):
         reader_id = reader_sampler.sample(rng)
-        book_id = book_sampler.sample(rng)
-        status = _pick_weighted(rng, order_status_weights)
+        reader = reader_by_id[reader_id]
+        book_id = _pick_book_for_reader(
+            reader=reader,
+            book_sampler=book_sampler,
+            book_by_id=book_by_id,
+            books_by_tag=books_by_tag,
+            rng=rng,
+            drift_ratio=config.interest_drift_ratio,
+        )
+        status = _pick_weighted(rng, list(config.borrow_status_weights))
         fulfillment_mode = _pick_weighted(rng, [("cabinet_pickup", 0.58), ("robot_delivery", 0.42)])
         book_copies = copies_by_book.get(book_id) or []
         assigned_copy = book_copies[rng.randrange(len(book_copies))] if book_copies and rng.random() < 0.93 else None
-        created_at = _random_datetime(config.anchor_time, config.history_days, rng)
-        picked_at = created_at + timedelta(hours=rng.randint(1, 24)) if status in {"picked_from_cabinet", "delivering", "delivered", "completed", "returned"} else None
-        delivered_at = picked_at + timedelta(hours=rng.randint(1, 8)) if status in {"delivered", "completed", "returned"} and picked_at else None
-        completed_at = delivered_at + timedelta(hours=rng.randint(2, 72)) if status in {"completed", "returned"} and delivered_at else None
+        timeline = _build_borrow_order_timeline(
+            status=status,
+            cutoff_at=config.cutoff_at,
+            history_days=config.history_days,
+            overdue_or_due_today_ratio=config.overdue_or_due_today_active_order_ratio,
+            rng=rng,
+        )
         failure_reason = None
         if status == "cancelled":
             failure_reason = _pick_weighted(
@@ -1361,15 +1444,19 @@ def _build_order_records(
                 "fulfillment_mode": fulfillment_mode,
                 "status": status,
                 "priority": _pick_weighted(rng, [("low", 0.22), ("normal", 0.61), ("urgent", 0.17)]),
-                "due_at": created_at + timedelta(days=rng.randint(7, 45)),
+                "due_at": timeline["due_at"],
                 "failure_reason": failure_reason,
-                "intervention_status": "manual_review" if status == "cancelled" and rng.random() < 0.36 else None,
+                "intervention_status": (
+                    "manual_review"
+                    if status == "cancelled" and rng.random() < config.cancelled_manual_review_probability
+                    else None
+                ),
                 "attempt_count": rng.randint(0, 3),
-                "created_at": created_at,
-                "updated_at": created_at + timedelta(days=rng.randint(0, 14)),
-                "picked_at": picked_at,
-                "delivered_at": delivered_at,
-                "completed_at": completed_at,
+                "created_at": timeline["created_at"],
+                "updated_at": timeline["updated_at"],
+                "picked_at": timeline["picked_at"],
+                "delivered_at": timeline["delivered_at"],
+                "completed_at": timeline["completed_at"],
             }
         )
 
@@ -1387,11 +1474,11 @@ def _build_order_records(
                         [("主馆自助提取口", 0.44), ("宿舍北区前台", 0.24), ("实验楼共享工位", 0.18), ("行政楼服务台", 0.14)],
                     ),
                     "status": fulfillment_status,
-                    "picked_at": picked_at,
-                    "delivered_at": delivered_at,
-                    "completed_at": completed_at,
-                    "created_at": created_at,
-                    "updated_at": created_at + timedelta(hours=rng.randint(1, 48)),
+                    "picked_at": timeline["picked_at"],
+                    "delivered_at": timeline["delivered_at"],
+                    "completed_at": timeline["completed_at"],
+                    "created_at": timeline["created_at"],
+                    "updated_at": timeline["updated_at"],
                 }
             )
             fulfillment_state.append(
@@ -1407,7 +1494,12 @@ def _build_order_records(
 
         if status in {"returned", "completed"} and assigned_copy and rng.random() < 0.54:
             return_status = _pick_weighted(rng, [("created", 0.12), ("received", 0.22), ("completed", 0.58), ("cancelled", 0.08)])
-            created_return_at = created_at + timedelta(days=rng.randint(8, 60))
+            return_timeline = _build_return_request_timeline(
+                base_time=timeline["completed_at"] or timeline["delivered_at"] or timeline["updated_at"],
+                cutoff_at=config.cutoff_at,
+                status=return_status,
+                rng=rng,
+            )
             return_rows.append(
                 {
                     "id": return_id,
@@ -1416,14 +1508,14 @@ def _build_order_records(
                     "receive_cabinet_id": assigned_copy["cabinet_id"] or f"cabinet-{1 + (order_id % 3):03d}",
                     "receive_slot_id": assigned_copy["current_slot_id"],
                     "processed_by_admin_id": admin_ids[order_id % len(admin_ids)] if return_status in {"received", "completed", "cancelled"} else None,
-                    "processed_at": created_return_at + timedelta(hours=6) if return_status in {"completed", "cancelled"} else None,
+                    "processed_at": return_timeline["processed_at"],
                     "result": "shelved" if return_status == "completed" else ("rejected" if return_status == "cancelled" else None),
-                    "condition_code": _pick_weighted(rng, [("good", 0.72), ("worn", 0.18), ("damaged", 0.1)]),
-                    "received_at": created_return_at + timedelta(hours=2) if return_status in {"received", "completed"} else None,
+                    "condition_code": _pick_weighted(rng, list(config.return_condition_weights)),
+                    "received_at": return_timeline["received_at"],
                     "note": "封面磨损" if rng.random() < 0.11 else None,
                     "status": return_status,
-                    "created_at": created_return_at,
-                    "updated_at": created_return_at + timedelta(hours=8),
+                    "created_at": return_timeline["created_at"],
+                    "updated_at": return_timeline["updated_at"],
                 }
             )
             return_id += 1
@@ -1433,6 +1525,194 @@ def _build_order_records(
         (OrderFulfillment, fulfillment_rows, "order_fulfillments"),
         (ReturnRequest, return_rows, "return_requests"),
     ], fulfillment_state
+
+
+def _pick_book_for_reader(
+    *,
+    reader: dict[str, Any],
+    book_sampler: WeightedSampler,
+    book_by_id: dict[int, dict[str, Any]],
+    books_by_tag: dict[str, list[int]],
+    rng: random.Random,
+    drift_ratio: float,
+) -> int:
+    interest_tags = [tag for tag in reader.get("interest_tags") or [] if tag]
+    interest_tag_set = set(interest_tags)
+
+    if interest_tags and rng.random() >= drift_ratio:
+        candidate_tag = interest_tags[rng.randrange(len(interest_tags))]
+        tagged_books = books_by_tag.get(candidate_tag) or []
+        if tagged_books:
+            return tagged_books[rng.randrange(len(tagged_books))]
+
+    for _ in range(12):
+        book_id = book_sampler.sample(rng)
+        if not interest_tag_set:
+            return book_id
+        if interest_tag_set.isdisjoint(set(book_by_id[book_id].get("tags") or [])):
+            return book_id
+    return book_sampler.sample(rng)
+
+
+def _build_borrow_order_timeline(
+    *,
+    status: str,
+    cutoff_at: datetime,
+    history_days: int,
+    overdue_or_due_today_ratio: float,
+    rng: random.Random,
+) -> dict[str, datetime | None]:
+    short_history = max(14, min(history_days, 45))
+
+    if status in {"completed", "returned"}:
+        completed_at = _random_datetime(cutoff_at, history_days, rng)
+        delivered_at = completed_at - timedelta(hours=rng.randint(2, 48))
+        picked_at = delivered_at - timedelta(hours=rng.randint(1, 24))
+        created_at = picked_at - timedelta(hours=rng.randint(1, 48))
+        due_at = min(cutoff_at, delivered_at + timedelta(days=rng.randint(7, 35)))
+        return {
+            "created_at": created_at,
+            "updated_at": completed_at,
+            "picked_at": picked_at,
+            "delivered_at": delivered_at,
+            "completed_at": completed_at,
+            "due_at": due_at,
+        }
+
+    if status == "cancelled":
+        cancelled_at = _random_datetime(cutoff_at, history_days, rng)
+        created_at = cancelled_at - timedelta(hours=rng.randint(1, 72))
+        return {
+            "created_at": created_at,
+            "updated_at": cancelled_at,
+            "picked_at": None,
+            "delivered_at": None,
+            "completed_at": None,
+            "due_at": None,
+        }
+
+    if status == "delivered":
+        delivered_at = _random_datetime(cutoff_at, short_history, rng)
+        picked_at = delivered_at - timedelta(hours=rng.randint(1, 24))
+        created_at = picked_at - timedelta(hours=rng.randint(1, 48))
+        due_at = _build_active_due_at(
+            reference_time=delivered_at,
+            cutoff_at=cutoff_at,
+            overdue_or_due_today_ratio=overdue_or_due_today_ratio,
+            rng=rng,
+        )
+        return {
+            "created_at": created_at,
+            "updated_at": delivered_at,
+            "picked_at": picked_at,
+            "delivered_at": delivered_at,
+            "completed_at": None,
+            "due_at": due_at,
+        }
+
+    if status == "delivering":
+        picked_at = _random_datetime(cutoff_at, short_history, rng)
+        created_at = picked_at - timedelta(hours=rng.randint(1, 48))
+        due_at = _build_active_due_at(
+            reference_time=picked_at,
+            cutoff_at=cutoff_at,
+            overdue_or_due_today_ratio=overdue_or_due_today_ratio,
+            rng=rng,
+        )
+        return {
+            "created_at": created_at,
+            "updated_at": picked_at,
+            "picked_at": picked_at,
+            "delivered_at": None,
+            "completed_at": None,
+            "due_at": due_at,
+        }
+
+    if status == "picked_from_cabinet":
+        picked_at = _random_datetime(cutoff_at, short_history, rng)
+        created_at = picked_at - timedelta(hours=rng.randint(1, 48))
+        due_at = _build_active_due_at(
+            reference_time=picked_at,
+            cutoff_at=cutoff_at,
+            overdue_or_due_today_ratio=overdue_or_due_today_ratio,
+            rng=rng,
+        )
+        return {
+            "created_at": created_at,
+            "updated_at": picked_at,
+            "picked_at": picked_at,
+            "delivered_at": None,
+            "completed_at": None,
+            "due_at": due_at,
+        }
+
+    if status == "awaiting_pick":
+        awaiting_at = _random_datetime(cutoff_at, short_history, rng)
+        created_at = awaiting_at - timedelta(hours=rng.randint(1, 72))
+        return {
+            "created_at": created_at,
+            "updated_at": awaiting_at,
+            "picked_at": None,
+            "delivered_at": None,
+            "completed_at": None,
+            "due_at": None,
+        }
+
+    created_at = _random_datetime(cutoff_at, short_history, rng)
+    return {
+        "created_at": created_at,
+        "updated_at": created_at,
+        "picked_at": None,
+        "delivered_at": None,
+        "completed_at": None,
+        "due_at": None,
+    }
+
+
+def _build_active_due_at(
+    *,
+    reference_time: datetime,
+    cutoff_at: datetime,
+    overdue_or_due_today_ratio: float,
+    rng: random.Random,
+) -> datetime | None:
+    if rng.random() >= overdue_or_due_today_ratio:
+        return None
+    if rng.random() < 0.4:
+        return cutoff_at
+    overdue_at = cutoff_at - timedelta(days=rng.randint(1, 21), hours=rng.randint(0, 23))
+    return max(reference_time, overdue_at)
+
+
+def _build_return_request_timeline(
+    *,
+    base_time: datetime,
+    cutoff_at: datetime,
+    status: str,
+    rng: random.Random,
+) -> dict[str, datetime | None]:
+    created_at = _advance_not_past(
+        base_time,
+        timedelta(days=rng.randint(1, 28), hours=rng.randint(0, 12)),
+        cutoff_at,
+    )
+    received_at = (
+        _advance_not_past(created_at, timedelta(hours=rng.randint(1, 24)), cutoff_at)
+        if status in {"received", "completed"}
+        else None
+    )
+    processed_at = (
+        _advance_not_past(received_at or created_at, timedelta(hours=rng.randint(1, 12)), cutoff_at)
+        if status in {"completed", "cancelled"}
+        else None
+    )
+    updated_at = processed_at or received_at or created_at
+    return {
+        "created_at": created_at,
+        "received_at": received_at,
+        "processed_at": processed_at,
+        "updated_at": updated_at,
+    }
 
 
 def _build_robot_records(
@@ -2302,6 +2582,14 @@ def _pick_weighted(rng: random.Random, weighted_items: list[tuple[Any, float]]) 
         if needle <= cumulative:
             return value
     return weighted_items[-1][0]
+
+
+def _round_up_to_step(value: float, step: int) -> int:
+    return max(step, int(math.ceil(value / step) * step))
+
+
+def _advance_not_past(base: datetime, delta: timedelta, cutoff_at: datetime) -> datetime:
+    return min(base + delta, cutoff_at)
 
 
 def _random_datetime(anchor: datetime, history_days: int, rng: random.Random) -> datetime:

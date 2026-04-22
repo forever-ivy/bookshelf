@@ -6,7 +6,11 @@ from pathlib import Path
 
 import pandas as pd
 
-from app.seed_factory.openlibrary_snapshot import build_snapshot_records, build_snapshot_records_from_source_dir
+from app.seed_factory.openlibrary_snapshot import (
+    build_snapshot_file,
+    build_snapshot_records,
+    build_snapshot_records_from_source_dir,
+)
 
 
 def _write_dump(path: Path, record_type: str, rows: list[tuple[str, dict]]) -> None:
@@ -201,6 +205,66 @@ def test_build_snapshot_records_from_source_dir_merges_local_book_sources(tmp_pa
     assert by_title["Algorithms Unlocked"]["author"] == "Thomas Cormen"
     assert by_title["Algorithms Unlocked"]["category"] == "Computer Science"
     assert "complexity" in by_title["Algorithms Unlocked"]["search_text"]
+
+
+def test_build_snapshot_file_supports_explicit_source_files_for_douban_csv(tmp_path: Path) -> None:
+    csv_path = tmp_path / "books.csv"
+    output_path = tmp_path / "snapshot.jsonl"
+    csv_path.write_text(
+        "\n".join(
+            [
+                "书名,作者,出版社,豆瓣成员常用的标签,内容简介,评分,ISBN号,定价,5条热门短评,出版时间,标签",
+                "许三观卖血记,余华,作家出版社,余华 人性 中国文学 小说,一部关于活着的小说,9,9.78751E+12,24,[],2005/4/1,小说",
+                "三体全集,刘慈欣,重庆出版社,刘慈欣 科幻 三体 科幻小说,文明与宇宙的故事,9.4,9787536692930,168,[],2012/5/1,科幻",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    stats = build_snapshot_file(
+        works_dump_path=None,
+        authors_dump_path=None,
+        editions_dump_path=None,
+        source_dir=None,
+        source_files=[csv_path],
+        output_path=output_path,
+        limit=None,
+    )
+
+    rows = [json.loads(line) for line in output_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    by_title = {row["title"]: row for row in rows}
+
+    assert stats.total_records == 2
+    assert by_title["许三观卖血记"] == {
+        "work_key": "/local/许三观卖血记|余华",
+        "title": "许三观卖血记",
+        "author": "余华",
+        "author_keys": [],
+        "category": "小说",
+        "tags": ["余华", "人性", "中国文学", "小说"],
+        "summary": "一部关于活着的小说",
+        "isbn": "9.78751E+12",
+        "cover_url": None,
+        "subjects": ["余华", "人性", "中国文学", "小说"],
+        "search_text": "许三观卖血记 余华 小说 余华 人性 中国文学 小说 一部关于活着的小说",
+        "first_publish_year": 2005,
+        "language": None,
+    }
+    assert by_title["三体全集"] == {
+        "work_key": "/local/三体全集|刘慈欣",
+        "title": "三体全集",
+        "author": "刘慈欣",
+        "author_keys": [],
+        "category": "科幻",
+        "tags": ["刘慈欣", "科幻", "三体", "科幻小说"],
+        "summary": "文明与宇宙的故事",
+        "isbn": "9787536692930",
+        "cover_url": None,
+        "subjects": ["刘慈欣", "科幻", "三体", "科幻小说"],
+        "search_text": "三体全集 刘慈欣 科幻 刘慈欣 科幻 三体 科幻小说 文明与宇宙的故事",
+        "first_publish_year": 2012,
+        "language": None,
+    }
 
 
 def test_build_snapshot_records_from_source_dir_filters_noisy_catalog_rows(tmp_path: Path) -> None:
