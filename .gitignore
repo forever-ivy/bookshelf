@@ -1,15 +1,13 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
-
-# dependencies
+# Dependencies
 node_modules/
 
-# Expo
+# Expo / build outputs
 .expo/
 dist/
 web-build/
 expo-env.d.ts
 
-# Native
+# Native / local credentials
 .kotlin/
 *.orig.*
 *.jks
@@ -17,39 +15,79 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+*.pem
 
-# Metro
+# Metro / logs / coverage
 .metro-health-check*
-
-# debug
 npm-debug.*
 yarn-debug.*
 yarn-error.*
 *.log
 coverage/
+test-results/
+playwright-report/
 
-# macOS
+# OS files
 .DS_Store
-*.pem
 
-# local env files and secrets
+# Local env files and secrets
 .env
 .env.*
 !.env.example
 !.env*.example
 .env*.local
 
-# local editor / agent overrides
-.claude/*.local.json
-
-# typescript
+# TypeScript
 *.tsbuildinfo
 
+# Local examples / scratch
 app-example
+scratch.tsx
 
-# generated native folders
+# Generated native folders
 /ios
 /android
 
-# local git worktrees
+# Local git worktrees
 .worktrees/
+
+# AI coding / agent tooling
+.claude/
+.codex/
+.cursor/
+.windsurf/
+.roo/
+.continue/
+.augment/
+.augment-code/
+.aider*
+.qodo/
+.superpowers/
+docs/superpowers/
+.github/copilot-instructions.md
+.github/prompts/
+.cursorrules
+.windsurfrules
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+COPILOT.md
+
+# Test files and test artifacts
+__tests__/
+.playwright-cli/
+jest.config.js
+jest.setup.ts
+*.test.ts
+*.test.tsx
+*.test.js
+*.test.jsx
+*.spec.ts
+*.spec.tsx
+*.spec.js
+*.spec.jsx
+*.snap
+test-*.ts
+test-*.tsx
+test-*.js
+test-*.jsx

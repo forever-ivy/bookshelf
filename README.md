@@ -1,288 +1,296 @@
 # 知序 App
 
-`app` 分支是智能书柜项目的手机端读者应用，面向借阅用户使用。它负责承接读者侧的登录、找书、借阅、收藏、个人中心和导学交互，并通过 `service` 分支提供的后端接口完成真实业务联调。
+这是智能书柜项目的移动端读者应用，对应读者日常会用到的手机端能力。
 
-## 这个分支负责什么
+它负责这些事情：
 
-- 读者登录、注册和 onboarding
+- 登录、注册、首次资料填写
 - 首页推荐、搜索、图书详情
 - 借阅单、配送进度、归还详情
 - 收藏夹和书单
-- 个人中心与阅读画像
-- 导学 tutor 工作区
-- 与 `service` 的认证、图书、订单、推荐、会话等接口对接
+- 个人中心和阅读画像
+- 导学工作区，包括 Guide、Explore、图谱、复盘、文档阅读
 
-如果你想看管理员使用的 Web 端，请切到 `admin` 分支；如果你想看接口、数据库和推荐逻辑，请切到 `service` 分支。
+这份仓库本身是前端。真实数据来自 `service` 端；管理员 Web 端在 `admin`。
 
-## 技术栈
+## 先看这三句
 
-- Expo 55
-- React 19
-- React Native 0.83
-- expo-router
-- TanStack Query
-- Zustand
-- React Native Reanimated
-- Jest
+- 这里说的“第一次部署”，指第一次把本地开发环境跑起来。
+- 第一次需要装依赖、拉起后端基础服务、导入 demo 数据、再启动 App。
+- 后续每天继续开发时，不要再执行 `bootstrap_demo_database.py --reset`，否则会把你本地数据重置回 demo 状态。
 
-## 目录结构
+## 第一次部署
 
-```text
-.
-├── app/               # 路由与页面
-├── components/        # 基础组件、页面组件、业务组件
-├── hooks/             # 应用级与业务级 hooks
-├── lib/               # API client、领域逻辑、展示逻辑、mock 数据
-├── providers/         # Query、profile sheet 等全局 provider
-├── stores/            # token 与本地会话存储
-├── assets/            # 图标、图片、启动图等资源
-├── __tests__/         # 单元测试与交互测试
-└── docs/              # PRD、联调说明、设计记录
-```
+### 1. 先准备好这些工具
 
-## 当前主要页面
+- Node.js 和 npm
+- `uv`
+- Docker Desktop
+- iOS 开发需要 Xcode
+- Android 开发需要 Android Studio 或真机
 
-- `app/login.tsx`
-- `app/register.tsx`
-- `app/onboarding/profile.tsx`
-- `app/onboarding/interests.tsx`
-- `app/(tabs)/(home)/index.tsx`
-- `app/(tabs)/search/index.tsx`
-- `app/(tabs)/borrowing/index.tsx`
-- `app/(tabs)/me/index.tsx`
-- `app/books/[bookId].tsx`
-- `app/orders/[orderId].tsx`
-- `app/returns/[returnRequestId].tsx`
-- `app/favorites/index.tsx`
-- `app/tutor/[profileId]/session/[sessionId].tsx`
+这个仓库当前带的是 `package-lock.json`，默认按 `npm` 使用。
 
-## 与后端的关系
-
-这个分支通过 `lib/api/client.ts` 中的请求层访问 `service` 后端。
-
-核心特征：
-
-- 使用 `EXPO_PUBLIC_LIBRARY_SERVICE_URL` 指定后端地址
-- 没有配置后端地址时，部分能力会走 fallback / mock，方便前端阶段性开发
-- 访问受保护接口时会自动读取本地 token
-- 遇到认证失效时会尝试用 refresh token 刷新会话
-
-默认本地联调地址通常为：
-
-```env
-EXPO_PUBLIC_LIBRARY_SERVICE_URL=http://127.0.0.1:8000
-```
-
-## 快速开始
-
-## 第一次 clone 推荐流程
-
-如果你是第一次在一台新机器上拉这个项目，并且要运行当前 `app` 分支，建议直接按下面顺序做。
-
-### 1. 拉代码并切到 `app` 分支
+### 2. 安装 App 依赖
 
 ```bash
-git clone <仓库地址> bookshelf-app
 cd bookshelf-app
-git checkout app
-```
-
-如果你已经在本地 clone 过仓库，只需要确认当前分支是 `app` 即可。
-
-### 2. 安装当前分支依赖
-
-```bash
 npm install
 ```
 
-### 3. 准备 `service` 后端
+### 3. 准备 `service` 端
 
-`app` 分支依赖 `service` 后端提供真实数据。如果你要联调真实接口，建议在另一个目录再准备一份 `service` 分支。
+这个 App 不自己带后端。要联调真实接口，需要另一个 `service` 工作目录。
+
+如果你本地还没有 `service` 目录，先准备一份：
 
 ```bash
 cd ..
-git clone <仓库地址> bookshelf-service
-cd bookshelf-service
+git clone <仓库地址> bookshelf
+cd bookshelf
 git checkout service
 uv sync
-docker compose -f docker-compose.pgvector.yml up -d
 ```
 
-如果仓库里已经带了标准演示数据库快照 `data/demo/service-demo.dump`，推荐直接恢复：
+如果你本地已经有 `bookshelf` 这个目录，就直接进入它，并确认当前是 `service` 即可。
+
+### 4. 第一次拉起 `service` 的基础依赖和 demo 数据
+
+在 `service` 根目录执行：
 
 ```bash
+docker compose -f docker-compose.pgvector.yml up -d
+until docker exec bookshelf pg_isready -U library -d service >/dev/null 2>&1; do sleep 1; done
+
+docker start bookshelf-redis 2>/dev/null || docker run -d --name bookshelf-redis -p 6379:6379 redis:7
+
+docker compose -f compose.learning.yml up -d neo4j
+
 uv run python scripts/bootstrap_demo_database.py --reset
 ```
 
-如果当前没有快照文件，就先初始化空库：
+这一步会做三件事：
 
-```bash
-uv run python scripts/init_postgres.py
-```
+- 拉起 PostgreSQL
+- 拉起 Redis 和 Neo4j
+- 导入一份标准 demo 数据
 
-然后启动后端：
+如果你只是第一次把项目跑起来，推荐直接这样做，最省事。
+
+### 5. 启动后端
+
+#### 方式 A：最小联调
+
+如果你现在只想联调登录、搜索、借阅、收藏、个人中心这类普通页面，先开 API 就够了。
+
+在 `service` 根目录执行：
 
 ```bash
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-确认后端健康检查可访问：
+#### 方式 B：完整联调
+
+如果你要联调导学、Explore、图谱、异步生成这条完整链路，推荐按下面 3 个进程来开。
+
+终端 1，在 `service` 根目录：
+
+```bash
+export LIBRARY_LEARNING_TASKS_EAGER=false
+export LIBRARY_LEARNING_AI_AGENT_URL=http://127.0.0.1:8787
+export LIBRARY_LEARNING_AI_CALLBACK_BASE_URL=http://127.0.0.1:8000
+
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+终端 2，在 `service/learning-agent` 目录：
+
+```bash
+npm install
+
+set -a
+source ../.env.local
+set +a
+
+export LIBRARY_REDIS_URL=redis://127.0.0.1:6379/0
+
+npm start
+```
+
+终端 3，在 `service` 根目录：
+
+```bash
+export LIBRARY_LEARNING_TASKS_EAGER=false
+
+uv run celery -A app.learning.tasks.celery_app worker -Q learning --loglevel=INFO
+```
+
+启动后，可以先检查：
 
 ```bash
 curl http://127.0.0.1:8000/api/v1/health
 ```
 
-### 4. 回到 `app` 分支配置环境变量
+完整模式下，`health` 里至少最好能看到这些状态：
 
-```bash
-cd ../bookshelf-app
-```
+- `database = ok`
+- `learning.queue = ok`
+- `learning.worker = ok`
 
-可以在 `.env` 中写入：
+### 6. 配置 App 环境变量
 
-```env
-EXPO_PUBLIC_LIBRARY_SERVICE_URL=http://127.0.0.1:8000
-```
-
-### 5. 启动当前分支
-
-```bash
-npx expo start
-```
-
-如果你需要直接跑原生工程，也可以用：
-
-```bash
-npx expo run:ios
-npx expo run:android
-```
-
-### 6. 第一次联调建议先验证这三条链路
-
-1. 登录是否能拿到真实账号会话
-2. 搜索页是否能返回真实图书数据
-3. 借阅/导学入口是否能拉到真实后端内容
-
-### 1. 安装依赖
-
-```bash
-npm install
-```
-
-### 2. 配置环境变量
-
-可以在 `.env` 中写入：
+回到 `bookshelf-app`，在 `.env` 里确认后端地址：
 
 ```env
 EXPO_PUBLIC_LIBRARY_SERVICE_URL=http://127.0.0.1:8000
 ```
 
-如果暂时不接真实后端，也可以不配置，但届时只能使用部分降级数据流。
+有两个注意点：
 
-### 3. 启动开发环境
+- 模拟器和同机开发，通常可以直接用 `127.0.0.1`
+- 真机调试不能用 `127.0.0.1`，要改成你电脑当前的局域网 IP
+
+如果你发现 `.env` 里已经有别人机器留下来的局域网地址，先改掉再启动。
+
+### 7. 启动 App
+
+```bash
+cd bookshelf-app
+npx expo start
+```
+
+常用启动方式：
+
+```bash
+npm run ios
+npm run android
+npm run web
+```
+
+## 后续继续开启
+
+如果你之前已经完整跑过一次，后面每天继续开发时，通常按这个顺序来。
+
+### 1. 先拉起 `service` 基础依赖
+
+在 `service` 根目录执行：
+
+```bash
+docker compose -f docker-compose.pgvector.yml up -d
+until docker exec bookshelf pg_isready -U library -d service >/dev/null 2>&1; do sleep 1; done
+
+docker start bookshelf-redis 2>/dev/null || docker run -d --name bookshelf-redis -p 6379:6379 redis:7
+
+docker compose -f compose.learning.yml up -d neo4j
+```
+
+这一步不要再加 `bootstrap_demo_database.py --reset`。
+
+### 2. 再启动后端进程
+
+如果你只看普通页面，启动 API 就够：
+
+```bash
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+如果你要继续调导学、Explore、图谱，再把下面两个也开起来：
+
+AI agent：
+
+```bash
+cd <service目录>/learning-agent
+
+set -a
+source ../.env.local
+set +a
+
+export LIBRARY_REDIS_URL=redis://127.0.0.1:6379/0
+
+npm start
+```
+
+learning worker：
+
+```bash
+cd <service目录>
+export LIBRARY_LEARNING_TASKS_EAGER=false
+
+uv run celery -A app.learning.tasks.celery_app worker -Q learning --loglevel=INFO
+```
+
+### 3. 最后启动 App
+
+在 `bookshelf-app` 根目录执行：
 
 ```bash
 npx expo start
 ```
 
-常用命令：
+## 常用命令
 
 ```bash
-npx expo run:ios
-npx expo run:android
-npx expo start --web
+npm run ios
+npm run android
+npm run web
 npm run lint
 npm test
+npm run build:learning-graph-runtime
 ```
 
-## iOS / Android 标识
+## 技术栈
 
-`app.json` 当前已经配置：
+当前这份 App 主要是下面这套组合：
 
-- iOS bundle identifier: `com.liuxuan.bookshelf.app`
-- Android package: `com.liuxuan.bookshelf.app`
-- URL scheme: `app`
+- Expo 55
+- React 19
+- React Native 0.83
+- Expo Router
+- TanStack Query
+- Zustand
+- React Native Reanimated
+- HeroUI Native
+- Uniwind + Tailwind CSS 4
+- Jest + Testing Library
 
-同时已经启用：
+## 用到的开源技术
 
-- `expo-router`
-- `expo-dev-client`
-- `expo-camera`
-- `expo-secure-store`
-- React Compiler
+下面这些库在项目里都能直接对应到实际代码：
 
-## 开发时最值得先看的文件
+- `expo`、`react`、`react-native`：跨平台应用基础
+- `expo-router`：页面路由和导航结构
+- `@tanstack/react-query`：服务端数据请求、缓存、重试
+- `zustand`：会话和本地状态管理
+- `expo-secure-store`：本地 token 安全存储
+- `assistant-ui`、`react-native-gifted-chat`：导学对话体验
+- `react-native-webview`：富文本和图谱运行容器
+- `react-native-pdf`：PDF 文档阅读
+- `react-native-markdown-display`、`katex`：Markdown 和公式渲染
+- `react-force-graph-2d`：图谱画布
+- `react-native-reanimated`、`@shopify/react-native-skia`：动画和定制绘制
+- `heroui-native`、`lucide-react-native`、`sonner-native`：基础 UI、图标、提示
+- `zod`：数据结构约束
+- `jest`、`@testing-library/react-native`：单测和交互测试
 
-如果你第一次接这个分支，建议按这个顺序读：
+## 项目亮点
 
-1. `app/_layout.tsx`
-2. `app/(tabs)/_layout.tsx`
-3. `lib/api/client.ts`
-4. `hooks/use-library-app-data.ts`
-5. `components/navigation/`
-6. `components/search/`
-7. `components/tutor/`
+这份 App 的特点，不是“页面多”，而是把几条不同类型的流程放进了一个移动端里：
 
-这样可以先建立路由、会话和数据流的基本认知。
+- 一个仓库里同时覆盖读者侧主流程：登录、找书、借阅、收藏、个人中心
+- 导学不是单一聊天页，而是拆成了 Guide、Explore、图谱、复盘、文档阅读几个部分
+- 支持 PDF 阅读、Markdown 渲染、公式渲染，学习内容不是纯文本
+- 图谱页面能把导学内容组织成节点和关系，方便从全局看知识结构
+- 没配真实后端时，部分接口可以走 fallback / mock，方便前端先做页面和交互
+- 同一套代码可以跑 iOS、Android，也保留了 Web 调试入口
 
-## 常见联调链路
+## 这个仓库和其他分支的关系
 
-### 登录链路
+- `app`：移动端读者应用，也就是当前这份仓库
+- `service`：后端接口、数据库、导学流程、推荐能力
+- `admin`：管理员 Web 端
 
-- 用户输入账号密码
-- App 调用 `service` 的认证接口
-- access token / refresh token 写入本地存储
-- 后续请求自动携带 token
+如果你现在要解决的是“App 为什么连不上后端”，先优先检查这三件事：
 
-### 搜索与借阅链路
-
-- 用户在搜索页查询图书
-- App 调用 catalog / recommendation 接口
-- 用户发起借阅后查看订单和配送状态
-
-### 导学链路
-
-- 用户进入 tutor 工作区
-- App 拉取 profile、session、sources 等数据
-- 与后端的推荐 / 会话能力协作
-
-## 测试
-
-```bash
-npm test
-```
-
-当前测试主要覆盖：
-
-- 路由加载与页面壳子
-- 搜索页与头部显示
-- UI shell 和部分交互行为
-
-## 常见问题
-
-### 启动了 App 但接口都失败
-
-先检查：
-
-- `service` 分支是否已经启动
-- `EXPO_PUBLIC_LIBRARY_SERVICE_URL` 是否正确
-- 手机模拟器是否能访问本机 `8000` 端口
-
-### 页面能开，但数据是假的
-
-通常说明没有连上真实后端，当前走的是 fallback / mock 流程。
-
-### 登录后又被打回登录页
-
-通常说明：
-
-- access token 已过期
-- refresh token 不可用
-- 后端地址配置错了
-
-## 推荐的本地联调顺序
-
-1. 切到 `service` 分支并启动后端
-2. 确认 `http://127.0.0.1:8000/api/v1/health` 可访问
-3. 回到当前 `app` 分支配置 `EXPO_PUBLIC_LIBRARY_SERVICE_URL`
-4. 启动 Expo 并从登录、搜索、借阅三条主链路开始联调
+1. `service` 有没有真的启动
+2. `EXPO_PUBLIC_LIBRARY_SERVICE_URL` 写的是不是当前正确地址
+3. 真机调试时是不是还误用了 `127.0.0.1`
