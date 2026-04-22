@@ -188,9 +188,7 @@ export function LoginPage() {
               <h1 className="text-3xl font-bold tracking-tight text-[var(--foreground)]">
                 图书馆管理后台
               </h1>
-              <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-                管理图书、读者、订单和库存。
-              </p>
+              
             </motion.div>
 
             {/* Form */}
