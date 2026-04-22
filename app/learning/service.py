@@ -38,6 +38,16 @@ except Exception:  # pragma: no cover - optional in tests
 
 FILENAME_SANITIZER = re.compile(r"[^A-Za-z0-9._-]+")
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_]+|[\u4e00-\u9fff]+")
+GRAPH_ID_SANITIZER = re.compile(r"[^\w\u4e00-\u9fff-]+", re.UNICODE)
+PARAGRAPH_BREAK_PATTERN = re.compile(r"\n\s*\n+", re.MULTILINE)
+MARKDOWN_HEADING_PATTERN = re.compile(r"^\s{0,3}(#{1,6})\s+(.+?)\s*$")
+CN_SECTION_HEADING_PATTERN = re.compile(r"^\s*(第[一二三四五六七八九十百千万0-9]+[章节篇部分]\s*.+)\s*$")
+ENUMERATED_HEADING_PATTERN = re.compile(r"^\s*((?:\d+(?:\.\d+){0,3}|[一二三四五六七八九十]+、)\s*[^\n。！？：:]{2,48})\s*$")
+DEFINITION_PATTERN = re.compile(r"^\s*(定义(?:\s*\d+(?:\.\d+)*)?)", re.MULTILINE)
+THEOREM_PATTERN = re.compile(r"^\s*((?:定理|引理|命题|推论)(?:\s*\d+(?:\.\d+)*)?)", re.MULTILINE)
+METHOD_PATTERN = re.compile(r"(?:^|\n)\s*(?:方法|算法|步骤)[:：]|\bmethod\b", re.IGNORECASE)
+CLAIM_PATTERN = re.compile(r"(?:结果表明|说明了?|由此可见|因此|本文提出|我们提出|实验显示)")
+FORMULA_PATTERN = re.compile(r"\$\$|\\\[|\\\]|\\begin\{equation|\\lim|\\sum|\\int|=")
 MINERU_SUPPORTED_SUFFIXES = {".pdf", ".docx", ".pptx", ".xlsx", ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}
 logger = logging.getLogger(__name__)
 
@@ -75,6 +85,201 @@ def _dedupe(items: list[str]) -> list[str]:
 
 def _chapter_label(index: int) -> str:
     return f"Section {index + 1}"
+
+
+def _slugify_graph_label(value: str, *, fallback: str) -> str:
+    normalized = GRAPH_ID_SANITIZER.sub("-", (value or "").strip().lower()).strip("-")
+    return normalized or fallback
+
+
+def _match_section_heading(line: str) -> tuple[str, int] | None:
+    stripped = line.strip()
+    if not stripped:
+        return None
+
+    markdown_match = MARKDOWN_HEADING_PATTERN.match(line)
+    if markdown_match:
+        return markdown_match.group(2).strip(), len(markdown_match.group(1))
+
+    cn_match = CN_SECTION_HEADING_PATTERN.match(line)
+    if cn_match:
+        return cn_match.group(1).strip(), 1
+
+    enum_match = ENUMERATED_HEADING_PATTERN.match(line)
+    if enum_match and len(stripped) <= 48:
+        return enum_match.group(1).strip(), 2
+
+    if stripped in {"摘要", "引言", "绪论", "方法", "实验", "结果", "讨论", "结论", "参考文献"}:
+        return stripped, 1
+
+    return None
+
+
+def _parse_structured_sections(text: str) -> list[dict[str, Any]]:
+    source = text or ""
+    if not source.strip():
+        return []
+
+    sections: list[dict[str, Any]] = []
+    current_title: str | None = None
+    current_level = 1
+    current_body_start = 0
+    buffer: list[str] = []
+    offset = 0
+    saw_heading = False
+
+    def flush(*, body_end: int) -> None:
+        nonlocal buffer
+        if current_title is None and not "".join(buffer).strip():
+            buffer = []
+            return
+        title = current_title or _chapter_label(len(sections))
+        content = "".join(buffer).strip()
+        if not content:
+            buffer = []
+            return
+        sections.append(
+            {
+                "content": content,
+                "id": f"section:{len(sections) + 1}:{_slugify_graph_label(title, fallback='section')}",
+                "level": current_level,
+                "start": current_body_start,
+                "end": body_end,
+                "title": title,
+            }
+        )
+        buffer = []
+
+    for line in source.splitlines(keepends=True):
+        heading = _match_section_heading(line)
+        line_start = offset
+        line_end = offset + len(line)
+        if heading is not None:
+            saw_heading = True
+            flush(body_end=line_start)
+            current_title, current_level = heading
+            current_body_start = line_end
+        else:
+            buffer.append(line)
+        offset = line_end
+
+    if saw_heading:
+        flush(body_end=len(source))
+    else:
+        sections.append(
+            {
+                "content": source.strip(),
+                "id": "section:1:section-1",
+                "level": 1,
+                "start": 0,
+                "end": len(source),
+                "title": _chapter_label(0),
+            }
+        )
+
+    return sections
+
+
+def _split_sentence_spans(text: str, *, base_offset: int) -> list[dict[str, Any]]:
+    spans: list[dict[str, Any]] = []
+    for index, match in enumerate(re.finditer(r"[^。！？；;\n]+[。！？；;]?", text or "")):
+        sentence = match.group(0).strip()
+        if not sentence:
+            continue
+        spans.append(
+            {
+                "index": index,
+                "offsetStart": base_offset + match.start(),
+                "offsetEnd": base_offset + match.end(),
+                "text": sentence,
+            }
+        )
+    if spans:
+        return spans
+    compact = (text or "").strip()
+    if not compact:
+        return []
+    return [
+        {
+            "index": 0,
+            "offsetStart": base_offset,
+            "offsetEnd": base_offset + len(compact),
+            "text": compact,
+        }
+    ]
+
+
+def _classify_structured_block(text: str) -> str:
+    content = (text or "").strip()
+    if not content:
+        return "text"
+    if DEFINITION_PATTERN.search(content):
+        return "definition"
+    if THEOREM_PATTERN.search(content):
+        return "theorem"
+    if FORMULA_PATTERN.search(content):
+        return "formula"
+    if METHOD_PATTERN.search(content):
+        return "method"
+    if CLAIM_PATTERN.search(content):
+        return "claim"
+    return "text"
+
+
+def _split_structured_blocks(section: dict[str, Any]) -> list[dict[str, Any]]:
+    content = str(section.get("content") or "")
+    blocks: list[dict[str, Any]] = []
+    cursor = 0
+    while cursor < len(content):
+        while cursor < len(content) and content[cursor].isspace():
+            cursor += 1
+        if cursor >= len(content):
+            break
+        separator = PARAGRAPH_BREAK_PATTERN.search(content, cursor)
+        raw_end = separator.start() if separator else len(content)
+        block = content[cursor:raw_end].strip()
+        if block:
+            leading_trim = len(content[cursor:raw_end]) - len(content[cursor:raw_end].lstrip())
+            trailing_trim = len(content[cursor:raw_end]) - len(content[cursor:raw_end].rstrip())
+            start = section["start"] + cursor + leading_trim
+            end = section["start"] + raw_end - trailing_trim
+            blocks.append(
+                {
+                    "content": block,
+                    "offsetStart": start,
+                    "offsetEnd": max(start, end),
+                    "sectionId": section["id"],
+                    "sectionLevel": section["level"],
+                    "sectionTitle": section["title"],
+                    "type": _classify_structured_block(block),
+                }
+            )
+        cursor = separator.end() if separator else len(content)
+
+    return blocks
+
+
+def _chunk_text_with_offsets(text: str, *, chunk_size: int, overlap: int) -> list[tuple[str, int, int]]:
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return []
+    if chunk_size <= overlap:
+        overlap = max(0, chunk_size // 5)
+    chunks: list[tuple[str, int, int]] = []
+    start = 0
+    while start < len(cleaned):
+        end = min(len(cleaned), start + chunk_size)
+        chunks.append((cleaned[start:end], start, end))
+        if end >= len(cleaned):
+            break
+        start = max(end - overlap, start + 1)
+    return chunks
+
+
+def _build_structured_summary(content: str) -> str:
+    first_sentence = next((span["text"] for span in _split_sentence_spans(content, base_offset=0)), None)
+    preview = first_sentence or " ".join((content or "").split())
+    return preview[:72]
 
 
 def learning_profile_storage_dir(*, settings: Settings, reader_id: int, profile_id: int) -> Path:
@@ -523,14 +728,19 @@ class LearningService:
                 plan_job.status = "processing"
 
             existing_versions = repository.list_profile_path_versions(session, profile_id=profile.id)
+            published_graph_snapshot = graph_result.snapshot
+            published_graph_provider = graph_result.provider
+            if not graph_result.success and existing_versions:
+                published_graph_snapshot = existing_versions[0].graph_snapshot_json or graph_result.snapshot
+                published_graph_provider = existing_versions[0].graph_provider or graph_result.provider
             path_version = repository.create_path_version(
                 session,
                 profile_id=profile.id,
                 version_number=(existing_versions[0].version_number + 1 if existing_versions else 1),
                 title=f"{profile.title}导学路径",
                 overview=planned["summary"],
-                graph_snapshot_json=graph_result.snapshot,
-                graph_provider=graph_result.provider,
+                graph_snapshot_json=published_graph_snapshot,
+                graph_provider=published_graph_provider,
                 metadata_json={"concepts": planned["concepts"]},
             )
             step_rows = repository.replace_path_steps(session, path_version_id=path_version.id, steps=steps)
@@ -551,7 +761,7 @@ class LearningService:
                 "jobs": list(repository.list_profile_jobs(session, profile_id=profile.id)),
                 "active_path_version": path_version,
                 "steps": list(step_rows),
-                "graph": graph_result.snapshot,
+                "graph": published_graph_snapshot,
             }
         except Exception as exc:
             profile.status = "failed"
@@ -754,34 +964,48 @@ class LearningService:
             return None
 
     def _build_fragments(self, text: str) -> list[dict[str, Any]]:
-        chunks = chunk_text(
-            text,
-            chunk_size=self.settings.learning_chunk_size,
-            overlap=self.settings.learning_chunk_overlap,
-        )
-        embeddings = self.embedding_provider.embed_texts(chunks) if chunks else []
         rows: list[dict[str, Any]] = []
-        offset = 0
-        for index, content in enumerate(chunks):
-            snippet = " ".join(content.split())[:72]
-            rows.append(
-                {
-                    "chunk_index": index,
-                    "fragment_type": "text",
-                    "chapter_label": _chapter_label(index),
-                    "semantic_summary": snippet,
-                    "content": content,
-                    "content_tsv": _token_string(content),
-                    "citation_anchor_json": {
-                        "chapterLabel": _chapter_label(index),
-                        "offsetStart": offset,
-                        "offsetEnd": offset + len(content),
-                    },
-                    "embedding": embeddings[index] if index < len(embeddings) else None,
-                    "metadata_json": {"length": len(content)},
-                }
-            )
-            offset += len(content)
+        for section in _parse_structured_sections(text):
+            for block in _split_structured_blocks(section):
+                for content, local_start, local_end in _chunk_text_with_offsets(
+                    block["content"],
+                    chunk_size=self.settings.learning_chunk_size,
+                    overlap=self.settings.learning_chunk_overlap,
+                ):
+                    absolute_start = int(block["offsetStart"]) + local_start
+                    absolute_end = int(block["offsetStart"]) + local_end
+                    rows.append(
+                        {
+                            "chunk_index": len(rows),
+                            "fragment_type": block["type"],
+                            "chapter_label": str(block["sectionTitle"]),
+                            "semantic_summary": _build_structured_summary(content),
+                            "content": content,
+                            "content_tsv": _token_string(content),
+                            "citation_anchor_json": {
+                                "chapterLabel": block["sectionTitle"],
+                                "offsetStart": absolute_start,
+                                "offsetEnd": absolute_end,
+                                "sectionId": block["sectionId"],
+                            },
+                            "metadata_json": {
+                                "blockType": block["type"],
+                                "length": len(content),
+                                "offsetStart": absolute_start,
+                                "offsetEnd": absolute_end,
+                                "sectionId": block["sectionId"],
+                                "sectionLevel": block["sectionLevel"],
+                                "sectionSlug": block["sectionId"].split(":", 2)[-1],
+                                "sectionTitle": block["sectionTitle"],
+                                "sentenceSpans": _split_sentence_spans(content, base_offset=absolute_start),
+                                "sourceExtractor": "structured-fragment-v2",
+                            },
+                        }
+                    )
+
+        embeddings = self.embedding_provider.embed_texts([row["content"] for row in rows]) if rows else []
+        for index, row in enumerate(rows):
+            row["embedding"] = embeddings[index] if index < len(embeddings) else None
         return rows
 
 

@@ -271,6 +271,43 @@ def test_learning_service_falls_back_to_pypdf_after_mineru_pdf_failure(tmp_path,
     assert pypdf_calls == [str(pdf_path)]
 
 
+def test_learning_service_builds_structured_fragments_for_sections_and_formula_blocks(tmp_path):
+    service = LearningService(
+        settings=Settings(
+            learning_storage_dir=str(tmp_path),
+            learning_chunk_overlap=0,
+            learning_chunk_size=120,
+            _env_file=None,
+        )
+    )
+
+    rows = service._build_fragments(
+        """
+        # 第一章 极限
+
+        定义 1.1 函数极限是指当 x 趋于 a 时，f(x) 趋于 L。
+
+        $$
+        \\lim_{x \\to a} f(x) = L
+        $$
+
+        方法：使用 epsilon-delta 方法判断极限是否存在。
+        """.strip()
+    )
+
+    assert [row["chapter_label"] for row in rows[:3]] == ["第一章 极限", "第一章 极限", "第一章 极限"]
+    assert rows[0]["fragment_type"] == "definition"
+    assert rows[0]["metadata_json"]["sectionTitle"] == "第一章 极限"
+    assert rows[0]["metadata_json"]["blockType"] == "definition"
+    assert rows[0]["metadata_json"]["sentenceSpans"][0]["text"].startswith("定义 1.1")
+    assert rows[1]["fragment_type"] == "formula"
+    assert rows[1]["metadata_json"]["blockType"] == "formula"
+    assert rows[1]["citation_anchor_json"]["sectionId"].startswith("section:1:")
+    assert rows[2]["fragment_type"] == "method"
+    assert rows[2]["metadata_json"]["blockType"] == "method"
+    assert rows[2]["metadata_json"]["offsetEnd"] > rows[2]["metadata_json"]["offsetStart"]
+
+
 def test_mineru_client_prefers_local_api_when_healthy_even_if_cloud_is_configured(tmp_path, monkeypatch):
     pdf_path = tmp_path / "resume.pdf"
     pdf_path.write_bytes(b"%PDF-1.4 fake")
@@ -520,6 +557,15 @@ def test_learning_retrieval_prefers_step_keywords(monkeypatch):
 def test_learning_graph_service_persists_and_reads_neo4j_snapshot(monkeypatch):
     graph_state = {"nodes": {}, "edges": []}
 
+    def assert_neo4j_compatible(value):
+        if isinstance(value, dict):
+            raise TypeError("Neo4j properties do not support map values")
+        if isinstance(value, list):
+            for item in value:
+                if isinstance(item, (dict, list)):
+                    raise TypeError("Neo4j properties do not support nested collection values")
+        return None
+
     class FakeResult:
         def __init__(self, rows=None):
             self.rows = rows or []
@@ -546,6 +592,8 @@ def test_learning_graph_service_persists_and_reads_neo4j_snapshot(monkeypatch):
                 return FakeResult()
             if "MERGE (n:" in query:
                 label = query.split("MERGE (n:", 1)[1].split(" ", 1)[0]
+                for value in (params.get("props") or {}).values():
+                    assert_neo4j_compatible(value)
                 graph_state["nodes"][params["id"]] = {
                     "labels": [label],
                     "props": params["props"],
@@ -553,8 +601,11 @@ def test_learning_graph_service_persists_and_reads_neo4j_snapshot(monkeypatch):
                 return FakeResult()
             if "MERGE (a)-[r:" in query:
                 rel_type = query.split("MERGE (a)-[r:", 1)[1].split(" ", 1)[0]
+                for value in (params.get("props") or {}).values():
+                    assert_neo4j_compatible(value)
                 graph_state["edges"].append(
                     {
+                        "props": params.get("props") or {},
                         "source": params["source"],
                         "target": params["target"],
                         "type": rel_type,
@@ -571,7 +622,12 @@ def test_learning_graph_service_persists_and_reads_neo4j_snapshot(monkeypatch):
                 return FakeResult(rows)
             if "RETURN a.id AS source" in query:
                 rows = [
-                    {"source": edge["source"], "target": edge["target"], "type": edge["type"]}
+                    {
+                        "props": edge.get("props") or {},
+                        "source": edge["source"],
+                        "target": edge["target"],
+                        "type": edge["type"],
+                    }
                     for edge in graph_state["edges"]
                     if edge["profile_id"] == params["profile_id"]
                 ]
@@ -599,7 +655,34 @@ def test_learning_graph_service_persists_and_reads_neo4j_snapshot(monkeypatch):
         profile_id=7,
         profile_title="操作系统实验导学",
         assets=[{"id": 1, "fileName": "os.md", "assetKind": "upload"}],
-        fragments=[{"id": 11, "assetId": 1, "chunkIndex": 0, "semanticSummary": "线程切换", "profileId": 7}],
+        fragments=[
+            {
+                "assetId": 1,
+                "chapterLabel": "第一章 线程",
+                "chunkIndex": 0,
+                "content": "定义 1.1 线程是处理器调度的基本单位。",
+                "id": 11,
+                "metadata": {
+                    "blockType": "definition",
+                    "offsetEnd": 18,
+                    "offsetStart": 0,
+                    "sectionId": "section:1:thread",
+                    "sectionLevel": 1,
+                    "sectionSlug": "thread",
+                    "sectionTitle": "第一章 线程",
+                    "sentenceSpans": [
+                        {
+                            "index": 0,
+                            "offsetEnd": 18,
+                            "offsetStart": 0,
+                            "text": "定义 1.1 线程是处理器调度的基本单位。",
+                        }
+                    ],
+                },
+                "profileId": 7,
+                "semanticSummary": "线程定义",
+            }
+        ],
         concepts=["线程", "调度"],
         steps=[{"step_index": 0, "title": "先看整体", "keywords_json": ["线程"]}],
     )
@@ -609,10 +692,122 @@ def test_learning_graph_service_persists_and_reads_neo4j_snapshot(monkeypatch):
     subgraph = service.get_profile_subgraph(profile_id=7)
     assert subgraph is not None
     assert any(node["type"] == "Concept" for node in subgraph["nodes"])
+    assert any(node["type"] == "Section" for node in subgraph["nodes"])
+    assert any(node["type"] == "Definition" for node in subgraph["nodes"])
+    assert any(node.get("schemaVersion") == 2 for node in subgraph["nodes"])
     assert any(edge["type"] == "MENTIONS" for edge in subgraph["edges"])
+    assert any(edge["type"] == "EVIDENCE_FOR" for edge in subgraph["edges"])
+    assert any(edge["type"] == "DEFINES" for edge in subgraph["edges"])
+    assert any(edge.get("provenance", {}).get("fragmentId") == 11 for edge in subgraph["edges"])
     step_candidates = service.list_step_fragment_candidates(profile_id=7, step_index=0, keywords=["线程"])
     assert [candidate.fragment_id for candidate in step_candidates] == [11]
     assert step_candidates[0].concepts == ["线程"]
+
+
+def test_learning_graph_service_builds_structured_semantic_graph_metadata():
+    service = LearningGraphService(
+        settings=SimpleNamespace(
+            graph_provider="disabled",
+            graph_uri=None,
+            graph_username=None,
+            graph_password=None,
+            graph_database=None,
+        )
+    )
+    result = service.build_snapshot(
+        profile_id=9,
+        profile_title="微积分教材",
+        assets=[{"id": 1, "fileName": "calculus.pdf", "assetKind": "upload"}],
+        fragments=[
+            {
+                "assetId": 1,
+                "chapterLabel": "第一章 极限",
+                "chunkIndex": 0,
+                "content": "定义 1.1 函数极限是指当 x 趋于 a 时，f(x) 趋于 L。",
+                "id": 101,
+                "metadata": {
+                    "blockType": "definition",
+                    "offsetEnd": 31,
+                    "offsetStart": 0,
+                    "sectionId": "section:1:limit",
+                    "sectionLevel": 1,
+                    "sectionSlug": "limit",
+                    "sectionTitle": "第一章 极限",
+                    "sentenceSpans": [
+                        {
+                            "index": 0,
+                            "offsetEnd": 31,
+                            "offsetStart": 0,
+                            "text": "定义 1.1 函数极限是指当 x 趋于 a 时，f(x) 趋于 L。",
+                        }
+                    ],
+                },
+                "semanticSummary": "函数极限定义",
+            },
+            {
+                "assetId": 1,
+                "chapterLabel": "第一章 极限",
+                "chunkIndex": 1,
+                "content": "$$ \\lim_{x \\to a} f(x) = L $$",
+                "id": 102,
+                "metadata": {
+                    "blockType": "formula",
+                    "offsetEnd": 60,
+                    "offsetStart": 32,
+                    "sectionId": "section:1:limit",
+                    "sectionLevel": 1,
+                    "sectionSlug": "limit",
+                    "sectionTitle": "第一章 极限",
+                    "sentenceSpans": [
+                        {
+                            "index": 0,
+                            "offsetEnd": 60,
+                            "offsetStart": 32,
+                            "text": "$$ \\lim_{x \\to a} f(x) = L $$",
+                        }
+                    ],
+                },
+                "semanticSummary": "极限公式",
+            },
+        ],
+        concepts=["极限", "函数"],
+        steps=[{"step_index": 0, "title": "理解极限", "keywords_json": ["极限"]}],
+    )
+
+    snapshot = result.snapshot
+    assert result.provider == "fallback"
+    assert any(node["type"] == "Section" for node in snapshot["nodes"])
+    assert any(node["type"] == "Definition" for node in snapshot["nodes"])
+    assert any(node["type"] == "Formula" for node in snapshot["nodes"])
+    definition_node = next(node for node in snapshot["nodes"] if node["type"] == "Definition")
+    assert definition_node["confidence"] >= 0.85
+    assert definition_node["schemaVersion"] == 2
+    assert definition_node["provenance"]["fragmentId"] == 101
+    assert any(
+        edge["type"] == "CONTAINS" and edge["source"] == "asset:1" and edge["target"].startswith("section:1:")
+        for edge in snapshot["edges"]
+    )
+    assert any(
+        edge["type"] == "EVIDENCE_FOR"
+        and edge["source"] == "fragment:101"
+        and edge["target"] == definition_node["id"]
+        and edge["provenance"]["sectionId"].startswith("section:1:")
+        for edge in snapshot["edges"]
+    )
+    assert any(
+        edge["type"] == "DEFINES"
+        and edge["source"] == definition_node["id"]
+        and edge["target"] == "concept:极限"
+        and edge["confidence"] >= 0.85
+        for edge in snapshot["edges"]
+    )
+    assert any(
+        edge["type"] == "MENTIONS"
+        and edge["source"] == "fragment:101"
+        and edge["target"] == "concept:极限"
+        and edge["provenance"]["fragmentId"] == 101
+        for edge in snapshot["edges"]
+    )
 
 
 def test_runtime_orchestrators_compile_langgraph_graphs():

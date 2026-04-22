@@ -25,6 +25,15 @@ class LearningProfileCreateRequest(BaseModel):
     sources: list[LearningSourceInput]
 
 
+class LearningProfileUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, max_length=255)
+
+    def normalized_title(self) -> str | None:
+        if self.title is None:
+            return None
+        return self.title.strip()
+
+
 class LearningSessionCreateRequest(BaseModel):
     profile_id: int = Field(alias="profileId")
     learning_mode: Literal["preview", "sprint", "deep-dive", "lab"] = Field(alias="learningMode")
@@ -104,6 +113,47 @@ class LearningAiRunCallbackRequest(BaseModel):
                 return reasoning_text
 
         return None
+
+
+class LearningReaderProgressRequest(BaseModel):
+    page_number: int = Field(default=1, ge=1, alias="pageNumber")
+    scale: float = Field(default=1, gt=0, alias="scale")
+    layout_mode: str = Field(default="horizontal", alias="layoutMode")
+    metadata: dict[str, Any] | None = None
+
+
+class LearningPdfAnnotationCreateRequest(BaseModel):
+    annotation_type: str = Field(default="highlight", alias="annotationType")
+    selected_text: str = Field(alias="selectedText")
+    note_text: str | None = Field(default=None, alias="noteText")
+    color: str | None = "#F7D56E"
+    page_number: int = Field(ge=1, alias="pageNumber")
+    anchor: dict[str, Any]
+    metadata: dict[str, Any] | None = None
+
+
+class LearningPdfAnnotationUpdateRequest(BaseModel):
+    annotation_type: str | None = Field(default=None, alias="annotationType")
+    selected_text: str | None = Field(default=None, alias="selectedText")
+    note_text: str | None = Field(default=None, alias="noteText")
+    color: str | None = None
+    page_number: int | None = Field(default=None, ge=1, alias="pageNumber")
+    anchor: dict[str, Any] | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class LearningQuickExplainRequest(BaseModel):
+    selected_text: str | None = Field(default=None, alias="selectedText")
+    nearby_text: str | None = Field(default=None, alias="nearbyText")
+    page_number: int = Field(ge=1, alias="pageNumber")
+    anchor: dict[str, Any] | None = None
+    surrounding_text: str | None = Field(default=None, alias="surroundingText")
+
+    def extract_text(self) -> str:
+        for value in (self.selected_text, self.nearby_text, self.surrounding_text):
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return ""
 
 
 class LearningBridgeActionRequest(BaseModel):
@@ -242,6 +292,46 @@ def serialize_path_version(path_version: Any, *, step_count: int = 0) -> dict[st
         "metadata": path_version.metadata_json or {},
         "stepCount": step_count,
         "createdAt": _isoformat(path_version.created_at),
+    }
+
+
+def serialize_reader_progress(progress: Any | None) -> dict[str, Any]:
+    if progress is None:
+        return {
+            "layoutMode": "horizontal",
+            "metadata": {},
+            "pageNumber": 1,
+            "profileId": None,
+            "readerId": None,
+            "scale": 1,
+            "updatedAt": None,
+        }
+
+    return {
+        "layoutMode": progress.layout_mode,
+        "metadata": progress.metadata_json or {},
+        "pageNumber": progress.page_number,
+        "profileId": progress.profile_id,
+        "readerId": progress.reader_id,
+        "scale": progress.scale,
+        "updatedAt": _isoformat(progress.updated_at),
+    }
+
+
+def serialize_pdf_annotation(annotation: Any) -> dict[str, Any]:
+    return {
+        "id": annotation.id,
+        "annotationType": annotation.annotation_type,
+        "profileId": annotation.profile_id,
+        "readerId": annotation.reader_id,
+        "selectedText": annotation.selected_text,
+        "noteText": annotation.note_text,
+        "color": annotation.color,
+        "pageNumber": annotation.page_number,
+        "anchor": annotation.anchor_json or {},
+        "metadata": annotation.metadata_json or {},
+        "createdAt": _isoformat(annotation.created_at),
+        "updatedAt": _isoformat(annotation.updated_at),
     }
 
 

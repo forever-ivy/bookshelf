@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from app.catalog.models import Book, BookSourceDocument
@@ -17,7 +17,9 @@ from app.learning.models import (
     LearningJob,
     LearningPathStep,
     LearningPathVersion,
+    LearningPdfAnnotation,
     LearningProfile,
+    LearningReaderProgress,
     LearningRemediationPlan,
     LearningReport,
     LearningSession,
@@ -127,6 +129,77 @@ def list_owned_profiles(session: Session, *, reader_id: int) -> Sequence[Learnin
         .order_by(LearningProfile.updated_at.desc(), LearningProfile.id.desc())
     )
     return session.execute(statement).scalars().all()
+
+
+def update_profile_title(session: Session, *, profile: LearningProfile, title: str) -> LearningProfile:
+    profile.title = title
+    bundle = get_source_bundle(session, bundle_id=profile.source_bundle_id)
+    if bundle is not None:
+        bundle.title = title
+    session.flush()
+    return profile
+
+
+def delete_profile(session: Session, *, profile: LearningProfile) -> None:
+    profile_id = profile.id
+    bundle_id = profile.source_bundle_id
+    session_ids = list(
+        session.execute(select(LearningSession.id).where(LearningSession.profile_id == profile_id)).scalars()
+    )
+    turn_ids = (
+        list(session.execute(select(LearningTurn.id).where(LearningTurn.session_id.in_(session_ids))).scalars())
+        if session_ids
+        else []
+    )
+    path_version_ids = list(
+        session.execute(select(LearningPathVersion.id).where(LearningPathVersion.profile_id == profile_id)).scalars()
+    )
+
+    profile.active_path_version_id = None
+    session.flush()
+
+    if turn_ids:
+        session.execute(delete(LearningAgentRun).where(LearningAgentRun.turn_id.in_(turn_ids)))
+
+    if session_ids:
+        session.execute(delete(LearningAiRun).where(LearningAiRun.session_id.in_(session_ids)))
+        session.execute(delete(LearningCheckpoint).where(LearningCheckpoint.session_id.in_(session_ids)))
+        session.execute(delete(LearningRemediationPlan).where(LearningRemediationPlan.session_id.in_(session_ids)))
+        session.execute(delete(LearningReport).where(LearningReport.session_id.in_(session_ids)))
+        bridge_action_clauses = [
+            LearningBridgeAction.from_session_id.in_(session_ids),
+            LearningBridgeAction.to_session_id.in_(session_ids),
+        ]
+        step_context_clauses = [
+            LearningStepContextItem.guide_session_id.in_(session_ids),
+            LearningStepContextItem.source_session_id.in_(session_ids),
+        ]
+        if turn_ids:
+            bridge_action_clauses.append(LearningBridgeAction.from_turn_id.in_(turn_ids))
+            step_context_clauses.append(LearningStepContextItem.source_turn_id.in_(turn_ids))
+        session.execute(delete(LearningBridgeAction).where(or_(*bridge_action_clauses)))
+        session.execute(delete(LearningStepContextItem).where(or_(*step_context_clauses)))
+        session.execute(delete(LearningTurn).where(LearningTurn.session_id.in_(session_ids)))
+        session.execute(delete(LearningSession).where(LearningSession.id.in_(session_ids)))
+
+    session.execute(delete(LearningReaderProgress).where(LearningReaderProgress.profile_id == profile_id))
+    session.execute(delete(LearningPdfAnnotation).where(LearningPdfAnnotation.profile_id == profile_id))
+    session.execute(delete(LearningJob).where(LearningJob.profile_id == profile_id))
+    session.execute(delete(LearningFragment).where(LearningFragment.profile_id == profile_id))
+
+    if path_version_ids:
+        session.execute(delete(LearningPathStep).where(LearningPathStep.path_version_id.in_(path_version_ids)))
+    session.execute(delete(LearningPathVersion).where(LearningPathVersion.profile_id == profile_id))
+
+    session.delete(profile)
+    session.flush()
+
+    remaining_profile = session.execute(
+        select(LearningProfile.id).where(LearningProfile.source_bundle_id == bundle_id).limit(1)
+    ).first()
+    if remaining_profile is None:
+        session.execute(delete(LearningSourceAsset).where(LearningSourceAsset.bundle_id == bundle_id))
+        session.execute(delete(LearningSourceBundle).where(LearningSourceBundle.id == bundle_id))
 
 
 def create_source_asset(
@@ -505,6 +578,128 @@ def list_session_turns(session: Session, *, session_id: int) -> Sequence[Learnin
         .order_by(LearningTurn.created_at.asc(), LearningTurn.id.asc())
     )
     return session.execute(statement).scalars().all()
+
+
+def get_reader_progress(
+    session: Session,
+    *,
+    profile_id: int,
+    reader_id: int,
+) -> LearningReaderProgress | None:
+    statement = select(LearningReaderProgress).where(
+        LearningReaderProgress.profile_id == profile_id,
+        LearningReaderProgress.reader_id == reader_id,
+    )
+    return session.execute(statement).scalars().first()
+
+
+def upsert_reader_progress(
+    session: Session,
+    *,
+    profile_id: int,
+    reader_id: int,
+    page_number: int,
+    scale: float,
+    layout_mode: str,
+    metadata_json: dict | None = None,
+) -> LearningReaderProgress:
+    progress = get_reader_progress(session, profile_id=profile_id, reader_id=reader_id)
+    if progress is None:
+        progress = LearningReaderProgress(
+            profile_id=profile_id,
+            reader_id=reader_id,
+            page_number=page_number,
+            scale=scale,
+            layout_mode=layout_mode,
+            metadata_json=metadata_json or {},
+        )
+        session.add(progress)
+    else:
+        progress.page_number = page_number
+        progress.scale = scale
+        progress.layout_mode = layout_mode
+        progress.metadata_json = metadata_json or {}
+    session.flush()
+    return progress
+
+
+def list_pdf_annotations(
+    session: Session,
+    *,
+    profile_id: int,
+    reader_id: int,
+) -> Sequence[LearningPdfAnnotation]:
+    statement = (
+        select(LearningPdfAnnotation)
+        .where(
+            LearningPdfAnnotation.profile_id == profile_id,
+            LearningPdfAnnotation.reader_id == reader_id,
+        )
+        .order_by(LearningPdfAnnotation.page_number.asc(), LearningPdfAnnotation.id.asc())
+    )
+    return session.execute(statement).scalars().all()
+
+
+def get_pdf_annotation(
+    session: Session,
+    *,
+    annotation_id: int,
+    profile_id: int,
+    reader_id: int,
+) -> LearningPdfAnnotation | None:
+    statement = select(LearningPdfAnnotation).where(
+        LearningPdfAnnotation.id == annotation_id,
+        LearningPdfAnnotation.profile_id == profile_id,
+        LearningPdfAnnotation.reader_id == reader_id,
+    )
+    return session.execute(statement).scalars().first()
+
+
+def create_pdf_annotation(
+    session: Session,
+    *,
+    profile_id: int,
+    reader_id: int,
+    annotation_type: str,
+    selected_text: str,
+    note_text: str | None,
+    color: str,
+    page_number: int,
+    anchor_json: dict,
+    metadata_json: dict | None = None,
+) -> LearningPdfAnnotation:
+    annotation = LearningPdfAnnotation(
+        profile_id=profile_id,
+        reader_id=reader_id,
+        annotation_type=annotation_type,
+        selected_text=selected_text,
+        note_text=note_text,
+        color=color,
+        page_number=page_number,
+        anchor_json=anchor_json,
+        metadata_json=metadata_json or {},
+    )
+    session.add(annotation)
+    session.flush()
+    return annotation
+
+
+def update_pdf_annotation(
+    session: Session,
+    *,
+    annotation: LearningPdfAnnotation,
+    updates: dict,
+) -> LearningPdfAnnotation:
+    for key, value in updates.items():
+        setattr(annotation, key, value)
+    session.add(annotation)
+    session.flush()
+    return annotation
+
+
+def delete_pdf_annotation(session: Session, *, annotation: LearningPdfAnnotation) -> None:
+    session.delete(annotation)
+    session.flush()
 
 
 def create_agent_run(

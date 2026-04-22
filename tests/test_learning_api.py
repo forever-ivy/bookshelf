@@ -113,6 +113,23 @@ def create_ready_learning_session(client: TestClient) -> tuple[dict[str, int], d
     return state, headers, session_response.json()["session"]["id"]
 
 
+def create_learning_profile_for_book(client: TestClient) -> tuple[dict[str, int], dict[str, str], int]:
+    state = seed_reader_with_book()
+    headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
+    create_response = client.post(
+        "/api/v2/learning/profiles",
+        headers=headers,
+        json={
+            "title": "操作系统导学空间",
+            "goalMode": "preview",
+            "difficultyMode": "guided",
+            "sources": [{"kind": "book", "bookId": state["book_id"]}],
+        },
+    )
+    assert create_response.status_code == 201
+    return state, headers, create_response.json()["profile"]["id"]
+
+
 def test_learning_profile_document_streams_primary_book_pdf(client, tmp_path):
     state = seed_reader_with_book()
     headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
@@ -176,6 +193,143 @@ def test_learning_profile_document_returns_404_when_pdf_is_unavailable(client):
 
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "learning_pdf_not_available"
+
+
+def test_learning_reader_state_persists_progress_and_annotations(client):
+    _state, headers, profile_id = create_learning_profile_for_book(client)
+
+    initial_response = client.get(f"/api/v2/learning/profiles/{profile_id}/reader-state", headers=headers)
+
+    assert initial_response.status_code == 200
+    assert initial_response.json()["progress"] == {
+        "layoutMode": "horizontal",
+        "metadata": {},
+        "pageNumber": 1,
+        "profileId": None,
+        "readerId": None,
+        "scale": 1,
+        "updatedAt": None,
+    }
+    assert initial_response.json()["annotations"] == []
+
+    progress_response = client.patch(
+        f"/api/v2/learning/profiles/{profile_id}/reader-progress",
+        headers=headers,
+        json={
+            "layoutMode": "horizontal",
+            "metadata": {"scrollLeft": 32},
+            "pageNumber": 6,
+            "scale": 1.35,
+        },
+    )
+
+    assert progress_response.status_code == 200
+    assert progress_response.json()["progress"]["pageNumber"] == 6
+    assert progress_response.json()["progress"]["scale"] == 1.35
+
+    anchor = {
+        "pageNumber": 6,
+        "rects": [{"height": 0.08, "width": 0.32, "x": 0.12, "y": 0.24}],
+        "textBefore": "操作系统中",
+        "textQuote": "进程是资源分配单位",
+    }
+    create_annotation_response = client.post(
+        f"/api/v2/learning/profiles/{profile_id}/annotations",
+        headers=headers,
+        json={
+            "anchor": anchor,
+            "annotationType": "highlight",
+            "color": "#F7D56E",
+            "noteText": "重点区分线程",
+            "pageNumber": 6,
+            "selectedText": "进程是资源分配单位",
+        },
+    )
+
+    assert create_annotation_response.status_code == 201
+    annotation = create_annotation_response.json()["annotation"]
+    assert annotation["anchor"] == anchor
+    assert annotation["selectedText"] == "进程是资源分配单位"
+    assert annotation["noteText"] == "重点区分线程"
+
+    update_annotation_response = client.patch(
+        f"/api/v2/learning/profiles/{profile_id}/annotations/{annotation['id']}",
+        headers=headers,
+        json={"color": "#8EC5FF", "noteText": "和线程对比记忆"},
+    )
+
+    assert update_annotation_response.status_code == 200
+    assert update_annotation_response.json()["annotation"]["color"] == "#8EC5FF"
+    assert update_annotation_response.json()["annotation"]["noteText"] == "和线程对比记忆"
+
+    state_response = client.get(f"/api/v2/learning/profiles/{profile_id}/reader-state", headers=headers)
+
+    assert state_response.status_code == 200
+    payload = state_response.json()
+    assert payload["progress"]["pageNumber"] == 6
+    assert [item["id"] for item in payload["annotations"]] == [annotation["id"]]
+    assert payload["annotations"][0]["noteText"] == "和线程对比记忆"
+
+    delete_response = client.delete(
+        f"/api/v2/learning/profiles/{profile_id}/annotations/{annotation['id']}",
+        headers=headers,
+    )
+
+    assert delete_response.status_code == 200
+    final_state_response = client.get(f"/api/v2/learning/profiles/{profile_id}/reader-state", headers=headers)
+    assert final_state_response.json()["annotations"] == []
+
+
+def test_learning_reader_state_rejects_cross_reader_access(client):
+    state, headers, profile_id = create_learning_profile_for_book(client)
+    other_headers = reader_headers(state["other_account_id"], state["other_profile_id"])
+
+    response = client.get(f"/api/v2/learning/profiles/{profile_id}/reader-state", headers=other_headers)
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "learning_profile_forbidden"
+
+
+def test_learning_quick_explain_uses_llm_without_creating_learning_turns(client, monkeypatch):
+    class FakeQuickExplainProvider:
+        model = "quick-test-model"
+
+        def chat(self, *, text: str, context: dict) -> str:
+            assert text == "进程是资源分配单位"
+            assert context["pageNumber"] == 3
+            assert "surroundingText" in context
+            return "这句话是在说进程持有内存、文件等资源。"
+
+    monkeypatch.setattr("app.learning.router.build_llm_provider", lambda: FakeQuickExplainProvider())
+    _state, headers, profile_id = create_learning_profile_for_book(client)
+
+    response = client.post(
+        f"/api/v2/learning/profiles/{profile_id}/quick-explain",
+        headers=headers,
+        json={
+            "anchor": {
+                "pageNumber": 3,
+                "rects": [{"height": 0.05, "width": 0.2, "x": 0.3, "y": 0.4}],
+                "textQuote": "进程是资源分配单位",
+            },
+            "pageNumber": 3,
+            "selectedText": "进程是资源分配单位",
+            "surroundingText": "进程是资源分配单位，线程是调度执行单位。",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "这句话是在说进程持有内存、文件等资源。"
+    assert response.json()["modelName"] == "quick-test-model"
+
+    session = get_session_factory()()
+    try:
+        learning_session_count = session.execute(text("SELECT COUNT(*) FROM learning_sessions")).scalar_one()
+        learning_turn_count = session.execute(text("SELECT COUNT(*) FROM learning_turns")).scalar_one()
+        assert learning_session_count == 0
+        assert learning_turn_count == 0
+    finally:
+        session.close()
 
 
 @pytest.mark.parametrize(
@@ -430,6 +584,50 @@ def test_generate_learning_profile_keeps_profile_when_graph_provider_missing(cli
     assert detail_payload["activePathVersion"]["graphProvider"] in {"fallback", "neo4j"}
     assert any(job["jobType"] == "graph_build" for job in detail_payload["jobs"])
     assert any(asset["parseStatus"] == "parsed" for asset in detail_payload["assets"])
+
+
+def test_learning_profile_graph_falls_back_to_snapshot_when_live_graph_is_empty(client, monkeypatch):
+    state = seed_reader_with_book()
+    headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
+
+    create_response = client.post(
+        "/api/v2/learning/profiles",
+        headers=headers,
+        json={
+            "title": "图谱回退验证",
+            "goalMode": "preview",
+            "difficultyMode": "guided",
+            "sources": [
+                {
+                    "kind": "inline_text",
+                    "fileName": "graph-fallback.md",
+                    "mimeType": "text/markdown",
+                    "content": "# 图论\n\n定义：图由节点和边组成。",
+                }
+            ],
+        },
+    )
+    profile_id = create_response.json()["profile"]["id"]
+
+    generate_response = client.post(
+        f"/api/v2/learning/profiles/{profile_id}/generate",
+        headers=headers,
+    )
+    assert generate_response.status_code == 202
+
+    monkeypatch.setattr(
+        "app.learning.graph.LearningGraphService.get_profile_subgraph",
+        lambda self, *, profile_id: {"provider": "neo4j", "nodes": [], "edges": []},
+    )
+
+    response = client.get(f"/api/v2/learning/profiles/{profile_id}/graph", headers=headers)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["graph"]["provider"] == "fallback"
+    assert len(payload["graph"]["nodes"]) > 0
+    assert len(payload["graph"]["edges"]) > 0
 
 
 def test_generate_learning_profile_can_defer_background_work_in_eager_mode(client, monkeypatch):
@@ -785,6 +983,87 @@ def test_list_learning_profiles_returns_latest_job_primary_asset_and_step_count(
     assert item["latestJob"]["jobType"] in {"parse", "chunk", "graph_build", "plan_generate"}
     assert item["primaryAsset"]["assetKind"] == "book"
     assert item["stepCount"] >= 3
+
+
+def test_update_learning_profile_title_trims_and_returns_profile(client):
+    _, headers, profile_id = create_learning_profile_for_book(client)
+
+    response = client.patch(
+        f"/api/v2/learning/profiles/{profile_id}",
+        headers=headers,
+        json={"title": "  重命名后的导学本  "},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["profile"]["id"] == profile_id
+    assert payload["profile"]["title"] == "重命名后的导学本"
+
+    detail_response = client.get(f"/api/v2/learning/profiles/{profile_id}", headers=headers)
+    assert detail_response.json()["profile"]["title"] == "重命名后的导学本"
+
+
+def test_update_learning_profile_title_rejects_blank_title(client):
+    _, headers, profile_id = create_learning_profile_for_book(client)
+
+    response = client.patch(
+        f"/api/v2/learning/profiles/{profile_id}",
+        headers=headers,
+        json={"title": "   "},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "learning_profile_title_required"
+
+
+def test_delete_learning_profile_removes_owned_profile_and_related_rows(client):
+    state, headers, profile_id = create_learning_profile_for_book(client)
+    client.post(f"/api/v2/learning/profiles/{profile_id}/generate", headers=headers)
+    session_response = client.post(
+        "/api/v2/learning/sessions",
+        headers=headers,
+        json={"profileId": profile_id, "learningMode": "preview"},
+    )
+    assert session_response.status_code == 201
+
+    db = get_session_factory()()
+    try:
+        source_bundle_id = db.execute(
+            text("SELECT source_bundle_id FROM learning_profiles WHERE id = :profile_id"),
+            {"profile_id": profile_id},
+        ).scalar_one()
+    finally:
+        db.close()
+
+    response = client.delete(f"/api/v2/learning/profiles/{profile_id}", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
+    assert client.get(f"/api/v2/learning/profiles/{profile_id}", headers=headers).status_code == 404
+
+    list_payload = client.get("/api/v2/learning/profiles", headers=headers).json()
+    assert all(item["profile"]["id"] != profile_id for item in list_payload["items"])
+
+    db = get_session_factory()()
+    try:
+        checks = {
+            "learning_profiles": ("id", profile_id),
+            "learning_jobs": ("profile_id", profile_id),
+            "learning_sessions": ("profile_id", profile_id),
+            "learning_fragments": ("profile_id", profile_id),
+            "learning_path_versions": ("profile_id", profile_id),
+            "learning_source_assets": ("bundle_id", source_bundle_id),
+            "learning_source_bundles": ("id", source_bundle_id),
+        }
+        for table_name, (column_name, value) in checks.items():
+            count = db.execute(
+                text(f"SELECT COUNT(*) FROM {table_name} WHERE {column_name} = :value"),
+                {"value": value},
+            ).scalar_one()
+            assert count == 0, table_name
+    finally:
+        db.close()
 
 
 def test_list_learning_sessions_returns_owned_sessions(client):

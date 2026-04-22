@@ -147,3 +147,39 @@ def test_bootstrap_demo_database_uses_default_snapshot_and_reset(monkeypatch, tm
         ("ensure", "postgresql+psycopg://library:library@localhost:55432/service"),
         ("restore", "postgresql+psycopg://library:library@localhost:55432/service", str(target_path), True),
     ]
+
+
+def test_restore_snapshot_resets_public_schema_before_clean_restore(monkeypatch, tmp_path: Path):
+    snapshot_path = tmp_path / "service-demo.dump"
+    snapshot_path.write_bytes(b"demo")
+    calls: list[tuple] = []
+
+    monkeypatch.setattr(
+        snapshot_module,
+        "reset_public_schema",
+        lambda database_url: calls.append(("reset", database_url)),
+    )
+    monkeypatch.setattr(
+        snapshot_module,
+        "build_pg_restore_command",
+        lambda database_url, *, snapshot_path, pg_restore_bin=None, clean=False: (
+            ["pg_restore", str(snapshot_path)],
+            {"PGPASSWORD": "secret"},
+        ),
+    )
+    monkeypatch.setattr(
+        snapshot_module.subprocess,
+        "run",
+        lambda command, check, env: calls.append(("run", tuple(command), check, env["PGPASSWORD"])),
+    )
+
+    snapshot_module.restore_snapshot(
+        database_url="postgresql+psycopg://library:secret@localhost:55432/service",
+        snapshot_path=snapshot_path,
+        clean=True,
+    )
+
+    assert calls == [
+        ("reset", "postgresql+psycopg://library:secret@localhost:55432/service"),
+        ("run", ("pg_restore", str(snapshot_path)), True, "secret"),
+    ]

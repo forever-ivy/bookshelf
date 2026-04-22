@@ -70,11 +70,16 @@
 
 ## 快速开始
 
-## 第一次 clone 推荐流程
+下面只保留两条最常用的本地启动路径：
 
-如果你是第一次在一台新机器上拉这个项目，并且要运行当前 `service` 分支，建议按下面顺序做。
+1. 第一次在新机器上把这个后端跑起来
+2. 之后已经恢复过 demo 数据，只是再次开启后端
 
-### 1. 拉代码并切到 `service` 分支
+如果你只是要最小化启动 API，可以看后面的“常用脚本”和“关键环境变量”；如果你要联调当前 learning / graph / Explore 这条完整链路，推荐按下面的四终端异步模式来。
+
+### 首次安装：新机器第一次跑起来
+
+#### 1. 拉代码并切到 `service` 分支
 
 ```bash
 git clone <仓库地址> bookshelf-service
@@ -82,19 +87,25 @@ cd bookshelf-service
 git checkout service
 ```
 
-如果你已经在本地 clone 过仓库，只需要确认当前分支是 `service` 即可。
+如果你已经在本地 clone 过仓库，只需要确认当前工作目录在 `service` 分支即可。
 
-### 2. 安装依赖
+#### 2. 安装依赖
 
 ```bash
 uv sync
 ```
 
-### 3. 启动 PostgreSQL + pgvector
+#### 3. 启动基础依赖
 
 ```bash
+cd /Volumes/Disk/Code/bookshelf
+
 docker compose -f docker-compose.pgvector.yml up -d
 until docker exec bookshelf pg_isready -U library -d service >/dev/null 2>&1; do sleep 1; done
+
+docker start bookshelf-redis 2>/dev/null || docker run -d --name bookshelf-redis -p 6379:6379 redis:7
+
+docker compose -f compose.learning.yml up -d neo4j
 ```
 
 默认数据库：
@@ -111,61 +122,127 @@ until docker exec bookshelf pg_isready -U library -d service >/dev/null 2>&1; do
 postgresql+psycopg://library:library@localhost:55432/service
 ```
 
-### 4. 恢复标准演示数据库，或初始化空库
+#### 4. 恢复标准演示数据库，或初始化空库
 
-如果仓库里已经带了标准演示数据库快照 `data/demo/service-demo.dump`，第一次 clone 推荐直接恢复，这样你的数据库内容会和当前标准演示库保持一致：
+如果仓库里已经带了标准演示数据库快照 `data/demo/service-demo.dump`，第一次推荐直接恢复：
 
 ```bash
 uv run python scripts/bootstrap_demo_database.py --reset
 ```
 
-如果数据库里已经有旧数据、又想重新恢复 demo 快照，也请继续带 `--reset`；不要直接对非空库执行不带 `--reset` 的恢复命令。
+这条命令适合：
 
-如果当前没有快照文件，就先初始化空库：
+- 第一次初始化 demo 数据
+- 想把数据库重置回仓库内标准演示状态
+
+如果当前没有快照文件，或者你明确想从空库开始：
 
 ```bash
 uv run python scripts/init_postgres.py
 ```
 
-### 5. 终端 1：准备数据库、Redis 和 demo 数据
+#### 5. 选择启动模式
+
+推荐优先用“标准四终端异步模式”，因为它最接近完整联调链路。
+
+### 后续再次开启后端：数据库已经恢复过，不想重新导入
+
+后续每天重新开后端时，**不要再跑** `bootstrap_demo_database.py --reset`，否则会把你本地现有数据重新覆盖成 demo 快照。
+
+只需要先把基础依赖重新拉起：
 
 ```bash
 cd /Volumes/Disk/Code/bookshelf
+
 docker compose -f docker-compose.pgvector.yml up -d
 until docker exec bookshelf pg_isready -U library -d service >/dev/null 2>&1; do sleep 1; done
+
 docker start bookshelf-redis 2>/dev/null || docker run -d --name bookshelf-redis -p 6379:6379 redis:7
+
+docker compose -f compose.learning.yml up -d neo4j
+```
+
+然后直接按下面的四终端方式重启 API / agent / worker 即可。
+
+### 标准四终端异步模式
+
+这套方式适合：
+
+- 联调 Explore AI agent
+- 联调 learning 异步生成链路
+- 希望 `/api/v1/health` 里能看到 `learning.worker = ok`
+
+如果你的 `.env.local` 里已经写了 `LIBRARY_LEARNING_TASKS_EAGER=true`，下面终端 2 和终端 4 会临时覆盖成 `false`，不需要先改文件。
+
+#### 终端 1：基础依赖
+
+首次安装时：
+
+```bash
+cd /Volumes/Disk/Code/bookshelf
+
+docker compose -f docker-compose.pgvector.yml up -d
+until docker exec bookshelf pg_isready -U library -d service >/dev/null 2>&1; do sleep 1; done
+
+docker start bookshelf-redis 2>/dev/null || docker run -d --name bookshelf-redis -p 6379:6379 redis:7
+
+docker compose -f compose.learning.yml up -d neo4j
+
 uv run python scripts/bootstrap_demo_database.py --reset
 ```
 
-### 6. 终端 2：启动 API
+后续再次开启时：
 
 ```bash
 cd /Volumes/Disk/Code/bookshelf
+
+docker compose -f docker-compose.pgvector.yml up -d
+until docker exec bookshelf pg_isready -U library -d service >/dev/null 2>&1; do sleep 1; done
+
+docker start bookshelf-redis 2>/dev/null || docker run -d --name bookshelf-redis -p 6379:6379 redis:7
+
+docker compose -f compose.learning.yml up -d neo4j
+```
+
+#### 终端 2：启动 API
+
+```bash
+cd /Volumes/Disk/Code/bookshelf
+
+export LIBRARY_LEARNING_TASKS_EAGER=false
 export LIBRARY_LEARNING_AI_AGENT_URL=http://127.0.0.1:8787
 export LIBRARY_LEARNING_AI_CALLBACK_BASE_URL=http://127.0.0.1:8000
+
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 7. 终端 3：启动 Explore AI SDK agent
+#### 终端 3：启动 Explore AI SDK agent
 
 ```bash
 cd /Volumes/Disk/Code/bookshelf/learning-agent
+
 npm install
-LIBRARY_REDIS_URL=redis://127.0.0.1:6379/0 \
-LIBRARY_LLM_API_KEY=你的 DeepSeek Key \
-LIBRARY_LLM_BASE_URL=https://api.deepseek.com \
-LIBRARY_LLM_MODEL=deepseek-reasoner \
+
+set -a
+source /Volumes/Disk/Code/bookshelf/.env.local
+set +a
+
+export LIBRARY_REDIS_URL=redis://127.0.0.1:6379/0
+
 npm start
 ```
 
-### 8. 终端 4：启动 learning worker
+#### 终端 4：启动 learning worker
 
 ```bash
 cd /Volumes/Disk/Code/bookshelf
+
+export LIBRARY_LEARNING_TASKS_EAGER=false
+
 uv run celery -A app.learning.tasks.celery_app worker -Q learning --loglevel=INFO
 ```
 
-### 9. 验证第一次启动是否成功
+#### 验证启动是否成功
 
 至少先检查下面三个地址：
 
@@ -179,52 +256,28 @@ uv run celery -A app.learning.tasks.celery_app worker -Q learning --loglevel=INF
 curl http://127.0.0.1:8000/api/v1/health
 ```
 
-如果要联调导学异步链路，health 里至少应看到：
+如果是四终端异步模式，health 里建议至少看到：
 
 - `database = ok`
 - `learning.queue = ok`
 - `learning.worker = ok`
 
-### 9. 如果后面要联调前端
+`orchestrator = not_configured` 在这条链路里可以接受，因为 Explore 走的是 `LIBRARY_LEARNING_AI_AGENT_URL`，不是 `LIBRARY_LEARNING_ORCHESTRATOR_URL`。
+
+#### 如果后面要联调前端
 
 - `admin` 分支默认访问 `http://127.0.0.1:8000`
 - `app` 分支默认也访问 `http://127.0.0.1:8000`
 
 也就是说，只要这个分支先跑起来，两个前端分支就可以继续往下接。
 
-### 1. 安装依赖
+### 额外说明
 
-```bash
-uv sync
-```
+- 如果你当前 `.env.local` 配了 `LIBRARY_GRAPH_PROVIDER=neo4j`，记得把 Neo4j 一起启动，否则 graph 相关接口会回退或不可用。
+- 如果你当前 `.env.local` 配了 `LIBRARY_MINERU_LOCAL_BASE_URL`，本地还需要有对应端口的 MinerU 服务；否则 PDF / Office 解析会退化到 fallback 路径，部分格式可能失败。
+- `docker compose -f docker-compose.pgvector.yml up -d` 时看到 `orphan containers` 警告通常不影响使用，不要在不确认的情况下直接加 `--remove-orphans`，否则可能把正在用的 Neo4j 一起删掉。
 
-### 2. 启动 PostgreSQL + pgvector
-
-```bash
-docker compose -f docker-compose.pgvector.yml up -d
-```
-
-默认数据库：
-
-- host: `127.0.0.1`
-- port: `55432`
-- db: `service`
-- user: `library`
-- password: `library`
-
-默认连接串：
-
-```text
-postgresql+psycopg://library:library@localhost:55432/service
-```
-
-### 3. 初始化数据库
-
-```bash
-uv run python scripts/init_postgres.py
-```
-
-### 4. 导出当前演示数据库快照（可选）
+### 导出当前演示数据库快照（可选）
 
 如果你想把**当前这份 PostgreSQL 数据**原样带到另一台机器，而不是重新 seed 一份近似数据，可以先导出标准快照：
 
@@ -244,25 +297,6 @@ data/demo/service-demo.dump
 LIBRARY_POSTGRES_BIN_DIR=/opt/homebrew/opt/libpq/bin uv run python scripts/export_demo_snapshot.py
 ```
 
-### 5. 启动服务
-
-```bash
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-如果你还要跑 `learning` 的异步生成链路，请额外启动 Redis 和 Celery worker：
-
-```bash
-docker start bookshelf-redis 2>/dev/null || docker run -d --name bookshelf-redis -p 6379:6379 redis:7
-uv run celery -A app.learning.tasks.celery_app worker -Q learning --loglevel=INFO
-```
-
-### 6. 验证服务
-
-- Swagger UI: `http://127.0.0.1:8000/docs`
-- OpenAPI: `http://127.0.0.1:8000/openapi.json`
-- Health: `http://127.0.0.1:8000/api/v1/health`
-
 ## 关键环境变量
 
 项目使用 `LIBRARY_` 前缀读取配置。最常用的几项：
@@ -271,8 +305,14 @@ uv run celery -A app.learning.tasks.celery_app worker -Q learning --loglevel=INF
 | --- | --- | --- |
 | `LIBRARY_DATABASE_URL` | PostgreSQL 连接串 | `postgresql+psycopg://library:library@localhost:55432/service` |
 | `LIBRARY_REDIS_URL` | Redis 连接串 | `redis://localhost:6379/0` |
+| `LIBRARY_LEARNING_TASKS_EAGER` | learning 任务是否在 API 进程内直接执行 | `false` |
 | `LIBRARY_LEARNING_AI_AGENT_URL` | Explore AI SDK agent 地址 | 空 |
 | `LIBRARY_LEARNING_AI_CALLBACK_BASE_URL` | Explore AI SDK 完成回调地址 | 空 |
+| `LIBRARY_GRAPH_PROVIDER` | 图谱存储提供方 | `disabled` |
+| `LIBRARY_GRAPH_URI` | Neo4j Bolt 地址 | 空 |
+| `LIBRARY_GRAPH_USERNAME` | Neo4j 用户名 | 空 |
+| `LIBRARY_GRAPH_PASSWORD` | Neo4j 密码 | 空 |
+| `LIBRARY_MINERU_LOCAL_BASE_URL` | 本地 MinerU 服务地址 | 空 |
 | `LIBRARY_JWT_SECRET` | JWT 签名密钥 | `library-service-dev-secret-2026-change-me` |
 | `LIBRARY_AUTO_CREATE_SCHEMA` | 启动时自动建表 | `true` |
 | `LIBRARY_LLM_PROVIDER` | LLM 提供方 | `null` |

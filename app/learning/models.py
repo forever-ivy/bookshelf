@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, JSON_VARIANT, utc_now
@@ -188,6 +188,44 @@ class LearningTurn(Base):
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     metadata_json: Mapped[dict | None] = mapped_column(JSON_VARIANT, nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(default=utc_now, nullable=True, index=True)
+
+
+class LearningReaderProgress(Base):
+    __tablename__ = "learning_reader_progress"
+    __table_args__ = (
+        UniqueConstraint("profile_id", "reader_id", name="uq_learning_reader_progress_profile_reader"),
+        Index("ix_learning_reader_progress_reader_profile", "reader_id", "profile_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    profile_id: Mapped[int] = mapped_column(ForeignKey("learning_profiles.id"), index=True)
+    reader_id: Mapped[int] = mapped_column(ForeignKey("reader_profiles.id"), index=True)
+    page_number: Mapped[int] = mapped_column(Integer, default=1)
+    scale: Mapped[float] = mapped_column(Float, default=1.0)
+    layout_mode: Mapped[str] = mapped_column(String(32), default="horizontal", index=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON_VARIANT, nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(default=utc_now, nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(default=utc_now, onupdate=utc_now, nullable=True)
+
+
+class LearningPdfAnnotation(Base):
+    __tablename__ = "learning_pdf_annotations"
+    __table_args__ = (
+        Index("ix_learning_pdf_annotations_reader_profile_page", "reader_id", "profile_id", "page_number"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    profile_id: Mapped[int] = mapped_column(ForeignKey("learning_profiles.id"), index=True)
+    reader_id: Mapped[int] = mapped_column(ForeignKey("reader_profiles.id"), index=True)
+    annotation_type: Mapped[str] = mapped_column(String(32), default="highlight", index=True)
+    selected_text: Mapped[str] = mapped_column(Text)
+    note_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    color: Mapped[str] = mapped_column(String(32), default="#F7D56E")
+    page_number: Mapped[int] = mapped_column(Integer, default=1, index=True)
+    anchor_json: Mapped[dict] = mapped_column(JSON_VARIANT)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON_VARIANT, nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(default=utc_now, nullable=True, index=True)
+    updated_at: Mapped[datetime | None] = mapped_column(default=utc_now, onupdate=utc_now, nullable=True)
 
 
 class LearningStepContextItem(Base):

@@ -21,15 +21,22 @@ from app.learning.orchestrator import LearningOrchestrator
 from app.learning.schemas import (
     LearningAiRunCallbackRequest,
     LearningBridgeActionRequest,
+    LearningPdfAnnotationCreateRequest,
+    LearningPdfAnnotationUpdateRequest,
     LearningProfileCreateRequest,
+    LearningProfileUpdateRequest,
+    LearningQuickExplainRequest,
+    LearningReaderProgressRequest,
     LearningSessionCreateRequest,
     LearningStreamRequest,
+    serialize_pdf_annotation,
     serialize_asset,
     serialize_bridge_action,
     serialize_job,
     serialize_path_step,
     serialize_path_version,
     serialize_profile,
+    serialize_reader_progress,
     serialize_report,
     serialize_session,
     serialize_step_context_item,
@@ -39,6 +46,7 @@ from app.learning.schemas import (
 )
 from app.learning.service import LearningBridgeService, LearningService
 from app.learning.storage import LearningBlobStore
+from app.llm.provider import build_llm_provider
 
 
 router = APIRouter(prefix="/api/v2/learning", tags=["learning"])
@@ -249,6 +257,42 @@ def get_learning_profile(
     }
 
 
+@router.patch("/profiles/{profile_id}")
+def update_learning_profile(
+    profile_id: int,
+    payload: LearningProfileUpdateRequest,
+    identity: AuthIdentity = Depends(require_reader),
+    db: Session = Depends(get_db),
+) -> dict:
+    profile = repository.require_owned_profile(db, profile_id=profile_id, reader_id=identity.profile_id)
+    title = payload.normalized_title()
+    if title is None or not title:
+        raise ApiError(400, "learning_profile_title_required", "Learning profile title is required")
+
+    updated = repository.update_profile_title(db, profile=profile, title=title)
+    assets = repository.list_bundle_assets(db, bundle_id=updated.source_bundle_id)
+    jobs = repository.list_profile_jobs(db, profile_id=updated.id)
+    db.commit()
+    return {
+        "ok": True,
+        "profile": serialize_profile(updated),
+        "assets": [serialize_asset(asset) for asset in assets],
+        "jobs": [serialize_job(job) for job in jobs],
+    }
+
+
+@router.delete("/profiles/{profile_id}")
+def delete_learning_profile(
+    profile_id: int,
+    identity: AuthIdentity = Depends(require_reader),
+    db: Session = Depends(get_db),
+) -> dict:
+    profile = repository.require_owned_profile(db, profile_id=profile_id, reader_id=identity.profile_id)
+    repository.delete_profile(db, profile=profile)
+    db.commit()
+    return {"ok": True}
+
+
 @router.get("/profiles/{profile_id}/document")
 def get_learning_profile_document(
     profile_id: int,
@@ -283,6 +327,167 @@ def get_learning_profile_document(
     )
 
 
+@router.get("/profiles/{profile_id}/reader-state")
+def get_learning_reader_state(
+    profile_id: int,
+    identity: AuthIdentity = Depends(require_reader),
+    db: Session = Depends(get_db),
+) -> dict:
+    profile = repository.require_owned_profile(db, profile_id=profile_id, reader_id=identity.profile_id)
+    progress = repository.get_reader_progress(db, profile_id=profile.id, reader_id=identity.profile_id)
+    annotations = repository.list_pdf_annotations(db, profile_id=profile.id, reader_id=identity.profile_id)
+    return {
+        "ok": True,
+        "progress": serialize_reader_progress(progress),
+        "annotations": [serialize_pdf_annotation(annotation) for annotation in annotations],
+    }
+
+
+@router.patch("/profiles/{profile_id}/reader-progress")
+def update_learning_reader_progress(
+    profile_id: int,
+    payload: LearningReaderProgressRequest,
+    identity: AuthIdentity = Depends(require_reader),
+    db: Session = Depends(get_db),
+) -> dict:
+    profile = repository.require_owned_profile(db, profile_id=profile_id, reader_id=identity.profile_id)
+    progress = repository.upsert_reader_progress(
+        db,
+        profile_id=profile.id,
+        reader_id=identity.profile_id,
+        page_number=payload.page_number,
+        scale=payload.scale,
+        layout_mode=payload.layout_mode,
+        metadata_json=payload.metadata,
+    )
+    db.commit()
+    return {"ok": True, "progress": serialize_reader_progress(progress)}
+
+
+@router.post("/profiles/{profile_id}/annotations", status_code=201)
+def create_learning_pdf_annotation(
+    profile_id: int,
+    payload: LearningPdfAnnotationCreateRequest,
+    identity: AuthIdentity = Depends(require_reader),
+    db: Session = Depends(get_db),
+) -> dict:
+    profile = repository.require_owned_profile(db, profile_id=profile_id, reader_id=identity.profile_id)
+    selected_text = payload.selected_text.strip()
+    if not selected_text:
+        raise ApiError(400, "learning_annotation_text_required", "Selected text is required")
+    annotation = repository.create_pdf_annotation(
+        db,
+        profile_id=profile.id,
+        reader_id=identity.profile_id,
+        annotation_type=payload.annotation_type,
+        selected_text=selected_text,
+        note_text=payload.note_text,
+        color=payload.color or "#F7D56E",
+        page_number=payload.page_number,
+        anchor_json=payload.anchor,
+        metadata_json=payload.metadata,
+    )
+    db.commit()
+    return {"ok": True, "annotation": serialize_pdf_annotation(annotation)}
+
+
+@router.patch("/profiles/{profile_id}/annotations/{annotation_id}")
+def update_learning_pdf_annotation(
+    profile_id: int,
+    annotation_id: int,
+    payload: LearningPdfAnnotationUpdateRequest,
+    identity: AuthIdentity = Depends(require_reader),
+    db: Session = Depends(get_db),
+) -> dict:
+    profile = repository.require_owned_profile(db, profile_id=profile_id, reader_id=identity.profile_id)
+    annotation = repository.get_pdf_annotation(
+        db,
+        annotation_id=annotation_id,
+        profile_id=profile.id,
+        reader_id=identity.profile_id,
+    )
+    if annotation is None:
+        raise ApiError(404, "learning_annotation_not_found", "Learning annotation not found")
+
+    raw_updates = payload.model_dump(exclude_unset=True)
+    updates: dict = {}
+    for source_key, target_key in {
+        "annotation_type": "annotation_type",
+        "selected_text": "selected_text",
+        "note_text": "note_text",
+        "color": "color",
+        "page_number": "page_number",
+        "anchor": "anchor_json",
+        "metadata": "metadata_json",
+    }.items():
+        if source_key in raw_updates:
+            value = raw_updates[source_key]
+            if source_key == "selected_text" and isinstance(value, str):
+                value = value.strip()
+                if not value:
+                    raise ApiError(400, "learning_annotation_text_required", "Selected text is required")
+            updates[target_key] = value
+
+    updated = repository.update_pdf_annotation(db, annotation=annotation, updates=updates)
+    db.commit()
+    return {"ok": True, "annotation": serialize_pdf_annotation(updated)}
+
+
+@router.delete("/profiles/{profile_id}/annotations/{annotation_id}")
+def delete_learning_pdf_annotation(
+    profile_id: int,
+    annotation_id: int,
+    identity: AuthIdentity = Depends(require_reader),
+    db: Session = Depends(get_db),
+) -> dict:
+    profile = repository.require_owned_profile(db, profile_id=profile_id, reader_id=identity.profile_id)
+    annotation = repository.get_pdf_annotation(
+        db,
+        annotation_id=annotation_id,
+        profile_id=profile.id,
+        reader_id=identity.profile_id,
+    )
+    if annotation is None:
+        raise ApiError(404, "learning_annotation_not_found", "Learning annotation not found")
+    repository.delete_pdf_annotation(db, annotation=annotation)
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/profiles/{profile_id}/quick-explain")
+def explain_learning_pdf_selection(
+    profile_id: int,
+    payload: LearningQuickExplainRequest,
+    identity: AuthIdentity = Depends(require_reader),
+    db: Session = Depends(get_db),
+) -> dict:
+    profile = repository.require_owned_profile(db, profile_id=profile_id, reader_id=identity.profile_id)
+    text = payload.extract_text()
+    if not text:
+        raise ApiError(400, "learning_quick_explain_text_required", "Selected or nearby text is required")
+
+    provider = build_llm_provider()
+    answer = (
+        provider.chat(
+            text=text,
+            context={
+                "systemPrompt": "你是学习资料阅读器里的快速解释助手，只解释用户选中的 PDF 片段。",
+                "instruction": "用中文直接解释选中内容，控制在 3 句以内，不进入对话模式。",
+                "profileId": profile.id,
+                "profileTitle": profile.title,
+                "pageNumber": payload.page_number,
+                "anchor": payload.anchor or {},
+                "selectedText": payload.selected_text,
+                "nearbyText": payload.nearby_text,
+                "surroundingText": payload.surrounding_text,
+            },
+        )
+        or ""
+    ).strip()
+    model_name = getattr(provider, "model", None) or get_settings().llm_model
+    return {"ok": True, "answer": answer, "modelName": model_name}
+
+
 @router.get("/profiles/{profile_id}/graph")
 def get_learning_profile_graph(
     profile_id: int,
@@ -292,15 +497,22 @@ def get_learning_profile_graph(
     profile = repository.require_owned_profile(db, profile_id=profile_id, reader_id=identity.profile_id)
     service = LearningService()
     live_graph = service.graph_service.get_profile_subgraph(profile_id=profile.id)
-    if live_graph is not None:
+    active_path_version = (
+        None
+        if profile.active_path_version_id is None
+        else repository.get_path_version(db, path_version_id=profile.active_path_version_id)
+    )
+    snapshot_graph = {} if active_path_version is None else (active_path_version.graph_snapshot_json or {})
+    if "provider" not in snapshot_graph:
+        snapshot_graph["provider"] = active_path_version.graph_provider if active_path_version is not None else "fallback"
+    has_snapshot_graph = bool(snapshot_graph.get("nodes") or snapshot_graph.get("edges"))
+    has_live_graph = live_graph is not None and bool(live_graph.get("nodes") or live_graph.get("edges"))
+
+    if has_live_graph:
         return {"ok": True, "graph": live_graph}
-    if profile.active_path_version_id is None:
-        return {"ok": True, "graph": {"provider": "fallback", "nodes": [], "edges": []}}
-    active_path_version = repository.get_path_version(db, path_version_id=profile.active_path_version_id)
-    graph = {} if active_path_version is None else (active_path_version.graph_snapshot_json or {})
-    if "provider" not in graph:
-        graph["provider"] = active_path_version.graph_provider if active_path_version is not None else "fallback"
-    return {"ok": True, "graph": graph}
+    if has_snapshot_graph:
+        return {"ok": True, "graph": snapshot_graph}
+    return {"ok": True, "graph": live_graph or snapshot_graph or {"provider": "fallback", "nodes": [], "edges": []}}
 
 
 @router.post("/profiles/{profile_id}/generate", status_code=202)

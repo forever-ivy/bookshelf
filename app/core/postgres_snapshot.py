@@ -6,6 +6,7 @@ import shutil
 import subprocess
 from typing import Iterable
 
+import psycopg
 from sqlalchemy.engine import URL, make_url
 
 
@@ -30,13 +31,13 @@ def _iter_postgres_bin_dirs() -> Iterable[Path]:
 
 
 def resolve_postgres_binary(binary_name: str) -> Path:
-    resolved = shutil.which(binary_name)
-    if resolved:
-        return Path(resolved)
     for directory in _iter_postgres_bin_dirs():
         candidate = directory / binary_name
         if candidate.exists() and os.access(candidate, os.X_OK):
             return candidate
+    resolved = shutil.which(binary_name)
+    if resolved:
+        return Path(resolved)
     raise FileNotFoundError(
         f"Unable to locate `{binary_name}`. Install PostgreSQL client tools or set LIBRARY_POSTGRES_BIN_DIR."
     )
@@ -67,6 +68,10 @@ def _cli_env(url: URL) -> dict[str, str]:
     if url.password:
         env["PGPASSWORD"] = url.password
     return env
+
+
+def _psycopg_connection_url(database_url: str) -> str:
+    return database_url.replace("+psycopg", "", 1)
 
 
 def build_pg_dump_command(
@@ -136,6 +141,8 @@ def restore_snapshot(
 ) -> None:
     if not snapshot_path.exists():
         raise FileNotFoundError(f"Snapshot file not found: {snapshot_path}")
+    if clean:
+        reset_public_schema(database_url)
     command, env = build_pg_restore_command(
         database_url,
         snapshot_path=snapshot_path,
@@ -143,3 +150,14 @@ def restore_snapshot(
         clean=clean,
     )
     subprocess.run(command, check=True, env=env)
+
+
+def reset_public_schema(database_url: str) -> None:
+    url = _require_postgres_url(database_url)
+    connect_url = _psycopg_connection_url(url.render_as_string(hide_password=False))
+    with psycopg.connect(connect_url, autocommit=True) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("DROP SCHEMA IF EXISTS public CASCADE")
+            cursor.execute("CREATE SCHEMA public")
+            cursor.execute("CREATE EXTENSION IF NOT EXISTS vector")
+            cursor.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
