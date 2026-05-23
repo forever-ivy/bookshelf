@@ -11,6 +11,11 @@ from app.core.config import Settings, get_settings
 from app.llm.provider import NullLLMProvider, build_llm_provider
 
 try:
+    from openai import APIConnectionError
+except Exception:  # pragma: no cover - optional dependency during tests
+    APIConnectionError = None  # type: ignore[assignment]
+
+try:
     from openai import APITimeoutError
 except Exception:  # pragma: no cover - optional dependency during tests
     APITimeoutError = None  # type: ignore[assignment]
@@ -85,10 +90,27 @@ def _truncate(text: str, *, limit: int = 5000) -> str:
 
 
 def _is_timeout_error(exc: Exception) -> bool:
+    if _is_connection_error(exc):
+        return False
     timeout_types: list[type[BaseException]] = [TimeoutError, httpx.TimeoutException]
     if APITimeoutError is not None:
         timeout_types.append(APITimeoutError)
     return isinstance(exc, tuple(timeout_types))
+
+
+def _is_connection_error(exc: Exception) -> bool:
+    return APIConnectionError is not None and isinstance(exc, APIConnectionError)
+
+
+def _is_llm_request_failure(exc: Exception) -> bool:
+    return _is_connection_error(exc) or _is_timeout_error(exc)
+
+
+def _non_empty_reply(reply: str | None) -> str | None:
+    if reply is None:
+        return None
+    normalized = reply.strip()
+    return normalized or None
 
 
 def _run_with_timeout(
@@ -183,10 +205,19 @@ class LearningLLMWorkflow:
             return None
         return {"summary": str(parsed["summary"]), "concepts": concepts, "steps": steps}
 
+    def _safe_provider_chat(self, *, text: str, context: dict) -> str | None:
+        try:
+            return self.provider.chat(text=text, context=context)
+        except Exception as exc:
+            if _is_llm_request_failure(exc):
+                logger.warning("LLM request failed; using local fallback", exc_info=True)
+                return None
+            raise
+
     def teacher_reply(self, *, step: dict[str, Any], evidence: list[dict[str, Any]], user_content: str) -> str | None:
         if not self.enabled:
             return None
-        return self.provider.chat(
+        reply = self._safe_provider_chat(
             text=user_content,
             context={
                 "systemPrompt": "你是图书馆导学课堂中的导师角色。请使用中文回答。",
@@ -194,12 +225,13 @@ class LearningLLMWorkflow:
                 "step": step,
                 "evidence": evidence[:3],
             },
-        ).strip() or None
+        )
+        return _non_empty_reply(reply)
 
     def peer_reply(self, *, step: dict[str, Any], user_content: str, passed: bool) -> str | None:
         if not self.enabled:
             return None
-        return self.provider.chat(
+        reply = self._safe_provider_chat(
             text=user_content,
             context={
                 "systemPrompt": "你是导学课堂中的学伴角色。请使用中文回答。",
@@ -207,12 +239,13 @@ class LearningLLMWorkflow:
                 "step": step,
                 "passed": passed,
             },
-        ).strip() or None
+        )
+        return _non_empty_reply(reply)
 
     def examine(self, *, step: dict[str, Any], user_content: str) -> dict[str, Any] | None:
         if not self.enabled:
             return None
-        reply = self.provider.chat(
+        reply = self._safe_provider_chat(
             text=user_content,
             context={
                 "systemPrompt": "你是导学课堂中的考官角色。你只返回 JSON。",
@@ -223,6 +256,8 @@ class LearningLLMWorkflow:
                 "step": step,
             },
         )
+        if reply is None:
+            return None
         parsed = _parse_json_payload(reply)
         if not isinstance(parsed, dict):
             return None
@@ -238,7 +273,7 @@ class LearningLLMWorkflow:
     def classify_guide_intent(self, *, step: dict[str, Any], user_content: str) -> dict[str, Any] | None:
         if not self.enabled:
             return None
-        reply = self.provider.chat(
+        reply = self._safe_provider_chat(
             text=user_content,
             context={
                 "systemPrompt": "你是导学课堂中的意图分类器。你只返回 JSON。",
@@ -250,6 +285,8 @@ class LearningLLMWorkflow:
                 "step": step,
             },
         )
+        if reply is None:
+            return None
         parsed = _parse_json_payload(reply)
         if not isinstance(parsed, dict):
             return None
@@ -284,6 +321,9 @@ class LearningLLMWorkflow:
                 context=context,
             )
         except Exception as exc:
+            if _is_connection_error(exc):
+                logger.warning("LLM explore answer connection error; returning fallback answer")
+                return _build_explore_timeout_fallback()
             if not _is_timeout_error(exc):
                 raise
             logger.warning("LLM explore answer timed out; returning fallback answer")

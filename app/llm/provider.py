@@ -88,7 +88,10 @@ class OpenAICompatibleLLMProvider:
     def _build_client(self, *, api_key: str, base_url: str | None) -> Any:
         if OpenAI is None:
             raise RuntimeError("openai package is not installed")
-        kwargs: dict[str, Any] = {"api_key": api_key}
+        kwargs: dict[str, Any] = {
+            "api_key": api_key,
+            "max_retries": 0,
+        }
         if base_url:
             kwargs["base_url"] = base_url
         return OpenAI(**kwargs)

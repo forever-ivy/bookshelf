@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 
 import { createExploreUiMessageResponse, createResumeUiMessageResponse } from '../src/server.js';
 import { MemoryResumableStreamStore } from '../src/stream-store.js';
+import { buildExplorePrompt } from '../src/explore-agent.js';
 
 async function readResponseText(response) {
   if (!response.body) {
@@ -60,5 +61,69 @@ describe('learning agent server', () => {
     assert.match(responseText, /text-delta/);
     assert.match(responseText, /\[DONE\]/);
   });
-});
 
+  it('waits for the completion callback before finishing the proxied stream', async () => {
+    const store = new MemoryResumableStreamStore();
+
+    const response = await createExploreUiMessageResponse(
+      {
+        callbackUrl: 'http://library-core-api.test/internal/learning/ai-runs/1/complete',
+        runId: 1,
+        streamId: 'learning-ai-run-1',
+        userContent: '详细讲解一个文档中的例题',
+      },
+      { LIBRARY_LLM_API_KEY: 'test-key' },
+      {
+        streamStore: store,
+        postRunCallback: async () => ({
+          turn: {
+            assistantContent: '进程是资源分配单位，线程是调度执行单位。',
+          },
+        }),
+        streamText: ({ onFinish }) => {
+          setTimeout(() => {
+            onFinish({
+              reasoningText: '先定位引用。',
+              text: '进程是资源分配单位，线程是调度执行单位。',
+            });
+          }, 10);
+          return {
+            async *toUIMessageStream() {
+              yield {
+                delta: '进程是资源分配单位，线程是调度执行单位。',
+                id: 'answer-1',
+                type: 'text-delta',
+              };
+            },
+          };
+        },
+      }
+    );
+
+    const responseText = await readResponseText(response);
+
+    assert.match(responseText, /text-delta/);
+    assert.match(responseText, /data-learning-final/);
+    assert.match(responseText, /进程是资源分配单位，线程是调度执行单位/);
+    assert.match(responseText, /"type":"finish"/);
+  });
+
+  it('passes citation content into the explore prompt format', () => {
+    const prompt = buildExplorePrompt({
+      citations: [
+        {
+          chapterLabel: '导数应用',
+          snippet: 'Leibniz 公式用于乘积求导。',
+        },
+      ],
+      focusContext: {
+        stepTitle: '导数应用',
+      },
+      relatedConcepts: ['Leibniz公式'],
+      userContent: '这部分怎么理解？',
+    });
+
+    assert.match(prompt, /导数应用/);
+    assert.match(prompt, /Leibniz 公式用于乘积求导/);
+  });
+});

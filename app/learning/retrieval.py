@@ -52,7 +52,10 @@ def _context_item_to_citation(item: Any) -> dict[str, Any]:
         "assetId": None,
         "chunkIndex": None,
         "chapterLabel": getattr(item, "title", None),
+        "title": getattr(item, "title", None),
         "snippet": snippet,
+        "excerpt": snippet,
+        "content": item.content or item.summary or "",
         "citationAnchor": {
             "contextItemId": item.id,
             "sourceSessionId": item.source_session_id,
@@ -122,7 +125,10 @@ class LearningRetrievalService:
                         "assetId": fragment.asset_id,
                         "chunkIndex": fragment.chunk_index,
                         "chapterLabel": fragment.chapter_label,
+                        "title": fragment.chapter_label,
                         "snippet": snippet,
+                        "excerpt": snippet,
+                        "content": fragment.content,
                         "citationAnchor": fragment.citation_anchor_json or {},
                     },
                 )

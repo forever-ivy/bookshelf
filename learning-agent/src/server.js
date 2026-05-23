@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 
 import { createDeepSeek } from '@ai-sdk/deepseek';
-import { createUIMessageStream, createUIMessageStreamResponse, streamText } from 'ai';
+import { createUIMessageStream, createUIMessageStreamResponse, smoothStream, streamText } from 'ai';
 
 import { buildExplorePrompt, resolveDeepSeekModelName } from './explore-agent.js';
 import { createStreamStore } from './stream-store.js';
@@ -130,12 +130,31 @@ function delay(ms) {
   });
 }
 
+function createChineseStreamSegmenter() {
+  if (typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function') {
+    return new Intl.Segmenter('zh', { granularity: 'word' });
+  }
+
+  return (buffer) => {
+    if (!buffer) {
+      return null;
+    }
+    const punctuationIndex = buffer.search(/[\n，。！？；：、,.!?;:]/);
+    if (punctuationIndex >= 0) {
+      return buffer.slice(0, punctuationIndex + 1);
+    }
+    return buffer.length >= 4 ? buffer.slice(0, 4) : null;
+  };
+}
+
 export async function createExploreUiMessageResponse(
   body,
   env = process.env,
   dependencies = {}
 ) {
   const streamStore = dependencies.streamStore ?? createStreamStore(env);
+  const streamTextImpl = dependencies.streamText ?? streamText;
+  const postRunCallbackImpl = dependencies.postRunCallback ?? postRunCallback;
   const streamId = String(body.streamId ?? `learning-ai-run-${body.runId ?? Date.now()}`);
   const callbackUrl = typeof body.callbackUrl === 'string' ? body.callbackUrl : '';
   const apiKey = resolveApiKey(env);
@@ -148,6 +167,10 @@ export async function createExploreUiMessageResponse(
   let finalPayload = null;
   let callbackFailed = false;
   let failureReported = false;
+  let settleRun;
+  const runSettled = new Promise((resolve) => {
+    settleRun = resolve;
+  });
 
   const reportFailure = async () => {
     if (failureReported) {
@@ -162,6 +185,7 @@ export async function createExploreUiMessageResponse(
       });
     } catch {}
     await streamStore.markFailed(streamId);
+    settleRun();
   };
 
   if (!apiKey) {
@@ -191,7 +215,11 @@ export async function createExploreUiMessageResponse(
     relatedConcepts: body.relatedConcepts ?? [],
     userContent: String(body.userContent ?? ''),
   });
-  const result = streamText({
+  const result = streamTextImpl({
+    experimental_transform: smoothStream({
+      chunking: createChineseStreamSegmenter(),
+      delayInMs: 18,
+    }),
     model: deepseek(resolveDeepSeekModelName(env)),
     onError: async () => {
       await reportFailure();
@@ -204,7 +232,7 @@ export async function createExploreUiMessageResponse(
       }
 
       try {
-        finalPayload = await postRunCallback(callbackUrl, {
+        finalPayload = await postRunCallbackImpl(callbackUrl, {
           answerText,
           assistantMessage: buildAssistantMessage(answerText, event.reasoningText ?? null),
           reasoningContent: event.reasoningText ?? null,
@@ -214,6 +242,8 @@ export async function createExploreUiMessageResponse(
       } catch {
         callbackFailed = true;
         await streamStore.markFailed(streamId);
+      } finally {
+        settleRun();
       }
     },
     prompt,
@@ -230,8 +260,13 @@ export async function createExploreUiMessageResponse(
         sendFinish: false,
         sendReasoning: true,
       });
-      for await (const part of modelStream) {
-        writer.write(part);
+      try {
+        for await (const part of modelStream) {
+          writer.write(part);
+        }
+        await runSettled;
+      } catch {
+        await reportFailure();
       }
 
       if (finalPayload?.turn) {
@@ -242,7 +277,10 @@ export async function createExploreUiMessageResponse(
 
       if (callbackFailed) {
         writer.write({ type: 'error', errorText: '模型请求错误' });
+        return;
       }
+
+      writer.write({ type: 'finish' });
     },
     onError: extractErrorText,
   });
@@ -382,4 +420,3 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log(`learning-agent listening on ${port}`);
   });
 }
-

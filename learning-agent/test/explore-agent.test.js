@@ -25,6 +25,23 @@ describe('explore agent prompt', () => {
     assert.match(prompt, /不要输出 JSON/);
   });
 
+  it('uses normalized citation fields when source fields are absent', () => {
+    const prompt = buildExplorePrompt({
+      citations: [
+        {
+          title: '计算机组成原理',
+          excerpt: '总线负责连接 CPU、存储器和 I/O 设备。',
+        },
+      ],
+      focusContext: {},
+      relatedConcepts: [],
+      userContent: '总线有什么作用？',
+    });
+
+    assert.match(prompt, /计算机组成原理/);
+    assert.match(prompt, /总线负责连接 CPU、存储器和 I\/O 设备/);
+  });
+
   it('defaults to deepseek-reasoner unless an explicit model is configured', () => {
     assert.equal(resolveDeepSeekModelName({}), 'deepseek-reasoner');
     assert.equal(resolveDeepSeekModelName({ LIBRARY_LLM_MODEL: 'deepseek-chat' }), 'deepseek-chat');

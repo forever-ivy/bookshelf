@@ -7,8 +7,13 @@ function formatJson(value) {
 }
 
 function formatCitation(citation, index) {
-  const title = citation?.sourceTitle || citation?.source_title || citation?.title || `引用 ${index + 1}`;
-  const excerpt = citation?.excerpt || citation?.content || '';
+  const title =
+    citation?.sourceTitle ||
+    citation?.source_title ||
+    citation?.title ||
+    citation?.chapterLabel ||
+    `引用 ${index + 1}`;
+  const excerpt = citation?.excerpt || citation?.snippet || citation?.content || '';
   return `【${index + 1}】${title}\n${excerpt}`.trim();
 }
 

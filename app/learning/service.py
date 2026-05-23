@@ -29,6 +29,11 @@ except Exception:  # pragma: no cover - optional in tests
     APITimeoutError = None  # type: ignore[assignment]
 
 try:
+    from openai import APIConnectionError
+except Exception:  # pragma: no cover - optional in tests
+    APIConnectionError = None  # type: ignore[assignment]
+
+try:
     from langgraph.graph import END, START, StateGraph  # type: ignore
 except Exception:  # pragma: no cover - optional in tests
     END = "__end__"
@@ -294,10 +299,18 @@ def ensure_learning_profile_storage_dir(*, settings: Settings, reader_id: int, p
 
 
 def _is_llm_timeout(exc: Exception) -> bool:
+    if _is_llm_connection_error(exc):
+        return False
     timeout_types = [TimeoutError, httpx.TimeoutException]
     if APITimeoutError is not None:
         timeout_types.append(APITimeoutError)
     return isinstance(exc, tuple(timeout_types))
+
+
+def _is_llm_connection_error(exc: Exception) -> bool:
+    if APIConnectionError is None:
+        return False
+    return isinstance(exc, APIConnectionError)
 
 
 def chunk_text(text: str, *, chunk_size: int, overlap: int) -> list[str]:
@@ -789,9 +802,9 @@ class LearningService:
                 combined_text=combined_text,
             )
         except Exception as exc:
-            if not _is_llm_timeout(exc):
+            if not (_is_llm_timeout(exc) or _is_llm_connection_error(exc)):
                 raise
-            logger.warning("LLM learning planner timed out; falling back to local planner")
+            logger.warning("LLM learning planner failed; falling back to local planner", exc_info=True)
         if llm_plan is not None:
             return llm_plan
         return plan_learning_path(

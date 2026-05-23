@@ -6,7 +6,7 @@ from io import BytesIO
 import httpx
 import pytest
 from fastapi.testclient import TestClient
-from openai import APITimeoutError
+from openai import APIConnectionError, APITimeoutError
 from sqlalchemy import text
 
 from app.catalog.models import Book, BookSourceDocument
@@ -705,6 +705,55 @@ def test_generate_learning_profile_falls_back_when_llm_plan_times_out(client, mo
         raise APITimeoutError(request=httpx.Request("POST", "https://api.deepseek.com/chat/completions"))
 
     monkeypatch.setattr("app.learning.llm_flow.LearningLLMWorkflow.plan_path", raise_timeout)
+
+    generate_response = client.post(
+        f"/api/v2/learning/profiles/{profile_id}/generate",
+        headers=headers,
+    )
+
+    assert generate_response.status_code == 202
+    payload = generate_response.json()
+    assert payload["ok"] is True
+    assert payload["triggered"] is True
+
+    detail_response = client.get(f"/api/v2/learning/profiles/{profile_id}", headers=headers)
+    assert detail_response.status_code == 200
+    detail_payload = detail_response.json()
+    assert detail_payload["profile"]["status"] == "ready"
+    assert detail_payload["activePathVersion"]["stepCount"] >= 3
+    assert all(job["status"] == "completed" for job in detail_payload["jobs"])
+
+
+def test_generate_learning_profile_falls_back_when_llm_plan_has_connection_error(client, monkeypatch):
+    state = seed_reader_with_book()
+    headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
+
+    create_response = client.post(
+        "/api/v2/learning/profiles",
+        headers=headers,
+        json={
+            "title": "连接错误回退导学空间",
+            "goalMode": "preview",
+            "difficultyMode": "guided",
+            "sources": [
+                {
+                    "kind": "inline_text",
+                    "fileName": "connection-error.md",
+                    "mimeType": "text/markdown",
+                    "content": "# 连接错误\n\nLLM 连接失败时，生成流程应该继续落到本地 planner。",
+                }
+            ],
+        },
+    )
+    profile_id = create_response.json()["profile"]["id"]
+
+    def raise_connection_error(self, **kwargs):
+        raise APIConnectionError(
+            message="Connection error.",
+            request=httpx.Request("POST", "https://api.deepseek.com/chat/completions"),
+        )
+
+    monkeypatch.setattr("app.learning.llm_flow.LearningLLMWorkflow.plan_path", raise_connection_error)
 
     generate_response = client.post(
         f"/api/v2/learning/profiles/{profile_id}/generate",
@@ -1799,6 +1848,63 @@ def test_explore_session_stream_returns_fallback_answer_when_llm_answer_times_ou
     assert len(turns) == 1
     assert turns[0]["turnKind"] == "explore"
     assert turns[0]["assistantContent"] == (
+        "模型响应超时了。我先给你一个保守结论：先围绕你当前的问题，回到资料里的核心定义、关键例子和直接证据继续看。"
+    )
+
+
+def test_explore_session_stream_returns_fallback_answer_when_llm_has_connection_error(client, monkeypatch):
+    state = seed_reader_with_book()
+    headers = reader_headers(state["owner_account_id"], state["owner_profile_id"])
+
+    create_response = client.post(
+        "/api/v2/learning/profiles",
+        headers=headers,
+        json={
+            "title": "操作系统导学空间",
+            "goalMode": "preview",
+            "difficultyMode": "guided",
+            "sources": [{"kind": "book", "bookId": state["book_id"]}],
+        },
+    )
+    profile_id = create_response.json()["profile"]["id"]
+    client.post(f"/api/v2/learning/profiles/{profile_id}/generate", headers=headers)
+
+    session_response = client.post(
+        "/api/v2/learning/sessions",
+        headers=headers,
+        json={
+            "profileId": profile_id,
+            "learningMode": "preview",
+            "sessionKind": "explore",
+        },
+    )
+
+    assert session_response.status_code == 201
+    explore_session_id = session_response.json()["session"]["id"]
+
+    class ConnectionErrorLLMProvider:
+        def chat(self, *, text: str, context: dict) -> str:
+            raise AssertionError("Explore fallback should not call plain chat")
+
+        def chat_with_reasoning(self, *, text: str, context: dict) -> tuple[str, str | None]:
+            raise APIConnectionError(
+                message="Connection error.",
+                request=httpx.Request("POST", "https://api.deepseek.com/chat/completions"),
+            )
+
+    monkeypatch.setattr("app.learning.llm_flow.build_llm_provider", lambda: ConnectionErrorLLMProvider())
+
+    with client.stream(
+        "POST",
+        f"/api/v2/learning/sessions/{explore_session_id}/stream",
+        headers=headers,
+        json={"content": "详细讲解一个文档中的例题"},
+    ) as response:
+        assert response.status_code == 200
+        events = parse_sse_lines(list(response.iter_lines()))
+
+    assert events[-1]["event"] == "assistant.final"
+    assert events[-1]["data"]["turn"]["assistantContent"] == (
         "模型响应超时了。我先给你一个保守结论：先围绕你当前的问题，回到资料里的核心定义、关键例子和直接证据继续看。"
     )
 
