@@ -91,6 +91,7 @@ export function LearningGiftedConversation({
   emptyLabel,
   inputTestID = 'learning-workspace-composer-input',
   isSending = false,
+  latestStatus,
   messages,
   onAction,
   onDraftChange,
@@ -150,6 +151,7 @@ export function LearningGiftedConversation({
           <LearningAssistantConversationSection
             emptyLabel={emptyLabel}
             focusMessageId={focusMessageId}
+            latestStatus={latestStatus}
             messages={messages}
             onAction={onAction}
             onFocusAnchorYChange={setFocusAnchorY}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Animated, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import Markdown from 'react-native-markdown-display';
 import SyntaxHighlighter from 'react-native-syntax-highlighter';
 import { atomOneDark } from 'react-syntax-highlighter/styles/hljs';
@@ -55,7 +55,7 @@ async function copyCodeToClipboard(value: string) {
         }
       | undefined;
     const setStringAsync =
-      clipboardModule.setStringAsync ?? clipboardModule.default?.setStringAsync;
+      clipboardModule?.setStringAsync ?? clipboardModule?.default?.setStringAsync;
 
     if (typeof setStringAsync === 'function') {
       await setStringAsync(value);
@@ -134,11 +134,40 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
 
 function StreamingCursor() {
   const { theme } = useAppTheme();
+  const opacity = React.useRef(new Animated.Value(1)).current;
+
+  React.useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, {
+          duration: 420,
+          toValue: 0,
+          useNativeDriver: false,
+        }),
+        Animated.timing(opacity, {
+          duration: 420,
+          toValue: 1,
+          useNativeDriver: false,
+        }),
+      ])
+    );
+
+    animation.start();
+    return () => animation.stop();
+  }, [opacity]);
 
   return (
-    <Text selectable={false} style={{ color: theme.colors.textSoft }}>
+    <Animated.Text
+      selectable={false}
+      style={{
+        color: theme.colors.textSoft,
+        opacity,
+        ...theme.typography.medium,
+        fontSize: 18,
+        lineHeight: 24,
+      }}>
       ●
-    </Text>
+    </Animated.Text>
   );
 }
 

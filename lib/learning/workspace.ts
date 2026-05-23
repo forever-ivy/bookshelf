@@ -401,34 +401,34 @@ export function buildLearningWorkspaceHighlights(
 export function resolveLearningStreamStatusSignal(phase?: string | null): LearningWorkspaceStatusSignal {
   if (phase === 'retrieving') {
     return {
-      label: '正在检索当前步骤相关资料…',
+      label: '正在检索资料',
       tone: 'info',
     };
   }
 
   if (phase === 'reasoning') {
     return {
-      label: '正在梳理这轮问题的回答路径…',
+      label: '正在思考',
       tone: 'info',
     };
   }
 
   if (phase === 'finalizing') {
     return {
-      label: '正在整理最终回复…',
+      label: '正在整理回答',
       tone: 'info',
     };
   }
 
   if (phase === 'writing') {
     return {
-      label: '正在生成这轮回答…',
+      label: '正在生成回答',
       tone: 'info',
     };
   }
 
   return {
-    label: '导师正在组织这一轮回应…',
+    label: '正在思考',
     tone: 'info',
   };
 }

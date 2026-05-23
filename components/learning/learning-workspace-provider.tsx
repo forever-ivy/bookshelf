@@ -13,7 +13,7 @@ import {
 } from '@/hooks/use-learning-workspace';
 import { getLibraryErrorMessage, LibraryApiError } from '@/lib/api/client';
 import { resumeLearningSessionReply, streamLearningSessionReply } from '@/lib/api/learning';
-import type { LearningSessionMessage, LearningStepEvaluation } from '@/lib/api/types';
+import type { LearningSessionMessage, LearningStepEvaluation, LearningStreamEvent } from '@/lib/api/types';
 import {
   buildSyntheticCompletedSteps,
   buildLearningSessionTransitionLabel,
@@ -99,6 +99,75 @@ function hasVisibleAssistantDraftContent() {
   }
 
   return assistantDraft.cards.length > 0;
+}
+
+type VisibleLearningStreamDeltaEvent = Extract<
+  LearningStreamEvent,
+  { delta: string }
+>;
+
+function isVisibleStreamDelta(event: LearningStreamEvent): event is VisibleLearningStreamDeltaEvent {
+  return (
+    (event.type === 'assistant.delta' ||
+      event.type === 'teacher.delta' ||
+      event.type === 'peer.delta' ||
+      event.type === 'explore.answer.delta' ||
+      event.type === 'explore.reasoning.delta') &&
+    event.delta.length > 0
+  );
+}
+
+function splitLearningStreamDelta(delta: string) {
+  const characters = Array.from(delta);
+  if (characters.length <= 10) {
+    return [delta];
+  }
+
+  const chunks: string[] = [];
+  let current = '';
+
+  characters.forEach((character) => {
+    current += character;
+    if (current.length >= 10 || /[\n，。！？；：、,.!?;:]/.test(character)) {
+      chunks.push(current);
+      current = '';
+    }
+  });
+
+  if (current) {
+    chunks.push(current);
+  }
+
+  return chunks;
+}
+
+function waitForNextLearningStreamPaint() {
+  return new Promise<void>((resolve) => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => resolve());
+      return;
+    }
+
+    setTimeout(resolve, 16);
+  });
+}
+
+async function applyLearningStreamEventForDisplay(
+  event: LearningStreamEvent,
+  applyEvent: (event: LearningStreamEvent) => void
+) {
+  if (!isVisibleStreamDelta(event)) {
+    applyEvent(event);
+    return;
+  }
+
+  for (const delta of splitLearningStreamDelta(event.delta)) {
+    applyEvent({
+      ...event,
+      delta,
+    });
+    await waitForNextLearningStreamPaint();
+  }
 }
 
 export function buildOptimisticUserHistoryMessage(
@@ -299,6 +368,7 @@ export function LearningWorkspaceProvider({
     session: NonNullable<ReturnType<typeof useLearningWorkspace>['workspaceSession']>;
   } | null>(null);
   const lastResumeAttemptKeyRef = React.useRef<string | null>(null);
+  const cancelResumeStreamRef = React.useRef<(() => void) | null>(null);
 
   const baseRenderedMessages = React.useMemo(
     () => createLearningRenderedMessages(sessionMessagesQuery.data ?? []),
@@ -400,7 +470,14 @@ export function LearningWorkspaceProvider({
     const normalized = (nextDraft ?? draft).trim();
     const activeSession = options?.session ?? activeWorkspaceSession;
     const activeMode = options?.mode ?? studyMode;
-    if (!normalized || !profile || !activeSession || !token || isSending) {
+    if (!normalized || !profile || !activeSession || !token) {
+      return;
+    }
+
+    cancelResumeStreamRef.current?.();
+    cancelResumeStreamRef.current = null;
+
+    if (isSending) {
       return;
     }
 
@@ -457,7 +534,7 @@ export function LearningWorkspaceProvider({
           event.type === 'explore.related_concepts' ||
           event.type === 'assistant.final'
         ) {
-          applyConversationEvent(event);
+          await applyLearningStreamEventForDisplay(event, applyConversationEvent);
           if (event.type === 'assistant.final') {
             finalAssistantMessage = event.message;
             updateMessagesCache(activeSession.id, optimisticUserMessage, event.message);
@@ -598,14 +675,21 @@ export function LearningWorkspaceProvider({
     lastResumeAttemptKeyRef.current = resumeAttemptKey;
 
     let cancelled = false;
+    const abortController = new AbortController();
+    const cancelResumeStream = () => {
+      cancelled = true;
+      abortController.abort();
+    };
+    cancelResumeStreamRef.current = cancelResumeStream;
 
     const resumeStream = async () => {
       let finalAssistantMessage: LearningSessionMessage | null = null;
       let resumeUserText: string | null = null;
 
-      setIsSending(true);
       try {
-        for await (const event of resumeLearningSessionReply(activeWorkspaceSession.id, token)) {
+        for await (const event of resumeLearningSessionReply(activeWorkspaceSession.id, token, {
+          signal: abortController.signal,
+        })) {
           if (cancelled) {
             return;
           }
@@ -640,7 +724,7 @@ export function LearningWorkspaceProvider({
             event.type === 'explore.related_concepts' ||
             event.type === 'assistant.final'
           ) {
-            applyConversationEvent(event);
+            await applyLearningStreamEventForDisplay(event, applyConversationEvent);
             if (event.type === 'assistant.final') {
               finalAssistantMessage = event.message;
               if (resumeUserText) {
@@ -692,8 +776,8 @@ export function LearningWorkspaceProvider({
           toast.error(getLibraryErrorMessage(error, getLearningReplyFailureFallback('explore')));
         }
       } finally {
-        if (!cancelled) {
-          setIsSending(false);
+        if (cancelResumeStreamRef.current === cancelResumeStream) {
+          cancelResumeStreamRef.current = null;
         }
       }
     };
@@ -701,7 +785,10 @@ export function LearningWorkspaceProvider({
     void resumeStream();
 
     return () => {
-      cancelled = true;
+      cancelResumeStream();
+      if (cancelResumeStreamRef.current === cancelResumeStream) {
+        cancelResumeStreamRef.current = null;
+      }
     };
   }, [
     applyConversationEvent,
@@ -709,6 +796,7 @@ export function LearningWorkspaceProvider({
     commitConversationDraft,
     discardAssistantDraft,
     ensureResumeConversationDraft,
+    isSending,
     setConversationLatestStatus,
     token,
     updateMessagesCache,

@@ -16,11 +16,15 @@ import {
   getLearningMessageFromAssistantMessage,
   toAssistantLearningMessage,
 } from '@/lib/learning/assistant-ui-conversation';
-import type { LearningWorkspaceRenderedMessage } from '@/lib/learning/workspace';
+import type {
+  LearningWorkspaceRenderedMessage,
+  LearningWorkspaceStatusSignal,
+} from '@/lib/learning/workspace';
 
 type LearningAssistantConversationSectionProps = {
   emptyLabel: string;
   focusMessageId?: string | null;
+  latestStatus?: LearningWorkspaceStatusSignal | null;
   messages: LearningWorkspaceRenderedMessage[];
   onAction?: (action: LearningBridgeAction) => void;
   onFocusAnchorYChange?: (y: number | null) => void;
@@ -31,6 +35,7 @@ type LearningAssistantConversationContextValue = {
   onAction?: (action: LearningBridgeAction) => void;
   onFocusMessageLayout?: (event: LayoutChangeEvent) => void;
   onFocusMessageNodeChange?: (node: View | null) => void;
+  streamStatusLabel?: string | null;
 };
 
 const LearningAssistantConversationContext =
@@ -118,7 +123,7 @@ function LearningAssistantUserMessage() {
 }
 
 function LearningAssistantAssistantMessage() {
-  const { onAction } = React.useContext(LearningAssistantConversationContext);
+  const { onAction, streamStatusLabel } = React.useContext(LearningAssistantConversationContext);
   const learningMessage = useLearningAssistantMessage();
   const hasTextPart = useAuiState((state) =>
     state.message.content.some((part) => part.type === 'text')
@@ -131,11 +136,19 @@ function LearningAssistantAssistantMessage() {
           <MessagePrimitive.Content
             renderReasoning={() => <React.Fragment />}
             renderText={() => (
-              <LearningConversationMessage message={learningMessage} onAction={onAction} />
+              <LearningConversationMessage
+                message={learningMessage}
+                onAction={onAction}
+                streamStatusLabel={streamStatusLabel}
+              />
             )}
           />
         ) : (
-          <LearningConversationMessage message={learningMessage} onAction={onAction} />
+          <LearningConversationMessage
+            message={learningMessage}
+            onAction={onAction}
+            streamStatusLabel={streamStatusLabel}
+          />
         )
       ) : (
         <MessagePrimitive.Content
@@ -174,6 +187,7 @@ function useLearningAssistantRuntime(messages: LearningWorkspaceRenderedMessage[
 export function LearningAssistantConversationSection({
   emptyLabel,
   focusMessageId,
+  latestStatus,
   messages,
   onAction,
   onFocusAnchorYChange,
@@ -266,8 +280,9 @@ export function LearningAssistantConversationSection({
       onFocusMessageNodeChange: (node: View | null) => {
         focusMessageNodeRef.current = node;
       },
+      streamStatusLabel: latestStatus?.label ?? null,
     }),
-    [focusMessageId, handleFocusMessageLayout, onAction]
+    [focusMessageId, handleFocusMessageLayout, latestStatus?.label, onAction]
   );
 
   return (

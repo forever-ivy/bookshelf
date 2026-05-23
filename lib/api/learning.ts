@@ -1419,7 +1419,8 @@ export async function* streamLearningSessionReply(
 
 export async function* resumeLearningSessionReply(
   sessionId: number,
-  token?: string | null
+  token?: string | null,
+  options: { signal?: AbortSignal } = {}
 ): AsyncGenerator<LearningStreamEvent, void, void> {
   const baseUrl = getLibraryServiceBaseUrl();
   if (!baseUrl) {
@@ -1434,6 +1435,7 @@ export async function* resumeLearningSessionReply(
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       method: 'GET',
+      signal: options.signal,
     });
   } catch {
     throw new LibraryApiError('library_network_error', {

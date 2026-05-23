@@ -357,9 +357,11 @@ function ReasoningSection({
 function ExploreMessage({
   message,
   onAction,
+  streamStatusLabel,
 }: {
   message: LearningWorkspaceRenderedMessage;
   onAction?: (action: LearningBridgeAction) => void;
+  streamStatusLabel?: string | null;
 }) {
   const { theme } = useAppTheme();
   const [exploreReasoningExpanded, setExploreReasoningExpanded] = React.useState(false);
@@ -367,6 +369,9 @@ function ExploreMessage({
   const answerContent = presentation?.answer.content.trim() ?? '';
   const exploreReasoning = presentation?.reasoningContent?.trim() ?? '';
   const showThinkingOnly = message.streaming && !answerContent && !exploreReasoning;
+  const statusLabel = streamStatusLabel ?? '正在思考';
+  const shouldShowReasoningToggle = Boolean(exploreReasoning);
+  const shouldShowStreamingStatus = message.streaming && !answerContent;
 
   const handleToggle = React.useCallback(() => {
     if (!exploreReasoning) return;
@@ -374,54 +379,55 @@ function ExploreMessage({
   }, [exploreReasoning]);
 
   if (!presentation) return null;
-  if (showThinkingOnly) return <LearningChatBubble role="assistant" text="" thinking />;
+  if (showThinkingOnly) {
+    return <LearningChatBubble role="assistant" text="" thinking thinkingLabel={statusLabel} />;
+  }
 
   return (
     <View style={{ gap: 16, width: '100%' }}>
-      <View style={{ gap: 10 }}>
-        {/* Header row: label + chevron + streaming status */}
-        <Pressable
-          accessibilityRole={exploreReasoning ? 'button' : undefined}
-          disabled={!exploreReasoning}
-          onPress={handleToggle}
-          style={({ pressed }) => ({
-            opacity: pressed && exploreReasoning ? 0.8 : 1,
-          })}
-          testID={exploreReasoning ? 'learning-conversation-reasoning-toggle' : undefined}>
-          <View style={{ alignItems: 'center', flexDirection: 'row', gap: 6 }}>
-            <Text
-              selectable
-              style={{
-                color: theme.colors.textSoft,
-                ...theme.typography.semiBold,
-                fontSize: 13,
-                letterSpacing: 0.2,
-              }}>
-              Explore
-            </Text>
-            {exploreReasoning ? (
-              <View
-                style={{
-                  transform: [{ rotate: exploreReasoningExpanded ? '180deg' : '0deg' }],
-                }}>
-                <AppIcon color={theme.colors.textSoft} name="chevronDown" size={15} strokeWidth={2} />
-              </View>
-            ) : null}
-            {message.streaming ? (
+      {shouldShowReasoningToggle || shouldShowStreamingStatus ? (
+        <View style={{ gap: 10 }}>
+          <Pressable
+            accessibilityRole={exploreReasoning ? 'button' : undefined}
+            disabled={!exploreReasoning}
+            onPress={handleToggle}
+            style={({ pressed }) => ({
+              opacity: pressed && exploreReasoning ? 0.8 : 1,
+            })}
+            testID={exploreReasoning ? 'learning-conversation-reasoning-toggle' : undefined}>
+            <View style={{ alignItems: 'center', flexDirection: 'row', gap: 6 }}>
               <Text
                 selectable
                 style={{
                   color: theme.colors.textSoft,
-                  ...theme.typography.medium,
-                  fontSize: 12,
+                  ...theme.typography.semiBold,
+                  fontSize: 13,
+                  letterSpacing: 0.2,
                 }}>
-                正在整理这轮回复…
+                {exploreReasoning ? '思考过程' : statusLabel}
               </Text>
-            ) : null}
-          </View>
-        </Pressable>
+              {exploreReasoning ? (
+                <View
+                  style={{
+                    transform: [{ rotate: exploreReasoningExpanded ? '180deg' : '0deg' }],
+                  }}>
+                  <AppIcon color={theme.colors.textSoft} name="chevronDown" size={15} strokeWidth={2} />
+                </View>
+              ) : null}
+              {exploreReasoning && shouldShowStreamingStatus ? (
+                <Text
+                  selectable
+                  style={{
+                    color: theme.colors.textSoft,
+                    ...theme.typography.medium,
+                    fontSize: 12,
+                  }}>
+                  {statusLabel}
+                </Text>
+              ) : null}
+            </View>
+          </Pressable>
 
-        {/* Reasoning body — conditionally mounted, enters with fade+slide */}
         {exploreReasoningExpanded && exploreReasoning ? (
           <Animated.View
             entering={FadeInDown.duration(320).springify().damping(20).stiffness(140)}
@@ -436,9 +442,10 @@ function ExploreMessage({
             </ChainOfThoughtPrimitive.Root>
           </Animated.View>
         ) : null}
-      </View>
+        </View>
+      ) : null}
 
-      {answerContent || message.streaming ? (
+      {answerContent ? (
         <TextSection content={answerContent} streaming={message.streaming} />
       ) : null}
     </View>
@@ -448,9 +455,11 @@ function ExploreMessage({
 function GuideMessage({
   message,
   onAction,
+  streamStatusLabel,
 }: {
   message: LearningWorkspaceRenderedMessage;
   onAction?: (action: LearningBridgeAction) => void;
+  streamStatusLabel?: string | null;
 }) {
   const { theme } = useAppTheme();
   const primaryCard =
@@ -468,9 +477,10 @@ function GuideMessage({
   );
   const redirectCard = message.cards.find((card) => isActionCardKind(card, 'redirect'));
   const primaryContent = primaryCard?.content ?? message.text.trim();
+  const statusLabel = streamStatusLabel ?? '正在整理回复';
 
   if (message.streaming && !primaryContent) {
-    return <LearningChatBubble role="assistant" text="" thinking />;
+    return <LearningChatBubble role="assistant" text="" thinking thinkingLabel={statusLabel} />;
   }
 
   return (
@@ -509,7 +519,7 @@ function GuideMessage({
               ...theme.typography.medium,
               fontSize: 12,
             }}>
-            正在整理这轮回复…
+            {statusLabel}
           </Text>
         ) : null}
       </View>
@@ -539,21 +549,36 @@ function GuideMessage({
 export function LearningConversationMessage({
   message,
   onAction,
+  streamStatusLabel,
 }: {
   message: LearningWorkspaceRenderedMessage;
   onAction?: (action: LearningBridgeAction) => void;
+  streamStatusLabel?: string | null;
 }) {
   if (message.role === 'user') {
     return <LearningChatBubble role="user" text={message.text} />;
   }
 
   if (message.presentation?.kind === 'explore') {
-    return <ExploreMessage message={message} onAction={onAction} />;
+    return (
+      <ExploreMessage
+        message={message}
+        onAction={onAction}
+        streamStatusLabel={streamStatusLabel}
+      />
+    );
   }
 
   if (!message.presentation || message.cards.length === 0) {
     if (message.streaming && !message.text.trim()) {
-      return <LearningChatBubble role="assistant" text="" thinking />;
+      return (
+        <LearningChatBubble
+          role="assistant"
+          text=""
+          thinking
+          thinkingLabel={streamStatusLabel ?? '正在思考'}
+        />
+      );
     }
 
     return (
@@ -561,10 +586,16 @@ export function LearningConversationMessage({
         role="assistant"
         streaming={message.streaming}
         text={message.text}
-        thinkingLabel={message.streaming ? '整理中' : undefined}
+        thinkingLabel={message.streaming ? (streamStatusLabel ?? '正在整理回复') : undefined}
       />
     );
   }
 
-  return <GuideMessage message={message} onAction={onAction} />;
+  return (
+    <GuideMessage
+      message={message}
+      onAction={onAction}
+      streamStatusLabel={streamStatusLabel}
+    />
+  );
 }

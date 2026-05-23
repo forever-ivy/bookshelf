@@ -118,7 +118,16 @@ function ChatGPTCursor({ inline = false }: { inline?: boolean }) {
   }, [opacity, inline]);
 
   if (inline) {
-    return <Animated.Text style={{ opacity }}>●</Animated.Text>;
+    return (
+      <Animated.Text
+        selectable={false}
+        style={{
+          color: theme.colors.text,
+          opacity,
+        }}>
+        ●
+      </Animated.Text>
+    );
   }
 
   return (
@@ -134,46 +143,104 @@ function ChatGPTCursor({ inline = false }: { inline?: boolean }) {
   );
 }
 
-function ThinkingPulse() {
+function ThinkingPulse({ label = '正在思考' }: { label?: string }) {
   const { theme } = useAppTheme();
-  const breathOpacity = React.useRef(new Animated.Value(0.55)).current;
+  const dotOpacities = React.useRef([
+    new Animated.Value(0.32),
+    new Animated.Value(0.32),
+    new Animated.Value(0.32),
+  ]).current;
 
   React.useEffect(() => {
-    const breathAnim = Animated.loop(
+    const animations = dotOpacities.map((opacity) =>
       Animated.sequence([
-        Animated.timing(breathOpacity, {
-          toValue: 0.95,
-          duration: 1800,
+        Animated.timing(opacity, {
+          duration: 360,
+          toValue: 1,
           useNativeDriver: true,
         }),
-        Animated.timing(breathOpacity, {
-          toValue: 0.55,
-          duration: 1800,
+        Animated.timing(opacity, {
+          duration: 360,
+          toValue: 0.32,
           useNativeDriver: true,
         }),
       ])
     );
+    const pulse = Animated.loop(Animated.stagger(140, animations));
 
-    breathAnim.start();
+    pulse.start();
     return () => {
-      breathAnim.stop();
+      pulse.stop();
     };
-  }, [breathOpacity]);
+  }, [dotOpacities]);
 
   return (
-    <Animated.Text
-      selectable={false}
+    <View
       testID="learning-assistant-thinking-indicator"
       style={{
+        alignItems: 'center',
         alignSelf: 'flex-start',
-        color: theme.colors.textSoft,
-        opacity: breathOpacity,
-        ...theme.typography.medium,
-        fontSize: 13,
-        lineHeight: 20,
+        flexDirection: 'row',
+        gap: 8,
+        minHeight: 28,
       }}>
-      Explore
-    </Animated.Text>
+      <Text
+        selectable={false}
+        style={{
+          color: theme.colors.textSoft,
+          ...theme.typography.medium,
+          fontSize: 13,
+          lineHeight: 20,
+        }}>
+        {label}
+      </Text>
+      <View style={{ flexDirection: 'row', gap: 4 }}>
+        {dotOpacities.map((opacity, index) => (
+          <Animated.View
+            key={`thinking-dot-${index}`}
+            style={{
+              backgroundColor: theme.colors.textSoft,
+              borderRadius: 99,
+              height: 4,
+              opacity,
+              width: 4,
+            }}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function AssistantTextBlock({
+  content,
+  cursor = false,
+  style,
+}: {
+  content: string;
+  cursor?: boolean;
+  style: any;
+}) {
+  const rich = learningTextNeedsRichRendering(content);
+
+  if (!rich) {
+    return (
+      <Text selectable style={style}>
+        {content}
+        {cursor ? <ChatGPTCursor inline /> : null}
+      </Text>
+    );
+  }
+
+  return (
+    <View style={{ width: '100%' }}>
+      <LearningRichText content={content} style={style} />
+      {cursor ? (
+        <View style={{ marginTop: 6 }}>
+          <ChatGPTCursor />
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -233,7 +300,7 @@ export function LearningChatBubble({
   }, [isAssistant, text, thinking]);
 
   if (isAssistant && thinking) {
-    return <ThinkingPulse />;
+    return <ThinkingPulse label={thinkingLabel} />;
   }
 
   if (isAssistant) {
@@ -243,6 +310,7 @@ export function LearningChatBubble({
           style={{
             maxWidth: '100%',
             paddingRight: theme.spacing.lg,
+            width: '100%',
           }}>
           {thinkingLabel ? (
             <Text
@@ -274,9 +342,10 @@ export function LearningChatBubble({
 
               if (block.type === 'heading') {
                 return (
-                  <View key={`heading-${index}`}>
-                    <LearningRichText 
+                  <View key={`heading-${index}`} style={{ width: '100%' }}>
+                    <AssistantTextBlock
                       content={block.content}
+                      cursor={isLastBlock}
                       style={{
                         color: theme.colors.text,
                         fontFamily: bodyTypography.fontFamily,
@@ -285,7 +354,6 @@ export function LearningChatBubble({
                         lineHeight: 26,
                       }}
                     />
-                    {isLastBlock ? <ChatGPTCursor inline /> : null}
                   </View>
                 );
               }
@@ -299,19 +367,16 @@ export function LearningChatBubble({
                       borderLeftWidth: 3,
                       paddingLeft: 12,
                     }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <LearningRichText 
-                        content={block.content}
-                        style={{
-                          color: theme.colors.textMuted,
-                          fontFamily: bodyTypography.fontFamily,
-                          fontSize: 16,
-                          lineHeight: 26,
-                          flex: 1,
-                        }}
-                      />
-                      {isLastBlock ? <ChatGPTCursor inline /> : null}
-                    </View>
+                    <AssistantTextBlock
+                      content={block.content}
+                      cursor={isLastBlock}
+                      style={{
+                        color: theme.colors.textMuted,
+                        fontFamily: bodyTypography.fontFamily,
+                        fontSize: 16,
+                        lineHeight: 26,
+                      }}
+                    />
                   </View>
                 );
               }
@@ -338,16 +403,15 @@ export function LearningChatBubble({
                               width: 6,
                             }}
                           />
-                          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                            <LearningRichText 
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <AssistantTextBlock
                               content={item}
+                              cursor={isLastItem}
                               style={{
                                 color: theme.colors.text,
-                                flex: 1,
                                 ...bodyTypography,
                               }}
                             />
-                            {isLastItem ? <ChatGPTCursor inline /> : null}
                           </View>
                         </View>
                       );
@@ -357,16 +421,15 @@ export function LearningChatBubble({
               }
 
               return (
-                <View key={`paragraph-${index}`} style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <LearningRichText 
+                <View key={`paragraph-${index}`} style={{ width: '100%' }}>
+                  <AssistantTextBlock
                     content={block.content}
+                    cursor={isLastBlock}
                     style={{
                       color: theme.colors.text,
                       ...bodyTypography,
-                      flex: 1,
                     }}
                   />
-                  {isLastBlock ? <ChatGPTCursor inline /> : null}
                 </View>
               );
             })}

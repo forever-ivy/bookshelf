@@ -120,6 +120,7 @@ function StarterPromptStrip({
 
 function ExplorePane({
   emptyLabel,
+  latestStatus,
   messages,
   onAction,
   onPromptPress,
@@ -127,6 +128,7 @@ function ExplorePane({
   topPadding,
 }: {
   emptyLabel: string;
+  latestStatus: ReturnType<typeof useLearningWorkspaceScreen>['latestStatus'];
   messages: ReturnType<typeof useLearningWorkspaceScreen>['renderedMessages'];
   onAction?: (action: LearningBridgeAction) => void;
   onPromptPress: (prompt: string) => void;
@@ -159,6 +161,7 @@ function ExplorePane({
         <LearningAssistantConversationSection
           emptyLabel={emptyLabel}
           focusMessageId={focusMessageId}
+          latestStatus={latestStatus}
           messages={messages}
           onAction={onAction}
           onFocusAnchorYChange={setFocusAnchorY}
@@ -177,6 +180,8 @@ export default function LearningWorkspaceStudyRoute() {
     draft,
     handleSend,
     isRetryPending,
+    isSending,
+    latestStatus,
     profile,
     renderedMessages,
     replaceWorkspaceSession,
@@ -257,11 +262,15 @@ export default function LearningWorkspaceStudyRoute() {
 
   const handleSearchSubmit = React.useCallback(
     (value: unknown) => {
-      if (!workspaceSession || workspaceSession.sessionKind !== activeSessionKind) {
+      if (isSending || !workspaceSession || workspaceSession.sessionKind !== activeSessionKind) {
         return;
       }
 
       const nextDraft = resolveSearchBarText(value) || draft;
+      if (!nextDraft.trim()) {
+        return;
+      }
+
       void handleSend(nextDraft, {
         mode: studyMode,
         session: workspaceSession,
@@ -269,12 +278,12 @@ export default function LearningWorkspaceStudyRoute() {
       searchBarRef.current?.clearText();
       searchBarRef.current?.blur();
     },
-    [activeSessionKind, draft, handleSend, studyMode, workspaceSession]
+    [activeSessionKind, draft, handleSend, isSending, studyMode, workspaceSession]
   );
 
   const handleStarterPromptPress = React.useCallback(
     (prompt: string) => {
-      if (!workspaceSession || workspaceSession.sessionKind !== activeSessionKind) {
+      if (isSending || !workspaceSession || workspaceSession.sessionKind !== activeSessionKind) {
         return;
       }
 
@@ -284,7 +293,7 @@ export default function LearningWorkspaceStudyRoute() {
         session: workspaceSession,
       });
     },
-    [activeSessionKind, handleSend, setDraft, studyMode, workspaceSession]
+    [activeSessionKind, handleSend, isSending, setDraft, studyMode, workspaceSession]
   );
 
   const handleConversationAction = React.useCallback(
@@ -425,6 +434,7 @@ export default function LearningWorkspaceStudyRoute() {
               : '问一个更细、更偏应用或更偏例子的延展问题，系统会基于当前资料给出答案。'
           }
           messages={renderedMessages}
+          latestStatus={latestStatus}
           onAction={handleConversationAction}
           onPromptPress={handleStarterPromptPress}
           starterPrompts={usesNativeSearchBar ? starterPrompts : []}
